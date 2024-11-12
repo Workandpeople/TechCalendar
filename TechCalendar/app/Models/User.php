@@ -2,47 +2,53 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
-        'name',
+        'nom',
+        'prenom',
         'email',
         'password',
+        'telephone',
+        'adresse',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
-        'password',
-        'remember_token',
+        'password', 'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected static function boot()
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        parent::boot();
+
+        // Génération automatique d'un UUID lors de la création de l'utilisateur
+        static::creating(function ($model) {
+            $model->id = (string) Str::uuid();
+        });
     }
+
+    // Définir la relation avec le modèle Role
+    public function role()
+    {
+        return $this->hasOne(Role::class, 'user_id');
+    }
+
+    // Définir les relations pour les jours de la semaine
+    public function monday() { return $this->hasMany(Monday::class, 'user_id'); }
+    public function tuesday() { return $this->hasMany(Tuesday::class, 'user_id'); }
+    public function wednesday() { return $this->hasMany(Wednesday::class, 'user_id'); }
+    public function thursday() { return $this->hasMany(Thursday::class, 'user_id'); }
+    public function friday() { return $this->hasMany(Friday::class, 'user_id'); }
+    public function saturday() { return $this->hasMany(Saturday::class, 'user_id'); }
+    public function sunday() { return $this->hasMany(Sunday::class, 'user_id'); }
 }

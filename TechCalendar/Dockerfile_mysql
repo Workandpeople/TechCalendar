@@ -1,0 +1,8 @@
+# Utiliser l'image officielle MySQL
+FROM mysql:8.0
+
+# Copier le fichier de configuration personnalisé dans le conteneur
+COPY ./my.cnf /etc/mysql/conf.d/my.cnf
+
+# Exposer le port MySQL
+EXPOSE 3306
