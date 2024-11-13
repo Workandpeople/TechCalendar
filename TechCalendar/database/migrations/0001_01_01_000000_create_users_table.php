@@ -15,7 +15,13 @@ class CreateUsersTable extends Migration
             $table->string('email')->unique();
             $table->string('password');
             $table->string('telephone', 20)->nullable();
-            $table->text('adresse')->nullable();
+            $table->string('adresse', 150)->nullable();
+            $table->string('code_postal', 10)->nullable();
+            $table->string('ville', 100)->nullable();
+            $table->time('default_start_at')->nullable();
+            $table->time('default_end_at')->nullable();
+            $table->integer('default_traject_time')->nullable();
+            $table->integer('default_rest_time')->nullable();
             $table->timestamps();
         });
     }

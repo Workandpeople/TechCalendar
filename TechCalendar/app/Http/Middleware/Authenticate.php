@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Log;
 
 class Authenticate
 {
+    /**
+     * Gérer une requête entrante.
+     */
     public function handle($request, Closure $next)
     {
         if (!Auth::check()) {

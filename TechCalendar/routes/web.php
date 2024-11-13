@@ -2,44 +2,28 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\TechController;
 
+// Route d'accueil pour le formulaire de connexion
 Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Routes protégées par l'authentification
 Route::middleware(['auth'])->group(function () {
-    // Routes pour l'administrateur
-    Route::get('/admin', function () {
-        $role = 'administrateur';
-        return view('admin.dashboard', compact('role'));
-    })->name('panel.admin');
 
-    Route::get('/admin/user-manager', function () {
-        return view('admin.userManager');
-    })->name('user.manager');
+    // Routes administrateur
+    Route::get('/admin/manage-user', [AdminController::class, 'manageUser'])->name('admin.manage_user');
+    Route::get('/admin/manage-presta', [AdminController::class, 'managePresta'])->name('admin.manage_presta');
 
-    // Routes pour l'assistante
-    Route::get('/assistant', function () {
-        $role = 'assistante';
-        return view('assist.dashboard', compact('role'));
-    })->name('panel.assistant');
+    // Routes assistante
+    Route::get('/assistant/dashboard', [AssistantController::class, 'dashboard'])->name('assistant.dashboard');
+    Route::get('/assistant/prendre-rdv', [AssistantController::class, 'prendreRdv'])->name('assistant.prendre_rdv');
+    Route::get('/assistant/agenda-tech', [AssistantController::class, 'agendaTech'])->name('assistant.agenda_tech');
 
-    Route::get('/assistant/rdv', function () {
-        return view('assist.rdv');
-    })->name('assistant.rdv');
-
-    // Routes pour le technicien
-    Route::get('/technician', function () {
-        $role = 'technicien';
-        return view('tech.dashboard', compact('role'));
-    })->name('panel.technician');
-
-    Route::get('/technician/calendar', function () {
-        return view('tech.calendar');
-    })->name('technician.calendar');
-
-    Route::get('/technician/profile', function () {
-        return view('tech.profile');
-    })->name('technician.profile');
+    // Routes technicien
+    Route::get('/tech/dashboard', [TechController::class, 'dashboard'])->name('tech.dashboard');
+    Route::get('/tech/agenda', [TechController::class, 'agenda'])->name('tech.agenda');
 });

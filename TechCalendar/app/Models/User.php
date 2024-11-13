@@ -15,40 +15,29 @@ class User extends Authenticatable
     protected $keyType = 'string';
 
     protected $fillable = [
-        'nom',
-        'prenom',
-        'email',
-        'password',
-        'telephone',
-        'adresse',
+        'nom', 'prenom', 'email', 'password', 'telephone', 'adresse', 'code_postal', 'ville', 
+        'default_start_at', 'default_end_at', 'default_traject_time', 'default_rest_time'
     ];
 
-    protected $hidden = [
-        'password', 'remember_token',
-    ];
+    protected $hidden = ['password', 'remember_token'];
 
     protected static function boot()
     {
         parent::boot();
-
-        // Génération automatique d'un UUID lors de la création de l'utilisateur
         static::creating(function ($model) {
             $model->id = (string) Str::uuid();
         });
     }
 
-    // Définir la relation avec le modèle Role
+    // Relation avec le modèle Role
     public function role()
     {
-        return $this->hasOne(Role::class, 'user_id');
+        return $this->hasOne(Role::class);
     }
 
-    // Définir les relations pour les jours de la semaine
-    public function monday() { return $this->hasMany(Monday::class, 'user_id'); }
-    public function tuesday() { return $this->hasMany(Tuesday::class, 'user_id'); }
-    public function wednesday() { return $this->hasMany(Wednesday::class, 'user_id'); }
-    public function thursday() { return $this->hasMany(Thursday::class, 'user_id'); }
-    public function friday() { return $this->hasMany(Friday::class, 'user_id'); }
-    public function saturday() { return $this->hasMany(Saturday::class, 'user_id'); }
-    public function sunday() { return $this->hasMany(Sunday::class, 'user_id'); }
+    // Relation avec le modèle Horaire
+    public function horaires()
+    {
+        return $this->hasMany(Horaire::class);
+    }
 }

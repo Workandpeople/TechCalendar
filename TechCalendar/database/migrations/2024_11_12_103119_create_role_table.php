@@ -8,7 +8,7 @@ class CreateRoleTable extends Migration
 {
     public function up()
     {
-        Schema::create('roles', function (Blueprint $table) {
+        Schema::create('role', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('user_id');
             $table->enum('role', ['administrateur', 'assistante', 'technicien']);
@@ -20,6 +20,6 @@ class CreateRoleTable extends Migration
 
     public function down()
     {
-        Schema::dropIfExists('roles');
+        Schema::dropIfExists('role');
     }
 }

@@ -6,15 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class Role extends Model
+class Horaire extends Model
 {
     use HasFactory;
 
-    protected $table = 'role';
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $fillable = ['user_id', 'role'];
+    protected $fillable = ['user_id', 'start_at', 'end_at', 'rest_time', 'start_rest_at'];
 
     protected static function boot()
     {
@@ -27,6 +26,6 @@ class Role extends Model
     // Relation avec le modèle User
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 }

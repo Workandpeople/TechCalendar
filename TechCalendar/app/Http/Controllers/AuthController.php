@@ -31,23 +31,29 @@ class AuthController extends Controller
             
             $request->session()->regenerate();
             $user = Auth::user();
-            $role = Role::where('user_id', $user->id)->first()->role;
+            $role = optional($user->role)->role;
+
+            if (!$role) {
+                Log::error("Utilisateur {$user->email} sans rôle attribué.");
+                Auth::logout();
+                return redirect()->route('login')->withErrors('Rôle non attribué.');
+            }
 
             Log::info("Utilisateur connecté : {$user->email}, Rôle : $role");
 
-            // Rediriger selon le rôle de l'utilisateur
+            // Redirection selon le rôle
             switch ($role) {
                 case 'administrateur':
                     Log::info("Redirection vers le panneau administrateur.");
-                    return redirect()->route('panel.admin');
+                    return redirect()->route('assistant.dashboard');
                 case 'assistante':
                     Log::info("Redirection vers le panneau assistant.");
-                    return redirect()->route('panel.assistant');
+                    return redirect()->route('assistant.dashboard');
                 case 'technicien':
                     Log::info("Redirection vers le panneau technicien.");
-                    return redirect()->route('panel.technician');
+                    return redirect()->route('tech.dashboard');
                 default:
-                    Log::error("Utilisateur {$user->email} avec un rôle inconnu : $role.");
+                    Log::error("Rôle inconnu pour l'utilisateur {$user->email} : $role.");
                     Auth::logout();
                     return redirect()->route('login')->withErrors('Rôle inconnu.');
             }
