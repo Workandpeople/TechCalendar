@@ -59,20 +59,52 @@
                 <!-- Area Chart -->
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
-                        <!-- Card Header - Dropdown -->
-                        <div
-                            class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                            <h6 class="m-0 font-weight-bold text-primary">Tech Agenda</h6>
-                        </div>
-                        <!-- Card Body -->
-                        <div class="card-body" style="height: 700px">
-                            <div class="chart-area">
-                                <canvas id="myAreaChart"></canvas>
+                        <div class="card">
+                            <!-- Card Header -->
+                            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                <h6 class="m-0 font-weight-bold text-primary">Agenda des Techniciens</h6>
+                                <div class="d-flex align-items-center">
+                                    <!-- Navigation pour les semaines -->
+                                    <button id="prevWeek" class="btn btn-outline-primary btn-sm mx-2">&larr;</button>
+                                    <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                    <button id="nextWeek" class="btn btn-outline-primary btn-sm mx-2">&rarr;</button>
+                                </div>
+                            </div>
+                        
+                            <!-- Card Body (Calendrier) -->
+                            <div class="card-body" style="height: 700px">
+                                <div id="calendarContainer"></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Liste des techniciens -->
+<div class="row">
+    <div class="col-xl-12 col-lg-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Liste des Techniciens</h6>
+                <div class="input-group mt-2">
+                    <input type="text" id="technicianSearch" class="form-control" placeholder="Rechercher un technicien...">
+                </div>
+            </div>
+            <div class="card-body">
+                <ul id="technicianList" class="list-group">
+                    @foreach($techniciens as $technicien)
+                        <li class="list-group-item d-flex justify-content-between align-items-center tech-item"
+                            data-name="{{ strtolower($technicien->prenom . ' ' . $technicien->nom) }}"
+                            data-postal-code="{{ $technicien->code_postal }}">
+                            {{ $technicien->prenom }} {{ $technicien->nom }}
+                            <input type="checkbox" class="ml-2">
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
 
         </div>
         <!-- /.container-fluid -->

@@ -13,6 +13,7 @@
     <link href="{{ asset('css/fontAwesome/css/all.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/manage_user.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/calendar.css') }}" rel="stylesheet">
 </head>
 <body id="page-top">
     
@@ -30,5 +31,7 @@
     <script src="{{ asset('js/sb-admin-2.min.js') }}"></script>
     <script src="{{ asset('js/manage_user.js') }}"></script>
     <script src="{{ asset('js/manage_presta.js') }}"></script>
+    <script src="{{ asset('js/calendar.js') }}"></script>
+    <script src="{{ asset('js/rdv.js') }}"></script>
 </body>
 </html>

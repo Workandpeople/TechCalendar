@@ -59,15 +59,62 @@
                 <!-- Area Chart -->
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
-                        <!-- Card Header - Dropdown -->
-                        <div
-                            class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                            <h6 class="m-0 font-weight-bold text-primary">Prendre rdv</h6>
+                        <div class="card">
+                            <!-- Card Header -->
+                            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                <h6 class="m-0 font-weight-bold text-primary">Prendre rendez-vous</h6>
+                                <div class="d-flex align-items-center">
+                                    <!-- Navigation pour les semaines -->
+                                    <button id="prevWeek" class="btn btn-outline-primary btn-sm mx-2">&larr;</button>
+                                    <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                    <button id="nextWeek" class="btn btn-outline-primary btn-sm mx-2">&rarr;</button>
+                                    
+                                    <!-- Bouton Nouveau RDV -->
+                                    <button id="newRdvBtn" class="btn btn-success btn-sm ml-3">Nouveau RDV</button>
+                                </div>
+                            </div>
+                        
+                            <!-- Card Body (Calendrier) -->
+                            <div class="card-body" style="height: 700px">
+                                <div id="calendarContainer"></div>
+                            </div>
                         </div>
-                        <!-- Card Body -->
-                        <div class="card-body" style="height: 700px">
-                            <div class="chart-area">
-                                <canvas id="myAreaChart"></canvas>
+                        
+                        <!-- Overlay pour le formulaire de RDV -->
+                        <div id="newRdvOverlay" class="modal-overlay" style="display: none;">
+                            <div class="modal-content">
+                                <button class="close-btn" onclick="toggleNewRdvOverlay()">&times;</button>
+                                <h3>Nouveau rendez-vous</h3>
+                                <form id="newRdvForm">
+                                    <!-- Dropdown pour les prestations avec recherche dynamique -->
+                                    <div class="form-group">
+                                        <label for="prestationSearch">Rechercher une prestation</label>
+                                        <input type="text" id="prestationSearch" class="form-control mb-2" placeholder="Rechercher une préstation...">
+                                        <select id="prestationDropdown" class="form-control">
+                                            @foreach($prestations as $prestation)
+                                                <option value="{{ $prestation->id }}">{{ $prestation->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <!-- Champs d'adresse, code postal et ville -->
+                                    <div class="form-group">
+                                        <label for="address">Adresse</label>
+                                        <input type="text" id="address" class="form-control" placeholder="Adresse">
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group col-md-6">
+                                            <label for="postalCode">Code postal</label>
+                                            <input type="text" id="postalCode" class="form-control" placeholder="Code postal">
+                                        </div>
+                                        <div class="form-group col-md-6">
+                                            <label for="city">Ville</label>
+                                            <input type="text" id="city" class="form-control" placeholder="Ville">
+                                        </div>
+                                    </div>
+                                    <!-- Boutons de soumission -->
+                                    <button type="button" class="btn btn-primary" onclick="submitRdvForm()">Rechercher</button>
+                                    <button type="button" class="btn btn-secondary" onclick="toggleNewRdvOverlay()">Annuler</button>
+                                </form>
                             </div>
                         </div>
                     </div>
