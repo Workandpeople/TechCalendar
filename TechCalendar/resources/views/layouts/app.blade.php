@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'TechCalendar')</title>
     
@@ -28,5 +29,6 @@
     <script src="{{ asset('js/jquery-easing/jquery.easing.min.js') }}"></script>
     <script src="{{ asset('js/sb-admin-2.min.js') }}"></script>
     <script src="{{ asset('js/manage_user.js') }}"></script>
+    <script src="{{ asset('js/manage_presta.js') }}"></script>
 </body>
 </html>

@@ -46,8 +46,10 @@
             <div class="row">
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
+                        <!-- Ajouter le bouton + à côté du titre Utilisateurs -->
                         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                             <h6 class="m-0 font-weight-bold text-primary">Utilisateurs</h6>
+                            <button class="btn btn-sm btn-success" onclick="showCreateUser()">+ Ajouter</button>
                         </div>
                         <div class="card-body" style="height: 700px">
                             <div class="table-responsive">
@@ -72,8 +74,8 @@
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="#" class="btn btn-sm btn-warning" title="Modifier" onclick="showEditUser({{ json_encode($user) }})"><i class="fas fa-edit"></i></a>
-                                                    <a href="#" class="btn btn-sm btn-danger" title="Supprimer" onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?');"><i class="fas fa-trash-alt"></i></a>
+                                                    <button class="btn btn-sm btn-warning" title="Modifier" onclick="showEditUser({{ json_encode($user) }})"><i class="fas fa-edit"></i></button>
+                                                    <button class="btn btn-sm btn-danger" title="Supprimer" onclick="deleteUser('{{ $user->id }}')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -92,7 +94,7 @@
         </div>
         <!-- /.container-fluid -->
 
-        <!-- Overlay Modal -->
+        <!-- Overlay Modal for User Details -->
         <div id="userModal" class="modal-overlay" style="display: none;">
             <div class="modal-content">
                 <button class="close-btn" onclick="closeUserDetails()">&times;</button>
@@ -101,8 +103,14 @@
                 <p><strong>Email :</strong> <span id="userEmail"></span></p>
                 <p><strong>Téléphone :</strong> <span id="userPhone"></span></p>
                 <p><strong>Adresse :</strong> <span id="userAddress"></span></p>
+                <p><strong>Code Postal :</strong> <span id="userPostalCode"></span></p>
+                <p><strong>Ville :</strong> <span id="userCity"></span></p>
                 <p><strong>Rôle :</strong> <span id="userRole"></span></p>
-                <p><strong>Statut :</strong> <span id="userStatus"></span></p>
+                <p><strong>Début par défaut :</strong> <span id="userDefaultStartAt"></span></p>
+                <p><strong>Fin par défaut :</strong> <span id="userDefaultEndAt"></span></p>
+                <p><strong>Temps de trajet maximal par défaut :</strong> <span id="userTrajectTime"></span> minutes</p>
+                <p><strong>Temps de repos par défaut :</strong> <span id="userRestTime"></span> minutes</p>
+                <!--<p><strong>Statut :</strong> <span id="userStatus"></span></p>-->
             </div>
         </div>
 
@@ -112,23 +120,144 @@
                 <button class="close-btn" onclick="closeEditUser()">&times;</button>
                 <h3>Modifier l'utilisateur</h3>
                 <form id="editUserForm">
+                    <input type="hidden" id="editUserId" name="user_id">
                     <div class="form-group">
-                        <label for="editUserName">Nom Prénom :</label>
-                        <input type="text" id="editUserName" name="name" class="form-control">
+                        <label for="editUserPrenom">Prénom :</label>
+                        <input type="text" id="editUserPrenom" name="prenom" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserNom">Nom :</label>
+                        <input type="text" id="editUserNom" name="nom" class="form-control">
                     </div>
                     <div class="form-group">
                         <label for="editUserEmail">Email :</label>
                         <input type="email" id="editUserEmail" name="email" class="form-control">
                     </div>
                     <div class="form-group">
+                        <label for="editUserPhone">Téléphone :</label>
+                        <input type="text" id="editUserPhone" name="telephone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserAddress">Adresse :</label>
+                        <input type="text" id="editUserAddress" name="adresse" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserPostalCode">Code Postal :</label>
+                        <input type="text" id="editUserPostalCode" name="code_postal" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserCity">Ville :</label>
+                        <input type="text" id="editUserCity" name="ville" class="form-control">
+                    </div>
+                    <div class="form-group">
                         <label for="editUserRole">Rôle :</label>
                         <select id="editUserRole" name="role" class="form-control">
                             <option value="administrateur">Administrateur</option>
-                            <option value="assistant">Assistant</option>
+                            <option value="assistante">Assistante</option>
                             <option value="technicien">Technicien</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="editUserDefaultStartAt">Début par défaut :</label>
+                        <input type="time" id="editUserDefaultStartAt" name="default_start_at" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserDefaultEndAt">Fin par défaut :</label>
+                        <input type="time" id="editUserDefaultEndAt" name="default_end_at" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserTrajectTime">Temps de trajet par défaut (minutes) :</label>
+                        <input type="number" id="editUserTrajectTime" name="default_traject_time" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="editUserRestTime">Temps de repos par défaut (minutes) :</label>
+                        <input type="number" id="editUserRestTime" name="default_rest_time" class="form-control">
+                    </div>
                     <button type="button" class="btn btn-primary" onclick="saveUserChanges()">Enregistrer</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Overlay Modal for Delete Confirmation -->
+        <div id="deleteConfirmationModal" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+                <button class="close-btn" onclick="closeDeleteConfirmation()">&times;</button>
+                <h3>Confirmer la suppression</h3>
+                <p>Êtes-vous sûr de vouloir supprimer cette prestation ? Cette action est irréversible.</p>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteUser()">Supprimer</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteConfirmation()">Annuler</button>
+            </div>
+        </div>
+
+        <!-- Overlay Modal for Creating User -->
+        <div id="createUserModal" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+                <button class="close-btn" onclick="closeCreateUser()">&times;</button>
+                <h3>Créer un nouvel utilisateur</h3>
+                <form id="createUserForm">
+                    <div class="form-group">
+                        <label for="createUserPrenom">Prénom :</label>
+                        <input type="text" id="createUserPrenom" name="prenom" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="createUserNom">Nom :</label>
+                        <input type="text" id="createUserNom" name="nom" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="createUserEmail">Email :</label>
+                        <input type="email" id="createUserEmail" name="email" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="createUserRole">Rôle :</label>
+                        <select id="createUserRole" name="role" class="form-control" onchange="toggleFieldsBasedOnRole()">
+                            <option value="administrateur">Administrateur</option>
+                            <option value="assistante">Assistante</option>
+                            <option value="technicien">Technicien</option>
+                        </select>
+                    </div>
+                    <div id="techFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="createUserPhone">Téléphone :</label>
+                            <input type="text" id="createUserPhone" name="telephone" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserAddress">Adresse :</label>
+                            <input type="text" id="createUserAddress" name="adresse" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserPostalCode">Code Postal :</label>
+                            <input type="text" id="createUserPostalCode" name="code_postal" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserCity">Ville :</label>
+                            <input type="text" id="createUserCity" name="ville" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserDefaultStartAt">Début par défaut :</label>
+                            <input type="time" id="createUserDefaultStartAt" name="default_start_at" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserDefaultEndAt">Fin par défaut :</label>
+                            <input type="time" id="createUserDefaultEndAt" name="default_end_at" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserTrajectTime">Temps de trajet journalier maximum par défaut (minutes) :</label>
+                            <input type="number" id="createUserTrajectTime" name="default_traject_time" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="createUserRestTime">Temps de repos par défaut (minutes) :</label>
+                            <input type="number" id="createUserRestTime" name="default_rest_time" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="createUserPassword">Mot de passe :</label>
+                        <input type="password" id="createUserPassword" name="password" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="createUserPasswordConfirm">Confirmation du mot de passe :</label>
+                        <input type="password" id="createUserPasswordConfirm" name="password_confirmation" class="form-control">
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="saveNewUser()">Créer</button>
                 </form>
             </div>
         </div>

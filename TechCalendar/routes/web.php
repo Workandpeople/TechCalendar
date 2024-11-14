@@ -18,6 +18,16 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/admin/manage-user', [AdminController::class, 'manageUser'])->name('admin.manage_user');
     Route::get('/admin/manage-presta', [AdminController::class, 'managePresta'])->name('admin.manage_presta');
 
+    // Routes pour les opérations de création, modification et de suppression des utilisateurs
+    Route::post('/admin/manage-user/update/{id}', [AdminController::class, 'updateUser'])->name('admin.update_user');
+    Route::delete('/admin/manage-user/delete/{id}', [AdminController::class, 'deleteUser'])->name('admin.delete_user');
+    Route::post('/admin/manage-user/create', [AdminController::class, 'createUser'])->name('admin.create_user');
+
+    // Routes pour les opérations de création, modification et de suppression des prestations
+    Route::post('/admin/manage-presta/update/{id}', [AdminController::class, 'updatePresta'])->name('admin.update_presta');
+    Route::delete('/admin/manage-presta/delete/{id}', [AdminController::class, 'deletePresta'])->name('admin.delete_presta');
+    Route::post('/admin/manage-presta/create', [AdminController::class, 'createPresta'])->name('admin.create_presta');
+
     // Routes assistante
     Route::get('/assistant/dashboard', [AssistantController::class, 'dashboard'])->name('assistant.dashboard');
     Route::get('/assistant/prendre-rdv', [AssistantController::class, 'prendreRdv'])->name('assistant.prendre_rdv');
