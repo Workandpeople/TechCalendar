@@ -12,7 +12,7 @@ class DatabaseSeeder extends Seeder
     public function run()
     {
         // Créer un administrateur spécifique
-        $admin = User::factory()->create([
+        $admin = User::factory()->adminData()->create([
             'nom' => 'Dinnichert',
             'prenom' => 'Lucas',
             'email' => 'contact@lucas-dinnichert.fr',
@@ -21,23 +21,24 @@ class DatabaseSeeder extends Seeder
 
         // Créer 3 assistantes
         User::factory()
-            ->count(3)
+            ->adminData()
+            ->count(5)
             ->create()
             ->each(function ($user) {
                 Role::factory()->assistante()->create(['user_id' => $user->id]);
             });
 
-        // Créer 16 techniciens
+        // Créer 300 techniciens
         User::factory()
-            ->count(16)
+            ->count(300)
             ->create()
             ->each(function ($user) {
                 Role::factory()->technicien()->create(['user_id' => $user->id]);
             });
 
-        // Créer 50 prestations
+        // Créer 20 prestations
         Prestation::factory()
-            ->count(50)
+            ->count(20)
             ->create();
     }
 }

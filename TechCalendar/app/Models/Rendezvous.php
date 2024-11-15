@@ -10,10 +10,15 @@ class Rendezvous extends Model
 {
     use HasFactory;
 
+    protected $table = 'rendezvous';
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $fillable = ['nom', 'prenom', 'adresse', 'code_postal', 'ville', 'tel', 'date', 'start_at', 'prestation', 'duree', 'commentaire'];
+
+    protected $fillable = [
+        'technician_id', 'nom', 'prenom', 'adresse', 'code_postal', 'ville', 'tel', 
+        'date', 'start_at', 'prestation', 'duree', 'commentaire'
+    ];
 
     protected static function boot()
     {
@@ -21,5 +26,10 @@ class Rendezvous extends Model
         static::creating(function ($model) {
             $model->id = (string) Str::uuid();
         });
+    }
+
+    public function technician()
+    {
+        return $this->belongsTo(User::class, 'technician_id');
     }
 }

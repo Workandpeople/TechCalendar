@@ -10,6 +10,7 @@ class CreateRendezvousTable extends Migration
     {
         Schema::create('rendezvous', function (Blueprint $table) {
             $table->uuid('id')->primary();
+            $table->uuid('technician_id'); // Clé étrangère vers la table des techniciens
             $table->string('nom', 100);
             $table->string('prenom', 100);
             $table->string('adresse', 150);
@@ -22,6 +23,9 @@ class CreateRendezvousTable extends Migration
             $table->integer('duree')->nullable();
             $table->text('commentaire')->nullable();
             $table->timestamps();
+
+            // Ajout de la contrainte de clé étrangère
+            $table->foreign('technician_id')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

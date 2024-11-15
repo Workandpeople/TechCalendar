@@ -15,7 +15,7 @@
                 <i class="fa fa-bars"></i>
             </button>
 
-            <!-- Topbar Search -->
+            <!-- Topbar Search 
             <form
                 class="d-none d-sm-inline-block form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100 navbar-search">
                 <div class="input-group">
@@ -27,7 +27,7 @@
                         </button>
                     </div>
                 </div>
-            </form>
+            </form> -->
 
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
@@ -59,15 +59,21 @@
                 <!-- Area Chart -->
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
-                        <!-- Card Header - Dropdown -->
-                        <div
-                            class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                            <h6 class="m-0 font-weight-bold text-primary">Agenda</h6>
-                        </div>
-                        <!-- Card Body -->
-                        <div class="card-body" style="height: 700px">
-                            <div class="chart-area">
-                                <canvas id="myAreaChart"></canvas>
+                        <div class="card">
+                            <!-- Card Header -->
+                            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                <h6 class="m-0 font-weight-bold text-primary">Agenda de {{ Auth::user()->prenom }} {{ Auth::user()->nom }} </h6>
+                                <div class="d-flex align-items-center">
+                                    <!-- Navigation pour les semaines -->
+                                    <button id="prevWeek" class="btn btn-outline-primary btn-sm mx-2">&larr;</button>
+                                    <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                    <button id="nextWeek" class="btn btn-outline-primary btn-sm mx-2">&rarr;</button>
+                                </div>
+                            </div>
+                        
+                            <!-- Card Body (Calendrier) -->
+                            <div class="card-body" style="height: 700px">
+                                <div id="calendarContainer"></div>
                             </div>
                         </div>
                     </div>

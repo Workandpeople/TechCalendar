@@ -15,20 +15,6 @@
                 <i class="fa fa-bars"></i>
             </button>
 
-            <!-- Topbar Search -->
-            <form
-                class="d-none d-sm-inline-block form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100 navbar-search">
-                <div class="input-group">
-                    <input type="text" class="form-control bg-light border-0 small" placeholder="Rechercher un utilisateur..."
-                        aria-label="Search" aria-describedby="basic-addon2">
-                    <div class="input-group-append">
-                        <button class="btn btn-primary" type="button">
-                            <i class="fas fa-search fa-sm"></i>
-                        </button>
-                    </div>
-                </div>
-            </form>
-
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
 
@@ -56,43 +42,28 @@
 
             <div class="row">
 
-                <!-- Area Chart -->
+                <!-- Card -->
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
-                        <div class="card">
-                            <!-- Card Header -->
-                            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                <h6 class="m-0 font-weight-bold text-primary">Prendre rendez-vous</h6>
-                                <div class="d-flex align-items-center">
-                                    <!-- Navigation pour les semaines -->
-                                    <button id="prevWeek" class="btn btn-outline-primary btn-sm mx-2">&larr;</button>
-                                    <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
-                                    <button id="nextWeek" class="btn btn-outline-primary btn-sm mx-2">&rarr;</button>
-                                    
-                                    <!-- Bouton Nouveau RDV -->
-                                    <button id="newRdvBtn" class="btn btn-success btn-sm ml-3">Nouveau RDV</button>
-                                </div>
-                            </div>
-                        
-                            <!-- Card Body (Calendrier) -->
-                            <div class="card-body" style="height: 700px">
-                                <div id="calendarContainer"></div>
-                            </div>
+                        <!-- Card Header -->
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Rechercher un technicien</h6>
                         </div>
                         
-                        <!-- Overlay pour le formulaire de RDV -->
-                        <div id="newRdvOverlay" class="modal-overlay" style="display: none;">
-                            <div class="modal-content">
-                                <button class="close-btn" onclick="toggleNewRdvOverlay()">&times;</button>
-                                <h3>Nouveau rendez-vous</h3>
+                        <!-- Card Body -->
+                        <div class="card-body d-flex">
+                            <!-- Formulaire à gauche -->
+                            <div class="col-md-6">
                                 <form id="newRdvForm">
                                     <!-- Dropdown pour les prestations avec recherche dynamique -->
                                     <div class="form-group">
                                         <label for="prestationSearch">Rechercher une prestation</label>
-                                        <input type="text" id="prestationSearch" class="form-control mb-2" placeholder="Rechercher une préstation...">
+                                        <input type="text" id="prestationSearch" class="form-control mb-2" placeholder="Rechercher une prestation...">
                                         <select id="prestationDropdown" class="form-control">
                                             @foreach($prestations as $prestation)
-                                                <option value="{{ $prestation->id }}">{{ $prestation->name }}</option>
+                                                <option value="{{ $prestation->id }}" data-default-time="{{ $prestation->default_time }}">
+                                                    {{ $prestation->name }}
+                                                </option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -112,9 +83,38 @@
                                         </div>
                                     </div>
                                     <!-- Boutons de soumission -->
-                                    <button type="button" class="btn btn-primary" onclick="submitRdvForm()">Rechercher</button>
-                                    <button type="button" class="btn btn-secondary" onclick="toggleNewRdvOverlay()">Annuler</button>
+                                    <button type="button" class="btn btn-primary" onclick="searchTechnicians()">Rechercher des techniciens disponibles</button>
                                 </form>
+                            </div>
+
+                            <!-- Tableau des résultats à droite -->
+                            <div class="col-md-6">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Nom & Prénom</th>
+                                            <th>Distance (km)</th>
+                                            <th>Temps de trajet (min)</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="technicianResults">
+                                        <!-- Les résultats seront ajoutés ici via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div id="calendarOverlay" class="modal-overlay" style="display: none;">
+                                <div class="modal-content">
+                                    <button class="close-btn" onclick="closeCalendar()">&times;</button>
+                                    <h3>Calendrier</h3>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <button id="prevWeek" class="btn btn-outline-primary btn-sm" onclick="changeWeek(-1)">&larr;</button>
+                                        <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                        <button id="nextWeek" class="btn btn-outline-primary btn-sm" onclick="changeWeek(1)">&rarr;</button>
+                                    </div>
+                                    <div id="calendarContainer" style="height: 500px;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -6,6 +6,10 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\TechController;
 
+Route::get('/test-env', function () {
+    return env('MAPBOX_PUBLIC_TOKEN', 'No Token Found');
+});
+
 // Route d'accueil pour le formulaire de connexion
 Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
@@ -32,6 +36,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/assistant/dashboard', [AssistantController::class, 'dashboard'])->name('assistant.dashboard');
     Route::get('/assistant/prendre-rdv', [AssistantController::class, 'prendreRdv'])->name('assistant.prendre_rdv');
     Route::get('/assistant/agenda-tech', [AssistantController::class, 'agendaTech'])->name('assistant.agenda_tech');
+
+    Route::get('/search-technicians', [AssistantController::class, 'searchTechnicians'])->name('search.technicians');
+    Route::post('/appointments', [AssistantController::class, 'storeAppointment'])->name('appointments.store');
 
     // Routes technicien
     Route::get('/tech/dashboard', [TechController::class, 'dashboard'])->name('tech.dashboard');
