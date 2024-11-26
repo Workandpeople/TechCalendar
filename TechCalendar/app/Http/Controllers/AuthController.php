@@ -23,7 +23,6 @@ class AuthController extends Controller
         ]);
 
         $credentials = $request->only('email', 'password');
-        Log::info("Tentative de connexion avec l'email : {$request->email}");
 
         if (Auth::attempt($credentials)) {
             Log::info("Connexion réussie pour l'utilisateur : {$request->email}");

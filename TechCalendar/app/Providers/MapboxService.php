@@ -12,7 +12,6 @@ class MapboxService
     public function __construct()
     {
         $this->mapboxToken = "pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw";
-        Log::info("Mapbox Token depuis .env : {$this->mapboxToken}");
     }
 
     // Fonction pour géocoder une adresse en coordonnées (latitude, longitude)
@@ -21,7 +20,6 @@ class MapboxService
         $url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" . urlencode($address) . ".json";
 
         // Log de l'URL de requête pour Mapbox Geocoding API
-        Log::info("Requête URL pour Mapbox Geocoding API : {$url}");
 
         $response = Http::get($url, [
             'access_token' => $this->mapboxToken,
@@ -46,7 +44,6 @@ class MapboxService
         $url = "https://api.mapbox.com/directions/v5/mapbox/driving/{$startCoordinates[0]},{$startCoordinates[1]};{$endCoordinates[0]},{$endCoordinates[1]}";
 
         // Log de l'URL pour Mapbox Directions API
-        Log::info("Requête URL pour Mapbox Directions API : {$url}");
 
         $response = Http::get($url, [
             'access_token' => $this->mapboxToken,

@@ -46,7 +46,6 @@ function closeEditUser() {
 }
 
 function saveUserChanges() {
-    console.log(document.getElementById('editUserId')); // Debugging
     
     const userId = document.getElementById('editUserId').value;
     const data = {
@@ -64,7 +63,6 @@ function saveUserChanges() {
         default_rest_time: document.getElementById('editUserRestTime')?.value
     };
 
-    console.log(data); // Verify collected data
 
     fetch(`/admin/manage-user/update/${userId}`, {
         method: 'POST',

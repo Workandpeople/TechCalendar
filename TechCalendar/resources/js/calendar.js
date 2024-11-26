@@ -14,9 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentWeekStarts = {};
 
 function getMonday(date) {
-    const day = date.getDay() || 7; // Si dimanche (0), on met à 7
-    if (day !== 1) date.setDate(date.getDate() - (day - 1));
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const day = date.getDay(); // 0 (dimanche) à 6 (samedi)
+    const diff = (day === 0 ? -6 : 1) - day; // Ajuste pour que lundi soit 0
+    return new Date(date.setDate(date.getDate() + diff));
 }
 
 function changeWeek(technicianId, weekOffset) {
@@ -41,26 +41,29 @@ function renderWeekView(technicianId) {
     const startDateLabel = formatDate(currentWeekStarts[technicianId]);
     document.getElementById(`weekLabel-${technicianId}`).textContent = `Semaine du ${startDateLabel}`;
 
-    const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-    const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, '0')}:00`);
+    const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
+    const hours = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`); // Commence à 8h, finit à 19h
 
     const appointments = technicianAppointments[technicianId] || [];
 
+    // Création de l'en-tête pour les jours
     const headerRow = document.createElement('div');
     headerRow.classList.add('row', 'week-header');
     const emptyCell = document.createElement('div');
     emptyCell.classList.add('cell', 'hour-cell');
     headerRow.appendChild(emptyCell);
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 5; i++) { // Boucle de 5 jours (lundi à vendredi)
         const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000);
         const dayCell = document.createElement('div');
         dayCell.classList.add('cell', 'day-cell');
         dayCell.textContent = `${daysOfWeek[i]} ${day.getDate()}/${day.getMonth() + 1}`;
+        dayCell.dataset.date = day.toISOString().split('T')[0];
         headerRow.appendChild(dayCell);
     }
     container.appendChild(headerRow);
 
+    // Création des lignes horaires
     hours.forEach(hour => {
         const row = document.createElement('div');
         row.classList.add('row', 'hour-row');
@@ -70,29 +73,38 @@ function renderWeekView(technicianId) {
         hourCell.textContent = hour;
         row.appendChild(hourCell);
 
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < 5; i++) { // Boucle de 5 jours (lundi à vendredi)
+            const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000);
+
             const dayHourCell = document.createElement('div');
             dayHourCell.classList.add('cell', 'day-hour-cell');
+            dayHourCell.dataset.date = day.toISOString().split('T')[0];
+            dayHourCell.dataset.hour = hour;
 
-            const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000).toISOString().split('T')[0];
-            const hourMinutes = timeStringToMinutes(hour);
+            const currentHourMinutes = timeStringToMinutes(hour);
 
             appointments.forEach(appointment => {
-                const appointmentDate = appointment.date;
+                const appointmentDate = appointment.date; // Format YYYY-MM-DD
+                const cellDate = dayHourCell.dataset.date; // Format YYYY-MM-DD
                 const appointmentStartMinutes = timeStringToMinutes(appointment.start_at);
                 const appointmentEndMinutes = appointmentStartMinutes + appointment.duree;
 
-                if (appointmentDate === day && hourMinutes === Math.floor(appointmentStartMinutes / 60) * 60) {
-                    // Calculer la hauteur en fonction de la durée
-                    const durationHours = Math.ceil(appointmentEndMinutes / 60) - Math.floor(appointmentStartMinutes / 60);
+                if (
+                    appointmentDate === cellDate &&
+                    currentHourMinutes === Math.floor(appointmentStartMinutes / 60) * 60
+                ) {
+                    const minutesPastHour = appointmentStartMinutes % 60;
+                    const durationPercentage = (appointment.duree * 100) / 60;
+                    const marginTopPercentage = ((((minutesPastHour * 100) / 60)*37.5)/100)/16;
+
                     const button = document.createElement('button');
                     button.classList.add('btn', 'btn-primary', 'btn-sm', 'appointment-btn');
                     button.textContent = `${appointment.nom} ${appointment.prenom}`;
-                    button.style.height = `${durationHours * 100}%`; // Ajuster selon la hauteur de chaque cellule
+                    button.style.height = `${durationPercentage}%`; // Hauteur basée sur la durée
+                    button.style.marginTop = `${marginTopPercentage}rem`; // Décalage vertical basé sur l'heure de début
                     button.onclick = () => alert(`Rendez-vous avec ${appointment.nom} ${appointment.prenom}`);
 
                     dayHourCell.appendChild(button);
-                    dayHourCell.style.gridRow = `span ${durationHours}`; // Étendre sur plusieurs lignes
                 }
             });
 
@@ -106,7 +118,6 @@ function placeAppointment(technicianId, travelTime, defaultStartAt) {
     // Initialiser currentWeekStarts pour ce technicien s'il n'existe pas
     if (!currentWeekStarts[technicianId]) {
         currentWeekStarts[technicianId] = getMonday(new Date());
-        console.log(`currentWeekStarts initialized for technicianId: ${technicianId}`, currentWeekStarts[technicianId]);
     }
 
     // Récupérer la date de début de semaine
@@ -296,7 +307,6 @@ function submitAppointment(technicianId, time, date) {
             return response.json();
         })
         .then(data => {
-            console.log('Réponse JSON du serveur :', data);
             alert('Rendez-vous enregistré avec succès.');
             closeAppointmentOverlay(`appointmentOverlay-${technicianId}`);
         })

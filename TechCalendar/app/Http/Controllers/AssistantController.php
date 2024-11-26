@@ -49,52 +49,52 @@ class AssistantController extends Controller
     {
         $address = $request->query('address');
         $city = $request->query('city');
-
-        Log::info("Recherche de techniciens pour disponibilité", compact('address', 'city'));
-
+        
         if (!$address || !$city) {
             Log::warning("Adresse ou ville manquante.");
             return response()->json([
                 'message' => 'Adresse et ville sont requis pour rechercher des techniciens.',
             ], 400);
         }
-
+    
         $technicians = User::whereHas('role', function ($query) {
             $query->where('role', 'technicien');
         })->get();
-
-        Log::info("Techniciens récupérés", ['count' => $technicians->count()]);
-
+    
+    
         $results = [];
-
+    
         foreach ($technicians as $technician) {
             $technicianAddress = "{$technician->adresse}, {$technician->code_postal}, {$technician->ville}";
-
-            // Récupérer tous les rendez-vous à venir
+    
+            // Récupérer tous les rendez-vous dans l'intervalle d'un mois avant et après
             $appointments = Rendezvous::where('technician_id', $technician->id)
-                ->whereDate('date', '>=', now()->format('Y-m-d'))
+                ->whereBetween('date', [
+                    now()->subMonth()->format('Y-m-d'),
+                    now()->addMonth()->format('Y-m-d'),
+                ])
                 ->orderBy('date')
                 ->orderBy('start_at')
                 ->get();
-
+    
             Log::info("Rendez-vous récupérés pour le technicien", [
                 'technician_id' => $technician->id,
                 'appointments' => $appointments->toArray(),
             ]);
-
+    
             $firstAvailableDate = null;
             $route = null;
             $numberOfAppointments = 0;
-
+    
             foreach (range(0, 365) as $dayOffset) {
                 $currentDate = now()->addDays($dayOffset)->format('Y-m-d');
                 $dayAppointments = $appointments->where('date', $currentDate);
-
+    
                 $numberOfAppointments = $dayAppointments->count();
-
+    
                 if ($numberOfAppointments < 2) {
                     $firstAvailableDate = $currentDate;
-
+    
                     // Calcul du trajet
                     if ($dayAppointments->isEmpty()) {
                         $route = $this->mapboxService->getRoute(
@@ -108,14 +108,14 @@ class AssistantController extends Controller
                             $this->mapboxService->geocodeAddress("{$address}, {$city}")
                         );
                     }
-
+    
                     break;
                 }
             }
-
+    
             $travelDistance = $route['distance_km'] ?? null;
             $travelDurationMinutes = $route['duration_minutes'] ?? $technician->default_traject_time;
-
+    
             // Appliquer les filtres
             if (
                 $travelDurationMinutes > ($technician->default_traject_time + 20) || 
@@ -129,11 +129,11 @@ class AssistantController extends Controller
                 ]);
                 continue;
             }
-
+    
             // Arrondir les valeurs comme demandé
             $travelDistance = $travelDistance !== null ? ceil($travelDistance) : null;
             $travelDurationMinutes = ceil($travelDurationMinutes / 10) * 10;
-
+    
             $results[] = [
                 'id' => $technician->id,
                 'name' => "{$technician->prenom} {$technician->nom}",
@@ -142,9 +142,10 @@ class AssistantController extends Controller
                 'travel' => $travelDistance !== null
                     ? sprintf("%dkm et %d:%02d de trajet", $travelDistance, intdiv($travelDurationMinutes, 60), $travelDurationMinutes % 60)
                     : "N/A",
+                'appointments' => $appointments->toArray(), // Inclure les rendez-vous dans la réponse
             ];
         }
-
+    
         // Trier les résultats
         usort($results, function ($a, $b) {
             // Trier par date de disponibilité
@@ -158,9 +159,8 @@ class AssistantController extends Controller
             // Enfin par durée du trajet
             return $a['travel_duration_minutes'] <=> $b['travel_duration_minutes'];
         });
-
-        Log::info("Techniciens triés par disponibilité", ['count' => count($results)]);
-
+    
+    
         return response()->json(['technicians' => $results]);
     }
 
@@ -207,7 +207,6 @@ class AssistantController extends Controller
 
     public function storeAppointment(Request $request)
     {
-        Log::info('Requête reçue : ', $request->all());
 
         // Ajouter un log pour vérifier la validation
         try {
@@ -225,7 +224,6 @@ class AssistantController extends Controller
                 'duree' => 'nullable|integer',
                 'commentaire' => 'nullable|string',
             ]);
-            Log::info('Données validées : ', $validatedData);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Erreur de validation : ', $e->errors());
             return response()->json(['errors' => $e->errors()], 422);
