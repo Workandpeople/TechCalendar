@@ -97,13 +97,11 @@ class AssistantController extends Controller
 
                     // Calcul du trajet
                     if ($dayAppointments->isEmpty()) {
-                        // Pas de rendez-vous dans la journée, calculer depuis le domicile
                         $route = $this->mapboxService->getRoute(
                             $this->mapboxService->geocodeAddress($technicianAddress),
                             $this->mapboxService->geocodeAddress("{$address}, {$city}")
                         );
                     } else {
-                        // Dernier rendez-vous de la journée
                         $lastAppointment = $dayAppointments->last();
                         $route = $this->mapboxService->getRoute(
                             $this->mapboxService->geocodeAddress("{$lastAppointment->adresse}, {$lastAppointment->ville}"),
@@ -118,9 +116,23 @@ class AssistantController extends Controller
             $travelDistance = $route['distance_km'] ?? null;
             $travelDurationMinutes = $route['duration_minutes'] ?? $technician->default_traject_time;
 
+            // Appliquer les filtres
+            if (
+                $travelDurationMinutes > ($technician->default_traject_time + 20) || 
+                ($travelDistance !== null && $travelDistance > 250)
+            ) {
+                Log::info("Technicien filtré pour dépassement des critères", [
+                    'technician_id' => $technician->id,
+                    'travel_distance' => $travelDistance,
+                    'travel_duration_minutes' => $travelDurationMinutes,
+                    'default_traject_time' => $technician->default_traject_time,
+                ]);
+                continue;
+            }
+
             // Arrondir les valeurs comme demandé
-            $travelDistance = $travelDistance !== null ? ceil($travelDistance) : null; // Arrondi au km supérieur
-            $travelDurationMinutes = ceil($travelDurationMinutes / 10) * 10; // Arrondi à la dizaine de minutes supérieure
+            $travelDistance = $travelDistance !== null ? ceil($travelDistance) : null;
+            $travelDurationMinutes = ceil($travelDurationMinutes / 10) * 10;
 
             $results[] = [
                 'id' => $technician->id,
@@ -132,6 +144,20 @@ class AssistantController extends Controller
                     : "N/A",
             ];
         }
+
+        // Trier les résultats
+        usort($results, function ($a, $b) {
+            // Trier par date de disponibilité
+            if ($a['next_availability_date'] !== $b['next_availability_date']) {
+                return strcmp($a['next_availability_date'], $b['next_availability_date']);
+            }
+            // Ensuite par nombre de rendez-vous dans la journée
+            if ($a['number_of_appointments'] !== $b['number_of_appointments']) {
+                return $a['number_of_appointments'] - $b['number_of_appointments'];
+            }
+            // Enfin par durée du trajet
+            return $a['travel_duration_minutes'] <=> $b['travel_duration_minutes'];
+        });
 
         Log::info("Techniciens triés par disponibilité", ['count' => count($results)]);
 
