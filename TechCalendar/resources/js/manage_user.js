@@ -145,9 +145,6 @@ function saveNewUser() {
         password_confirmation: document.getElementById('createUserPasswordConfirm').value
     };
 
-    // Log to check the role value
-    console.log("Role selected:", data.role);
-
     // Ajouter les champs techniques si le rôle est technicien
     if (data.role === 'technicien') {
         data.telephone = document.getElementById('createUserPhone').value;

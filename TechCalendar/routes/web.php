@@ -6,10 +6,6 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\TechController;
 
-Route::get('/test-env', function () {
-    return env('MAPBOX_PUBLIC_TOKEN', 'No Token Found');
-});
-
 // Route d'accueil pour le formulaire de connexion
 Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.submit');

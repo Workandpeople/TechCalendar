@@ -4,6 +4,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (prestationSearchInput) {
         prestationSearchInput.addEventListener('input', filterPrestations);
     }
+
+    // Mettre à jour les champs 'type' et 'defaultTime' lors de la sélection d'une prestation
+    const prestationDropdown = document.getElementById('prestationDropdown');
+    if (prestationDropdown) {
+        prestationDropdown.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const type = selectedOption.getAttribute('data-type');
+            const defaultTime = selectedOption.getAttribute('data-default-time');
+
+            document.getElementById('prestationType').value = type;
+            document.getElementById('defaultTime').value = defaultTime;
+        });
+
+        // Déclencher l'événement change au chargement pour initialiser les champs
+        prestationDropdown.dispatchEvent(new Event('change'));
+    }
 });
 
 function filterPrestations() {
@@ -18,70 +34,74 @@ function filterPrestations() {
 }
 
 function searchTechnicians() {
+    console.log('Début de la fonction searchTechnicians');
+
     const postalCode = document.getElementById('postalCode').value.trim();
     const city = document.getElementById('city').value.trim();
     const address = document.getElementById('address').value.trim();
     const prestation = document.getElementById('prestationDropdown').value;
 
-    // Validation des champs obligatoires
+    console.log('Champs saisis', { postalCode, city, address, prestation });
+
     if (!postalCode || !city || !address) {
         alert('Veuillez remplir tous les champs nécessaires.');
+        console.warn('Validation échouée: des champs sont manquants');
         return;
     }
 
-    // Extraire le département à partir du code postal
     const department = postalCode.substring(0, 2);
+    console.log('Département extrait', { department });
 
-    // Construire l'URL de la requête
     const queryURL = `/search-technicians?department=${department}&address=${encodeURIComponent(address)}&city=${encodeURIComponent(city)}&prestation=${prestation}`;
+    console.log('URL construite pour la requête', { queryURL });
 
-    // Effectuer la requête fetch
     fetch(queryURL)
         .then(response => {
+            console.log('Réponse reçue', { status: response.status });
             if (!response.ok) {
                 throw new Error(`Erreur réseau: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            const resultContainer = document.getElementById('technicianResults');
-            resultContainer.innerHTML = ''; // Nettoyer les anciens résultats
+            console.log('Données reçues de l\'API', data);
 
-            if (data.error) {
-                // Afficher un message d'erreur si l'API retourne une erreur
+            const resultContainer = document.getElementById('technicianResults');
+            resultContainer.innerHTML = '';
+
+            if (data.technicians.length === 0) {
+                console.warn('Aucun technicien trouvé');
                 resultContainer.innerHTML = `
                     <tr>
-                        <td colspan="4" class="text-center text-danger">Erreur: ${data.error}</td>
+                        <td colspan="5" class="text-center text-warning">Aucun technicien disponible.</td>
                     </tr>
                 `;
-            } else if (data.technicians.length === 0) {
-                // Afficher un message si aucun technicien n'est trouvé
-                resultContainer.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="text-center text-warning">Aucun technicien disponible ne correspond aux critères spécifiés.</td>
-                    </tr>
-                `;
-            } else {
-                // Parcourir et afficher les techniciens dans le tableau
-                data.technicians.forEach(tech => {
-                    console.log('Technician data:', tech); // Log des données pour vérification
+                return;
+            }
+
+            data.technicians.forEach(tech => {
+                try {
+                    console.log('Traitement d\'un technicien', tech);
 
                     const row = `
                         <tr>
                             <td>${tech.name}</td>
-                            <td>${tech.distance.toFixed(2)} km</td>
-                            <td>${tech.duration.toFixed(2)} min</td>
+                            <td>${tech.next_availability_date || 'N/A'}</td>
+                            <td>${tech.number_of_appointments || 0}</td>
+                            <td>${tech.travel || 'N/A'}</td>
                             <td>
-                                <button class="btn btn-success btn-sm" 
-                                    onclick="openCalendar('${tech.id}', '${tech.name}', ${tech.duration})">
-                                    Choisir ce tech
-                                </button>
+                                <div class="d-inline-flex">
+                                    <button class="btn btn-info btn-sm mr-2" onclick="openCalendar('${tech.id}')">Agenda</button>
+                                    <button class="btn btn-success btn-sm" onclick="placeAppointment('${tech.id}')">Placer</button>
+                                </div>
                             </td>
                         </tr>
                     `;
                     resultContainer.innerHTML += row;
-                });
-            }
+                } catch (error) {
+                    console.error('Erreur lors du traitement d\'un technicien', { tech, error });
+                }
+            });
         })
         .catch(error => {
             console.error('Erreur lors de la recherche des techniciens:', error);
@@ -89,13 +109,15 @@ function searchTechnicians() {
         });
 }
 
-function openCalendar(technicianId, technicianName, travelTime) {
-    console.log('Ouverture du calendrier pour le technicien', technicianId, technicianName, travelTime);
+function showComparativeAgenda() {
+    alert('Affichage de l\'agenda comparatif à implémenter.');
+}
+
+function openCalendar(technicianId, technicianName) {
     const overlayId = `calendarOverlay-${technicianId}`;
     let overlay = document.getElementById(overlayId);
 
     if (!overlay) {
-        // Crée un nouvel overlay pour le technicien si non existant
         overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.className = 'modal-overlay';
@@ -115,7 +137,13 @@ function openCalendar(technicianId, technicianName, travelTime) {
     }
 
     overlay.style.display = 'flex';
-    renderWeekView(technicianId, travelTime); // Affiche le calendrier pour le technicien choisi
+
+    // Assurez-vous que les rendez-vous sont bien stockés
+    if (technicianAppointments[technicianId]) {
+        renderWeekView(technicianId); // Affiche le calendrier avec les rendez-vous
+    } else {
+        alert("Aucun rendez-vous trouvé pour ce technicien.");
+    }
 }
 
 function closeCalendar(technicianId) {

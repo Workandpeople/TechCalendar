@@ -14,8 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentWeekStarts = {};
 
 function getMonday(date) {
-    const day = date.getDay() || 7;
-    if (day !== 1) date.setHours(-24 * (day - 1));
+    const day = date.getDay() || 7; // Si dimanche (0), on met à 7
+    if (day !== 1) date.setDate(date.getDate() - (day - 1));
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
@@ -28,9 +28,11 @@ function changeWeek(technicianId, weekOffset) {
     renderWeekView(technicianId);
 }
 
-function renderWeekView(technicianId, travelTime = 0, defaultStartTime = '07:00', defaultEndTime = '20:00') {
+let technicianAppointments = {};
+
+function renderWeekView(technicianId) {
     const container = document.getElementById(`RdvCalendarContainer-${technicianId}`);
-    container.innerHTML = ''; // Efface le contenu précédent
+    container.innerHTML = '';
 
     if (!currentWeekStarts[technicianId]) {
         currentWeekStarts[technicianId] = getMonday(new Date());
@@ -42,11 +44,8 @@ function renderWeekView(technicianId, travelTime = 0, defaultStartTime = '07:00'
     const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
     const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, '0')}:00`);
 
-    // Convertir les heures par défaut en minutes pour comparaison
-    const startMinutes = timeStringToMinutes(defaultStartTime);
-    const endMinutes = timeStringToMinutes(defaultEndTime);
+    const appointments = technicianAppointments[technicianId] || [];
 
-    // En-tête pour les jours de la semaine
     const headerRow = document.createElement('div');
     headerRow.classList.add('row', 'week-header');
     const emptyCell = document.createElement('div');
@@ -62,7 +61,6 @@ function renderWeekView(technicianId, travelTime = 0, defaultStartTime = '07:00'
     }
     container.appendChild(headerRow);
 
-    // Lignes pour chaque heure de 7:00 à 20:00
     hours.forEach(hour => {
         const row = document.createElement('div');
         row.classList.add('row', 'hour-row');
@@ -72,25 +70,31 @@ function renderWeekView(technicianId, travelTime = 0, defaultStartTime = '07:00'
         hourCell.textContent = hour;
         row.appendChild(hourCell);
 
-        const hourMinutes = timeStringToMinutes(hour); // Convertir l'heure en minutes
-
         for (let i = 0; i < 7; i++) {
             const dayHourCell = document.createElement('div');
             dayHourCell.classList.add('cell', 'day-hour-cell');
 
-            // Vérifier si le temps est dans la plage de disponibilité
-            if (hourMinutes >= startMinutes && hourMinutes < endMinutes) {
-                const arrivalTime = startMinutes + travelTime; // Calculer l'heure d'arrivée
-                const roundedArrivalHour = Math.ceil(arrivalTime / 60) * 60; // Arrondir à l'heure suivante en minutes
+            const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000).toISOString().split('T')[0];
+            const hourMinutes = timeStringToMinutes(hour);
 
-                if (hourMinutes === roundedArrivalHour) {
-                    const btn = document.createElement('button');
-                    btn.classList.add('btn', 'btn-success', 'btn-sm');
-                    btn.textContent = 'DISPO';
-                    btn.onclick = () => placeAppointment(technicianId, hour, i);
-                    dayHourCell.appendChild(btn);
+            appointments.forEach(appointment => {
+                const appointmentDate = appointment.date;
+                const appointmentStartMinutes = timeStringToMinutes(appointment.start_at);
+                const appointmentEndMinutes = appointmentStartMinutes + appointment.duree;
+
+                if (appointmentDate === day && hourMinutes === Math.floor(appointmentStartMinutes / 60) * 60) {
+                    // Calculer la hauteur en fonction de la durée
+                    const durationHours = Math.ceil(appointmentEndMinutes / 60) - Math.floor(appointmentStartMinutes / 60);
+                    const button = document.createElement('button');
+                    button.classList.add('btn', 'btn-primary', 'btn-sm', 'appointment-btn');
+                    button.textContent = `${appointment.nom} ${appointment.prenom}`;
+                    button.style.height = `${durationHours * 100}%`; // Ajuster selon la hauteur de chaque cellule
+                    button.onclick = () => alert(`Rendez-vous avec ${appointment.nom} ${appointment.prenom}`);
+
+                    dayHourCell.appendChild(button);
+                    dayHourCell.style.gridRow = `span ${durationHours}`; // Étendre sur plusieurs lignes
                 }
-            }
+            });
 
             row.appendChild(dayHourCell);
         }
@@ -98,24 +102,37 @@ function renderWeekView(technicianId, travelTime = 0, defaultStartTime = '07:00'
     });
 }
 
-function placeAppointment(technicianId, time, dayIndex) {
+function placeAppointment(technicianId, travelTime, defaultStartAt) {
+    // Initialiser currentWeekStarts pour ce technicien s'il n'existe pas
     if (!currentWeekStarts[technicianId]) {
+        currentWeekStarts[technicianId] = getMonday(new Date());
+        console.log(`currentWeekStarts initialized for technicianId: ${technicianId}`, currentWeekStarts[technicianId]);
+    }
+
+    // Récupérer la date de début de semaine
+    const startDate = currentWeekStarts[technicianId];
+    if (!startDate) {
         console.error(`currentWeekStarts is undefined for technicianId: ${technicianId}`);
         return;
     }
 
+    // Le reste de la fonction reste identique
     const prestationDropdown = document.getElementById('prestationDropdown');
     const selectedPrestationId = prestationDropdown.value;
-    const selectedPrestationName = prestationDropdown.options[prestationDropdown.selectedIndex].text;
     const selectedPrestationTime = prestationDropdown.options[prestationDropdown.selectedIndex].getAttribute('data-default-time');
 
-    const startDate = new Date(currentWeekStarts[technicianId].getTime() + dayIndex * 86400000);
-    if (isNaN(startDate.getTime())) {
-        console.error('Invalid date calculated for overlay:', startDate);
-        return;
-    }
     const formattedDate = startDate.toISOString().split('T')[0];
 
+    // Calculer l'heure d'arrivée
+    const travelMinutes = parseInt(travelTime, 10);
+    const [startHour, startMinute] = defaultStartAt.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMinute;
+    const arrivalTimeMinutes = startMinutes + travelMinutes;
+
+    const formattedStartTime = `${Math.floor(arrivalTimeMinutes / 60).toString().padStart(2, '0')}:${(arrivalTimeMinutes % 60).toString().padStart(2, '0')}`;
+
+
+    // Création ou affichage de l'overlay
     const overlayId = `appointmentOverlay-${technicianId}`;
     let overlay = document.getElementById(overlayId);
 
@@ -128,21 +145,25 @@ function placeAppointment(technicianId, time, dayIndex) {
                 <button class="close-btn" onclick="closeAppointmentOverlay('${overlayId}')">&times;</button>
                 <h3>Créer un rendez-vous</h3>
                 <form id="appointmentForm-${technicianId}">
-                    <div class="form-group">
-                        <label for="clientLastName">Nom du client</label>
-                        <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="clientLastName">Nom du client</label>
+                            <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="clientFirstName">Prénom du client</label>
+                            <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="clientFirstName">Prénom du client</label>
-                        <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="clientAddress">Adresse</label>
-                        <input type="text" id="clientAddress" class="form-control" placeholder="Adresse" value="${document.getElementById('address').value}">
-                    </div>
-                    <div class="form-group">
-                        <label for="clientPostalCode">Code postal</label>
-                        <input type="text" id="clientPostalCode" class="form-control" placeholder="Code postal" value="${document.getElementById('postalCode').value}">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="clientAddress">Adresse</label>
+                            <input type="text" id="clientAddress" class="form-control" placeholder="Adresse" value="${document.getElementById('address').value}">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="clientPostalCode">Code postal</label>
+                            <input type="text" id="clientPostalCode" class="form-control" placeholder="Code postal" value="${document.getElementById('postalCode').value}">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="clientCity">Ville</label>
@@ -152,39 +173,44 @@ function placeAppointment(technicianId, time, dayIndex) {
                         <label for="clientPhone">Téléphone</label>
                         <input type="tel" id="clientPhone" class="form-control" placeholder="Téléphone" required>
                     </div>
-                    <div class="form-group">
-                        <label for="appointmentDate">Date</label>
-                        <input type="text" id="appointmentDate" class="form-control" value="${formattedDate}" readonly>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="appointmentDate">Date</label>
+                            <input type="text" id="appointmentDate" class="form-control" value="${formattedDate}" readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="startTime">Débute à</label>
+                            <input type="time" id="startTime" class="form-control" value="${formattedStartTime}">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="startTime">Débute à</label>
-                        <input type="time" id="startTime" class="form-control" value="${time}">
-                    </div>
-                    <div class="form-group">
-                        <label for="prestation">Prestation</label>
-                        <select id="prestation" class="form-control">
-                            ${Array.from(prestationDropdown.options)
-                                .map(option => `<option value="${option.value}" ${option.value === selectedPrestationId ? 'selected' : ''}>
-                                    ${option.text}
-                                </option>`)
-                                .join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="duration">Durée</label>
-                        <input type="text" id="duration" class="form-control" value="${selectedPrestationTime} minutes">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="prestation">Prestation</label>
+                            <select id="prestation" class="form-control">
+                                ${Array.from(prestationDropdown.options)
+                                    .map(option => `<option value="${option.value}" ${option.value === selectedPrestationId ? 'selected' : ''}>
+                                        ${option.text}
+                                    </option>`)
+                                    .join('')}
+                            </select>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="duration">Durée</label>
+                            <input type="text" id="duration" class="form-control" value="${selectedPrestationTime} minutes">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="comment">Commentaire</label>
                         <textarea id="comment" class="form-control" placeholder="Ajouter un commentaire"></textarea>
                     </div>
-                    <button type="button" class="btn btn-primary" onclick="submitAppointment('${technicianId}', '${time}', '${formattedDate}')">Valider le rendez-vous</button>
+                    <button type="button" class="btn btn-primary justify-center" onclick="submitAppointment('${technicianId}', '${formattedStartTime}', '${formattedDate}')">Valider le rendez-vous</button>
                 </form>
             </div>
         `;
         document.body.appendChild(overlay);
     }
 
+    // Ajouter un écouteur pour mettre à jour la durée lors du changement de prestation
     const prestationSelect = overlay.querySelector('#prestation');
     prestationSelect.addEventListener('change', function () {
         const selectedOption = prestationSelect.options[prestationSelect.selectedIndex];
@@ -193,6 +219,16 @@ function placeAppointment(technicianId, time, dayIndex) {
     });
 
     overlay.style.display = 'flex';
+}
+
+// Fonction utilitaire pour ajouter des minutes à une heure au format HH:MM
+function calculateAdjustedStartTime(baseTime, additionalMinutes) {
+    const [hours, minutes] = baseTime.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes + additionalMinutes;
+    const adjustedHours = Math.floor(totalMinutes / 60) % 24;
+    const adjustedMinutes = totalMinutes % 60;
+
+    return `${String(adjustedHours).padStart(2, '0')}:${String(adjustedMinutes).padStart(2, '0')}`;
 }
 
 function closeAppointmentOverlay(overlayId) {

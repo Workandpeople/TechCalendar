@@ -104,7 +104,7 @@
                             <option value="" disabled selected>Choisissez le type</option>
                             <option value="MAR">MAR</option>
                             <option value="AUDIT">AUDIT</option>
-                            <option value="COFFRAC">COFFRAC</option>
+                            <option value="COFRAC">COFRAC</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -142,7 +142,7 @@
                         <select id="createPrestaType" name="type" class="form-control">
                             <option value="MAR">MAR</option>
                             <option value="AUDIT">AUDIT</option>
-                            <option value="COFFRAC">COFFRAC</option>
+                            <option value="COFRAC">COFRAC</option>
                         </select>
                     </div>
                     <div class="form-group">

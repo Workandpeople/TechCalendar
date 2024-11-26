@@ -22,13 +22,11 @@ class AssistantController extends Controller
     }
     public function dashboard()
     {
-        Log::info("Accès au tableau de bord de l'assistant.");
         return view('assistant.dashboard');
     }
 
     public function prendreRdv()
     {
-        Log::info("Accès à la prise de rendez-vous de l'assistant.");
 
         // Récupérer les prestations depuis la base de données
         $prestations = Prestation::all();
@@ -38,7 +36,6 @@ class AssistantController extends Controller
 
     public function agendaTech()
     {
-        Log::info("Accès à l'agenda technique de l'assistant.");
 
         // Récupérer uniquement les techniciens
         $techniciens = User::whereHas('role', function ($query) {
@@ -50,65 +47,136 @@ class AssistantController extends Controller
 
     public function searchTechnicians(Request $request)
     {
-        $department = $request->query('department');
         $address = $request->query('address');
         $city = $request->query('city');
 
-        if (!$department || !$address || !$city) {
-            return response()->json(['error' => 'Les paramètres requis sont manquants.'], 400);
+        Log::info("Recherche de techniciens pour disponibilité", compact('address', 'city'));
+
+        if (!$address || !$city) {
+            Log::warning("Adresse ou ville manquante.");
+            return response()->json([
+                'message' => 'Adresse et ville sont requis pour rechercher des techniciens.',
+            ], 400);
         }
 
-        // Filtrer les techniciens par département
-        $technicians = User::where('code_postal', 'LIKE', "{$department}%")
-            ->whereHas('role', function ($query) {
-                $query->where('role', 'technicien');
-            })
-            ->get();
+        $technicians = User::whereHas('role', function ($query) {
+            $query->where('role', 'technicien');
+        })->get();
 
-        $primaryResults = [];
-        $fallbackResults = [];
+        Log::info("Techniciens récupérés", ['count' => $technicians->count()]);
+
+        $results = [];
 
         foreach ($technicians as $technician) {
-            // Adresse complète du technicien
             $technicianAddress = "{$technician->adresse}, {$technician->code_postal}, {$technician->ville}";
 
-            // Calculer la distance et le temps entre les adresses
-            $route = $this->mapboxService->calculateRouteBetweenAddresses($technicianAddress, "{$address}, {$city}");
-            if ($route) {
-                $allowedTrajectTime = $technician->default_traject_time + 30; // Temps de trajet autorisé avec une marge de 30 minutes
+            // Récupérer tous les rendez-vous à venir
+            $appointments = Rendezvous::where('technician_id', $technician->id)
+                ->whereDate('date', '>=', now()->format('Y-m-d'))
+                ->orderBy('date')
+                ->orderBy('start_at')
+                ->get();
 
-                $technicianData = [
-                    'id' => $technician->id, // Inclure l'ID
-                    'name' => "{$technician->prenom} {$technician->nom}",
-                    'distance' => $route['distance_km'],
-                    'duration' => $route['duration_minutes'],
-                ];
+            Log::info("Rendez-vous récupérés pour le technicien", [
+                'technician_id' => $technician->id,
+                'appointments' => $appointments->toArray(),
+            ]);
 
-                if ($route['duration_minutes'] <= $allowedTrajectTime) {
-                    // Ajouter aux résultats principaux si le critère de temps de trajet est respecté
-                    $primaryResults[] = $technicianData;
-                } else {
-                    // Ajouter aux résultats de fallback si le critère de temps de trajet n'est pas respecté
-                    $fallbackResults[] = $technicianData;
+            $firstAvailableDate = null;
+            $route = null;
+            $numberOfAppointments = 0;
+
+            foreach (range(0, 365) as $dayOffset) {
+                $currentDate = now()->addDays($dayOffset)->format('Y-m-d');
+                $dayAppointments = $appointments->where('date', $currentDate);
+
+                $numberOfAppointments = $dayAppointments->count();
+
+                if ($numberOfAppointments < 2) {
+                    $firstAvailableDate = $currentDate;
+
+                    // Calcul du trajet
+                    if ($dayAppointments->isEmpty()) {
+                        // Pas de rendez-vous dans la journée, calculer depuis le domicile
+                        $route = $this->mapboxService->getRoute(
+                            $this->mapboxService->geocodeAddress($technicianAddress),
+                            $this->mapboxService->geocodeAddress("{$address}, {$city}")
+                        );
+                    } else {
+                        // Dernier rendez-vous de la journée
+                        $lastAppointment = $dayAppointments->last();
+                        $route = $this->mapboxService->getRoute(
+                            $this->mapboxService->geocodeAddress("{$lastAppointment->adresse}, {$lastAppointment->ville}"),
+                            $this->mapboxService->geocodeAddress("{$address}, {$city}")
+                        );
+                    }
+
+                    break;
                 }
             }
+
+            $travelDistance = $route['distance_km'] ?? null;
+            $travelDurationMinutes = $route['duration_minutes'] ?? $technician->default_traject_time;
+
+            // Arrondir les valeurs comme demandé
+            $travelDistance = $travelDistance !== null ? ceil($travelDistance) : null; // Arrondi au km supérieur
+            $travelDurationMinutes = ceil($travelDurationMinutes / 10) * 10; // Arrondi à la dizaine de minutes supérieure
+
+            $results[] = [
+                'id' => $technician->id,
+                'name' => "{$technician->prenom} {$technician->nom}",
+                'next_availability_date' => $firstAvailableDate,
+                'number_of_appointments' => $numberOfAppointments,
+                'travel' => $travelDistance !== null
+                    ? sprintf("%dkm et %d:%02d de trajet", $travelDistance, intdiv($travelDurationMinutes, 60), $travelDurationMinutes % 60)
+                    : "N/A",
+            ];
         }
 
-        if (empty($primaryResults) && !empty($fallbackResults)) {
-            // Retourner les techniciens de fallback si aucun résultat principal
-            return response()->json([
-                'technicians' => $fallbackResults,
-                'message' => 'Aucun technicien ne répond aux critères de temps de trajet. Voici des techniciens dans le même département.',
-            ]);
-        }
+        Log::info("Techniciens triés par disponibilité", ['count' => count($results)]);
 
-        if (empty($primaryResults) && empty($fallbackResults)) {
-            // Si aucun technicien n'est trouvé
-            return response()->json(['error' => 'Aucun technicien disponible.'], 404);
-        }
+        return response()->json(['technicians' => $results]);
+    }
 
-        // Retourner les résultats principaux si disponibles
-        return response()->json(['technicians' => $primaryResults]);
+    private function timeStringToMinutes(string $time): int
+    {
+        [$hours, $minutes] = explode(':', $time);
+        return (int)$hours * 60 + (int)$minutes;
+    }
+
+    private function minutesToTimeString(int $minutes): string
+    {
+        $hours = intdiv($minutes, 60);
+        $remainingMinutes = $minutes % 60;
+        return sprintf('%02d:%02d', $hours, $remainingMinutes);
+    }
+    
+    private function addAvailability(User $technician, int $startMinutes, int $endMinutes)
+    {
+        return [
+            'id' => $technician->id,
+            'name' => "{$technician->prenom} {$technician->nom}",
+            'next_availability' => sprintf('%02d:%02d', intdiv($startMinutes, 60), $startMinutes % 60),
+            'available_until' => sprintf('%02d:%02d', intdiv($endMinutes, 60), $endMinutes % 60),
+        ];
+    }
+
+    private function calculateDistance($coords1, $coords2)
+    {
+        [$lon1, $lat1] = $coords1;
+        [$lon2, $lat2] = $coords2;
+
+        $earthRadius = 6371; // Rayon de la Terre en km
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lonDelta = deg2rad($lon2 - $lon1);
+
+        $a = sin($latDelta / 2) ** 2 +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($lonDelta / 2) ** 2;
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
     }
 
     public function storeAppointment(Request $request)

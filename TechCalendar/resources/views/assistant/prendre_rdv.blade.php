@@ -51,50 +51,73 @@
                         </div>
                         
                         <!-- Card Body -->
-                        <div class="card-body d-flex">
-                            <!-- Formulaire à gauche -->
-                            <div class="col-md-6">
-                                <form id="newRdvForm">
-                                    <!-- Dropdown pour les prestations avec recherche dynamique -->
-                                    <div class="form-group">
-                                        <label for="prestationSearch">Rechercher une prestation</label>
-                                        <input type="text" id="prestationSearch" class="form-control mb-2" placeholder="Rechercher une prestation...">
-                                        <select id="prestationDropdown" class="form-control">
-                                            @foreach($prestations as $prestation)
-                                                <option value="{{ $prestation->id }}" data-default-time="{{ $prestation->default_time }}">
-                                                    {{ $prestation->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <!-- Champs d'adresse, code postal et ville -->
-                                    <div class="form-group">
-                                        <label for="address">Adresse</label>
-                                        <input type="text" id="address" class="form-control" placeholder="Adresse">
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group col-md-6">
-                                            <label for="postalCode">Code postal</label>
-                                            <input type="text" id="postalCode" class="form-control" placeholder="Code postal">
+                        <div class="card-body">
+                            <div class="row">
+                                <!-- Formulaire à gauche -->
+                                <div class="col-md-6">
+                                    <form id="newRdvForm">
+                                        <!-- Dropdown pour les prestations -->
+                                        <div class="form-group">
+                                            <label for="prestationDropdown">Prestation :</label>
+                                            <select id="prestationDropdown" class="form-control">
+                                                @foreach($prestations as $prestation)
+                                                    <option value="{{ $prestation->id }}" data-default-time="{{ $prestation->default_time }}" data-type="{{ $prestation->type }}">
+                                                        {{ $prestation->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
                                         </div>
-                                        <div class="form-group col-md-6">
-                                            <label for="city">Ville</label>
-                                            <input type="text" id="city" class="form-control" placeholder="Ville">
+
+                                        <!-- Informations de la prestation -->
+                                        <div class="form-row">
+                                            <div class="form-group col-md-6">
+                                                <label for="prestationType">Type :</label>
+                                                <input type="text" id="prestationType" class="form-control" readonly>
+                                            </div>
+                                            <div class="form-group col-md-6">
+                                                <label for="defaultTime">Durée :</label>
+                                                <input type="number" id="defaultTime" class="form-control">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <!-- Boutons de soumission -->
-                                    <button type="button" class="btn btn-primary" onclick="searchTechnicians()">Rechercher des techniciens disponibles</button>
-                                </form>
+                                    </form>
+                                </div>
+
+                                <!-- Champs d'adresse à droite -->
+                                <div class="col-md-6">
+                                    <form>
+                                        <div class="form-group">
+                                            <label for="address">Adresse :</label>
+                                            <input type="text" id="address" class="form-control" placeholder="Adresse">
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group col-md-6">
+                                                <label for="postalCode">Code postal :</label>
+                                                <input type="text" id="postalCode" class="form-control" placeholder="Code postal">
+                                            </div>
+                                            <div class="form-group col-md-6">
+                                                <label for="city">Ville :</label>
+                                                <input type="text" id="city" class="form-control" placeholder="Ville">
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
 
-                            <!-- Tableau des résultats à droite -->
-                            <div class="col-md-6">
+                            <!-- Bouton Rechercher centré -->
+                            <div class="text-center mt-4">
+                                <button type="button" class="btn btn-primary" onclick="searchTechnicians()">Rechercher des techniciens disponibles</button>
+                            </div>
+
+                            <!-- Tableau des résultats en dessous -->
+                            <div class="mt-4">
+                                <h5>Techniciens disponibles :</h5>
                                 <table class="table table-bordered">
                                     <thead>
                                         <tr>
                                             <th>Nom & Prénom</th>
-                                            <th>Distance (km)</th>
-                                            <th>Temps de trajet (min)</th>
+                                            <th>Date de la première disponibilitée</th>
+                                            <th>Nombre de RDV ce jour</th>
+                                            <th>Trajet</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
@@ -102,18 +125,10 @@
                                         <!-- Les résultats seront ajoutés ici via JavaScript -->
                                     </tbody>
                                 </table>
-                            </div>
 
-                            <div id="calendarOverlay" class="modal-overlay" style="display: none;">
-                                <div class="modal-content">
-                                    <button class="close-btn" onclick="closeCalendar()">&times;</button>
-                                    <h3>Calendrier</h3>
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <button id="prevWeek" class="btn btn-outline-primary btn-sm" onclick="changeWeek(-1)">&larr;</button>
-                                        <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
-                                        <button id="nextWeek" class="btn btn-outline-primary btn-sm" onclick="changeWeek(1)">&rarr;</button>
-                                    </div>
-                                    <div id="calendarContainer" style="height: 500px;"></div>
+                                <!-- Bouton Voir l'agenda comparatif -->
+                                <div id="agendaComparatifContainer" class="text-center mt-3" style="display: none;">
+                                    <button type="button" class="btn btn-secondary" onclick="showComparativeAgenda()">Voir l'agenda comparatif</button>
                                 </div>
                             </div>
                         </div>

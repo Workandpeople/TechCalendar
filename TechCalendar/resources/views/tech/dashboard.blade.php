@@ -192,27 +192,12 @@
                                             </div>
                                             <div class="col-6 mb-2">
                                                 <span class="mr-2">
-                                                    <i class="fas fa-circle text-success"></i> COFFRAC AUDIT 145
+                                                    <i class="fas fa-circle text-success"></i> COFRAC
                                                 </span>
                                             </div>
                                             <div class="col-6 mb-2">
                                                 <span class="mr-2">
-                                                    <i class="fas fa-circle text-info"></i> COFFRAC TRAVAUX 145
-                                                </span>
-                                            </div>
-                                            <div class="col-6 mb-2">
-                                                <span class="mr-2">
-                                                    <i class="fas fa-circle text-warning"></i> AUDIT 145
-                                                </span>
-                                            </div>
-                                            <div class="col-6 mb-2">
-                                                <span class="mr-2">
-                                                    <i class="fas fa-circle text-danger"></i> COFFRAC TRAVAUX
-                                                </span>
-                                            </div>
-                                            <div class="col-6 mb-2">
-                                                <span class="mr-2">
-                                                    <i class="fas fa-circle text-secondary"></i> COFFRAC AUDIT
+                                                    <i class="fas fa-circle text-warning"></i> AUDIT
                                                 </span>
                                             </div>
                                         </div>

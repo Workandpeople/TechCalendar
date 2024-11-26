@@ -1,13 +1,17 @@
+/* Conteneur principal du calendrier */
 #calendarContainer {
     display: flex;
     flex-direction: column;
     margin-top: 20px;
+    font-family: Arial, sans-serif;
 }
 
+/* Ligne (row) du calendrier */
 .row {
     display: flex;
 }
 
+/* Cellules génériques */
 .cell {
     border: 1px solid #ddd;
     padding: 8px;
@@ -16,25 +20,37 @@
     text-align: center;
 }
 
+/* Cellules des heures */
 .hour-cell {
     width: 80px;
     background-color: #f7f7f7;
     font-weight: bold;
+    color: #333;
+    text-align: right;
+    padding-right: 10px;
 }
 
+/* Cellules des jours (en-têtes de colonnes) */
 .day-cell {
     background-color: #e9ecef;
     font-weight: bold;
+    color: #495057;
+    text-transform: capitalize;
 }
 
+/* Cellules horaires des jours */
 .day-hour-cell {
     background-color: #ffffff;
+    position: relative;
 }
 
+/* Effet hover sur les cellules horaires */
 .day-hour-cell:hover {
     background-color: #dfe6f7;
+    cursor: pointer;
 }
 
+/* Boutons de navigation (précédent/suivant) */
 .nav-arrow {
     background: none;
     border: none;
@@ -42,17 +58,45 @@
     font-size: 20px;
     font-weight: bold;
     color: #007bff;
+    padding: 5px;
 }
 
 .nav-arrow:hover {
     color: #0056b3;
 }
 
+/* Label de la semaine (en-tête) */
 #weekLabel {
     font-weight: bold;
     font-size: 16px;
+    text-align: center;
+    margin: 10px 0;
+    color: #333;
 }
 
+/* Boutons d'un rendez-vous */
+.appointment-btn {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    background-color: #007bff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    border: none;
+    border-radius: 4px;
+    text-align: center;
+    padding: 5px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.appointment-btn:hover {
+    background-color: #0056b3;
+}
+
+/* Masquer les éléments avec la classe "hidden" */
 .hidden {
     display: none !important;
 }

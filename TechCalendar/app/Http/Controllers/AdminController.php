@@ -18,7 +18,6 @@ class AdminController extends Controller
                          ->orWhere('prenom', 'like', "{$search}%");
         })->paginate(8);
 
-        Log::info("Accès à la gestion des utilisateurs par un administrateur.");
         return view('admin.manage_user', compact('users', 'search'));
     }
 
@@ -65,7 +64,6 @@ class AdminController extends Controller
                          ->orWhere('type', 'like', "{$search}%");
         })->paginate(8);
 
-        Log::info("Accès à la gestion des prestations par un administrateur.");
         return view('admin.manage_presta', compact('prestations', 'search'));
     }
 
@@ -73,7 +71,7 @@ class AdminController extends Controller
     public function updatePresta(Request $request, $id)
     {
         $request->validate([
-            'type' => 'required|in:MAR,AUDIT,COFFRAC',
+            'type' => 'required|in:MAR,AUDIT,COFRAC',
             'name' => 'required|string|max:255',
             'default_time' => 'required|integer|min:1',
         ]);
@@ -98,7 +96,6 @@ class AdminController extends Controller
     public function createUser(Request $request)
     {
         // Log the role value for debugging
-        Log::info('Rôle sélectionné : ' . $request->input('role'));
 
         $request->validate([
             'prenom' => 'required|string|max:255',

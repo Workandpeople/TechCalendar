@@ -11,7 +11,6 @@ class AuthController extends Controller
 {
     public function showLoginForm()
     {
-        Log::info("Affichage de la page de connexion.");
         return view('login');
     }
 
@@ -44,13 +43,10 @@ class AuthController extends Controller
             // Redirection selon le rôle
             switch ($role) {
                 case 'administrateur':
-                    Log::info("Redirection vers le panneau administrateur.");
                     return redirect()->route('assistant.dashboard');
                 case 'assistante':
-                    Log::info("Redirection vers le panneau assistant.");
                     return redirect()->route('assistant.dashboard');
                 case 'technicien':
-                    Log::info("Redirection vers le panneau technicien.");
                     return redirect()->route('tech.dashboard');
                 default:
                     Log::error("Rôle inconnu pour l'utilisateur {$user->email} : $role.");
