@@ -39,12 +39,6 @@
         <div class="sidebar-heading">
             Assistante Panel
         </div>
-        <li class="nav-item {{ Route::is('assistant.dashboard') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('assistant.dashboard') }}">
-                <i class="fas fa-fw fa-tachometer-alt"></i>
-                <span>Dashboard</span>
-            </a>
-        </li>
         <li class="nav-item {{ Route::is('assistant.prendre_rdv') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('assistant.prendre_rdv') }}">
                 <i class="fas fa-fw fa-wrench"></i>

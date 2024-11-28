@@ -20,10 +20,6 @@ class AssistantController extends Controller
     {
         $this->mapboxService = $mapboxService;
     }
-    public function dashboard()
-    {
-        return view('assistant.dashboard');
-    }
 
     public function prendreRdv()
     {
@@ -162,6 +158,47 @@ class AssistantController extends Controller
     
     
         return response()->json(['technicians' => $results]);
+    }
+
+    public function getTechnicianAppointments(Request $request)
+    {
+        $technicianIds = $request->input('technician_ids', []);
+
+        $appointments = Rendezvous::with('technician')
+            ->whereIn('technician_id', $technicianIds)
+            ->get();
+
+        return response()->json([
+            'appointments' => $appointments,
+        ]);
+    }
+
+    public function show($id)
+    {
+        $rendezvous = Rendezvous::with('technician')->find($id);
+
+        if (!$rendezvous) {
+            return response()->json(['error' => 'Rendez-vous non trouvé.'], 404);
+        }
+
+        return response()->json([
+            'id' => $rendezvous->id,
+            'nom' => $rendezvous->nom,
+            'prenom' => $rendezvous->prenom,
+            'adresse' => $rendezvous->adresse,
+            'code_postal' => $rendezvous->code_postal,
+            'ville' => $rendezvous->ville,
+            'tel' => $rendezvous->tel,
+            'date' => $rendezvous->date,
+            'start_at' => $rendezvous->start_at,
+            'prestation' => $rendezvous->prestation,
+            'duree' => $rendezvous->duree,
+            'commentaire' => $rendezvous->commentaire,
+            'technician' => [
+                'id' => $rendezvous->technician->id,
+                'name' => $rendezvous->technician->name,
+            ],
+        ]);
     }
 
     private function timeStringToMinutes(string $time): int

@@ -29,12 +29,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/admin/manage-presta/create', [AdminController::class, 'createPresta'])->name('admin.create_presta');
 
     // Routes assistante
-    Route::get('/assistant/dashboard', [AssistantController::class, 'dashboard'])->name('assistant.dashboard');
     Route::get('/assistant/prendre-rdv', [AssistantController::class, 'prendreRdv'])->name('assistant.prendre_rdv');
     Route::get('/assistant/agenda-tech', [AssistantController::class, 'agendaTech'])->name('assistant.agenda_tech');
 
     Route::get('/search-technicians', [AssistantController::class, 'searchTechnicians'])->name('search.technicians');
     Route::post('/appointments', [AssistantController::class, 'storeAppointment'])->name('appointments.store');
+
+    Route::get('/rendezvous/{id}', [AssistantController::class, 'show'])->name('rendezvous.show');
+    Route::post('/get-technician-appointments', [AssistantController::class, 'getTechnicianAppointments']);
 
     // Routes technicien
     Route::get('/tech/dashboard', [TechController::class, 'dashboard'])->name('tech.dashboard');

@@ -42,7 +42,7 @@ function renderWeekView(technicianId) {
     document.getElementById(`weekLabel-${technicianId}`).textContent = `Semaine du ${startDateLabel}`;
 
     const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
-    const hours = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`); // Commence à 8h, finit à 19h
+    const hours = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
 
     const appointments = technicianAppointments[technicianId] || [];
 
@@ -53,7 +53,7 @@ function renderWeekView(technicianId) {
     emptyCell.classList.add('cell', 'hour-cell');
     headerRow.appendChild(emptyCell);
 
-    for (let i = 0; i < 5; i++) { // Boucle de 5 jours (lundi à vendredi)
+    for (let i = 0; i < 5; i++) {
         const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000);
         const dayCell = document.createElement('div');
         dayCell.classList.add('cell', 'day-cell');
@@ -73,7 +73,7 @@ function renderWeekView(technicianId) {
         hourCell.textContent = hour;
         row.appendChild(hourCell);
 
-        for (let i = 0; i < 5; i++) { // Boucle de 5 jours (lundi à vendredi)
+        for (let i = 0; i < 5; i++) {
             const day = new Date(currentWeekStarts[technicianId].getTime() + i * 86400000);
 
             const dayHourCell = document.createElement('div');
@@ -83,6 +83,7 @@ function renderWeekView(technicianId) {
 
             const currentHourMinutes = timeStringToMinutes(hour);
 
+            // Gérer les rendez-vous existants
             appointments.forEach(appointment => {
                 const appointmentDate = appointment.date; // Format YYYY-MM-DD
                 const cellDate = dayHourCell.dataset.date; // Format YYYY-MM-DD
@@ -95,17 +96,26 @@ function renderWeekView(technicianId) {
                 ) {
                     const minutesPastHour = appointmentStartMinutes % 60;
                     const durationPercentage = (appointment.duree * 100) / 60;
-                    const marginTopPercentage = ((((minutesPastHour * 100) / 60)*37.5)/100)/16;
+                    const marginTopPercentage = ((((minutesPastHour * 100) / 60) * 37.5) / 100) / 16;
 
                     const button = document.createElement('button');
                     button.classList.add('btn', 'btn-primary', 'btn-sm', 'appointment-btn');
                     button.textContent = `${appointment.nom} ${appointment.prenom}`;
-                    button.style.height = `${durationPercentage}%`; // Hauteur basée sur la durée
-                    button.style.marginTop = `${marginTopPercentage}rem`; // Décalage vertical basé sur l'heure de début
-                    button.onclick = () => alert(`Rendez-vous avec ${appointment.nom} ${appointment.prenom}`);
+                    button.style.height = `${durationPercentage}%`;
+                    button.style.marginTop = `${marginTopPercentage}rem`;
+
+                    button.onclick = () => openAppointmentDetailsOverlay(appointment.id);
 
                     dayHourCell.appendChild(button);
                 }
+            });
+
+            // Ajouter un écouteur de double-clic pour ouvrir l'overlay
+            dayHourCell.addEventListener('dblclick', () => {
+                const date = dayHourCell.dataset.date;
+                const hour = dayHourCell.dataset.hour;
+                const technicians = Object.values(techniciansData); // Récupérer les techniciens disponibles
+                openAppointmentOverlay(date, hour, technicians);
             });
 
             row.appendChild(dayHourCell);
@@ -114,37 +124,8 @@ function renderWeekView(technicianId) {
     });
 }
 
-function placeAppointment(technicianId, travelTime, defaultStartAt) {
-    // Initialiser currentWeekStarts pour ce technicien s'il n'existe pas
-    if (!currentWeekStarts[technicianId]) {
-        currentWeekStarts[technicianId] = getMonday(new Date());
-    }
-
-    // Récupérer la date de début de semaine
-    const startDate = currentWeekStarts[technicianId];
-    if (!startDate) {
-        console.error(`currentWeekStarts is undefined for technicianId: ${technicianId}`);
-        return;
-    }
-
-    // Le reste de la fonction reste identique
-    const prestationDropdown = document.getElementById('prestationDropdown');
-    const selectedPrestationId = prestationDropdown.value;
-    const selectedPrestationTime = prestationDropdown.options[prestationDropdown.selectedIndex].getAttribute('data-default-time');
-
-    const formattedDate = startDate.toISOString().split('T')[0];
-
-    // Calculer l'heure d'arrivée
-    const travelMinutes = parseInt(travelTime, 10);
-    const [startHour, startMinute] = defaultStartAt.split(':').map(Number);
-    const startMinutes = startHour * 60 + startMinute;
-    const arrivalTimeMinutes = startMinutes + travelMinutes;
-
-    const formattedStartTime = `${Math.floor(arrivalTimeMinutes / 60).toString().padStart(2, '0')}:${(arrivalTimeMinutes % 60).toString().padStart(2, '0')}`;
-
-
-    // Création ou affichage de l'overlay
-    const overlayId = `appointmentOverlay-${technicianId}`;
+function openAppointmentDetailsOverlay(appointmentId) {
+    const overlayId = 'appointmentDetailsOverlay';
     let overlay = document.getElementById(overlayId);
 
     if (!overlay) {
@@ -153,83 +134,52 @@ function placeAppointment(technicianId, travelTime, defaultStartAt) {
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
             <div class="modal-content">
-                <button class="close-btn" onclick="closeAppointmentOverlay('${overlayId}')">&times;</button>
-                <h3>Créer un rendez-vous</h3>
-                <form id="appointmentForm-${technicianId}">
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="clientLastName">Nom du client</label>
-                            <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="clientFirstName">Prénom du client</label>
-                            <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="clientAddress">Adresse</label>
-                            <input type="text" id="clientAddress" class="form-control" placeholder="Adresse" value="${document.getElementById('address').value}">
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="clientPostalCode">Code postal</label>
-                            <input type="text" id="clientPostalCode" class="form-control" placeholder="Code postal" value="${document.getElementById('postalCode').value}">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="clientCity">Ville</label>
-                        <input type="text" id="clientCity" class="form-control" placeholder="Ville" value="${document.getElementById('city').value}">
-                    </div>
-                    <div class="form-group">
-                        <label for="clientPhone">Téléphone</label>
-                        <input type="tel" id="clientPhone" class="form-control" placeholder="Téléphone" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="appointmentDate">Date</label>
-                            <input type="text" id="appointmentDate" class="form-control" value="${formattedDate}" readonly>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="startTime">Débute à</label>
-                            <input type="time" id="startTime" class="form-control" value="${formattedStartTime}">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="prestation">Prestation</label>
-                            <select id="prestation" class="form-control">
-                                ${Array.from(prestationDropdown.options)
-                                    .map(option => `<option value="${option.value}" ${option.value === selectedPrestationId ? 'selected' : ''}>
-                                        ${option.text}
-                                    </option>`)
-                                    .join('')}
-                            </select>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="duration">Durée</label>
-                            <input type="text" id="duration" class="form-control" value="${selectedPrestationTime} minutes">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="comment">Commentaire</label>
-                        <textarea id="comment" class="form-control" placeholder="Ajouter un commentaire"></textarea>
-                    </div>
-                    <button type="button" class="btn btn-primary justify-center" onclick="submitAppointment('${technicianId}', '${formattedStartTime}', '${formattedDate}')">Valider le rendez-vous</button>
-                </form>
+                <button class="close-btn" onclick="closeAppointmentDetailsOverlay()">&times;</button>
+                <h3>Détails du rendez-vous</h3>
+                <div id="appointmentDetailsContainer">
+                    <p><strong>Nom du client :</strong> <span id="clientName"></span></p>
+                    <p><strong>Téléphone :</strong> <span id="clientPhone"></span></p>
+                    <p><strong>Adresse :</strong> <span id="clientAddress"></span></p>
+                    <p><strong>Date :</strong> <span id="appointmentDate"></span></p>
+                    <p><strong>Heure de début :</strong> <span id="startTime"></span></p>
+                    <p><strong>Durée :</strong> <span id="duration"></span> minutes</p>
+                    <p><strong>Commentaire :</strong> <span id="comment"></span></p>
+                </div>
             </div>
         `;
         document.body.appendChild(overlay);
     }
 
-    // Ajouter un écouteur pour mettre à jour la durée lors du changement de prestation
-    const prestationSelect = overlay.querySelector('#prestation');
-    prestationSelect.addEventListener('change', function () {
-        const selectedOption = prestationSelect.options[prestationSelect.selectedIndex];
-        const newDefaultTime = selectedOption.getAttribute('data-default-time');
-        overlay.querySelector('#duration').value = `${newDefaultTime} minutes`;
-    });
+    // Appeler le backend pour récupérer les détails du rendez-vous
+    fetch(`/rendezvous/${appointmentId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erreur lors de la récupération des détails du rendez-vous.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('clientName').textContent = `${data.nom} ${data.prenom}`;
+            document.getElementById('clientPhone').textContent = data.tel || 'Non renseigné';
+            document.getElementById('clientAddress').textContent = `${data.adresse}, ${data.code_postal} ${data.ville}`;
+            document.getElementById('appointmentDate').textContent = data.date || 'Non renseignée';
+            document.getElementById('startTime').textContent = data.start_at || 'Non renseignée';
+            document.getElementById('duration').textContent = data.duree || 'Non renseignée';
+            document.getElementById('comment').textContent = data.commentaire || 'Non renseigné';
+            overlay.style.display = 'flex';
+        })
+        .catch(error => {
+            console.error(error);
+            alert('Impossible de charger les détails du rendez-vous.');
+        });
+}
 
-    overlay.style.display = 'flex';
+// Fonction pour fermer l'overlay
+function closeAppointmentDetailsOverlay() {
+    const overlay = document.getElementById('appointmentDetailsOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
 }
 
 // Fonction utilitaire pour ajouter des minutes à une heure au format HH:MM
@@ -240,11 +190,6 @@ function calculateAdjustedStartTime(baseTime, additionalMinutes) {
     const adjustedMinutes = totalMinutes % 60;
 
     return `${String(adjustedHours).padStart(2, '0')}:${String(adjustedMinutes).padStart(2, '0')}`;
-}
-
-function closeAppointmentOverlay(overlayId) {
-    const overlay = document.getElementById(overlayId);
-    if (overlay) overlay.style.display = 'none';
 }
 
 function submitAppointment(technicianId, time, date) {
@@ -326,4 +271,216 @@ function formatDate(date) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
+}
+
+let currentTechWeekStart = getMonday(new Date()); // Initialisation à la semaine courante
+
+function changeTechWeek(offset) {
+    currentTechWeekStart.setDate(currentTechWeekStart.getDate() + offset * 7);
+
+    // Mise à jour de l'étiquette de la semaine
+    const weekLabelTech = document.getElementById('weekLabelTech');
+    if (weekLabelTech) {
+        const weekEnd = new Date(currentTechWeekStart.getTime() + 4 * 86400000); // Lundi à Vendredi
+        weekLabelTech.textContent = `Semaine du ${formatDate(currentTechWeekStart)} au ${formatDate(weekEnd)}`;
+    }
+
+    // Mettre à jour le calendrier avec les techniciens cochés
+    updateTechCalendar();
+}
+
+async function updateTechCalendar() {
+    const checkedTechnicians = Array.from(document.querySelectorAll('.tech-checkbox:checked'))
+        .map(checkbox => checkbox.closest('.tech-item').dataset.id);
+
+    console.log('Techniciens cochés :', checkedTechnicians);
+
+    if (checkedTechnicians.length === 0) {
+        document.getElementById('techCalendarContainer').innerHTML = '<p>Aucun technicien sélectionné.</p>';
+        return;
+    }
+
+    try {
+        const response = await fetch('/get-technician-appointments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({
+                technician_ids: checkedTechnicians,
+                week_start: currentTechWeekStart.toISOString(),
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erreur réseau : ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        console.log('Rendez-vous récupérés :', data.appointments);
+
+        const technicians = data.appointments.reduce((result, appointment) => {
+            const techId = appointment.technician_id;
+        
+            if (!result[techId]) {
+                result[techId] = {
+                    id: techId,
+                    name: `${appointment.technician.prenom} ${appointment.technician.nom}`,
+                    appointments: [],
+                };
+            }
+        
+            result[techId].appointments.push({
+                id: appointment.id, // Ajoutez explicitement l'ID ici
+                date: appointment.date,
+                start_at: appointment.start_at,
+                duree: appointment.duree,
+                nom: appointment.nom,
+            });
+        
+            return result;
+        }, {});
+
+        renderTechCalendar(Object.values(technicians), document.getElementById('techCalendarContainer'));
+    } catch (error) {
+        console.error('Erreur lors de la récupération des rendez-vous :', error);
+        alert('Impossible de charger les rendez-vous.');
+    }
+}
+
+function renderTechCalendar(technicians, container) {
+    container.innerHTML = '';
+    const colors = ['#FF5733', '#33FF57', '#3357FF', '#FF33A8', '#FFBD33'];
+
+    const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
+    const hours = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
+
+    const appointmentsByDate = {};
+
+    // Début et fin de la semaine courante
+    const weekStart = currentTechWeekStart;
+    const weekEnd = new Date(weekStart.getTime() + 4 * 86400000); // 5 jours de lundi à vendredi
+
+    // Ajouter une légende pour les techniciens
+    const legendContainer = document.createElement('div');
+    legendContainer.classList.add('legend-container', 'd-flex', 'align-items-center', 'mb-3');
+    legendContainer.style.flexWrap = 'wrap';
+    legendContainer.style.gap = '10px';
+
+    technicians.forEach((tech, index) => {
+        const techColor = colors[index % colors.length];
+
+        const legendItem = document.createElement('div');
+        legendItem.classList.add('legend-item', 'd-flex', 'align-items-center');
+
+        const colorBox = document.createElement('div');
+        colorBox.style.backgroundColor = techColor;
+        colorBox.style.width = '20px';
+        colorBox.style.height = '20px';
+        colorBox.style.borderRadius = '3px';
+        colorBox.style.marginRight = '8px';
+
+        const techName = document.createElement('span');
+        techName.textContent = tech.name;
+
+        legendItem.appendChild(colorBox);
+        legendItem.appendChild(techName);
+        legendContainer.appendChild(legendItem);
+    });
+
+    container.appendChild(legendContainer);
+
+    // Filtrer et organiser les rendez-vous par date dans la semaine actuelle
+    technicians.forEach((tech, index) => {
+        if (!tech || !tech.appointments) return;
+
+        const techColor = colors[index % colors.length];
+
+        tech.appointments.forEach(appointment => {
+            const appointmentDate = new Date(appointment.date);
+
+            if (appointmentDate >= weekStart && appointmentDate <= weekEnd) {
+                const startMinutes = timeStringToMinutes(appointment.start_at);
+                const endMinutes = startMinutes + appointment.duree;
+                const dateKey = appointment.date;
+
+                if (!appointmentsByDate[dateKey]) {
+                    appointmentsByDate[dateKey] = [];
+                }
+                appointmentsByDate[dateKey].push({
+                    ...appointment,
+                    id: appointment.id, // Assurez-vous que l'ID est inclus
+                    color: techColor,
+                    startMinutes,
+                    endMinutes,
+                });
+            }
+        });
+    });
+
+    // Création de l'en-tête
+    const headerRow = document.createElement('div');
+    headerRow.classList.add('row', 'week-header');
+    const emptyCell = document.createElement('div');
+    emptyCell.classList.add('cell', 'hour-cell');
+    headerRow.appendChild(emptyCell);
+
+    for (let i = 0; i < 5; i++) {
+        const day = new Date(weekStart.getTime() + i * 86400000);
+        const dayCell = document.createElement('div');
+        dayCell.classList.add('cell', 'day-cell');
+        dayCell.textContent = `${daysOfWeek[i]} ${day.getDate()}/${day.getMonth() + 1}`;
+        headerRow.appendChild(dayCell);
+    }
+    container.appendChild(headerRow);
+
+    // Générer les lignes horaires
+    hours.forEach(hour => {
+        const row = document.createElement('div');
+        row.classList.add('row', 'hour-row');
+
+        const hourCell = document.createElement('div');
+        hourCell.classList.add('cell', 'hour-cell');
+        hourCell.textContent = hour;
+        row.appendChild(hourCell);
+
+        for (let i = 0; i < 5; i++) {
+            const day = new Date(weekStart.getTime() + i * 86400000);
+            const dayKey = day.toISOString().split('T')[0];
+
+            const cell = document.createElement('div');
+            cell.classList.add('cell', 'day-hour-cell');
+            cell.style.position = 'relative';
+
+            const appointments = appointmentsByDate[dayKey]?.filter(appt => {
+                const startHour = Math.floor(appt.startMinutes / 60);
+                return `${String(startHour).padStart(2, '0')}:00` === hour;
+            });
+
+            if (appointments && appointments.length) {
+                appointments.forEach(appointment => {
+                    const minutesPastHour = timeStringToMinutes(appointment.start_at) % 60;
+                    const durationPercentage = (appointment.duree * 100) / 60;
+                    const marginTopPercentage = ((((minutesPastHour * 100) / 60) * 37.5) / 100) / 16;
+
+                    const button = document.createElement('button');
+                    button.classList.add('btn', 'btn-sm', 'appointment-btn');
+                    button.style.backgroundColor = appointment.color;
+                    button.style.height = `${durationPercentage}%`;
+                    button.style.marginTop = `${marginTopPercentage}rem`;
+
+                    button.textContent = `${appointment.nom}`;
+                    console.log('Appointment Data:', appointment);
+                    button.onclick = () => openAppointmentDetailsOverlay(appointment.id); // Utilise appointment.id
+
+                    cell.appendChild(button);
+                });
+            }
+
+            row.appendChild(cell);
+        }
+        container.appendChild(row);
+    });
 }

@@ -17,25 +17,31 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('defaultTime').value = defaultTime;
         });
 
-
-        https://www.amazon.fr/gp/product/B07GB5JRTZ/ref=ewc_pr_img_11?smid=AUBM4K0YLFI9J&psc=1
-
-
         // Déclencher l'événement change au chargement pour initialiser les champs
         prestationDropdown.dispatchEvent(new Event('change'));
     }
 });
 
-function filterPrestations() {
-    const filter = this.value.toLowerCase();
-    const dropdown = document.getElementById('prestationDropdown');
-    const options = dropdown.getElementsByTagName('option');
+document.addEventListener('DOMContentLoaded', () => {
+    const searchField = document.getElementById('searchTechnicians');
+    const technicianList = document.querySelectorAll('.tech-item');
 
-    Array.from(options).forEach(option => {
-        const text = option.textContent.toLowerCase();
-        option.style.display = text.startsWith(filter) ? '' : 'none';
+    searchField.addEventListener('input', () => {
+        const searchValue = searchField.value.toLowerCase().trim();
+
+        technicianList.forEach(item => {
+            const name = item.dataset.name.toLowerCase();
+            const department = item.dataset.department;
+
+            // Ajouter ou retirer la classe 'hidden' en fonction du nom ou du département
+            if (name.startsWith(searchValue) || department.startsWith(searchValue)) {
+                item.classList.remove('hidden'); // Afficher l'élément
+            } else {
+                item.classList.add('hidden'); // Masquer l'élément
+            }
+        });
     });
-}
+});
 
 function searchTechnicians() {
     const postalCode = document.getElementById('postalCode').value.trim();
@@ -132,7 +138,12 @@ function showAgendaComparatif() {
         overlay.innerHTML = `
             <div class="modal-content">
                 <button class="close-btn" onclick="closeComparatifCalendar()">&times;</button>
-                <h3>Agenda Comparatif</h3>
+                <h3 class="text-center justify-center">Agenda Comparatif</h3>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button id="prevWeekComparatif" class="btn btn-outline-primary btn-sm" onclick="changeComparatifWeek(-1)">&larr; Semaine précédente</button>
+                    <span id="weekLabelComparatif" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                    <button id="nextWeekComparatif" class="btn btn-outline-primary btn-sm" onclick="changeComparatifWeek(1)">Semaine suivante &rarr;</button>
+                </div>
                 <div id="ComparatifCalendarContainer" class="calendar-container" style="height: 500px;"></div>
                 <div id="legendContainer" class="legend-container mt-3"></div>
             </div>
@@ -144,10 +155,50 @@ function showAgendaComparatif() {
 
     console.log("Affichage du calendrier comparatif dans l'élément :", overlay);
 
+    // Initialisation de la semaine actuelle si non définie
+    if (!currentWeekStarts['comparatif']) {
+        currentWeekStarts['comparatif'] = getMonday(new Date());
+    }
+
     renderComparatifCalendar(
         technicians,
         document.getElementById('ComparatifCalendarContainer')
     ); // Affiche l'agenda comparatif
+
+    // Mise à jour de l'étiquette de la semaine
+    updateComparatifWeekLabel();
+}
+
+// Fonction pour mettre à jour l'étiquette de la semaine
+function updateComparatifWeekLabel() {
+    const weekStart = currentWeekStarts['comparatif'];
+    const weekLabel = document.getElementById('weekLabelComparatif');
+    if (weekLabel && weekStart) {
+        weekLabel.textContent = `Semaine du ${formatDate(weekStart)}`;
+    }
+}
+
+// Fonction pour changer de semaine
+function changeComparatifWeek(offset) {
+    if (!currentWeekStarts['comparatif']) {
+        currentWeekStarts['comparatif'] = getMonday(new Date());
+    }
+    currentWeekStarts['comparatif'] = new Date(currentWeekStarts['comparatif'].getTime() + offset * 7 * 86400000);
+
+    console.log(`Semaine mise à jour : ${currentWeekStarts['comparatif']}`);
+    
+    const technicians = Object.entries(techniciansData).map(([id, data]) => ({
+        id,
+        name: data.name,
+        appointments: data.appointments,
+    }));
+
+    renderComparatifCalendar(
+        technicians,
+        document.getElementById('ComparatifCalendarContainer')
+    );
+
+    updateComparatifWeekLabel(); // Mettre à jour l'étiquette de la semaine
 }
 
 function closeComparatifCalendar() {
@@ -166,41 +217,64 @@ function renderComparatifCalendar(technicians, container) {
 
     const appointmentsByDate = {};
 
-    // Initialiser currentWeekStarts pour tous les techniciens
-    technicians.forEach(tech => {
-        if (!currentWeekStarts[tech.id]) {
-            currentWeekStarts[tech.id] = getMonday(new Date());
-        }
+    // Début et fin de la semaine courante
+    const weekStart = currentWeekStarts['comparatif'];
+    const weekEnd = new Date(weekStart.getTime() + 4 * 86400000); // 5 jours de lundi à vendredi
+
+    // Ajouter une légende pour les techniciens
+    const legendContainer = document.createElement('div');
+    legendContainer.classList.add('legend-container', 'd-flex', 'align-items-center', 'mb-3');
+    legendContainer.style.flexWrap = 'wrap';
+    legendContainer.style.gap = '10px';
+
+    technicians.forEach((tech, index) => {
+        const techColor = colors[index % colors.length];
+
+        const legendItem = document.createElement('div');
+        legendItem.classList.add('legend-item', 'd-flex', 'align-items-center');
+
+        const colorBox = document.createElement('div');
+        colorBox.style.backgroundColor = techColor;
+        colorBox.style.width = '20px';
+        colorBox.style.height = '20px';
+        colorBox.style.borderRadius = '3px';
+        colorBox.style.marginRight = '8px';
+
+        const techName = document.createElement('span');
+        techName.textContent = tech.name;
+
+        legendItem.appendChild(colorBox);
+        legendItem.appendChild(techName);
+        legendContainer.appendChild(legendItem);
     });
 
-    if (!technicians || technicians.length === 0) {
-        console.error("Aucun technicien disponible pour afficher le calendrier.");
-        return;
-    }
+    container.appendChild(legendContainer);
 
-    // Organiser les rendez-vous par date
+    // Filtrer et organiser les rendez-vous par date dans la semaine actuelle
     technicians.forEach((tech, index) => {
         if (!tech || !tech.appointments) return;
 
         const techColor = colors[index % colors.length];
-        const appointments = tech.appointments;
 
-        appointments.forEach(appointment => {
-            const startMinutes = timeStringToMinutes(appointment.start_at);
-            const endMinutes = startMinutes + appointment.duree;
+        tech.appointments.forEach(appointment => {
+            const appointmentDate = new Date(appointment.date);
 
-            const dateKey = appointment.date;
+            if (appointmentDate >= weekStart && appointmentDate <= weekEnd) {
+                const startMinutes = timeStringToMinutes(appointment.start_at);
+                const endMinutes = startMinutes + appointment.duree;
+                const dateKey = appointment.date;
 
-            if (!appointmentsByDate[dateKey]) {
-                appointmentsByDate[dateKey] = [];
+                if (!appointmentsByDate[dateKey]) {
+                    appointmentsByDate[dateKey] = [];
+                }
+                appointmentsByDate[dateKey].push({
+                    ...appointment,
+                    color: techColor,
+                    startMinutes,
+                    endMinutes,
+                    conflictClass: null, // Ajouter la propriété conflictClass
+                });
             }
-            appointmentsByDate[dateKey].push({
-                ...appointment,
-                color: techColor,
-                startMinutes,
-                endMinutes,
-                conflictClass: null, // Ajouter la propriété conflictClass
-            });
         });
     });
 
@@ -226,7 +300,6 @@ function renderComparatifCalendar(technicians, container) {
                             `- RDV 2 : ${appt2.nom} (${appt2.start_at} - ${appt2.duree} min)`
                         );
 
-                        // Attribuer conflict-1 et conflict-2
                         if (!appt1.conflictClass) appt1.conflictClass = 'conflict-1';
                         if (!appt2.conflictClass) appt2.conflictClass = 'conflict-2';
                     }
@@ -242,15 +315,8 @@ function renderComparatifCalendar(technicians, container) {
     emptyCell.classList.add('cell', 'hour-cell');
     headerRow.appendChild(emptyCell);
 
-    const firstTech = technicians[0];
-    const firstTechWeekStart = currentWeekStarts[firstTech.id];
-    if (!firstTechWeekStart) {
-        console.error("Impossible de récupérer la date de début pour le premier technicien.");
-        return;
-    }
-
     for (let i = 0; i < 5; i++) {
-        const day = new Date(firstTechWeekStart.getTime() + i * 86400000);
+        const day = new Date(weekStart.getTime() + i * 86400000);
         const dayCell = document.createElement('div');
         dayCell.classList.add('cell', 'day-cell');
         dayCell.textContent = `${daysOfWeek[i]} ${day.getDate()}/${day.getMonth() + 1}`;
@@ -269,13 +335,21 @@ function renderComparatifCalendar(technicians, container) {
         row.appendChild(hourCell);
 
         for (let i = 0; i < 5; i++) {
-            const day = new Date(firstTechWeekStart.getTime() + i * 86400000);
+            const day = new Date(weekStart.getTime() + i * 86400000);
             const dayKey = day.toISOString().split('T')[0];
-            const key = `${dayKey}-${hour}`;
 
             const cell = document.createElement('div');
             cell.classList.add('cell', 'day-hour-cell');
             cell.style.position = 'relative';
+
+            cell.setAttribute('data-date', dayKey);
+            cell.setAttribute('data-hour', hour);
+
+            cell.addEventListener('dblclick', () => {
+                const cellDate = cell.getAttribute('data-date');
+                const cellHour = cell.getAttribute('data-hour');
+                openAppointmentOverlay(cellDate, cellHour, technicians);
+            });
 
             const appointments = appointmentsByDate[dayKey]?.filter(appt => {
                 const startHour = Math.floor(appt.startMinutes / 60);
@@ -294,15 +368,12 @@ function renderComparatifCalendar(technicians, container) {
                     button.style.height = `${durationPercentage}%`;
                     button.style.marginTop = `${marginTopPercentage}rem`;
 
-                    // Ajouter la classe de conflit si définie
                     if (appointment.conflictClass) {
                         button.classList.add(appointment.conflictClass);
-                        console.log(`Classe appliquée : ${appointment.conflictClass} pour le RDV "${appointment.nom}"`);
                     }
 
                     button.textContent = `${appointment.nom}`;
-                    button.onclick = () =>
-                        alert(`Rendez-vous avec ${appointment.nom} à ${appointment.start_at}`);
+                    button.onclick = () => openAppointmentDetailsOverlay(appointment.id);
                     cell.appendChild(button);
                 });
             }
@@ -311,6 +382,95 @@ function renderComparatifCalendar(technicians, container) {
         }
         container.appendChild(row);
     });
+}
+
+function openAppointmentOverlay(date, hour, technicians) {
+    const overlayId = 'appointmentOverlay';
+    let overlay = document.getElementById(overlayId);
+
+    // Récupération des valeurs pré-remplies pour adresse, code postal et ville
+    const address = document.getElementById('address').value || '';
+    const postalCode = document.getElementById('postalCode').value || '';
+    const city = document.getElementById('city').value || '';
+
+    if (!overlay) {
+        // Créer l'overlay si inexistant
+        overlay = document.createElement('div');
+        overlay.id = overlayId;
+        overlay.className = 'modal-overlay appointment-overlay';
+        overlay.innerHTML = `
+            <div class="modal-content">
+                <button class="close-btn" onclick="closeAppointmentOverlay()">&times;</button>
+                <h3>Créer un rendez-vous</h3>
+                <form id="appointmentForm">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="appointmentDate">Date</label>
+                            <input type="text" id="appointmentDate" class="form-control" readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="startTime">Heure</label>
+                            <input type="time" id="startTime" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="clientLastName">Nom du client</label>
+                            <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="clientFirstName">Prénom du client</label>
+                            <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="clientPhone">Téléphone</label>
+                        <input type="tel" id="clientPhone" class="form-control" placeholder="Téléphone" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="clientAddress">Adresse</label>
+                        <input type="text" id="clientAddress" class="form-control">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="clientPostalCode">Code postal</label>
+                            <input type="text" id="clientPostalCode" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="clientCity">Ville</label>
+                            <input type="text" id="clientCity" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="technician">Technicien</label>
+                        <select id="technician" class="form-control">
+                            ${technicians.map(tech => `<option value="${tech.id}">${tech.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="comment">Commentaire</label>
+                        <textarea id="comment" class="form-control"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="submitAppointment()">Valider</button>
+                </form>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // Mettre à jour les champs existants
+    overlay.querySelector('#appointmentDate').value = date;
+    overlay.querySelector('#startTime').value = hour;
+    overlay.querySelector('#clientAddress').value = address;
+    overlay.querySelector('#clientPostalCode').value = postalCode;
+    overlay.querySelector('#clientCity').value = city;
+
+    overlay.style.display = 'flex';
+}
+
+function closeAppointmentOverlay() {
+    const overlay = document.getElementById('appointmentOverlay');
+    if (overlay) overlay.style.display = 'none';
 }
 
 function openCalendar(technicianId, technicianName) {
@@ -351,27 +511,4 @@ function openCalendar(technicianId, technicianName) {
 function closeCalendar(technicianId) {
     const overlay = document.getElementById(`calendarOverlay-${technicianId}`);
     if (overlay) overlay.style.display = 'none';
-}
-
-function chooseTechnician(technicianId) {
-    // Simulation de l'action de choix d'un technicien
-    alert(`Technicien avec ID ${technicianId} sélectionné. Overlay à implémenter.`);
-}
-
-function filterTechnicians() {
-    const searchInput = document.getElementById('technicianSearch');
-    const filter = searchInput ? searchInput.value.toLowerCase() : '';
-
-    const techItems = document.querySelectorAll('.technician-item');
-    techItems.forEach(item => {
-        const techName = item.textContent.toLowerCase().trim();
-
-        if (techName.startsWith(filter)) {
-            item.classList.remove('hidden');
-            item.style.display = 'table-row'; // Affiche l'élément sous forme de ligne de tableau
-        } else {
-            item.classList.add('hidden');
-            item.style.display = 'none'; // Masque l'élément
-        }
-    });
 }
