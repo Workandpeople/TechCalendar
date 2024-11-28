@@ -100,3 +100,13 @@
 .hidden {
     display: none !important;
 }
+
+.conflict-1 {
+    left: 0;
+    width: 50%;
+}
+
+.conflict-2 {
+    left: 50%;
+    width: 50%;
+}

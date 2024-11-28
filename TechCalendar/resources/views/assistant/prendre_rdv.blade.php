@@ -128,7 +128,7 @@
 
                                 <!-- Bouton Voir l'agenda comparatif -->
                                 <div id="agendaComparatifContainer" class="text-center mt-3" style="display: none;">
-                                    <button type="button" class="btn btn-secondary" onclick="showComparativeAgenda()">Voir l'agenda comparatif</button>
+                                    <button type="button" class="btn btn-secondary" onclick="showAgendaComparatif()">Voir l'agenda comparatif</button>
                                 </div>
                             </div>
                         </div>
