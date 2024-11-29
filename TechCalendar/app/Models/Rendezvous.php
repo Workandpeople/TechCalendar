@@ -14,10 +14,9 @@ class Rendezvous extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
-
     protected $fillable = [
         'technician_id', 'nom', 'prenom', 'adresse', 'code_postal', 'ville', 'tel', 
-        'date', 'start_at', 'prestation', 'duree', 'commentaire'
+        'date', 'start_at', 'prestation', 'duree', 'commentaire', 'traject_time', 'traject_distance'
     ];
 
     protected static function boot()

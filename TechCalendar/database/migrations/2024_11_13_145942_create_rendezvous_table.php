@@ -22,6 +22,8 @@ class CreateRendezvousTable extends Migration
             $table->string('prestation');
             $table->integer('duree')->nullable();
             $table->text('commentaire')->nullable();
+            $table->integer('traject_time')->nullable(); // Temps de trajet en minutes
+            $table->float('traject_distance', 8, 2)->nullable(); // Distance de trajet en km
             $table->timestamps();
 
             // Ajout de la contrainte de clé étrangère

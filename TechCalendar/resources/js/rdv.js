@@ -105,6 +105,7 @@ function searchTechnicians() {
                 techniciansData[tech.id] = {
                     name: tech.name,
                     appointments: tech.appointments || [],
+                    travel: tech.travel || '',
                 };
                 technicianAppointments[tech.id] = tech.appointments || [];
 
@@ -115,7 +116,7 @@ function searchTechnicians() {
                         <td>${tech.number_of_appointments || 0}</td>
                         <td>${tech.travel || 'N/A'}</td>
                         <td>
-                            <button class="btn btn-info btn-sm" onclick="openCalendar('${tech.id}', '${tech.name}')">Agenda</button>
+                            <button class="btn btn-info btn-sm" onclick="openCalendar('${tech.id}', '${tech.name}', '${tech.travel}')">Agenda</button>
                         </td>
                     </tr>
                 `;
@@ -147,6 +148,7 @@ function showAgendaComparatif() {
         id,
         name: data.name,
         appointments: data.appointments,
+        travel: data.travel,
     }));
 
     if (technicians.length === 0) {
@@ -188,13 +190,16 @@ function showAgendaComparatif() {
         currentWeekStarts['comparatif'] = getMonday(new Date());
     }
 
-    renderComparatifCalendar(
-        technicians,
-        document.getElementById('ComparatifCalendarContainer')
-    ); // Affiche l'agenda comparatif
+    renderComparatifCalendar(technicians, document.getElementById('ComparatifCalendarContainer'));
 
     // Mise à jour de l'étiquette de la semaine
     updateComparatifWeekLabel();
+}
+
+function parseTravel(travel) {
+    if (!travel) return [0, 0];
+    const [distance, hours, minutes] = travel.match(/\d+/g).map(Number);
+    return [distance || 0, (hours || 0) * 60 + (minutes || 0)];
 }
 
 // Fonction pour mettre à jour l'étiquette de la semaine
@@ -237,6 +242,11 @@ function closeComparatifCalendar() {
 }
 
 function renderComparatifCalendar(technicians, container) {
+    technicians.forEach(tech => {
+        const [distance, time] = parseTravel(tech.travel);
+        console.log(`Technicien: ${tech.name}, Distance: ${distance} km, Temps: ${time} minutes`);
+        // Utilisez distance et time comme nécessaire
+    });
     container.innerHTML = '';
     const colors = ['#FF5733', '#33FF57', '#3357FF', '#FF33A8', '#FFBD33'];
 
@@ -376,7 +386,29 @@ function renderComparatifCalendar(technicians, container) {
             cell.addEventListener('dblclick', () => {
                 const cellDate = cell.getAttribute('data-date');
                 const cellHour = cell.getAttribute('data-hour');
-                openAppointmentOverlay(cellDate, cellHour, technicians);
+            
+                // Trouver un technicien lié à ce rendez-vous (si applicable)
+                let selectedTechnician = null;
+                const appointment = appointmentsByDate[cellDate]?.find(appt => {
+                    const startHour = Math.floor(appt.startMinutes / 60);
+                    return `${String(startHour).padStart(2, '0')}:00` === cellHour;
+                });
+            
+                if (appointment) {
+                    // Si un rendez-vous existe, trouver le technicien associé
+                    selectedTechnician = technicians.find(t => t.id === appointment.technician_id);
+                } else {
+                    // Si aucun rendez-vous n'existe, sélectionner le premier technicien par défaut
+                    selectedTechnician = technicians.length > 0 ? technicians[0] : null;
+                }
+            
+                if (selectedTechnician) {
+                    const [distance, time] = parseTravel(selectedTechnician.travel);
+                    openAppointmentOverlay(cellDate, cellHour, [selectedTechnician], distance, time);
+                } else {
+                    console.warn('Aucun technicien disponible pour créer un rendez-vous.');
+                    alert('Aucun technicien disponible pour créer un rendez-vous.');
+                }
             });
 
             const appointments = appointmentsByDate[dayKey]?.filter(appt => {
@@ -412,8 +444,12 @@ function renderComparatifCalendar(technicians, container) {
     });
 }
 
-function openAppointmentOverlay(date, hour, technicians) {
-    console.log("Ouverture de l'overlay avec les tecjniciens :", technicians);
+function openAppointmentOverlay(date, hour, technicians, distance = 0, time = 0) {
+    console.log("Ouverture de l'overlay avec les paramètres :");
+    console.log(`Date : ${date}, Heure : ${hour}`);
+    console.log(`Distance : ${distance} km, Temps : ${time} minutes`);
+    console.log("Techniciens :", technicians);
+    console.log("Ouverture de l'overlay avec les techniciens :", technicians);
     const overlayId = 'appointmentOverlay';
     let overlay = document.getElementById(overlayId);
 
@@ -436,7 +472,7 @@ function openAppointmentOverlay(date, hour, technicians) {
                 console.warn(`Technician ID invalide détecté : ${tech.id}`);
                 return ''; // Ignorer les techniciens avec un ID invalide
             }
-            return `<option value="${tech.id}">${tech.name}</option>`;
+            return `<option value="${tech.id}" data-travel="${tech.travel}">${tech.name}</option>`;
         }).join('');
 
         overlay.innerHTML = `
@@ -482,6 +518,16 @@ function openAppointmentOverlay(date, hour, technicians) {
                             <input type="text" id="clientCity" class="form-control">
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="trajectTime">Temps de trajet (minutes)</label>
+                            <input type="number" id="trajectTime" class="form-control" value="${time}" placeholder="Temps de trajet" readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="trajectDistance">Distance de trajet (km)</label>
+                            <input type="number" step="0.01" id="trajectDistance" class="form-control" value="${distance}" placeholder="Distance de trajet" readonly>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label for="technician">Technicien</label>
                         <select id="technician" class="form-control">
@@ -506,10 +552,19 @@ function openAppointmentOverlay(date, hour, technicians) {
     overlay.querySelector('#clientPostalCode').value = postalCode;
     overlay.querySelector('#clientCity').value = city;
 
-    overlay.style.display = 'flex';
+    const technicianSelect = overlay.querySelector('#technician');
+    technicianSelect.addEventListener('change', function () {
+        const selectedOption = this.selectedOptions[0];
+        const travel = selectedOption.getAttribute('data-travel');
+        if (travel) {
+            const [distance, time] = travel.match(/\d+/g) || [];
+            document.getElementById('trajectDistance').value = parseFloat(distance) || 0;
+            const [hours, minutes] = time.split(':').map(Number);
+            document.getElementById('trajectTime').value = hours * 60 + minutes;
+        }
+    });
 
-    // Log pour valider la génération de l'overlay
-    console.log("Overlay d'ajout de rendez-vous affiché avec les techniciens :", technicians);
+    overlay.style.display = 'flex';
 }
 
 function closeAppointmentOverlay() {
@@ -517,7 +572,7 @@ function closeAppointmentOverlay() {
     if (overlay) overlay.style.display = 'none';
 }
 
-function openCalendar(technicianId, technicianName) {
+function openCalendar(technicianId, technicianName, travel) {
     const overlayId = `calendarOverlay-${technicianId}`;
     let overlay = document.getElementById(overlayId);
 
@@ -545,7 +600,8 @@ function openCalendar(technicianId, technicianName) {
     // Assurez que la liste des rendez-vous existe même si elle est vide
     technicianAppointments[technicianId] = technicianAppointments[technicianId] || [];
 
-    renderWeekView(technicianId); // Affiche l'agenda, même vide
+    const [distance, time] = parseTravel(travel); // Parse travel data
+    renderWeekView(technicianId, distance, time);
 }
 
 function closeCalendar(technicianId) {

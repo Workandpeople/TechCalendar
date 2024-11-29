@@ -30,7 +30,8 @@ function changeWeek(technicianId, weekOffset) {
 
 let technicianAppointments = {};
 
-function renderWeekView(technicianId) {
+function renderWeekView(technicianId, distance, time) {
+    console.log(`Distance: ${distance} km, Temps: ${time} minutes`);
     const container = document.getElementById(`RdvCalendarContainer-${technicianId}`);
     container.innerHTML = '';
 
@@ -114,8 +115,11 @@ function renderWeekView(technicianId) {
             dayHourCell.addEventListener('dblclick', () => {
                 const date = dayHourCell.dataset.date;
                 const hour = dayHourCell.dataset.hour;
-                const technicians = [{ id: technicianId, name: techniciansData[technicianId]?.name || "Technicien inconnu" }];
-                openAppointmentOverlay(date, hour, technicians); // Passe le technicien actuel uniquement
+            
+                // Récupérez les informations pour le technicien actuel
+                const selectedTechnician = { id: technicianId, name: techniciansData[technicianId]?.name || "Technicien inconnu" };
+                
+                openAppointmentOverlay(date, hour, [selectedTechnician], distance, time);
             });
 
             row.appendChild(dayHourCell);
@@ -247,8 +251,10 @@ function submitAppointment() {
             date: getFieldValue('#appointmentDate'),
             start_at: getFieldValue('#startTime'),
             prestation: prestationDropdown.value,
-            duree: parseInt(prestationDefaultTime, 10), // Convertir en entier
+            duree: parseInt(prestationDefaultTime, 10),
             commentaire: getFieldValue('#comment'),
+            traject_time: parseInt(getFieldValue('#trajectTime'), 10), // Temps de trajet
+            traject_distance: parseFloat(getFieldValue('#trajectDistance')) // Distance de trajet
         };
 
         console.log('Données du rendez-vous :', appointmentData);

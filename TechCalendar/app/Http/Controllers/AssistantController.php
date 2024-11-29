@@ -258,46 +258,46 @@ class AssistantController extends Controller
         ]);
     }
 
-    private function timeStringToMinutes(string $time): int
-    {
-        [$hours, $minutes] = explode(':', $time);
-        return (int)$hours * 60 + (int)$minutes;
-    }
+    // private function timeStringToMinutes(string $time): int
+    // {
+    //     [$hours, $minutes] = explode(':', $time);
+    //     return (int)$hours * 60 + (int)$minutes;
+    // }
 
-    private function minutesToTimeString(int $minutes): string
-    {
-        $hours = intdiv($minutes, 60);
-        $remainingMinutes = $minutes % 60;
-        return sprintf('%02d:%02d', $hours, $remainingMinutes);
-    }
+    // private function minutesToTimeString(int $minutes): string
+    // {
+    //     $hours = intdiv($minutes, 60);
+    //     $remainingMinutes = $minutes % 60;
+    //     return sprintf('%02d:%02d', $hours, $remainingMinutes);
+    // }
     
-    private function addAvailability(User $technician, int $startMinutes, int $endMinutes)
-    {
-        return [
-            'id' => $technician->id,
-            'name' => "{$technician->prenom} {$technician->nom}",
-            'next_availability' => sprintf('%02d:%02d', intdiv($startMinutes, 60), $startMinutes % 60),
-            'available_until' => sprintf('%02d:%02d', intdiv($endMinutes, 60), $endMinutes % 60),
-        ];
-    }
+    // private function addAvailability(User $technician, int $startMinutes, int $endMinutes)
+    // {
+    //     return [
+    //         'id' => $technician->id,
+    //         'name' => "{$technician->prenom} {$technician->nom}",
+    //         'next_availability' => sprintf('%02d:%02d', intdiv($startMinutes, 60), $startMinutes % 60),
+    //         'available_until' => sprintf('%02d:%02d', intdiv($endMinutes, 60), $endMinutes % 60),
+    //     ];
+    // }
 
-    private function calculateDistance($coords1, $coords2)
-    {
-        [$lon1, $lat1] = $coords1;
-        [$lon2, $lat2] = $coords2;
+    // private function calculateDistance($coords1, $coords2)
+    // {
+    //     [$lon1, $lat1] = $coords1;
+    //     [$lon2, $lat2] = $coords2;
 
-        $earthRadius = 6371; // Rayon de la Terre en km
-        $latDelta = deg2rad($lat2 - $lat1);
-        $lonDelta = deg2rad($lon2 - $lon1);
+    //     $earthRadius = 6371; // Rayon de la Terre en km
+    //     $latDelta = deg2rad($lat2 - $lat1);
+    //     $lonDelta = deg2rad($lon2 - $lon1);
 
-        $a = sin($latDelta / 2) ** 2 +
-            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-            sin($lonDelta / 2) ** 2;
+    //     $a = sin($latDelta / 2) ** 2 +
+    //         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+    //         sin($lonDelta / 2) ** 2;
 
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+    //     $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
-        return $earthRadius * $c;
-    }
+    //     return $earthRadius * $c;
+    // }
 
     public function storeAppointment(Request $request)
     {
@@ -319,6 +319,8 @@ class AssistantController extends Controller
                 'prestation' => 'required|string|max:255',
                 'duree' => 'nullable|integer|min:0',
                 'commentaire' => 'nullable|string',
+                'traject_time' => 'nullable|integer|min:0',
+                'traject_distance' => 'nullable|numeric|min:0',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Erreur de validation des données : ', $e->errors());
