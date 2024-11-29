@@ -9,6 +9,31 @@ use App\Models\Prestation;
 
 class AdminController extends Controller
 {
+
+    // Fonction pour afficher la page de statistiques des utilisateurs
+    public function graphUser(Request $request)
+    {
+        $search = $request->get('search'); // Récupérer le terme de recherche
+        $usersQuery = User::with([
+            'role', // Inclure les rôles
+            'horaires', // Inclure les horaires
+            'horaires.rendezvous' => function ($query) {
+                $query->with('technician'); // Inclure les techniciens des rendez-vous
+            },
+        ]);
+
+        if ($search) {
+            // Filtrer par nom ou prénom
+            $usersQuery->where('nom', 'like', "%$search%")
+                ->orWhere('prenom', 'like', "%$search%");
+        }
+
+        $users = $usersQuery->get();
+
+        return view('admin.graph_user', compact('users', 'search'));
+    }
+
+    // Fonction pour afficher la page de gestion des utilisateurs
     public function manageUser(Request $request)
     {
         $search = $request->input('search');

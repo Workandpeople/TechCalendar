@@ -23,6 +23,12 @@
                 <span>Gestion des Utilisateurs</span>
             </a>
         </li>
+        <li class="nav-item {{ Route::is('admin.graph_user') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('admin.graph_user') }}">
+                <i class="fas fa-fw fa-cog"></i>
+                <span>Stats des Utilisateurs</span>
+            </a>
+        </li>
         <li class="nav-item {{ Route::is('admin.manage_presta') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('admin.manage_presta') }}">
                 <i class="fas fa-fw fa-cog"></i>

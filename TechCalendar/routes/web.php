@@ -17,6 +17,7 @@ Route::middleware(['auth'])->group(function () {
     // Routes administrateur
     Route::get('/admin/manage-user', [AdminController::class, 'manageUser'])->name('admin.manage_user');
     Route::get('/admin/manage-presta', [AdminController::class, 'managePresta'])->name('admin.manage_presta');
+    Route::get('/admin/graph-user', [AdminController::class, 'graphUser'])->name('admin.graph_user');
 
     // Routes pour les opérations de création, modification et de suppression des utilisateurs
     Route::post('/admin/manage-user/update/{id}', [AdminController::class, 'updateUser'])->name('admin.update_user');

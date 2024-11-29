@@ -28,10 +28,12 @@
     <script src="{{ asset('js/jquery/jquery.min.js') }}"></script>
     <script src="{{ asset('js/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('js/jquery-easing/jquery.easing.min.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ asset('js/sb-admin-2.min.js') }}"></script>
     <script src="{{ asset('js/manage_user.js') }}"></script>
     <script src="{{ asset('js/manage_presta.js') }}"></script>
     <script src="{{ asset('js/calendar.js') }}"></script>
     <script src="{{ asset('js/rdv.js') }}"></script>
+    <script src="{{ asset('js/graph.js') }}"></script>
 </body>
 </html>
