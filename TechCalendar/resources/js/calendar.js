@@ -114,8 +114,8 @@ function renderWeekView(technicianId) {
             dayHourCell.addEventListener('dblclick', () => {
                 const date = dayHourCell.dataset.date;
                 const hour = dayHourCell.dataset.hour;
-                const technicians = Object.values(techniciansData); // Récupérer les techniciens disponibles
-                openAppointmentOverlay(date, hour, technicians);
+                const technicians = [{ id: technicianId, name: techniciansData[technicianId]?.name || "Technicien inconnu" }];
+                openAppointmentOverlay(date, hour, technicians); // Passe le technicien actuel uniquement
             });
 
             row.appendChild(dayHourCell);
@@ -205,7 +205,6 @@ function submitAppointment() {
         return;
     }
 
-    // Récupération sécurisée des valeurs du formulaire
     const getFieldValue = (selector) => {
         const field = form.querySelector(selector);
         if (!field) {
@@ -218,9 +217,19 @@ function submitAppointment() {
 
     let appointmentData;
     try {
-        // Récupération de la durée depuis l'attribut `data-default-time` du dropdown prestation
+        const technicianSelect = document.getElementById('technician');
+        if (!technicianSelect || !technicianSelect.value) {
+            console.error("Aucun technicien sélectionné ou élément introuvable.");
+            alert("Veuillez sélectionner un technicien.");
+            return;
+        }
+        const technicianId = technicianSelect.value;
+        console.log("Technician ID récupéré :", technicianId);
+
         const prestationDropdown = document.getElementById('prestationDropdown');
-        const prestationDefaultTime = prestationDropdown.selectedOptions[0].getAttribute('data-default-time');
+        const prestationDefaultTime = prestationDropdown.selectedOptions[0]?.getAttribute('data-default-time');
+        console.log("Durée par défaut récupérée :", prestationDefaultTime);
+
         if (!prestationDefaultTime) {
             console.error("La durée associée à la prestation est introuvable.");
             alert("Une erreur est survenue : durée de la prestation introuvable.");
@@ -228,7 +237,7 @@ function submitAppointment() {
         }
 
         appointmentData = {
-            technician_id: getFieldValue('#technician'),
+            technician_id: technicianId,
             nom: getFieldValue('#clientLastName'),
             prenom: getFieldValue('#clientFirstName'),
             adresse: getFieldValue('#clientAddress'),
@@ -238,9 +247,11 @@ function submitAppointment() {
             date: getFieldValue('#appointmentDate'),
             start_at: getFieldValue('#startTime'),
             prestation: prestationDropdown.value,
-            duree: parseInt(prestationDefaultTime), // Utilisation de la durée depuis le dropdown
+            duree: parseInt(prestationDefaultTime, 10), // Convertir en entier
             commentaire: getFieldValue('#comment'),
         };
+
+        console.log('Données du rendez-vous :', appointmentData);
     } catch (error) {
         console.error("Erreur lors de la récupération des données du formulaire :", error);
         return;

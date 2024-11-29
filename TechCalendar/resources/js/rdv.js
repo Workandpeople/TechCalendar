@@ -50,6 +50,7 @@ function searchTechnicians() {
     const prestation = document.getElementById('prestationDropdown').value;
 
     if (!postalCode || !city || !address) {
+        console.warn('Tous les champs requis ne sont pas remplis.');
         alert('Veuillez remplir tous les champs nécessaires.');
         return;
     }
@@ -57,8 +58,7 @@ function searchTechnicians() {
     const department = postalCode.substring(0, 2);
     const queryURL = `/search-technicians?department=${department}&address=${encodeURIComponent(address)}&city=${encodeURIComponent(city)}&postal_code=${postalCode}&prestation=${prestation}`;
 
-    // Log the parameters sent in the query
-    console.log("Requête envoyée :", {
+    console.log("Requête envoyée pour rechercher les techniciens :", {
         department,
         address,
         city,
@@ -75,12 +75,22 @@ function searchTechnicians() {
             return response.json();
         })
         .then(data => {
+            console.log("Réponse reçue pour les techniciens :", data);
+
             const resultContainer = document.getElementById('technicianResults');
             const agendaComparatifContainer = document.getElementById('agendaComparatifContainer');
+            const technicianSelect = document.getElementById('technician');
+
+            // Réinitialisation des champs
             resultContainer.innerHTML = '';
             agendaComparatifContainer.style.display = 'none'; // Masquer le bouton par défaut
 
+            if (technicianSelect) {
+                technicianSelect.innerHTML = ''; // Réinitialiser la liste déroulante
+            }
+
             if (data.technicians.length === 0) {
+                console.warn('Aucun technicien disponible trouvé.');
                 resultContainer.innerHTML = `
                     <tr>
                         <td colspan="5" class="text-center text-warning">Aucun technicien disponible.</td>
@@ -89,7 +99,7 @@ function searchTechnicians() {
                 return;
             }
 
-            // Stocker les données des techniciens pour l'agenda comparatif
+            // Stocker et afficher les techniciens
             techniciansData = {};
             data.technicians.forEach(tech => {
                 techniciansData[tech.id] = {
@@ -110,13 +120,21 @@ function searchTechnicians() {
                     </tr>
                 `;
                 resultContainer.innerHTML += row;
+
+                // Ajouter au dropdown
+                if (technicianSelect) {
+                    const option = document.createElement('option');
+                    option.value = tech.id;
+                    option.textContent = tech.name;
+                    technicianSelect.appendChild(option);
+                }
             });
 
-            if (data.technicians.length > 1) { // Afficher le bouton uniquement si plus de 2 techniciens
-                agendaComparatifContainer.style.display = 'block';
+            if (data.technicians.length > 1) {
+                agendaComparatifContainer.style.display = 'block'; // Afficher le bouton comparatif
             }
 
-            console.log("Données des techniciens récupérées :", techniciansData);
+            console.log("Données des techniciens stockées :", techniciansData);
         })
         .catch(error => {
             console.error('Erreur lors de la recherche des techniciens:', error);
@@ -151,7 +169,7 @@ function showAgendaComparatif() {
                 <h3 class="text-center justify-center">Agenda Comparatif</h3>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <button id="prevWeekComparatif" class="btn btn-outline-primary btn-sm" onclick="changeComparatifWeek(-1)">&larr; Semaine précédente</button>
-                    <span id="weekLabelComparatif" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                    <span id="weekLabelComparatif" class="font-weight-bold">Semaine en cours</span>
                     <button id="nextWeekComparatif" class="btn btn-outline-primary btn-sm" onclick="changeComparatifWeek(1)">Semaine suivante &rarr;</button>
                 </div>
                 <div id="ComparatifCalendarContainer" class="calendar-container" style="height: 500px;"></div>
@@ -395,6 +413,7 @@ function renderComparatifCalendar(technicians, container) {
 }
 
 function openAppointmentOverlay(date, hour, technicians) {
+    console.log("Ouverture de l'overlay avec les tecjniciens :", technicians);
     const overlayId = 'appointmentOverlay';
     let overlay = document.getElementById(overlayId);
 
@@ -408,6 +427,18 @@ function openAppointmentOverlay(date, hour, technicians) {
         overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.className = 'modal-overlay appointment-overlay';
+
+        // Validation de l'UUID des techniciens et génération des options
+        const technicianOptions = technicians.map(tech => {
+            console.log(`Technicien trouvé : ${tech.name} (${tech.id})`);
+            const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(tech.id);
+            if (!isValidUUID) {
+                console.warn(`Technician ID invalide détecté : ${tech.id}`);
+                return ''; // Ignorer les techniciens avec un ID invalide
+            }
+            return `<option value="${tech.id}">${tech.name}</option>`;
+        }).join('');
+
         overlay.innerHTML = `
             <div class="modal-content">
                 <button class="close-btn" onclick="closeAppointmentOverlay()">&times;</button>
@@ -454,7 +485,7 @@ function openAppointmentOverlay(date, hour, technicians) {
                     <div class="form-group">
                         <label for="technician">Technicien</label>
                         <select id="technician" class="form-control">
-                            ${technicians.map(tech => `<option value="${tech.id}">${tech.name}</option>`).join('')}
+                            ${technicianOptions}
                         </select>
                     </div>
                     <div class="form-group">
@@ -476,6 +507,9 @@ function openAppointmentOverlay(date, hour, technicians) {
     overlay.querySelector('#clientCity').value = city;
 
     overlay.style.display = 'flex';
+
+    // Log pour valider la génération de l'overlay
+    console.log("Overlay d'ajout de rendez-vous affiché avec les techniciens :", technicians);
 }
 
 function closeAppointmentOverlay() {
@@ -497,7 +531,7 @@ function openCalendar(technicianId, technicianName) {
                 <h3 class="text-center">Calendrier de ${technicianName}</h3>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <button id="prevWeek-${technicianId}" class="btn btn-outline-primary btn-sm" onclick="changeWeek('${technicianId}', -1)">&larr; Semaine précédente</button>
-                    <span id="weekLabel-${technicianId}" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                    <span id="weekLabel-${technicianId}" class="font-weight-bold">Semaine en cours</span>
                     <button id="nextWeek-${technicianId}" class="btn btn-outline-primary btn-sm" onclick="changeWeek('${technicianId}', 1)">Semaine suivante &rarr;</button>
                 </div>
                 <div id="RdvCalendarContainer-${technicianId}" class="calendar-container" style="height: 500px;"></div>

@@ -52,7 +52,7 @@
                                 <div class="d-flex align-items-center">
                                     <!-- Navigation pour les semaines -->
                                     <button id="prevWeekTech" class="btn btn-outline-primary btn-sm mx-2" onclick="changeTechWeek(-1)">&larr;</button>
-                                    <span id="weekLabelTech" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                    <span id="weekLabelTech" class="font-weight-bold">Semaine en cours</span>
                                     <button id="nextWeekTech" class="btn btn-outline-primary btn-sm mx-2" onclick="changeTechWeek(1)">&rarr;</button>
                                 </div>
                             </div>

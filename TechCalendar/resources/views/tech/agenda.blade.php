@@ -66,7 +66,7 @@
                                 <div class="d-flex align-items-center">
                                     <!-- Navigation pour les semaines -->
                                     <button id="prevWeek" class="btn btn-outline-primary btn-sm mx-2">&larr;</button>
-                                    <span id="weekLabel" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
+                                    <span id="weekLabel" class="font-weight-bold">Semaine en cours</span>
                                     <button id="nextWeek" class="btn btn-outline-primary btn-sm mx-2">&rarr;</button>
                                 </div>
                             </div>
