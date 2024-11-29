@@ -195,73 +195,86 @@
                 <button class="close-btn" onclick="closeCreateUser()">&times;</button>
                 <h3>Créer un nouvel utilisateur</h3>
                 <form id="createUserForm">
-                    <div class="form-group">
-                        <label for="createUserPrenom">Prénom :</label>
-                        <input type="text" id="createUserPrenom" name="prenom" class="form-control">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="createUserPrenom">Prénom :</label>
+                            <input type="text" id="createUserPrenom" name="prenom" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="createUserNom">Nom :</label>
+                            <input type="text" id="createUserNom" name="nom" class="form-control">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="createUserNom">Nom :</label>
-                        <input type="text" id="createUserNom" name="nom" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="createUserEmail">Email :</label>
-                        <input type="email" id="createUserEmail" name="email" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="createUserRole">Rôle :</label>
-                        <select id="createUserRole" name="role" class="form-control" onchange="toggleFieldsBasedOnRole()">
-                            <option value="administrateur">Administrateur</option>
-                            <option value="assistante">Assistante</option>
-                            <option value="technicien">Technicien</option>
-                        </select>
-                    </div>
-                    <div id="techFields" style="display: none;">
-                        <div class="form-group">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="createUserEmail">Email :</label>
+                            <input type="email" id="createUserEmail" name="email" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
                             <label for="createUserPhone">Téléphone :</label>
                             <input type="text" id="createUserPhone" name="telephone" class="form-control">
                         </div>
-                        <div class="form-group">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="createUserRole">Rôle :</label>
+                            <select id="createUserRole" name="role" class="form-control" onchange="toggleFieldsBasedOnRole()">
+                                <option value="administrateur">Administrateur</option>
+                                <option value="assistante">Assistante</option>
+                                <option value="technicien">Technicien</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-6">
                             <label for="createUserAddress">Adresse :</label>
                             <input type="text" id="createUserAddress" name="adresse" class="form-control">
                         </div>
-                        <div class="form-group">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
                             <label for="createUserPostalCode">Code Postal :</label>
                             <input type="text" id="createUserPostalCode" name="code_postal" class="form-control">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group col-md-6">
                             <label for="createUserCity">Ville :</label>
                             <input type="text" id="createUserCity" name="ville" class="form-control">
                         </div>
-                        <div class="form-group">
-                            <label for="createUserDefaultStartAt">Début par défaut :</label>
-                            <input type="time" id="createUserDefaultStartAt" name="default_start_at" class="form-control">
+                    </div>
+                    <div id="techFields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label for="createUserDefaultStartAt">Début par défaut :</label>
+                                <input type="time" id="createUserDefaultStartAt" name="default_start_at" class="form-control">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label for="createUserDefaultEndAt">Fin par défaut :</label>
+                                <input type="time" id="createUserDefaultEndAt" name="default_end_at" class="form-control">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="createUserDefaultEndAt">Fin par défaut :</label>
-                            <input type="time" id="createUserDefaultEndAt" name="default_end_at" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="createUserTrajectTime">Temps de trajet journalier maximum par défaut (minutes) :</label>
-                            <input type="number" id="createUserTrajectTime" name="default_traject_time" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="createUserRestTime">Temps de repos par défaut (minutes) :</label>
-                            <input type="number" id="createUserRestTime" name="default_rest_time" class="form-control">
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label for="createUserTrajectTime">Temps de trajet (min) :</label>
+                                <input type="number" id="createUserTrajectTime" name="default_traject_time" class="form-control">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label for="createUserRestTime">Temps de repos (min) :</label>
+                                <input type="number" id="createUserRestTime" name="default_rest_time" class="form-control">
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="createUserPassword">Mot de passe :</label>
-                        <input type="password" id="createUserPassword" name="password" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="createUserPasswordConfirm">Confirmation du mot de passe :</label>
-                        <input type="password" id="createUserPasswordConfirm" name="password_confirmation" class="form-control">
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="createUserPassword">Mot de passe :</label>
+                            <input type="password" id="createUserPassword" name="password" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="createUserPasswordConfirm">Confirmation :</label>
+                            <input type="password" id="createUserPasswordConfirm" name="password_confirmation" class="form-control">
+                        </div>
                     </div>
                     <button type="button" class="btn btn-primary" onclick="saveNewUser()">Créer</button>
                 </form>
             </div>
         </div>
-
     </div>
     <!-- End of Main Content -->
 

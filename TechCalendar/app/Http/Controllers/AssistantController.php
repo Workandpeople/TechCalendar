@@ -43,13 +43,17 @@ class AssistantController extends Controller
 
     public function searchTechnicians(Request $request)
     {
+
+        Log::info('Paramètres reçus :', $request->all());
+
         $address = $request->query('address');
         $city = $request->query('city');
-        
-        if (!$address || !$city) {
-            Log::warning("Adresse ou ville manquante.");
+        $postalCode = $request->query('postal_code'); // Ajout du code postal
+    
+        if (!$address || !$city || !$postalCode) {
+            Log::warning("Adresse, ville ou code postal manquant.");
             return response()->json([
-                'message' => 'Adresse et ville sont requis pour rechercher des techniciens.',
+                'message' => 'Adresse, ville et code postal sont requis pour rechercher des techniciens.',
             ], 400);
         }
     
@@ -57,13 +61,12 @@ class AssistantController extends Controller
             $query->where('role', 'technicien');
         })->get();
     
-    
         $results = [];
     
         foreach ($technicians as $technician) {
             $technicianAddress = "{$technician->adresse}, {$technician->code_postal}, {$technician->ville}";
     
-            // Récupérer tous les rendez-vous dans l'intervalle d'un mois avant et après
+            // Récupérer les rendez-vous
             $appointments = Rendezvous::where('technician_id', $technician->id)
                 ->whereBetween('date', [
                     now()->subMonth()->format('Y-m-d'),
@@ -93,16 +96,34 @@ class AssistantController extends Controller
     
                     // Calcul du trajet
                     if ($dayAppointments->isEmpty()) {
-                        $route = $this->mapboxService->getRoute(
-                            $this->mapboxService->geocodeAddress($technicianAddress),
-                            $this->mapboxService->geocodeAddress("{$address}, {$city}")
-                        );
+                        $startCoordinates = $this->mapboxService->geocodeAddress("{$technician->code_postal}, {$technician->ville}, France");
+                        $endCoordinates = $this->mapboxService->geocodeAddress("{$postalCode}, {$city}, France");
+
+                        Log::info("Calcul de trajet : Départ (technicien) : {$technician->code_postal}, {$technician->ville}, France");
+                        Log::info("Calcul de trajet : Destination : {$postalCode}, {$city}, France");
+
+                        if ($startCoordinates && $endCoordinates) {
+                            $route = $this->mapboxService->getRoute($startCoordinates, $endCoordinates);
+                            Log::info("Résultat du calcul de trajet (sans rendez-vous) : ", $route);
+                        } else {
+                            Log::warning("Échec de la géolocalisation pour le technicien ou la destination.");
+                            $route = null;
+                        }
                     } else {
                         $lastAppointment = $dayAppointments->last();
-                        $route = $this->mapboxService->getRoute(
-                            $this->mapboxService->geocodeAddress("{$lastAppointment->adresse}, {$lastAppointment->ville}"),
-                            $this->mapboxService->geocodeAddress("{$address}, {$city}")
-                        );
+                        $startCoordinates = $this->mapboxService->geocodeAddress("{$lastAppointment->adresse}, {$lastAppointment->ville}, France");
+                        $endCoordinates = $this->mapboxService->geocodeAddress("{$postalCode}, {$city}, France");
+
+                        Log::info("Calcul de trajet : Départ (dernier RDV) : {$lastAppointment->adresse}, {$lastAppointment->ville}, France");
+                        Log::info("Calcul de trajet : Destination : {$postalCode}, {$city}, France");
+
+                        if ($startCoordinates && $endCoordinates) {
+                            $route = $this->mapboxService->getRoute($startCoordinates, $endCoordinates);
+                            Log::info("Résultat du calcul de trajet (avec dernier RDV) : ", $route);
+                        } else {
+                            Log::warning("Échec de la géolocalisation pour le dernier rendez-vous ou la destination.");
+                            $route = null;
+                        }
                     }
     
                     break;
@@ -126,7 +147,7 @@ class AssistantController extends Controller
                 continue;
             }
     
-            // Arrondir les valeurs comme demandé
+            // Arrondir les valeurs
             $travelDistance = $travelDistance !== null ? ceil($travelDistance) : null;
             $travelDurationMinutes = ceil($travelDurationMinutes / 10) * 10;
     
@@ -138,11 +159,48 @@ class AssistantController extends Controller
                 'travel' => $travelDistance !== null
                     ? sprintf("%dkm et %d:%02d de trajet", $travelDistance, intdiv($travelDurationMinutes, 60), $travelDurationMinutes % 60)
                     : "N/A",
-                'appointments' => $appointments->toArray(), // Inclure les rendez-vous dans la réponse
+                'appointments' => $appointments->toArray(),
+                'travel_duration_minutes' => $travelDurationMinutes, // Assurer l'existence de cette clé
             ];
         }
     
-        // Trier les résultats
+        // Si aucun technicien ne passe les filtres, recalculer les distances avec code postal, ville et "France"
+        if (empty($results)) {
+            Log::info("Aucun technicien trouvé, recalcul avec code postal et ville.");
+    
+            foreach ($technicians as $technician) {
+                $technicianAddress = "{$technician->adresse}, {$technician->code_postal}, {$technician->ville}";
+    
+                $route = $this->mapboxService->getRoute(
+                    $this->mapboxService->geocodeAddress($technicianAddress),
+                    $this->mapboxService->geocodeAddress("{$postalCode}, {$city}, France")
+                );
+    
+                $travelDistance = $route['distance_km'] ?? null;
+                $travelDurationMinutes = $route['duration_minutes'] ?? $technician->default_traject_time;
+    
+                $results[] = [
+                    'id' => $technician->id,
+                    'name' => "{$technician->prenom} {$technician->nom}",
+                    'travel' => $travelDistance !== null
+                        ? sprintf("%dkm et %d:%02d de trajet", ceil($travelDistance), intdiv($travelDurationMinutes, 60), $travelDurationMinutes % 60)
+                        : "N/A",
+                    'travel_duration_minutes' => $travelDurationMinutes,
+                ];
+            }
+    
+            // Trier les résultats finaux par durée de trajet
+            usort($results, function ($a, $b) {
+                return ($a['travel_duration_minutes'] ?? PHP_INT_MAX) <=> ($b['travel_duration_minutes'] ?? PHP_INT_MAX);
+            });
+    
+            return response()->json([
+                'message' => 'Aucun technicien disponible avec les filtres initiaux. Résultats basés sur code postal et ville.',
+                'technicians' => $results,
+            ]);
+        }
+    
+        // Trier les résultats finaux
         usort($results, function ($a, $b) {
             // Trier par date de disponibilité
             if ($a['next_availability_date'] !== $b['next_availability_date']) {
@@ -153,13 +211,12 @@ class AssistantController extends Controller
                 return $a['number_of_appointments'] - $b['number_of_appointments'];
             }
             // Enfin par durée du trajet
-            return $a['travel_duration_minutes'] <=> $b['travel_duration_minutes'];
+            return ($a['travel_duration_minutes'] ?? 0) <=> ($b['travel_duration_minutes'] ?? 0);
         });
-    
     
         return response()->json(['technicians' => $results]);
     }
-
+    
     public function getTechnicianAppointments(Request $request)
     {
         $technicianIds = $request->input('technician_ids', []);
@@ -244,8 +301,10 @@ class AssistantController extends Controller
 
     public function storeAppointment(Request $request)
     {
+        // Log des données reçues
+        Log::info('Données reçues pour le rendez-vous : ', $request->all());
 
-        // Ajouter un log pour vérifier la validation
+        // Validation des données
         try {
             $validatedData = $request->validate([
                 'technician_id' => 'required|uuid|exists:users,id',
@@ -258,20 +317,42 @@ class AssistantController extends Controller
                 'date' => 'required|date',
                 'start_at' => 'required|date_format:H:i',
                 'prestation' => 'required|string|max:255',
-                'duree' => 'nullable|integer',
+                'duree' => 'nullable|integer|min:0',
                 'commentaire' => 'nullable|string',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Erreur de validation : ', $e->errors());
+            Log::error('Erreur de validation des données : ', $e->errors());
             return response()->json(['errors' => $e->errors()], 422);
         }
 
-        $appointment = Rendezvous::create($validatedData);
-        Log::info('Rendez-vous créé avec succès : ', $appointment->toArray());
+        // Vérification des conflits de rendez-vous
+        $conflictingAppointments = Rendezvous::where('technician_id', $validatedData['technician_id'])
+            ->where('date', $validatedData['date'])
+            ->where('start_at', '<=', $validatedData['start_at'])
+            ->whereRaw("(TIME_TO_SEC(start_at) + (duree * 60)) > TIME_TO_SEC(?)", [$validatedData['start_at']])
+            ->exists();
 
-        return response()->json([
-            'message' => 'Rendez-vous ajouté avec succès.',
-            'appointment' => $appointment,
-        ], 201);
+        if ($conflictingAppointments) {
+            Log::warning('Conflit détecté pour le technicien avec un autre rendez-vous.', $validatedData);
+            return response()->json([
+                'message' => 'Un autre rendez-vous est déjà planifié pour ce créneau.',
+            ], 409);
+        }
+
+        // Création du rendez-vous
+        try {
+            $appointment = Rendezvous::create($validatedData);
+            Log::info('Rendez-vous créé avec succès : ', $appointment->toArray());
+
+            return response()->json([
+                'message' => 'Rendez-vous ajouté avec succès.',
+                'appointment' => $appointment,
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la création du rendez-vous : ', ['exception' => $e->getMessage()]);
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de la création du rendez-vous.',
+            ], 500);
+        }
     }
 }

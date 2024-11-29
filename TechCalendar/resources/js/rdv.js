@@ -55,7 +55,17 @@ function searchTechnicians() {
     }
 
     const department = postalCode.substring(0, 2);
-    const queryURL = `/search-technicians?department=${department}&address=${encodeURIComponent(address)}&city=${encodeURIComponent(city)}&prestation=${prestation}`;
+    const queryURL = `/search-technicians?department=${department}&address=${encodeURIComponent(address)}&city=${encodeURIComponent(city)}&postal_code=${postalCode}&prestation=${prestation}`;
+
+    // Log the parameters sent in the query
+    console.log("Requête envoyée :", {
+        department,
+        address,
+        city,
+        postal_code: postalCode,
+        prestation,
+        queryURL,
+    });
 
     fetch(queryURL)
         .then(response => {
@@ -474,7 +484,6 @@ function closeAppointmentOverlay() {
 }
 
 function openCalendar(technicianId, technicianName) {
-
     const overlayId = `calendarOverlay-${technicianId}`;
     let overlay = document.getElementById(overlayId);
 
@@ -485,7 +494,7 @@ function openCalendar(technicianId, technicianName) {
         overlay.innerHTML = `
             <div class="modal-content">
                 <button class="close-btn" onclick="closeCalendar('${technicianId}')">&times;</button>
-                <h3>Calendrier de ${technicianName}</h3>
+                <h3 class="text-center">Calendrier de ${technicianName}</h3>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <button id="prevWeek-${technicianId}" class="btn btn-outline-primary btn-sm" onclick="changeWeek('${technicianId}', -1)">&larr; Semaine précédente</button>
                     <span id="weekLabel-${technicianId}" class="font-weight-bold">Semaine du XX/XX/XXXX</span>
@@ -499,13 +508,10 @@ function openCalendar(technicianId, technicianName) {
 
     overlay.style.display = 'flex';
 
-    if (!technicianAppointments[technicianId] || technicianAppointments[technicianId].length === 0) {
-        console.warn(`Aucun rendez-vous trouvé pour le technicien ${technicianId}`);
-        alert("Aucun rendez-vous pour ce technicien.");
-        return;
-    }
+    // Assurez que la liste des rendez-vous existe même si elle est vide
+    technicianAppointments[technicianId] = technicianAppointments[technicianId] || [];
 
-    renderWeekView(technicianId); // Affiche l'agenda
+    renderWeekView(technicianId); // Affiche l'agenda, même vide
 }
 
 function closeCalendar(technicianId) {

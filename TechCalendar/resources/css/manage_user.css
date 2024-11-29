@@ -201,3 +201,14 @@ table.table .avatar {
 .modal-open {
     overflow: hidden;
 }
+
+@media (max-width: 768px) {
+
+    .modal-overlay {
+        padding-left: 5%;
+        padding-right: 5%;
+        padding-top: 20%;
+        padding-bottom: 20%;
+    }
+    
+}

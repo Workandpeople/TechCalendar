@@ -44,7 +44,7 @@ function renderWeekView(technicianId) {
     const daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
     const hours = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
 
-    const appointments = technicianAppointments[technicianId] || [];
+    const appointments = technicianAppointments[technicianId];
 
     // Création de l'en-tête pour les jours
     const headerRow = document.createElement('div');
@@ -192,39 +192,53 @@ function calculateAdjustedStartTime(baseTime, additionalMinutes) {
     return `${String(adjustedHours).padStart(2, '0')}:${String(adjustedMinutes).padStart(2, '0')}`;
 }
 
-function submitAppointment(technicianId, time, date) {
-    const form = document.getElementById(`appointmentForm-${technicianId}`);
+function isValidUUID(uuid) {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return regex.test(uuid);
+}
+
+function submitAppointment() {
+    const form = document.getElementById('appointmentForm');
     if (!form) {
-        console.error(`Le formulaire avec l'ID appointmentForm-${technicianId} n'existe pas.`);
+        console.error("Le formulaire de rendez-vous est introuvable.");
         alert("Une erreur est survenue : formulaire introuvable.");
         return;
     }
 
-    // Récupération sécurisée des valeurs
+    // Récupération sécurisée des valeurs du formulaire
     const getFieldValue = (selector) => {
         const field = form.querySelector(selector);
         if (!field) {
-            console.error(`Le champ ${selector} est introuvable dans le formulaire.`);
+            console.error(`Le champ ${selector} est introuvable.`);
             alert(`Une erreur est survenue : le champ ${selector} est introuvable.`);
             throw new Error(`Champ introuvable : ${selector}`);
         }
-        return field.value;
+        return field.value.trim();
     };
 
     let appointmentData;
     try {
+        // Récupération de la durée depuis l'attribut `data-default-time` du dropdown prestation
+        const prestationDropdown = document.getElementById('prestationDropdown');
+        const prestationDefaultTime = prestationDropdown.selectedOptions[0].getAttribute('data-default-time');
+        if (!prestationDefaultTime) {
+            console.error("La durée associée à la prestation est introuvable.");
+            alert("Une erreur est survenue : durée de la prestation introuvable.");
+            return;
+        }
+
         appointmentData = {
-            technician_id: technicianId,
+            technician_id: getFieldValue('#technician'),
             nom: getFieldValue('#clientLastName'),
             prenom: getFieldValue('#clientFirstName'),
             adresse: getFieldValue('#clientAddress'),
             code_postal: getFieldValue('#clientPostalCode'),
             ville: getFieldValue('#clientCity'),
             tel: getFieldValue('#clientPhone'),
-            date: date, // La date est passée comme paramètre déjà formatée
+            date: getFieldValue('#appointmentDate'),
             start_at: getFieldValue('#startTime'),
-            prestation: getFieldValue('#prestation'),
-            duree: parseInt(getFieldValue('#duration')),
+            prestation: prestationDropdown.value,
+            duree: parseInt(prestationDefaultTime), // Utilisation de la durée depuis le dropdown
             commentaire: getFieldValue('#comment'),
         };
     } catch (error) {
@@ -245,7 +259,7 @@ function submitAppointment(technicianId, time, date) {
         .then(response => {
             if (!response.ok) {
                 return response.text().then(text => {
-                    console.error('Réponse HTML reçue :', text);
+                    console.error('Réponse du serveur :', text);
                     throw new Error('Erreur lors de la création du rendez-vous.');
                 });
             }
@@ -253,7 +267,8 @@ function submitAppointment(technicianId, time, date) {
         })
         .then(data => {
             alert('Rendez-vous enregistré avec succès.');
-            closeAppointmentOverlay(`appointmentOverlay-${technicianId}`);
+            console.log('Rendez-vous créé :', data);
+            closeAppointmentOverlay();
         })
         .catch(error => {
             console.error('Erreur détectée :', error);
