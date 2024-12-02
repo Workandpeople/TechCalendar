@@ -67,6 +67,8 @@ function searchTechnicians() {
         queryURL,
     });
 
+    showLoadingOverlay(); // Afficher l'overlay de chargement
+
     fetch(queryURL)
         .then(response => {
             if (!response.ok) {
@@ -140,6 +142,9 @@ function searchTechnicians() {
         .catch(error => {
             console.error('Erreur lors de la recherche des techniciens:', error);
             alert('Une erreur est survenue lors de la recherche des techniciens.');
+        })
+        .finally(() => {
+            hideLoadingOverlay(); // Cacher l'overlay de chargement
         });
 }
 
@@ -459,95 +464,99 @@ function openAppointmentOverlay(date, hour, technicians, distance = 0, time = 0)
         overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.className = 'modal-overlay appointment-overlay';
-
-        // Générer les options pour les techniciens
-        const technicianOptions = technicians.map(tech => {
-            const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(tech.id);
-            if (!isValidUUID) {
-                console.warn(`Technician ID invalide détecté : ${tech.id}`);
-                return ''; // Ignorer les techniciens avec un ID invalide
-            }
-            return `<option value="${tech.id}" data-travel="${tech.travel}">${tech.name}</option>`;
-        }).join('');
-
-        overlay.innerHTML = `
-            <div class="modal-content">
-                <button class="close-btn" onclick="closeAppointmentOverlay()">&times;</button>
-                <h3>Créer un rendez-vous</h3>
-                <form id="appointmentForm">
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="appointmentDate">Date</label>
-                            <input type="text" id="appointmentDate" class="form-control" readonly>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="startTime">Heure</label>
-                            <input type="time" id="startTime" class="form-control">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="clientLastName">Nom du client</label>
-                            <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="clientFirstName">Prénom du client</label>
-                            <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="clientPhone">Téléphone</label>
-                        <input type="tel" id="clientPhone" class="form-control" placeholder="Téléphone" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="clientAddress">Adresse</label>
-                        <input type="text" id="clientAddress" class="form-control">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="clientPostalCode">Code postal</label>
-                            <input type="text" id="clientPostalCode" class="form-control">
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="clientCity">Ville</label>
-                            <input type="text" id="clientCity" class="form-control">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="trajectTime">Temps de trajet (minutes)</label>
-                            <input type="number" id="trajectTime" class="form-control" value="${time}" placeholder="Temps de trajet" readonly>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="trajectDistance">Distance de trajet (km)</label>
-                            <input type="number" step="0.01" id="trajectDistance" class="form-control" value="${distance}" placeholder="Distance de trajet" readonly>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="technician">Technicien</label>
-                        <select id="technician" class="form-control">
-                            ${technicianOptions}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="comment">Commentaire</label>
-                        <textarea id="comment" class="form-control"></textarea>
-                    </div>
-                    <button type="button" class="btn btn-primary" onclick="submitAppointment()">Valider</button>
-                </form>
-            </div>
-        `;
         document.body.appendChild(overlay);
     }
 
-    // Mettre à jour les champs existants
+    // Générer les options pour les techniciens
+    const technicianOptions = technicians.map(tech => {
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(tech.id);
+        if (!isValidUUID) {
+            console.warn(`Technician ID invalide détecté : ${tech.id}`);
+            return ''; // Ignorer les techniciens avec un ID invalide
+        }
+        return `<option value="${tech.id}" data-travel="${tech.travel}">${tech.name}</option>`;
+    }).join('');
+
+    // Mettre à jour le contenu HTML de l'overlay
+    overlay.innerHTML = `
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeAppointmentOverlay()">&times;</button>
+            <h3>Créer un rendez-vous</h3>
+            <form id="appointmentForm">
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="appointmentDate">Date</label>
+                        <input type="text" id="appointmentDate" class="form-control" readonly>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="startTime">Heure</label>
+                        <input type="time" id="startTime" class="form-control">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="clientLastName">Nom du client</label>
+                        <input type="text" id="clientLastName" class="form-control" placeholder="Nom du client" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="clientFirstName">Prénom du client</label>
+                        <input type="text" id="clientFirstName" class="form-control" placeholder="Prénom du client" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="clientPhone">Téléphone</label>
+                    <input type="tel" id="clientPhone" class="form-control" placeholder="Téléphone" required>
+                </div>
+                <div class="form-group">
+                    <label for="clientAddress">Adresse</label>
+                    <input type="text" id="clientAddress" class="form-control">
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="clientPostalCode">Code postal</label>
+                        <input type="text" id="clientPostalCode" class="form-control">
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="clientCity">Ville</label>
+                        <input type="text" id="clientCity" class="form-control">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="trajectTime">Temps de trajet (minutes)</label>
+                        <input type="number" id="trajectTime" class="form-control" value="${time}" placeholder="Temps de trajet" readonly>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="trajectDistance">Distance de trajet (km)</label>
+                        <input type="number" step="0.01" id="trajectDistance" class="form-control" value="${distance}" placeholder="Distance de trajet" readonly>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="technician">Technicien</label>
+                    <select id="technician" class="form-control">
+                        ${technicianOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="comment">Commentaire</label>
+                    <textarea id="comment" class="form-control"></textarea>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="submitAppointment()">Valider</button>
+            </form>
+        </div>
+    `;
+
+    // Pré-remplir les champs avec les données fournies
     overlay.querySelector('#appointmentDate').value = date;
     overlay.querySelector('#startTime').value = hour;
     overlay.querySelector('#clientAddress').value = address;
     overlay.querySelector('#clientPostalCode').value = postalCode;
     overlay.querySelector('#clientCity').value = city;
 
+    // Sélectionner le technicien actuellement affiché dans le calendrier
     const technicianSelect = overlay.querySelector('#technician');
+    technicianSelect.value = technicians[0]?.id; // Sélectionne automatiquement le technicien courant
+
     technicianSelect.addEventListener('change', function () {
         const selectedOption = this.selectedOptions[0];
         const travel = selectedOption.getAttribute('data-travel');

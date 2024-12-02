@@ -10,6 +10,7 @@
     <link href="{{ asset('css/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     
     <!-- Custom Fonts and Styles -->
+    <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <link href="{{ asset('css/fontAwesome/css/all.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/manage_user.css') }}" rel="stylesheet">
@@ -22,6 +23,11 @@
         @include('partials.sidebar')
         @yield('content')
         @include('partials.Footer')
+        <div id="loadingOverlay" class="loading-overlay d-none">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -35,5 +41,6 @@
     <script src="{{ asset('js/calendar.js') }}"></script>
     <script src="{{ asset('js/rdv.js') }}"></script>
     <script src="{{ asset('js/graph.js') }}"></script>
+    <script src="{{ asset('js/app.js') }}"></script>
 </body>
 </html>
