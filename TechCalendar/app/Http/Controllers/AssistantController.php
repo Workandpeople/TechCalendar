@@ -136,7 +136,7 @@ class AssistantController extends Controller
             // Appliquer les filtres
             if (
                 $travelDurationMinutes > ($technician->default_traject_time + 20) || 
-                ($travelDistance !== null && $travelDistance > 250)
+                ($travelDistance !== null && $travelDistance > 150)
             ) {
                 Log::info("Technicien filtré pour dépassement des critères", [
                     'technician_id' => $technician->id,

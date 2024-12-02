@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use App\Models\User;
 use App\Models\Prestation;
 
@@ -13,24 +14,30 @@ class AdminController extends Controller
     // Fonction pour afficher la page de statistiques des utilisateurs
     public function graphUser(Request $request)
     {
-        $search = $request->get('search'); // Récupérer le terme de recherche
-        $usersQuery = User::with([
-            'role', // Inclure les rôles
-            'horaires', // Inclure les horaires
-            'horaires.rendezvous' => function ($query) {
-                $query->with('technician'); // Inclure les techniciens des rendez-vous
-            },
-        ]);
+        // Récupérer les dates de la requête ou définir les dates par défaut pour le mois en cours
+        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
 
-        if ($search) {
-            // Filtrer par nom ou prénom
-            $usersQuery->where('nom', 'like', "%$search%")
-                ->orWhere('prenom', 'like', "%$search%");
+        // Récupérer tous les utilisateurs ayant le rôle 'technicien'
+        $techniciens = User::whereHas('role', function ($query) {
+                $query->where('role', 'technicien');
+            })
+            ->with('rendezvous') // Charger tous les rendez-vous associés sans filtrer
+            ->get();
+
+        // Log des techniciens pour vérification
+        if ($techniciens->isEmpty()) {
+            Log::warning('Aucun technicien trouvé.');
+        } else {
+            Log::info("Techniciens récupérés : " . $techniciens->toJson());
         }
 
-        $users = $usersQuery->get();
-
-        return view('admin.graph_user', compact('users', 'search'));
+        // Retourner la vue avec les données
+        return view('admin.graph_user', [
+            'techniciens' => $techniciens,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+        ]);
     }
 
     // Fonction pour afficher la page de gestion des utilisateurs

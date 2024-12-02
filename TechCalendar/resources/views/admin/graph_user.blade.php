@@ -14,18 +14,6 @@
                 <i class="fa fa-bars"></i>
             </button>
 
-            <!-- Topbar Search -->
-            <form class="d-none d-sm-inline-block form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100 navbar-search" method="GET" action="{{ route('admin.graph_user') }}">
-                <div class="input-group">
-                    <input type="text" name="search" value="{{ $search ?? '' }}" class="form-control bg-light border-0 small" placeholder="Rechercher un utilisateur..." aria-label="Search" aria-describedby="basic-addon2">
-                    <div class="input-group-append">
-                        <button class="btn btn-primary" type="submit">
-                            <i class="fas fa-search fa-sm"></i>
-                        </button>
-                    </div>
-                </div>
-            </form>
-
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
                 <div class="topbar-divider d-none d-sm-block"></div>
@@ -46,72 +34,85 @@
             <div class="row">
                 <div class="col-xl-12 col-lg-12">
                     <div class="card shadow mb-4">
-                        <!-- Ajouter le bouton + à côté du titre Utilisateurs -->
+                        <!-- Titre et filtres -->
                         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                            <div class="col-md-6">
-                                @if(isset($search) && !empty($search))
-                                    <h6 class="m-0 font-weight-bold text-primary">Utilisateurs : {{ $users->first()->prenom ?? '' }} {{ $users->first()->nom ?? '' }}</h6>
-                                @else
-                                    <h6 class="m-0 font-weight-bold text-primary">Utilisateurs</h6>
-                                @endif
-                            </div>
-                            <div class="col-md-6">
-                                <form method="GET" action="{{ route('admin.graph_user') }}">
-                                    <div class="form-row">
-                                        <div class="col">
-                                            <input type="date" name="start_date" class="form-control" value="{{ request()->get('start_date') }}">
-                                        </div>
-                                        <div class="col">
-                                            <input type="date" name="end_date" class="form-control" value="{{ request()->get('end_date') }}">
-                                        </div>
-                                        <div class="col">
-                                            <button type="submit" class="btn btn-primary">Filtrer</button>
-                                        </div>
+                            <h6 class="m-0 font-weight-bold text-primary">Statistiques des Techniciens</h6>
+                            <form method="GET" action="{{ route('admin.graph_user') }}">
+                                <div class="form-row">
+                                    <div class="col">
+                                        <input type="date" name="start_date" class="form-control" value="{{ $startDate }}">
                                     </div>
-                                </form>
-                            </div>
+                                    <div class="col">
+                                        <input type="date" name="end_date" class="form-control" value="{{ $endDate }}">
+                                    </div>
+                                    <div class="col">
+                                        <button type="submit" class="btn btn-primary">Filtrer</button>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
+                        <!-- Graphiques -->
                         <div class="card-body" style="height: 700px">
                             <div class="row" style="height: 100%">
                                 <div class="col-lg-6 mb-4">
-                                    <div class="card shadow h-100">
-                                        <div class="card-header py-3">
-                                            <h6 class="m-0 font-weight-bold text-primary">Nombre de km parcourus</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <canvas id="distanceChart"></canvas>
-                                        </div>
-                                    </div>
+                                    <canvas id="distanceChart"></canvas>
                                 </div>
                                 <div class="col-lg-6 mb-4">
-                                    <div class="card shadow h-100">
-                                        <div class="card-header py-3">
-                                            <h6 class="m-0 font-weight-bold text-primary">Nombre de RDV</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <canvas id="rdvChart"></canvas>
-                                        </div>
-                                    </div>
+                                    <canvas id="rdvChart"></canvas>
                                 </div>
                                 <div class="col-lg-6 mb-4">
-                                    <div class="card shadow h-100">
-                                        <div class="card-header py-3">
-                                            <h6 class="m-0 font-weight-bold text-primary">Temps de trajet effectué</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <canvas id="travelTimeChart"></canvas>
-                                        </div>
-                                    </div>
+                                    <canvas id="travelTimeChart"></canvas>
                                 </div>
                                 <div class="col-lg-6 mb-4">
-                                    <div class="card shadow h-100">
-                                        <div class="card-header py-3">
-                                            <h6 class="m-0 font-weight-bold text-primary">Temps de RDV effectué</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <canvas id="appointmentTimeChart"></canvas>
-                                        </div>
-                                    </div>
+                                    <canvas id="appointmentTimeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liste des techniciens -->
+                <div class="row">
+                    <div class="col-xl-12 col-lg-12">
+                        <div class="card shadow mb-4">
+                            <div class="card-header py-3">
+                                <h6 class="m-0 font-weight-bold text-primary">Liste des Techniciens</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mt-1">
+                                    <!-- Champ de recherche -->
+                                    <input type="text" id="searchTechniciansInGraph" class="form-control mb-3" placeholder="Rechercher par nom ou département">
+                                    
+                                    <!-- Liste des techniciens -->
+                                    <ul id="technicianList" class="list-group">
+                                        @foreach($techniciens as $technicien)
+                                            <li class="list-group-item d-flex justify-content-between align-items-center tech-item"
+                                                data-id="{{ $technicien->id }}"
+                                                data-name="{{ strtolower($technicien->prenom . ' ' . $technicien->nom) }}"
+                                                data-rdv="{{ json_encode($technicien->rendezvous->map(function($rdv) {
+                                                    return [
+                                                        'date' => $rdv->date,
+                                                        'distance' => $rdv->traject_distance,
+                                                        'travelTime' => $rdv->traject_time,
+                                                        'appointmentTime' => $rdv->duree,
+                                                    ];
+                                                })) }}">
+                                                <div>
+                                                    <strong>{{ $technicien->prenom }} {{ $technicien->nom }}</strong>
+                                                    <small class="d-block text-muted">
+                                                        {{ $technicien->rendezvous->count() }} rendez-vous au total dont 
+                                                        <span class="current-period-count" data-id="{{ $technicien->id }}">
+                                                            {{ $technicien->rendezvous->filter(function ($rdv) use ($startDate, $endDate) {
+                                                                return $rdv->date >= $startDate && $rdv->date <= $endDate;
+                                                            })->count() }}
+                                                        </span>
+                                                        sur la période en cours
+                                                    </small>
+                                                </div>
+                                                <input type="checkbox" class="ml-2 tech-checkbox" onchange="updateCharts()">
+                                            </li>
+                                        @endforeach
+                                    </ul>
                                 </div>
                             </div>
                         </div>

@@ -32,12 +32,11 @@ class User extends Authenticatable
     // Relation avec le modèle Role
     public function role()
     {
-        return $this->hasOne(Role::class);
+        return $this->hasOne(Role::class, 'user_id', 'id');
     }
 
-    // Relation avec le modèle Horaire
-    public function horaires()
+    public function rendezvous()
     {
-        return $this->hasMany(Horaire::class);
+        return $this->hasMany(Rendezvous::class, 'technician_id', 'id');
     }
 }

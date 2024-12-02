@@ -387,24 +387,23 @@ function renderComparatifCalendar(technicians, container) {
                 const cellDate = cell.getAttribute('data-date');
                 const cellHour = cell.getAttribute('data-hour');
             
-                // Trouver un technicien lié à ce rendez-vous (si applicable)
-                let selectedTechnician = null;
+                // Chercher un rendez-vous correspondant à cette date et cette heure
                 const appointment = appointmentsByDate[cellDate]?.find(appt => {
                     const startHour = Math.floor(appt.startMinutes / 60);
                     return `${String(startHour).padStart(2, '0')}:00` === cellHour;
                 });
             
-                if (appointment) {
-                    // Si un rendez-vous existe, trouver le technicien associé
-                    selectedTechnician = technicians.find(t => t.id === appointment.technician_id);
-                } else {
-                    // Si aucun rendez-vous n'existe, sélectionner le premier technicien par défaut
-                    selectedTechnician = technicians.length > 0 ? technicians[0] : null;
-                }
+                // Identifier le technicien associé, ou sélectionner un technicien par défaut
+                const selectedTechnician = appointment 
+                    ? technicians.find(t => t.id === appointment.technician_id)
+                    : (technicians.length > 0 ? technicians[0] : null);
             
                 if (selectedTechnician) {
+                    // Extraire les informations de distance et de temps du technicien
                     const [distance, time] = parseTravel(selectedTechnician.travel);
-                    openAppointmentOverlay(cellDate, cellHour, [selectedTechnician], distance, time);
+            
+                    // Ouvrir l'overlay pour créer un rendez-vous
+                    openAppointmentOverlay(cellDate, cellHour, technicians, distance, time);
                 } else {
                     console.warn('Aucun technicien disponible pour créer un rendez-vous.');
                     alert('Aucun technicien disponible pour créer un rendez-vous.');
@@ -445,11 +444,8 @@ function renderComparatifCalendar(technicians, container) {
 }
 
 function openAppointmentOverlay(date, hour, technicians, distance = 0, time = 0) {
-    console.log("Ouverture de l'overlay avec les paramètres :");
-    console.log(`Date : ${date}, Heure : ${hour}`);
-    console.log(`Distance : ${distance} km, Temps : ${time} minutes`);
-    console.log("Techniciens :", technicians);
     console.log("Ouverture de l'overlay avec les techniciens :", technicians);
+
     const overlayId = 'appointmentOverlay';
     let overlay = document.getElementById(overlayId);
 
@@ -464,9 +460,8 @@ function openAppointmentOverlay(date, hour, technicians, distance = 0, time = 0)
         overlay.id = overlayId;
         overlay.className = 'modal-overlay appointment-overlay';
 
-        // Validation de l'UUID des techniciens et génération des options
+        // Générer les options pour les techniciens
         const technicianOptions = technicians.map(tech => {
-            console.log(`Technicien trouvé : ${tech.name} (${tech.id})`);
             const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(tech.id);
             if (!isValidUUID) {
                 console.warn(`Technician ID invalide détecté : ${tech.id}`);
@@ -557,10 +552,9 @@ function openAppointmentOverlay(date, hour, technicians, distance = 0, time = 0)
         const selectedOption = this.selectedOptions[0];
         const travel = selectedOption.getAttribute('data-travel');
         if (travel) {
-            const [distance, time] = travel.match(/\d+/g) || [];
+            const [distance, hours, minutes] = travel.match(/\d+/g) || [];
             document.getElementById('trajectDistance').value = parseFloat(distance) || 0;
-            const [hours, minutes] = time.split(':').map(Number);
-            document.getElementById('trajectTime').value = hours * 60 + minutes;
+            document.getElementById('trajectTime').value = (parseInt(hours, 10) || 0) * 60 + (parseInt(minutes, 10) || 0);
         }
     });
 
