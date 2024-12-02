@@ -10,6 +10,7 @@
     <link href="{{ asset('css/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     
     <!-- Custom Fonts and Styles -->
+    <link href="{{ asset('css/dashboard.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <link href="{{ asset('css/fontAwesome/css/all.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
@@ -42,5 +43,6 @@
     <script src="{{ asset('js/rdv.js') }}"></script>
     <script src="{{ asset('js/graph.js') }}"></script>
     <script src="{{ asset('js/app.js') }}"></script>
+    <script src="{{ asset('js/dashboard.js') }}"></script>
 </body>
 </html>

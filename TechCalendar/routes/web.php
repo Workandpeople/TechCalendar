@@ -41,5 +41,5 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes technicien
     Route::get('/tech/dashboard', [TechController::class, 'dashboard'])->name('tech.dashboard');
-    Route::get('/tech/agenda', [TechController::class, 'agenda'])->name('tech.agenda');
+    Route::post('/get-user-appointments', [TechController::class, 'getUserAppointments']);
 });
