@@ -2,52 +2,43 @@
 
 namespace Database\Factories;
 
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ */
 class UserFactory extends Factory
 {
-    protected $model = User::class;
+    /**
+     * The current password being used by the factory.
+     */
+    protected static ?string $password;
 
-    public function definition()
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
     {
-        $startTimes = ['07:00:00', '07:30:00', '08:00:00', '08:30:00', '09:00:00'];
-        $defaultTrajectTime = $this->faker->numberBetween(120, 180);
-        $defaultRestTime = $this->faker->numberBetween(30, 60);
-        $start = $this->faker->randomElement($startTimes);
-        $end = date('H:i:s', strtotime($start) + ($defaultRestTime + 8 * 60) * 60);
-
         return [
-            'id' => (string) Str::uuid(),
-            'nom' => $this->faker->lastName,
-            'prenom' => $this->faker->firstName,
-            'email' => $this->faker->unique()->safeEmail,
-            'password' => bcrypt('password'), // Mot de passe par défaut
-            'telephone' => $this->faker->regexify('(06|07)[0-9]{8}'),
-            'adresse' => $this->faker->numberBetween(1, 200) . ' ' . $this->faker->randomElement(['rue', 'boulevard', 'avenue']) . ' ' . $this->faker->word,
-            'code_postal' => $this->faker->regexify('[0-9]{4}0'),
-            'ville' => $this->faker->city,
-            'default_start_at' => $start,
-            'default_end_at' => $end,
-            'default_traject_time' => $defaultTrajectTime, // minutes
-            'default_rest_time' => $defaultRestTime, // minutes
+            'name' => fake()->name(),
+            'email' => fake()->unique()->safeEmail(),
+            'email_verified_at' => now(),
+            'password' => static::$password ??= Hash::make('password'),
+            'remember_token' => Str::random(10),
         ];
     }
 
-    public function adminData()
+    /**
+     * Indicate that the model's email address should be unverified.
+     */
+    public function unverified(): static
     {
-        return $this->state(function (array $attributes) {
-            return [
-                'adresse' => null,
-                'telephone' => null,
-                'code_postal' => null,
-                'ville' => null,
-                'default_start_at' => null,
-                'default_end_at' => null,
-                'default_traject_time' => null,
-                'default_rest_time' => null,
-            ];
-        });
+        return $this->state(fn (array $attributes) => [
+            'email_verified_at' => null,
+        ]);
     }
 }
