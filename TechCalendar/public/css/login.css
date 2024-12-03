@@ -1,0 +1,18 @@
+.password-wrapper {
+    position: relative;
+}
+.toggle-password {
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+.toggle-password img {
+    width: 20px;
+    height: 20px;
+    opacity: 0.6;
+}
+.toggle-password img:hover {
+    opacity: 1;
+}

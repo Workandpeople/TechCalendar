@@ -1,0 +1,8 @@
+/* Importer Bootstrap CSS */
+@import '../../node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+/* Importer FontAwesome pour les icônes */
+@import 'fontAwesome/css/all.min.css';
+
+/* Importer le fichier layout.min.css personnalisé */
+@import './layout.min.css';
