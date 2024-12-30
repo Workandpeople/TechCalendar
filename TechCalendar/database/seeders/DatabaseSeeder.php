@@ -3,42 +3,28 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Prestation;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use App\Models\WAPetGCUser;
 
 class DatabaseSeeder extends Seeder
 {
-    public function run()
+    /**
+     * Seed the application's database.
+     */
+    public function run(): void
     {
-        // Créer un administrateur spécifique
-        $admin = User::factory()->adminData()->create([
+        // Utilisateur spécifique
+        WAPetGCUser::create([
+            'id' => \Illuminate\Support\Str::uuid()->toString(),
             'nom' => 'Dinnichert',
             'prenom' => 'Lucas',
             'email' => 'contact@lucas-dinnichert.fr',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
         ]);
-        Role::factory()->administrateur()->create(['user_id' => $admin->id]);
 
-        // Créer 3 assistantes
-        User::factory()
-            ->adminData()
-            ->count(5)
-            ->create()
-            ->each(function ($user) {
-                Role::factory()->assistante()->create(['user_id' => $user->id]);
-            });
-
-        // Créer 300 techniciens
-        User::factory()
-            ->count(300)
-            ->create()
-            ->each(function ($user) {
-                Role::factory()->technicien()->create(['user_id' => $user->id]);
-            });
-
-        // Créer 20 prestations
-        Prestation::factory()
-            ->count(20)
-            ->create();
+        // Générer des utilisateurs aléatoires si nécessaire
+        WAPetGCUser::factory(10)->create();
     }
 }

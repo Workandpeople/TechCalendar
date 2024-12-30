@@ -4,21 +4,28 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreatePrestationTable extends Migration
+return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up()
     {
-        Schema::create('prestation', function (Blueprint $table) {
+        Schema::create('WAPetGC_Services', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->enum('type', ['MAR', 'AUDIT', 'COFRAC']);
-            $table->string('name', 100);
+            $table->string('name');
             $table->integer('default_time');
             $table->timestamps();
         });
     }
 
+
+    /**
+     * Reverse the migrations.
+     */
     public function down()
     {
-        Schema::dropIfExists('prestation');
+        Schema::dropIfExists('WAPetGC_Services');
     }
-}
+};

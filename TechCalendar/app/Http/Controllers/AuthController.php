@@ -5,68 +5,66 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use App\Models\Role;
+use Illuminate\Support\Facades\Hash;
+use App\Models\WAPetGCUser;
 
 class AuthController extends Controller
 {
-    public function showLoginForm()
+    public function loginView()
     {
         return view('login');
     }
 
+    /**
+     * Handle login request.
+     */
     public function login(Request $request)
     {
-        // Validation des champs
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required|min:6'
+            'password' => 'required|string|min:6',
         ]);
 
-        $credentials = $request->only('email', 'password');
+        Log::info("Tentative de connexion pour l'email : " . $request->email);
 
-        if (Auth::attempt($credentials)) {
-            Log::info("Connexion réussie pour l'utilisateur : {$request->email}");
-            
-            $request->session()->regenerate();
-            $user = Auth::user();
-            $role = optional($user->role)->role;
+        $user = WAPetGCUser::where('email', $request->email)->first();
 
-            if (!$role) {
-                Log::error("Utilisateur {$user->email} sans rôle attribué.");
-                Auth::logout();
-                return redirect()->route('login')->withErrors('Rôle non attribué.');
-            }
-
-            Log::info("Utilisateur connecté : {$user->email}, Rôle : $role");
-
-            // Redirection selon le rôle
-            switch ($role) {
-                case 'administrateur':
-                    return redirect()->route('admin.manage_user');
-                case 'assistante':
-                    return redirect()->route('admin.manage_user');
-                case 'technicien':
-                    return redirect()->route('tech.dashboard');
-                default:
-                    Log::error("Rôle inconnu pour l'utilisateur {$user->email} : $role.");
-                    Auth::logout();
-                    return redirect()->route('login')->withErrors('Rôle inconnu.');
-            }
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            Log::warning("Échec de connexion pour l'email : " . $request->email);
+            return redirect()->route('login')->withErrors(['message' => 'Invalid email or password']);
         }
 
-        Log::warning("Échec de connexion pour l'email : {$request->email}");
-        return redirect()->back()->withErrors('Identifiants incorrects.');
+        // Authentification et session
+        Auth::login($user);
+        Log::info("Connexion réussie pour l'utilisateur : " . $user->email . " (Role: " . $user->role . ")");
+
+        // Rediriger en fonction du rôle
+        switch ($user->role) {
+            case 'tech':
+                Log::info("Redirection vers le tableau de bord technicien pour : " . $user->email);
+                return redirect()->route('tech.dashboard', [], 303);
+
+            case 'assistante':
+                Log::info("Redirection vers la gestion des rendez-vous pour : " . $user->email);
+                return redirect()->route('assistant.take_appointements', [], 303);
+
+            case 'admin':
+                Log::info("Redirection vers les graphiques utilisateurs pour : " . $user->email);
+                return redirect()->route('admin.graph_user', [], 303);
+
+            default:
+                Log::error("Rôle inconnu pour l'utilisateur : " . $user->email);
+                return redirect()->route('login')->withErrors(['message' => 'Unknown role']);
+        }
     }
 
+    /**
+     * Handle logout request.
+     */
     public function logout(Request $request)
     {
-        $user = Auth::user();
-        Log::info("Déconnexion de l'utilisateur : {$user->email}");
-        
         Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
 
-        return redirect()->route('login');
+        return response()->json(['message' => 'Logout successful'], 200);
     }
 }

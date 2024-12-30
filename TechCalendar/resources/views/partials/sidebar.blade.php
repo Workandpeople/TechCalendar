@@ -13,46 +13,45 @@
     <hr class="sidebar-divider">
 
     <!-- Admin Panel -->
-    @if(Auth::user()->role->role === 'administrateur')
+    @if(Auth::user()->role === 'admin')
         <div class="sidebar-heading">
             Admin Panel
         </div>
-        <li class="nav-item {{ Route::is('admin.manage_user') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('admin.manage_user') }}">
-                <i class="fas fa-fw fa-cog"></i>
-                <span>Gestion des Utilisateurs</span>
-            </a>
-        </li>
         <li class="nav-item {{ Route::is('admin.graph_user') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('admin.graph_user') }}">
                 <i class="fas fa-fw fa-cog"></i>
                 <span>Stats des Utilisateurs</span>
             </a>
         </li>
-        <li class="nav-item {{ Route::is('admin.manage_presta') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('admin.manage_presta') }}">
-                <i class="fas fa-fw fa-cog"></i>
-                <span>Gestion des Préstations</span>
-            </a>
-        </li>
-
         <!-- Divider -->
         <hr class="sidebar-divider">
     @endif
 
     <!-- Assistante Panel -->
-    @if(Auth::user()->role->role === 'administrateur' || Auth::user()->role->role === 'assistante')
+    @if(Auth::user()->role === 'admin' || Auth::user()->role->role === 'assistante')
         <div class="sidebar-heading">
             Assistante Panel
         </div>
-        <li class="nav-item {{ Route::is('assistant.prendre_rdv') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('assistant.prendre_rdv') }}">
+        <li class="nav-item {{ Route::is('assistant.manage_service') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.manage_service') }}">
+                <i class="fas fa-fw fa-cog"></i>
+                <span>Gestion des Préstations</span>
+            </a>
+        </li>
+        <li class="nav-item {{ Route::is('assistant.manage_user') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.manage_user') }}">
+                <i class="fas fa-fw fa-cog"></i>
+                <span>Gestion des Utilisateurs</span>
+            </a>
+        </li>
+        <li class="nav-item {{ Route::is('assistant.take_appointements') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.take_appointements') }}">
                 <i class="fas fa-fw fa-wrench"></i>
                 <span>Prise de RDV</span>
             </a>
         </li>
-        <li class="nav-item {{ Route::is('assistant.agenda_tech') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('assistant.agenda_tech') }}">
+        <li class="nav-item {{ Route::is('assistant.tech_calendar') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.tech_calendar') }}">
                 <i class="fas fa-fw fa-table"></i>
                 <span>Agenda des Tech</span>
             </a>
@@ -63,7 +62,7 @@
     @endif
 
     <!-- Tech Panel -->
-    @if(Auth::user()->role->role === 'administrateur' || Auth::user()->role->role === 'assistante' || Auth::user()->role->role === 'technicien')
+    @if(Auth::user()->role === 'admin' || Auth::user()->role->role === 'assistante' || Auth::user()->role->role === 'tech')
         <div class="sidebar-heading">
             Tech Panel
         </div>
