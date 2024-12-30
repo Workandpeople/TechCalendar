@@ -21,7 +21,16 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes assistante
     Route::get('/assistant/manage-user', [ManageUsersController::class, 'manageUser'])->name('assistant.manage_user');
+    Route::post('/assistant/manage-user', [ManageUsersController::class, 'createUser'])->name('assistant.create_user');
+    Route::put('/assistant/manage-user/{id}', [ManageUsersController::class, 'updateUser'])->name('assistant.update_user');
+    Route::delete('/assistant/manage-user/{id}', [ManageUsersController::class, 'deleteUser'])->name('assistant.delete_user');
+
+    // Routes pour la gestion des prestations
     Route::get('/assistant/manage-service', [ManageServicesController::class, 'manageService'])->name('assistant.manage_service');
+    Route::post('/assistant/manage-service', [ManageServicesController::class, 'createService'])->name('assistant.create_service');
+    Route::put('/assistant/manage-service/{id}', [ManageServicesController::class, 'updateService'])->name('assistant.update_service');
+    Route::delete('/assistant/manage-service/{id}', [ManageServicesController::class, 'deleteService'])->name('assistant.delete_service');
+
     Route::get('/assistant/take-appointements', [AppointmentController::class, 'takeAppointement'])->name('assistant.take_appointements');
     Route::get('/assistant/tech-calendar', [CalendarController::class, 'techCalendar'])->name('assistant.tech_calendar');
 

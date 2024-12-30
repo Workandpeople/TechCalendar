@@ -32,6 +32,17 @@ class WAPetGCTech extends Model
         return $this->belongsTo(WAPetGCUser::class, 'user_id', 'id');
     }
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->{$model->getKeyName()})) {
+                $model->{$model->getKeyName()} = (string) \Illuminate\Support\Str::uuid();
+            }
+        });
+    }
+
     public function appointments()
     {
         return $this->hasMany(WAPetGCAppointment::class, 'tech_id', 'id');
