@@ -53,7 +53,7 @@
                     <select id="manualServiceId" name="serviceId" class="form-control" required>
                         <option value="" disabled selected>Choisissez une prestation</option>
                         @foreach ($services as $service)
-                            <option value="{{ $service->id }}" data-duration="{{ $service->default_time }}">{{ $service->name }}</option>
+                            <option value="{{ $service->id }}" data-duration="{{ $service->default_time }}">{{ $service->name }} ({{ $service->type }})</option>
                         @endforeach
                     </select>
                 </div>

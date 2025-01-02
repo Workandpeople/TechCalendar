@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('WAPetGC_Appointments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('tech_id');
+            $table->uuid('service_id');
             $table->string('client_fname');
             $table->string('client_lname');
             $table->string('client_adresse');
@@ -30,6 +31,7 @@ return new class extends Migration
             $table->softDeletes(); // Ajout de la colonne soft delete
 
             $table->foreign('tech_id')->references('id')->on('WAPetGC_Tech')->onDelete('cascade');
+            $table->foreign('service_id')->references('id')->on('WAPetGC_Services')->onDelete('cascade');
         });
     }
 

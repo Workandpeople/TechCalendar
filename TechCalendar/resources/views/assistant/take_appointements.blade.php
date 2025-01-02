@@ -107,60 +107,65 @@
     
     // Définir globalement la fonction searchTechnicians
     function searchTechnicians() {
-        const formData = new FormData(document.getElementById('searchForm'));
-        const resultsList = document.getElementById('resultsList');
-    
-        if (!resultsList) {
-            console.error('Element resultsList introuvable.');
-            alert('Une erreur est survenue.');
-            return;
-        }
-    
-        // Affiche l'overlay de chargement
-        showLoadingOverlay();
-    
-        fetch("{{ route('assistant.submit_appointment') }}", {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-            },
-        })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                resultsList.innerHTML = '';
-    
-                if (data.technicians && data.technicians.length > 0) {
-                    data.technicians.forEach(tech => {
-                        const listItem = document.createElement('li');
-                        listItem.className = 'list-group-item';
-                        listItem.innerHTML = `
-                            Adresse: ${tech.adresse}, ${tech.zip_code} ${tech.city}<br>
-                            Distance : ${tech.distance_km} km<br>
-                            Temps estimé : ${tech.duration_minutes} minutes
-                        `;
-                        resultsList.appendChild(listItem);
-                    });
-                } else {
-                    resultsList.innerHTML = '<p>Aucun technicien disponible.</p>';
-                }
-    
-                // Affiche le modal
-                $('#resultModal').modal('show');
-            })
-            .catch(error => {
-                console.error('Erreur lors de la recherche:', error);
-                alert('Une erreur est survenue.');
-            })
-            .finally(() => {
-                // Cache l'overlay de chargement
-                hideLoadingOverlay();
-            });
+    const formData = new FormData(document.getElementById('searchForm'));
+    const resultsList = document.getElementById('resultsList');
+
+    if (!resultsList) {
+        console.error('Element resultsList introuvable.');
+        alert('Une erreur est survenue.');
+        return;
     }
+
+    // Affiche l'overlay de chargement
+    showLoadingOverlay();
+
+    fetch("{{ route('assistant.submit_appointment') }}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+        },
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            resultsList.innerHTML = '';
+
+            if (data.technicians && data.technicians.length > 0) {
+                data.technicians.forEach(tech => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item';
+                    listItem.innerHTML = `
+                        Adresse: ${tech.adresse}, ${tech.zip_code} ${tech.city}<br>
+                        Distance : ${tech.distance_km} km<br>
+                        Temps estimé : ${tech.duration_minutes} minutes<br>
+                        <a href="/assistant/agenda/${tech.id}" class="btn btn-sm btn-secondary">Agenda</a>
+                    `;
+                    resultsList.appendChild(listItem);
+                });
+
+                // Met à jour le lien Agenda Comparatif
+                const agendaLink = document.getElementById('agendaComparatifLink');
+                agendaLink.href = `/assistant/tech-calendar?tech_ids=${data.availableTechIds.join(',')}`;
+            } else {
+                resultsList.innerHTML = '<p>Aucun technicien disponible.</p>';
+            }
+
+            // Affiche le modal
+            $('#resultModal').modal('show');
+        })
+        .catch(error => {
+            console.error('Erreur lors de la recherche:', error);
+            alert('Une erreur est survenue.');
+        })
+        .finally(() => {
+            // Cache l'overlay de chargement
+            hideLoadingOverlay();
+        });
+}
 </script>
 @endsection

@@ -3,6 +3,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="resultModalLabel">Techniciens disponibles</h5>
+                <a id="agendaComparatifLink" href="#" class="btn btn-primary btn-sm">Agenda comparatif</a>
                 <button type="button" class="close" aria-label="Close" onclick="closeModal()">
                     <span aria-hidden="true">&times;</span>
                 </button>

@@ -18,6 +18,7 @@ class WAPetGCAppointment extends Model
 
     protected $fillable = [
         'tech_id',
+        'service_id', // Ajout du service
         'client_fname',
         'client_lname',
         'client_adresse',
@@ -50,5 +51,10 @@ class WAPetGCAppointment extends Model
     public function tech()
     {
         return $this->belongsTo(WAPetGCTech::class, 'tech_id', 'id');
+    }
+
+    public function service()
+    {
+        return $this->belongsTo(WAPetGCService::class, 'service_id', 'id');
     }
 }

@@ -31,8 +31,6 @@ class AppointmentController extends Controller
     public function submitAppointment(Request $request)
     {
         try {
-            Log::info('Validation des champs pour la soumission du rendez-vous.', $request->all());
-    
             // Validation des champs
             $validated = $request->validate([
                 'clientAddressStreet' => 'required|string|max:255',
@@ -42,38 +40,28 @@ class AppointmentController extends Controller
                 'duration' => 'required|integer|min:1',
             ]);
     
-            Log::info('Validation réussie.', ['validated_data' => $validated]);
-    
             // Adresse du client
             $clientAddress = "{$validated['clientAddressStreet']}, {$validated['clientAddressPostalCode']} {$validated['clientAddressCity']}";
-            Log::info('Adresse complète du client générée.', ['client_address' => $clientAddress]);
-    
-            // Extraction du département
             $department = substr($validated['clientAddressPostalCode'], 0, 2);
-            Log::info('Département extrait du code postal.', ['department' => $department]);
     
             // Récupération des techniciens dans le même département
             $technicians = WAPetGCTech::where('zip_code', 'LIKE', "$department%")->with('user')->get();
-            Log::info('Techniciens récupérés.', ['count' => $technicians->count()]);
     
             // Calcul des distances et temps avec Mapbox
             foreach ($technicians as $tech) {
                 $techAddress = "{$tech->adresse}, {$tech->zip_code} {$tech->city}";
-                Log::info('Adresse du technicien.', ['tech_address' => $techAddress]);
-    
                 $route = $this->mapbox->calculateRouteBetweenAddresses($clientAddress, $techAddress);
-    
                 $tech->distance_km = $route['distance_km'] ?? 'N/A';
                 $tech->duration_minutes = $route['duration_minutes'] ?? 'N/A';
-    
-                Log::info('Route calculée via Mapbox.', [
-                    'tech_id' => $tech->id,
-                    'distance_km' => $tech->distance_km,
-                    'duration_minutes' => $tech->duration_minutes,
-                ]);
             }
     
-            return response()->json(['technicians' => $technicians], 200);
+            // Extraction des IDs des techniciens
+            $availableTechIds = $technicians->pluck('id');
+    
+            return response()->json([
+                'technicians' => $technicians,
+                'availableTechIds' => $availableTechIds,
+            ], 200);
         } catch (\Throwable $e) {
             Log::error('Erreur lors de la soumission du rendez-vous.', [
                 'error_message' => $e->getMessage(),
@@ -83,7 +71,7 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'Une erreur est survenue lors du traitement.'], 500);
         }
     }
-        
+            
     public function manualAppointment(Request $request)
     {
         // Validation des champs
@@ -119,6 +107,7 @@ class AppointmentController extends Controller
         // Création du rendez-vous
         WAPetGCAppointment::create([
             'tech_id' => $validated['techId'],
+            'service_id' => $validated['serviceId'], // Enregistrement du service
             'client_fname' => $validated['clientFirstName'],
             'client_lname' => $validated['clientLastName'],
             'client_adresse' => $validated['clientAddressStreet'],

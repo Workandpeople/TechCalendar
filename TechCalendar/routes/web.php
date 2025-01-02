@@ -41,7 +41,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes pour la gestion de l'agenda comparatif
     Route::get('/assistant/tech-calendar', [CalendarController::class, 'techCalendar'])->name('assistant.tech_calendar');
-
+    Route::get('/assistant/calendar-events', [CalendarController::class, 'getCalendarEvents'])->name('assistant.calendar_events');
+    
     // Routes pour la gestion de l'agenda d'un technicien
     Route::get('/assistant/one-tech-calendar', [OneCalendarController::class, 'oneTechCalendar'])->name('assistant.one_tech_calendar');
 
