@@ -7,6 +7,7 @@ use App\Http\Controllers\ManageUsersController;
 use App\Http\Controllers\ManageServicesController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\OneCalendarController;
 use App\Http\Controllers\DashboardController;
 
 // Route pour le formulaire de connexion
@@ -16,10 +17,12 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Routes protégées par l'authentification
 Route::middleware(['auth'])->group(function () {
-    // Routes administrateur
+    // Routes graphiques
     Route::get('/admin/graph-user', [GraphController::class, 'graphUser'])->name('admin.graph_user');
+    Route::get('/api/technicians', [GraphController::class, 'getTechnicians'])->name('api.technicians');
+    Route::post('/api/technician-stats', [GraphController::class, 'getTechnicianStats'])->name('api.technician_stats');
 
-    // Routes assistante
+    // Routes pour la gestion des utilisateurs
     Route::get('/assistant/manage-user', [ManageUsersController::class, 'manageUser'])->name('assistant.manage_user');
     Route::post('/assistant/manage-user', [ManageUsersController::class, 'createUser'])->name('assistant.create_user');
     Route::put('/assistant/manage-user/{id}', [ManageUsersController::class, 'updateUser'])->name('assistant.update_user');
@@ -31,27 +34,17 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/assistant/manage-service/{id}', [ManageServicesController::class, 'updateService'])->name('assistant.update_service');
     Route::delete('/assistant/manage-service/{id}', [ManageServicesController::class, 'deleteService'])->name('assistant.delete_service');
 
+    // Routes pour les rendez-vous
     Route::get('/assistant/take-appointements', [AppointmentController::class, 'takeAppointement'])->name('assistant.take_appointements');
+    Route::post('/assistant/submit-appointment', [AppointmentController::class, 'submitAppointment'])->name('assistant.submit_appointment');
+    Route::post('/assistant/manual-appointment', [AppointmentController::class, 'manualAppointment'])->name('assistant.manual_appointment');
+
+    // Routes pour la gestion de l'agenda comparatif
     Route::get('/assistant/tech-calendar', [CalendarController::class, 'techCalendar'])->name('assistant.tech_calendar');
+
+    // Routes pour la gestion de l'agenda d'un technicien
+    Route::get('/assistant/one-tech-calendar', [OneCalendarController::class, 'oneTechCalendar'])->name('assistant.one_tech_calendar');
 
     // Routes technicien
     Route::get('/tech/dashboard', [DashboardController::class, 'dashboard'])->name('tech.dashboard');
 });
-
-//Route::post('/get-user-appointments', [TechController::class, 'getUserAppointments']);
-
-    // Routes pour les opérations de création, modification et de suppression des utilisateurs
-    // Route::post('/admin/manage-user/update/{id}', [AdminController::class, 'updateUser'])->name('admin.update_user');
-    // Route::delete('/admin/manage-user/delete/{id}', [AdminController::class, 'deleteUser'])->name('admin.delete_user');
-    // Route::post('/admin/manage-user/create', [AdminController::class, 'createUser'])->name('admin.create_user');
-
-    // Routes pour les opérations de création, modification et de suppression des prestations
-    // Route::post('/admin/manage-presta/update/{id}', [AdminController::class, 'updatePresta'])->name('admin.update_presta');
-    // Route::delete('/admin/manage-presta/delete/{id}', [AdminController::class, 'deletePresta'])->name('admin.delete_presta');
-    // Route::post('/admin/manage-presta/create', [AdminController::class, 'createPresta'])->name('admin.create_presta');
-
-    // Route::get('/search-technicians', [AssistantController::class, 'searchTechnicians'])->name('search.technicians');
-    // Route::post('/appointments', [AssistantController::class, 'storeAppointment'])->name('appointments.store');
-
-    // Route::get('/rendezvous/{id}', [AssistantController::class, 'show'])->name('rendezvous.show');
-    // Route::post('/get-technician-appointments', [AssistantController::class, 'getTechnicianAppointments']);

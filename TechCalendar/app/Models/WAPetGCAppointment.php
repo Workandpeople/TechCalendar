@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class WAPetGCAppointment extends Model
 {
@@ -30,6 +31,20 @@ class WAPetGCAppointment extends Model
         'trajet_time',
         'trajet_distance',
     ];
+
+    /**
+     * Boot function to assign a UUID when creating a new record.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->id)) {
+                $model->id = Str::uuid()->toString(); // Génère un UUID
+            }
+        });
+    }
 
     // Relations
     public function tech()

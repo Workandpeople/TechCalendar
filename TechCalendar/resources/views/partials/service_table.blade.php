@@ -19,7 +19,7 @@
                     <td>
                         <button class="btn btn-sm btn-info" onclick="showServiceDetails({{ json_encode($service) }})">Voir</button>
                         <button class="btn btn-sm btn-warning" onclick="showEditService({{ json_encode($service) }})">Modifier</button>
-                        <button class="btn btn-danger" onclick="showDeleteConfirmation('{{ $service->id }}')">Supprimer</button>
+                        <button class="btn btn-sm btn-danger" onclick="showDeleteConfirmation('{{ $service->id }}')">Supprimer</button>
                     </td>
                 </tr>
             @endforeach

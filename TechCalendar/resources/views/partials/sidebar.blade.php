@@ -56,13 +56,19 @@
                 <span>Agenda des Tech</span>
             </a>
         </li>
+        <li class="nav-item {{ Route::is('assistant.one_tech_calendar') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.one_tech_calendar') }}">
+                <i class="fas fa-fw fa-tachometer-alt"></i>
+                <span>Tech Dashboard</span>
+            </a>
+        </li>
 
         <!-- Divider -->
         <hr class="sidebar-divider">
     @endif
 
     <!-- Tech Panel -->
-    @if(Auth::user()->role === 'admin' || Auth::user()->role->role === 'assistante' || Auth::user()->role->role === 'tech')
+    @if(Auth::user()->role === 'tech')
         <div class="sidebar-heading">
             Tech Panel
         </div>

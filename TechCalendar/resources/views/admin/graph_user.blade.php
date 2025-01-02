@@ -9,39 +9,26 @@
 
         <!-- Topbar -->
         <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-            <!-- Sidebar Toggle (Topbar) -->
-            <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                <i class="fa fa-bars"></i>
-            </button>
-
-            <!-- Topbar Navbar -->
-            <ul class="navbar-nav ml-auto">
-                <div class="topbar-divider d-none d-sm-block"></div>
-                <li class="nav-item dropdown no-arrow">
-                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <span class="mr-2 d-none d-lg-inline text-gray-600 small">{{ Auth::user()->prenom }} {{ Auth::user()->nom }}</span>
-                        <div class="img-profile rounded-circle d-flex align-items-center justify-content-center bg-primary text-white" style="width: 40px; height: 40px;">
-                            {{ strtoupper(substr(Auth::user()->prenom, 0, 1)) }}{{ strtoupper(substr(Auth::user()->nom, 0, 1)) }}
-                        </div>
-                    </a>
-                </li>
-            </ul>
+            @include('partials/simpleTopbar')
         </nav>
         <!-- End of Topbar -->
 
         <!-- Begin Page Content -->
         <div class="container-fluid">
             <div class="row">
+                <!-- Graphiques -->
                 <div class="col-xl-8 col-lg-8">
                     <div class="card shadow mb-4">
-                        <!-- Titre et filtres -->
                         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                             <h6 class="m-0 font-weight-bold text-primary">Statistiques des Techniciens</h6>
-                            <!-- Bouton pour ouvrir l'overlay -->
-                            <button class="btn btn-primary" id="openFilters">Filtres</button>
+                            <div class="form-inline">
+                                <label for="dateFrom" class="mr-2">Du :</label>
+                                <input type="date" id="dateFrom" class="form-control mr-2">
+                                <label for="dateTo" class="mr-2">Au :</label>
+                                <input type="date" id="dateTo" class="form-control">
+                            </div>
                         </div>
-                        <!-- Graphiques -->
-                        <div class="card-body" style="height: 700px">
+                        <div class="card-body" style="height: 80vh">
                             <div class="row h-100">
                                 <div class="col-lg-6 col-md-12 mb-4">
                                     <canvas id="appointmentChart"></canvas>
@@ -59,23 +46,22 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Liste des Techniciens -->
                 <div class="col-xl-4 col-lg-4">
                     <div class="card shadow mb-4">
-                        <!-- Titre et filtres -->
                         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                             <h6 class="m-0 font-weight-bold text-primary">Liste des Techniciens</h6>
-                            <input type="text" id="searchTechnicians" class="form-control" placeholder="Rechercher un technicien">
+                            <input type="text" id="techSearch" class="form-control" placeholder="Rechercher un technicien">
                         </div>
-                        <!-- Liste des techniciens -->
-                        <div class="card-body" style="height: 700px">
+                        <div class="card-body" style="height: 80vh; overflow-y: auto;">
                             <div id="technicianList" class="list-group">
-                                <!-- Les techniciens seront ajoutés dynamiquement via JS -->
+                                <!-- Dynamique via JS -->
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-
         </div>
         <!-- /.container-fluid -->
     </div>
@@ -88,87 +74,91 @@
 <!-- End of Page Wrapper -->
 
 @section('head-js')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Gestion de l'ouverture et de la fermeture de l'overlay
-    const overlayId = 'filterOverlay';
+    document.addEventListener('DOMContentLoaded', () => {
+        const technicianList = document.getElementById('technicianList');
+        const techSearch = document.getElementById('techSearch');
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
 
-    function openFilterOverlay() {
-        console.log('Opening overlay');
-        
-        let overlay = document.getElementById(overlayId);
+        // Chargement initial des techniciens
+        const loadTechnicians = (search = '') => {
+            fetch(`/api/technicians?search=${encodeURIComponent(search)}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Fetched technicians:', data.technicians);
+                technicianList.innerHTML = '';
+                data.technicians.forEach(tech => {
+                    if (tech.tech) { // Vérifie que la relation "tech" existe
+                        const item = document.createElement('div');
+                        item.className = 'list-group-item d-flex align-items-center';
+                        item.innerHTML = `
+                            <input type="checkbox" class="mr-3" value="${tech.tech.id}" id="tech_${tech.tech.id}">
+                            <label for="tech_${tech.tech.id}" class="mb-0">${tech.prenom} ${tech.nom}</label>
+                        `;
+                        technicianList.appendChild(item);
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching technicians:', error);
+                alert('Erreur lors de la récupération des techniciens.');
+            });
+        };
 
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = overlayId;
-            overlay.className = 'modal-overlay';
-            overlay.innerHTML = `
-                <div class="modal-content">
-                    <button class="close-btn" onclick="closeFilterOverlay()">&times;</button>
-                    <h3 class="text-center">Filtres</h3>
-                    <form id="filterForm">
-                        <div class="form-group">
-                            <label for="techSearch">Rechercher un technicien</label>
-                            <input type="text" id="techSearch" class="form-control" placeholder="Nom, Prénom ou Département">
-                        </div>
-                        <div class="form-group">
-                            <label for="startDate">Date de début</label>
-                            <input type="date" id="startDate" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="endDate">Date de fin</label>
-                            <input type="date" id="endDate" class="form-control">
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <button type="submit" class="btn btn-primary">Appliquer</button>
-                            <button type="button" class="btn btn-secondary" onclick="closeFilterOverlay()">Annuler</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.body.appendChild(overlay);
-        }
+        // Recherche dynamique
+        techSearch.addEventListener('input', () => loadTechnicians(techSearch.value));
 
-        overlay.style.display = 'flex';
-    }
+        // Mise à jour des graphiques
+        const updateCharts = () => {
+            const selectedTechIds = Array.from(technicianList.querySelectorAll('input:checked')).map(input => input.value);
+            const from = dateFrom.value;
+            const to = dateTo.value;
 
-    function closeFilterOverlay() {
-        const overlay = document.getElementById(overlayId);
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
-    }
+            fetch(`/api/technician-stats`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ techIds: selectedTechIds, from, to }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    updateChart(appointmentChart, data.appointments);
+                    updateChart(distanceChart, data.distances);
+                    updateChart(timeSpentChart, data.timeSpent);
+                    updateChart(costChart, data.costs);
+                });
+        };
 
-    // Ajouter un événement pour ouvrir l'overlay
-    document.getElementById('openFilters').addEventListener('click', openFilterOverlay);
+        // Initialisation des graphiques
+        const createChart = (ctx, label) => new Chart(ctx, {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label, data: [] }] },
+            options: { responsive: true },
+        });
 
-    // Exemple de techniciens
-    const technicians = [
-        { id: 1, name: 'John Doe' },
-        { id: 2, name: 'Jane Smith' },
-        { id: 3, name: 'Albert Johnson' }
-    ];
+        const appointmentChart = createChart(document.getElementById('appointmentChart'), 'Nombre de RDV');
+        const distanceChart = createChart(document.getElementById('distanceChart'), 'Distance parcourue (km)');
+        const timeSpentChart = createChart(document.getElementById('timeSpentChart'), 'Temps de trajet (h)');
+        const costChart = createChart(document.getElementById('costChart'), 'Forfait kilométrique (€)');
 
-    // Remplir la liste des techniciens dynamiquement
-    const technicianList = document.getElementById('technicianList');
-    technicians.forEach(tech => {
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `tech-${tech.id}`;
-        checkbox.className = 'form-check-input';
+        const updateChart = (chart, data) => {
+            chart.data.labels = data.labels;
+            chart.data.datasets[0].data = data.values;
+            chart.update();
+        };
 
-        const label = document.createElement('label');
-        label.htmlFor = `tech-${tech.id}`;
-        label.className = 'form-check-label';
-        label.innerText = tech.name;
+        // Écoute des événements pour la mise à jour des graphiques
+        [techSearch, dateFrom, dateTo].forEach(input => input.addEventListener('change', updateCharts));
+        technicianList.addEventListener('change', updateCharts);
 
-        const div = document.createElement('div');
-        div.className = 'form-check';
-        div.appendChild(checkbox);
-        div.appendChild(label);
-
-        technicianList.appendChild(div);
+        // Chargement initial
+        loadTechnicians();
+        updateCharts();
     });
 </script>
 @endsection
-
 @endsection

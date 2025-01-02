@@ -18,20 +18,20 @@ class ManageServicesController extends Controller
                                  ->orWhere('type', 'LIKE', "%$search%");
                 })
                 ->paginate(10);
-
+    
             Log::info('Services retrieved successfully', ['search' => $search]);
-
+    
             if ($request->ajax()) {
                 return view('partials.service_table', compact('services'))->render();
             }
-
+    
             return view('assistant.manage_service', compact('services', 'search'));
         } catch (\Exception $e) {
             Log::error('Error retrieving services', ['error' => $e->getMessage()]);
             return redirect()->back()->withErrors('Erreur lors de la récupération des prestations.');
         }
     }
-
+    
     public function createService(Request $request)
     {
         try {
@@ -61,8 +61,8 @@ class ManageServicesController extends Controller
             $service = WAPetGCService::findOrFail($id);
 
             $validated = $request->validate([
-                'type' => 'required|string|max:255',
-                'name' => 'required|string|max:255|unique:WAPetGC_Services,name,' . $service->id,
+                'type' => 'required|string|in:MAR,AUDIT,COFRAC',
+                'name' => 'required|string|max:255|unique:WAPetGC_Services,name',
                 'default_time' => 'required|integer|min:0',
             ]);
 
