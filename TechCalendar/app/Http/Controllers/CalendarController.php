@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\WAPetGCAppointment;
+use App\Models\WAPetGCTech;
 use Illuminate\Support\Facades\Log;
 
 class CalendarController extends Controller
@@ -11,18 +12,26 @@ class CalendarController extends Controller
     public function techCalendar(Request $request)
     {
         try {
-            // Récupérer les IDs des techniciens à partir de la requête
-            $techIds = explode(',', $request->query('tech_ids', ''));
+            $techIds = $request->query('tech_ids', []);
+
+            // Vérifiez et nettoyez les IDs
+            if (!is_array($techIds)) {
+                $techIds = explode(',', $techIds); // Convertir en tableau si une chaîne est passée
+            }
+
+            $techIds = array_map('trim', $techIds); // Supprimer les espaces inutiles
+            $techIds = array_filter($techIds); // Supprimer les valeurs vides
 
             Log::info('Tech IDs spécifiés : ', $techIds);
 
-            if (empty($techIds)) {
-                throw new \Exception("Aucun technicien spécifié.");
-            }
+            // Récupérer tous les techniciens
+            $technicians = WAPetGCTech::with('user')->get();
 
-            // Récupérer les rendez-vous des techniciens spécifiques
+            // Filtrer les rendez-vous selon les techniciens sélectionnés
             $appointments = WAPetGCAppointment::with('tech.user')
-                ->whereIn('tech_id', $techIds)
+                ->when(!empty($techIds), function ($query) use ($techIds) {
+                    $query->whereIn('tech_id', $techIds);
+                })
                 ->get();
 
             Log::info('Rendez-vous récupérés : ', $appointments->toArray());
@@ -34,10 +43,10 @@ class CalendarController extends Controller
                     'AUDIT' => '#28a745',
                     'COFRAC' => '#ffc107',
                 ];
-            
-                $type = $appointment->service->type ?? 'MAR'; // Défaut : MAR
-                $color = $colorMap[$type] ?? '#007bff'; // Couleur par défaut
-            
+
+                $type = $appointment->service->type ?? 'MAR';
+                $color = $colorMap[$type] ?? '#007bff';
+
                 return [
                     'title' => "{$appointment->client_fname} {$appointment->client_lname}",
                     'start' => $appointment->start_at,
@@ -52,6 +61,8 @@ class CalendarController extends Controller
 
             return view('assistant.comparative_schedule', [
                 'events' => $events,
+                'technicians' => $technicians,
+                'preSelectedTechIds' => $techIds,
             ]);
         } catch (\Throwable $e) {
             Log::error("Erreur dans techCalendar : " . $e->getMessage(), [
@@ -64,32 +75,45 @@ class CalendarController extends Controller
     public function getCalendarEvents(Request $request)
     {
         try {
-            // Optionnel : récupérer une liste de techniciens spécifiques
             $techIds = $request->input('tech_ids', []);
 
-            $query = WAPetGCAppointment::query();
-
-            if (!empty($techIds)) {
-                $query->whereIn('tech_id', $techIds);
+            if (!is_array($techIds)) {
+                $techIds = explode(',', $techIds);
             }
 
-            $appointments = $query->with('tech')->get();
+            $appointments = WAPetGCAppointment::with('tech.user')
+                ->when(!empty($techIds), function ($query) use ($techIds) {
+                    $query->whereIn('tech_id', $techIds);
+                })
+                ->get();
 
-            // Convertir les rendez-vous au format FullCalendar
             $events = $appointments->map(function ($appointment) {
+                $colorMap = [
+                    'MAR' => '#007bff',
+                    'AUDIT' => '#28a745',
+                    'COFRAC' => '#ffc107',
+                ];
+
+                $type = $appointment->service->type ?? 'MAR'; // Assurez-vous que `$appointment->service` est bien défini
+                $color = $colorMap[$type] ?? '#007bff';
+
                 return [
-                    'title' => $appointment->tech->name ?? 'Technicien inconnu',
-                    'start' => $appointment->start_at ?? null,
-                    'end' => $appointment->end_at ?? null,
-                    'description' => $appointment->comment ?? 'Pas de description',
-                    'color' => '#007bff',
+                    'title' => "{$appointment->client_fname} {$appointment->client_lname}",
+                    'start' => $appointment->start_at,
+                    'end' => $appointment->end_at,
+                    'color' => $color,
+                    'description' => [
+                        'durée' => $appointment->duration . ' minutes',
+                        'commentaire' => $appointment->comment ?? 'Non spécifié',
+                    ],
                     'extendedProps' => [
-                        'techName' => $appointment->tech->name ?? '',
-                        'client' => $appointment->client_fname . ' ' . $appointment->client_lname,
+                        'techName' => $appointment->tech->user->prenom . ' ' . $appointment->tech->user->nom,
                         'adresse' => $appointment->client_adresse,
                     ],
                 ];
             });
+
+            Log::info('Données formatées pour FullCalendar : ', $events->toArray());
 
             return response()->json($events);
         } catch (\Throwable $e) {

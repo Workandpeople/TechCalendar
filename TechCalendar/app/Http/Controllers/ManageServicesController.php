@@ -62,7 +62,7 @@ class ManageServicesController extends Controller
 
             $validated = $request->validate([
                 'type' => 'required|string|in:MAR,AUDIT,COFRAC',
-                'name' => 'required|string|max:255|unique:WAPetGC_Services,name',
+                'name' => 'required|string|max:255|unique:WAPetGC_Services,name,' . $service->id,
                 'default_time' => 'required|integer|min:0',
             ]);
 

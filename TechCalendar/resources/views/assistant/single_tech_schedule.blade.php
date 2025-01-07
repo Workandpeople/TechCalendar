@@ -1,15 +1,18 @@
-@extends('layouts.appTech')
+@extends('layouts.app')
 
-@section('title', 'Dashboard')
+@section('title', 'Agenda Technicien')
 
 @section('head-css')
 <style>
-    .fc-event {
-        cursor: pointer;
-    }
     .dropdown-menu {
         max-height: 200px;
         overflow-y: auto;
+    }
+    .dropdown-item {
+        cursor: pointer;
+    }
+    .fc-event {
+        cursor: pointer;
     }
 
     @media (max-width: 768px) {
@@ -34,6 +37,23 @@
     <div id="content">
 
         <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
+            <!-- Sidebar Toggle (Topbar) -->
+            <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
+                <i class="fa fa-bars"></i>
+            </button>
+            <form class="form-inline mr-auto position-relative">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="techSearchInput" 
+                        class="form-control bg-light border-0 small" 
+                        placeholder="Rechercher un technicien..." 
+                        aria-label="Search"
+                        aria-expanded="false"
+                        autocomplete="off">
+                    <div id="techSearchResults" class="dropdown-menu shadow animated--fade-in position-absolute w-100" style="display: none;"></div>
+                </div>
+            </form>
             @include('partials/simpleTopbar')
         </nav>
 
@@ -43,7 +63,7 @@
                     <div class="row align-items-center text-center">
                         <!-- Titre -->
                         <div class="col-12 col-md-4">
-                            <h6 class="m-0 font-weight-bold text-primary">Mon Agenda</h6>
+                            <h6 class="m-0 font-weight-bold text-primary">Agenda de Technicien</h6>
                         </div>
                         <!-- Légende -->
                         <div class="col-12 col-md-4 mt-2">
@@ -146,10 +166,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     calendar.render();
 
+    // Recharger le rendu du calendrier lorsque la sidebar est ouverte/fermée
+    document.getElementById('sidebarToggleTop').addEventListener('click', () => {
+        setTimeout(() => {
+            calendar.render(); // Recharge le rendu après l'animation de la sidebar
+        }, 10);
+    });
+
     // Navigation entre les jours
     prevDayBtn.addEventListener('click', () => calendar.prev());
     todayBtn.addEventListener('click', () => calendar.today());
     nextDayBtn.addEventListener('click', () => calendar.next());
+
+    // Gestion de la recherche dynamique
+    techSearchInput.addEventListener('input', function () {
+        const query = this.value.trim();
+
+        if (query.length < 2) {
+            techSearchResults.style.display = 'none';
+            return;
+        }
+
+        fetch(`{{ route('assistant.search_technicians') }}?query=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                techSearchResults.innerHTML = ''; // Nettoyer les résultats précédents
+
+                if (data.length > 0) {
+                    data.forEach(tech => {
+                        const resultItem = document.createElement('a');
+                        resultItem.href = "#";
+                        resultItem.className = "dropdown-item";
+                        resultItem.textContent = `${tech.prenom} ${tech.nom}`;
+                        resultItem.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            loadTechAppointments(tech.id);
+                            techSearchInput.value = `${tech.prenom} ${tech.nom}`;
+                            techSearchResults.style.display = 'none';
+                        });
+                        techSearchResults.appendChild(resultItem);
+                    });
+                    techSearchResults.style.display = 'block';
+                } else {
+                    const noResultItem = document.createElement('p');
+                    noResultItem.className = "dropdown-item text-muted";
+                    noResultItem.textContent = "Aucun résultat trouvé.";
+                    techSearchResults.appendChild(noResultItem);
+                    techSearchResults.style.display = 'block';
+                }
+            })
+            .catch(error => console.error('Erreur lors de la recherche :', error));
+    });
 
     // Fermer le modal
     window.closeAppointmentModal = function () {

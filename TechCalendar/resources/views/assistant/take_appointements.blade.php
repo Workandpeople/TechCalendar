@@ -35,111 +35,107 @@
 
 @section('head-js')
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Formulaire manuel
-        const manualServiceSelect = document.getElementById('manualServiceId');
-        const manualDurationInput = document.getElementById('manualDuration');
-        const manualStartTimeInput = document.getElementById('manualStartTime');
-        const manualEndTimeInput = document.getElementById('manualEndTime');
-    
-        // Formulaire de recherche
-        const searchServiceSelect = document.getElementById('searchServiceId');
-        const searchDurationInput = document.getElementById('searchDuration');
-    
-        const resultsList = document.getElementById('resultsList');
-        if (!resultsList) {
-            console.error('Element resultsList introuvable. Vérifiez le DOM et le moment où le script s\'exécute.');
-        }
-    
-        /**
-         * Met à jour la durée et l'heure de fin pour le formulaire manuel
-         */
-        manualServiceSelect?.addEventListener('change', () => {
-            const selectedOption = manualServiceSelect.options[manualServiceSelect.selectedIndex];
-            const defaultTime = selectedOption.getAttribute('data-duration');
-            if (defaultTime) {
-                manualDurationInput.value = defaultTime;
-                calculateManualEndTime(); // Recalcule l'heure de fin
-            }
-        });
-    
-        manualStartTimeInput?.addEventListener('input', calculateManualEndTime);
-        manualDurationInput?.addEventListener('input', calculateManualEndTime);
-    
-        function calculateManualEndTime() {
-            const startTime = manualStartTimeInput.value;
-            const duration = parseInt(manualDurationInput.value, 10);
-    
-            if (startTime && !isNaN(duration)) {
-                const [hours, minutes] = startTime.split(':').map(Number);
-                const endTime = new Date();
-                endTime.setHours(hours);
-                endTime.setMinutes(minutes + duration);
-    
-                const endHours = endTime.getHours().toString().padStart(2, '0');
-                const endMinutes = endTime.getMinutes().toString().padStart(2, '0');
-                manualEndTimeInput.value = `${endHours}:${endMinutes}`;
-            } else {
-                manualEndTimeInput.value = ''; // Vide l'heure de fin si les données sont invalides
-            }
-        }
-    
-        /**
-         * Met à jour la durée pour le formulaire de recherche
-         */
-        searchServiceSelect?.addEventListener('change', () => {
-            const selectedOption = searchServiceSelect.options[searchServiceSelect.selectedIndex];
-            const defaultTime = selectedOption.getAttribute('data-duration');
-            if (defaultTime) {
-                searchDurationInput.value = defaultTime;
-            }
-        });
-    });
-    
-    function closeModal() {
-        const modal = document.getElementById('resultModal');
-        if (modal) {
-            $(modal).modal('hide'); // Utilise Bootstrap pour fermer le modal
-        } else {
-            console.error('Le modal resultModal est introuvable.');
-        }
-    }
-    
-    // Définir globalement la fonction searchTechnicians
-    function searchTechnicians() {
-    const formData = new FormData(document.getElementById('searchForm'));
+document.addEventListener('DOMContentLoaded', () => {
+    // Formulaire manuel
+    const manualServiceSelect = document.getElementById('manualServiceId');
+    const manualDurationInput = document.getElementById('manualDuration');
+    const manualStartTimeInput = document.getElementById('manualStartTime');
+    const manualEndTimeInput = document.getElementById('manualEndTime');
+
+    // Formulaire de recherche
+    const searchServiceSelect = document.getElementById('searchServiceId');
+    const searchDurationInput = document.getElementById('searchDuration');
+    const searchForm = document.getElementById('searchForm');
     const resultsList = document.getElementById('resultsList');
+    const agendaComparatifLink = document.getElementById('agendaComparatifLink');
 
     if (!resultsList) {
-        console.error('Element resultsList introuvable.');
-        alert('Une erreur est survenue.');
-        return;
+        console.error('Element resultsList introuvable. Vérifiez le DOM et le moment où le script s\'exécute.');
     }
 
-    // Affiche l'overlay de chargement
-    showLoadingOverlay();
+    /**
+     * Met à jour la durée et l'heure de fin pour le formulaire manuel
+     */
+    manualServiceSelect?.addEventListener('change', () => {
+        const selectedOption = manualServiceSelect.options[manualServiceSelect.selectedIndex];
+        const defaultTime = selectedOption.getAttribute('data-duration');
+        if (defaultTime) {
+            manualDurationInput.value = defaultTime;
+            calculateManualEndTime(); // Recalcule l'heure de fin
+        }
+    });
 
-    fetch("{{ route('assistant.submit_appointment') }}", {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-        },
-    })
+    manualStartTimeInput?.addEventListener('input', calculateManualEndTime);
+    manualDurationInput?.addEventListener('input', calculateManualEndTime);
+
+    function calculateManualEndTime() {
+        const startTime = manualStartTimeInput.value;
+        const duration = parseInt(manualDurationInput.value, 10);
+
+        if (startTime && !isNaN(duration)) {
+            const [hours, minutes] = startTime.split(':').map(Number);
+            const endTime = new Date();
+            endTime.setHours(hours);
+            endTime.setMinutes(minutes + duration);
+
+            const endHours = endTime.getHours().toString().padStart(2, '0');
+            const endMinutes = endTime.getMinutes().toString().padStart(2, '0');
+            manualEndTimeInput.value = `${endHours}:${endMinutes}`;
+        } else {
+            manualEndTimeInput.value = ''; // Vide l'heure de fin si les données sont invalides
+        }
+    }
+
+    /**
+     * Met à jour la durée pour le formulaire de recherche
+     */
+    searchServiceSelect?.addEventListener('change', () => {
+        const selectedOption = searchServiceSelect.options[searchServiceSelect.selectedIndex];
+        const defaultTime = selectedOption.getAttribute('data-duration');
+        if (defaultTime) {
+            searchDurationInput.value = defaultTime;
+        }
+    });
+
+    /**
+     * Recherche des techniciens disponibles
+     */
+     function searchTechnicians() {
+        const formData = new FormData(searchForm);
+
+        if (!resultsList) {
+            console.error('Le conteneur de résultats est introuvable.');
+            alert('Une erreur est survenue.');
+            return;
+        }
+
+        showLoadingOverlay(); // Afficher un overlay de chargement si nécessaire
+
+        fetch("{{ route('assistant.submit_appointment') }}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            },
+        })
         .then(response => {
             if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
+                throw new Error(`Erreur HTTP : ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
             resultsList.innerHTML = '';
-
             if (data.technicians && data.technicians.length > 0) {
+                const availableTechIds = [];
+
                 data.technicians.forEach(tech => {
+                    availableTechIds.push(tech.id);
+
                     const listItem = document.createElement('li');
                     listItem.className = 'list-group-item';
                     listItem.innerHTML = `
+                        <strong>${tech.user.prenom} ${tech.user.nom}</strong><br>
                         Adresse: ${tech.adresse}, ${tech.zip_code} ${tech.city}<br>
                         Distance : ${tech.distance_km} km<br>
                         Temps estimé : ${tech.duration_minutes} minutes<br>
@@ -148,24 +144,43 @@
                     resultsList.appendChild(listItem);
                 });
 
-                // Met à jour le lien Agenda Comparatif
-                const agendaLink = document.getElementById('agendaComparatifLink');
-                agendaLink.href = `/assistant/tech-calendar?tech_ids=${data.availableTechIds.join(',')}`;
+                // Corrigez la génération de l'URL pour l'Agenda Comparatif
+                const agendaComparatifLink = document.getElementById('agendaComparatifLink');
+                if (agendaComparatifLink) {
+                    const encodedTechIds = availableTechIds.map(id => `tech_ids[]=${encodeURIComponent(id)}`).join('&');
+                    agendaComparatifLink.href = `/assistant/tech-calendar?${encodedTechIds}`;
+                }
             } else {
                 resultsList.innerHTML = '<p>Aucun technicien disponible.</p>';
             }
 
-            // Affiche le modal
-            $('#resultModal').modal('show');
+            $('#resultModal').modal('show'); // Afficher le modal des résultats
         })
         .catch(error => {
-            console.error('Erreur lors de la recherche:', error);
+            console.error('Erreur lors de la recherche de techniciens :', error);
             alert('Une erreur est survenue.');
         })
         .finally(() => {
-            // Cache l'overlay de chargement
-            hideLoadingOverlay();
+            hideLoadingOverlay(); // Masquer l'overlay de chargement si nécessaire
         });
-}
+    }
+
+    // Ajouter l'événement de recherche au formulaire
+    searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        searchTechnicians();
+    });
+
+    /**
+     * Fermer le modal des résultats
+     */
+    function closeModal() {
+        $('#resultModal').modal('hide');
+    }
+
+    // Rendre les fonctions disponibles globalement
+    window.searchTechnicians = searchTechnicians;
+    window.closeModal = closeModal;
+});
 </script>
 @endsection

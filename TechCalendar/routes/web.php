@@ -41,11 +41,14 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes pour la gestion de l'agenda comparatif
     Route::get('/assistant/tech-calendar', [CalendarController::class, 'techCalendar'])->name('assistant.tech_calendar');
-    Route::get('/assistant/calendar-events', [CalendarController::class, 'getCalendarEvents'])->name('assistant.calendar_events');
-    
+    Route::post('/assistant/calendar-events', [CalendarController::class, 'getCalendarEvents'])->name('assistant.calendar_events');    
+
     // Routes pour la gestion de l'agenda d'un technicien
-    Route::get('/assistant/one-tech-calendar', [OneCalendarController::class, 'oneTechCalendar'])->name('assistant.one_tech_calendar');
+    Route::get('/assistant/single-tech-schedule', [OneCalendarController::class, 'singleTechSchedule'])->name('assistant.single_tech_schedule');
+    Route::get('/assistant/search-technicians', [OneCalendarController::class, 'searchTechnicians'])->name('assistant.search_technicians');
+    Route::get('/assistant/tech-appointments', [OneCalendarController::class, 'getTechAppointments'])->name('assistant.tech_appointments');
 
     // Routes technicien
-    Route::get('/tech/dashboard', [DashboardController::class, 'dashboard'])->name('tech.dashboard');
+    Route::get('/tech/dashboard', [DashboardController::class, 'index'])->name('tech.dashboard');
+    Route::get('/tech/dashboard/appointments', [DashboardController::class, 'getAppointments'])->name('dashboard.appointments');
 });

@@ -56,8 +56,8 @@
                 <span>Agenda des Tech</span>
             </a>
         </li>
-        <li class="nav-item {{ Route::is('assistant.one_tech_calendar') ? 'active' : '' }}">
-            <a class="nav-link" href="{{ route('assistant.one_tech_calendar') }}">
+        <li class="nav-item {{ Route::is('assistant.single_tech_schedule') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('assistant.single_tech_schedule') }}">
                 <i class="fas fa-fw fa-tachometer-alt"></i>
                 <span>Tech Dashboard</span>
             </a>
@@ -84,7 +84,7 @@
     @endif
 
     <!-- Sidebar Toggler (Sidebar) -->
-    <div class="text-center d-none d-md-inline">
+    <div class="text-center d-md-inline">
         <button class="rounded-circle border-0" id="sidebarToggle"></button>
     </div>
 </ul>
