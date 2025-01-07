@@ -271,6 +271,31 @@
                 hideLoadingOverlay();
             });
         };
+
+        /**
+         * Restaure un utilisateur supprimé.
+         * @param {string} id - ID de l'utilisateur à restaurer.
+         */
+         window.restoreUser = (id) => {
+            if (!confirm('Voulez-vous vraiment restaurer cet utilisateur ?')) return;
+
+            fetch(`/assistant/manage-user/${id}/restore`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+            })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.success) {
+                    alert('Utilisateur restauré avec succès.');
+                    location.reload();
+                } else {
+                    alert(data.error || 'Erreur lors de la restauration.');
+                }
+            })
+            .catch((err) => alert('Erreur lors de la restauration.'));
+        };
     
         /**
          * Supprime un utilisateur.

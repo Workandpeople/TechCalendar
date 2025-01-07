@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log; // <-- Ajouter
 
 class WAPetGCAppointment extends Model
 {
@@ -18,7 +19,7 @@ class WAPetGCAppointment extends Model
 
     protected $fillable = [
         'tech_id',
-        'service_id', // Ajout du service
+        'service_id',
         'client_fname',
         'client_lname',
         'client_adresse',
@@ -33,21 +34,21 @@ class WAPetGCAppointment extends Model
         'trajet_distance',
     ];
 
-    /**
-     * Boot function to assign a UUID when creating a new record.
-     */
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($model) {
+            Log::info('[WAPetGCAppointment] Creating new appointment', [
+                'attributes' => $model->attributes
+            ]);
+
             if (empty($model->id)) {
-                $model->id = Str::uuid()->toString(); // Génère un UUID
+                $model->id = Str::uuid()->toString();
             }
         });
     }
 
-    // Relations
     public function tech()
     {
         return $this->belongsTo(WAPetGCTech::class, 'tech_id', 'id');

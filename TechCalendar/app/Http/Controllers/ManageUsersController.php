@@ -13,14 +13,13 @@ class ManageUsersController extends Controller
     {
         try {
             $search = $request->input('search');
-            $users = WAPetGCUser::with('tech') // Inclure les informations du technicien
+            $users = WAPetGCUser::with(['tech'])
+                ->withTrashed() // Inclure les utilisateurs supprimés
                 ->when($search, function ($query, $search) {
                     return $query->where('prenom', 'LIKE', "%$search%")
                                  ->orWhere('nom', 'LIKE', "%$search%");
                 })
                 ->paginate(10);
-    
-            Log::info('Users retrieved successfully', ['search' => $search]);
     
             if ($request->ajax()) {
                 return view('partials.user_table', compact('users'))->render();
@@ -31,7 +30,7 @@ class ManageUsersController extends Controller
             Log::error('Error retrieving users', ['error' => $e->getMessage()]);
             return redirect()->back()->withErrors('Erreur lors de la récupération des utilisateurs.');
         }
-    }
+    }    
     
     public function createUser(Request $request)
     {
@@ -145,17 +144,53 @@ class ManageUsersController extends Controller
     {
         try {
             Log::info('Requête de suppression reçue pour l\'utilisateur', ['user_id' => $id]);
-            
+
             $user = WAPetGCUser::findOrFail($id);
-            $user->delete();
-    
-            Log::info('Utilisateur supprimé avec succès', ['user_id' => $id]);
-    
+            $user->delete(); // Softban l'utilisateur
+
+            Log::info('Utilisateur softbanné avec succès', ['user_id' => $id]);
+
+            // Softban également dans la table WAPetGCTech si l'utilisateur est un technicien
+            $tech = WAPetGCTech::where('user_id', $id)->first();
+
+            if ($tech) {
+                $tech->delete(); // Softban le technicien
+                Log::info('Technicien softbanné avec succès', ['tech_id' => $tech->id]);
+            }
+
             // Retourner une réponse JSON
-            return response()->json(['success' => 'Utilisateur supprimé avec succès.']);
+            return response()->json(['success' => 'Utilisateur et technicien associés supprimés avec succès.']);
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la suppression de l\'utilisateur', ['user_id' => $id, 'error' => $e->getMessage()]);
-            return response()->json(['error' => 'Erreur lors de la suppression de l\'utilisateur.'], 500);
+            Log::error('Erreur lors de la suppression de l\'utilisateur ou du technicien', [
+                'user_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['error' => 'Erreur lors de la suppression.'], 500);
+        }
+    }
+
+    public function restoreUser($id)
+    {
+        try {
+            $user = WAPetGCUser::withTrashed()->findOrFail($id);
+            $user->restore();
+
+            Log::info('Utilisateur restauré avec succès', ['user_id' => $id]);
+
+            $tech = WAPetGCTech::withTrashed()->where('user_id', $id)->first();
+
+            if ($tech) {
+                $tech->restore();
+                Log::info('Technicien restauré avec succès', ['tech_id' => $tech->id]);
+            }
+
+            return response()->json(['success' => 'Utilisateur et technicien associés restaurés avec succès.']);
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la restauration de l\'utilisateur ou du technicien', [
+                'user_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['error' => 'Erreur lors de la restauration.'], 500);
         }
     }
 }

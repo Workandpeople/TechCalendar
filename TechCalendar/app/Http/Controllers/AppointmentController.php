@@ -31,7 +31,7 @@ class AppointmentController extends Controller
     public function submitAppointment(Request $request)
     {
         try {
-            // Validation des champs
+            // 1) Validation de base
             $validated = $request->validate([
                 'clientAddressStreet' => 'required|string|max:255',
                 'clientAddressPostalCode' => 'required|string|size:5',
@@ -40,28 +40,76 @@ class AppointmentController extends Controller
                 'duration' => 'required|integer|min:1',
             ]);
     
-            // Adresse du client
             $clientAddress = "{$validated['clientAddressStreet']}, {$validated['clientAddressPostalCode']} {$validated['clientAddressCity']}";
-            $department = substr($validated['clientAddressPostalCode'], 0, 2);
+            $department = substr($validated['clientAddressPostalCode'], 0, 2); // ex: '59' pour code postal 59000
     
-            // Récupération des techniciens dans le même département
-            $technicians = WAPetGCTech::where('zip_code', 'LIKE', "$department%")->with('user')->get();
+            // 2) Récupérer d'abord les techniciens du département
+            $deptTechs = WAPetGCTech::where('zip_code', 'LIKE', "$department%")->with('user')->get();
     
-            // Calcul des distances et temps avec Mapbox
-            foreach ($technicians as $tech) {
+            // 3) Calculer distance/temps pour ces techs
+            foreach ($deptTechs as $tech) {
                 $techAddress = "{$tech->adresse}, {$tech->zip_code} {$tech->city}";
                 $route = $this->mapbox->calculateRouteBetweenAddresses($clientAddress, $techAddress);
-                $tech->distance_km = $route['distance_km'] ?? 'N/A';
-                $tech->duration_minutes = $route['duration_minutes'] ?? 'N/A';
+                $tech->distance_km = $route['distance_km'] ?? 99999;    // Valeur par défaut très grande si null
+                $tech->duration_minutes = $route['duration_minutes'] ?? 99999;
             }
     
-            // Extraction des IDs des techniciens
-            $availableTechIds = $technicians->pluck('id');
+            // 4) Vérifier combien on a de techs
+            if ($deptTechs->count() === 0) {
+                // A) Aucun tech dans le département -> on prend tous les techs
+                $allTechs = WAPetGCTech::with('user')->get();
+    
+                // Calculer distance/temps pour TOUS
+                foreach ($allTechs as $tech) {
+                    $techAddress = "{$tech->adresse}, {$tech->zip_code} {$tech->city}";
+                    $route = $this->mapbox->calculateRouteBetweenAddresses($clientAddress, $techAddress);
+                    $tech->distance_km = $route['distance_km'] ?? 99999;
+                    $tech->duration_minutes = $route['duration_minutes'] ?? 99999;
+                }
+    
+                // Trier par distance croissante
+                $sortedAllTechs = $allTechs->sortBy('distance_km')->values();
+                // Garder les 3 premiers
+                $finalTechs = $sortedAllTechs->take(3);
+    
+            } elseif ($deptTechs->count() < 3) {
+                // B) Moins de 3 techs dans le département
+                // => On complète avec d'autres techniciens (hors département)
+                $otherTechs = WAPetGCTech::where('zip_code', 'NOT LIKE', "$department%")->with('user')->get();
+    
+                // Calculer distances pour ceux hors département
+                foreach ($otherTechs as $tech) {
+                    $techAddress = "{$tech->adresse}, {$tech->zip_code} {$tech->city}";
+                    $route = $this->mapbox->calculateRouteBetweenAddresses($clientAddress, $techAddress);
+                    $tech->distance_km = $route['distance_km'] ?? 99999;
+                    $tech->duration_minutes = $route['duration_minutes'] ?? 99999;
+                }
+    
+                // Fusionner les deux listes
+                $merged = $deptTechs->merge($otherTechs);
+    
+                // Trier par distance croissante
+                $sortedMerged = $merged->sortBy('distance_km')->values();
+    
+                // Garder les 3 premiers
+                $finalTechs = $sortedMerged->take(3);
+    
+            } else {
+                // C) On a déjà >= 3 techs dans le département
+                // => On ne prend que ceux-là, triés par distance
+                $sortedDeptTechs = $deptTechs->sortBy('distance_km')->values();
+                // Prendre les 3 premiers
+                $finalTechs = $sortedDeptTechs->take(3);
+            }
+    
+            // 5) Extraction des IDs
+            $availableTechIds = $finalTechs->pluck('id');
     
             return response()->json([
-                'technicians' => $technicians,
+                'technicians' => $finalTechs->values(), // On renvoie la collection finale de techs
                 'availableTechIds' => $availableTechIds,
             ], 200);
+    
         } catch (\Throwable $e) {
             Log::error('Erreur lors de la soumission du rendez-vous.', [
                 'error_message' => $e->getMessage(),
@@ -71,7 +119,7 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'Une erreur est survenue lors du traitement.'], 500);
         }
     }
-            
+                
     public function manualAppointment(Request $request)
     {
         // Validation des champs

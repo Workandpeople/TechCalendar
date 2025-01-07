@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log; // <-- Ajouter
 
 class WAPetGCTech extends Model
 {
@@ -26,21 +28,24 @@ class WAPetGCTech extends Model
         'default_rest_time',
     ];
 
-    // Relations
-    public function user()
-    {
-        return $this->belongsTo(WAPetGCUser::class, 'user_id', 'id');
-    }
-
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($model) {
+            Log::info('[WAPetGCTech] Creating new tech', [
+                'attributes' => $model->attributes
+            ]);
+
             if (empty($model->{$model->getKeyName()})) {
-                $model->{$model->getKeyName()} = (string) \Illuminate\Support\Str::uuid();
+                $model->{$model->getKeyName()} = (string) Str::uuid();
             }
         });
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(WAPetGCUser::class, 'user_id', 'id');
     }
 
     public function appointments()

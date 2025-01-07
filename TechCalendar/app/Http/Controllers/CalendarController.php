@@ -94,7 +94,7 @@ class CalendarController extends Controller
                     'COFRAC' => '#ffc107',
                 ];
 
-                $type = $appointment->service->type ?? 'MAR'; // Assurez-vous que `$appointment->service` est bien défini
+                $type = $appointment->service->type ?? 'MAR';
                 $color = $colorMap[$type] ?? '#007bff';
 
                 return [
@@ -108,12 +108,11 @@ class CalendarController extends Controller
                     ],
                     'extendedProps' => [
                         'techName' => $appointment->tech->user->prenom . ' ' . $appointment->tech->user->nom,
-                        'adresse' => $appointment->client_adresse,
+                        // On peut stocker l'adresse de manière concaténée
+                        'fullAddress' => trim("{$appointment->client_adresse}, {$appointment->client_zip_code} {$appointment->client_city}"),
                     ],
                 ];
             });
-
-            Log::info('Données formatées pour FullCalendar : ', $events->toArray());
 
             return response()->json($events);
         } catch (\Throwable $e) {

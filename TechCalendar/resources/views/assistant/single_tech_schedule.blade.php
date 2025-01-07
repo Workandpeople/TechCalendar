@@ -93,6 +93,11 @@
                                     <i class="fas fa-chevron-right"></i>
                                 </button>
                             </div>
+                            <div class="d-flex justify-content-center mt-2">
+                                <button class="btn btn-sm btn-outline-primary mx-1" id="monthView">Mois</button>
+                                <button class="btn btn-sm btn-outline-primary mx-1" id="weekView">Semaine</button>
+                                <button class="btn btn-sm btn-outline-primary mx-1" id="dayView">Jour</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -136,61 +141,95 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('[JS] DOMContentLoaded - Initializing calendar...');
+    
     const calendarEl = document.getElementById('calendar');
     const prevDayBtn = document.getElementById('prevDay');
     const todayBtn = document.getElementById('today');
     const nextDayBtn = document.getElementById('nextDay');
+    const monthViewBtn = document.getElementById('monthView');
+    const weekViewBtn = document.getElementById('weekView');
+    const dayViewBtn = document.getElementById('dayView');
 
     // Initialisation de FullCalendar
     const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'timeGridDay',
+        initialView: 'dayGridMonth',
         locale: 'fr',
-        headerToolbar: false, // Pas de boutons de navigation intégrés
+        headerToolbar: false,
         weekends: false,
         slotMinTime: '07:00:00',
         slotMaxTime: '21:00:00',
         allDaySlot: false,
-        events: [], // Chargement initial vide
+        events: [], 
         eventClick: function (info) {
-            const event = info.event.extendedProps;
+            console.log('[JS] eventClick', info.event);
 
-            // Remplir le modal avec les informations du rendez-vous
             document.getElementById('modal-client').textContent = info.event.title || 'Non spécifié';
-            document.getElementById('modal-adresse').textContent = event.adresse || 'Non spécifiée';
-            document.getElementById('modal-duree').textContent = event.durée || 'Non spécifiée';
-            document.getElementById('modal-commentaire').textContent = event.commentaire || 'Non spécifié';
+            document.getElementById('modal-adresse').textContent = info.event.extendedProps.fullAddress || 'Non spécifiée';
+            document.getElementById('modal-duree').textContent = info.event.extendedProps.durée || 'Non spécifiée';
+            document.getElementById('modal-commentaire').textContent = info.event.extendedProps.commentaire || 'Non spécifié';
 
             $('#appointmentModal').modal('show');
         }
     });
 
     calendar.render();
+    console.log('[JS] Calendar rendered');
 
-    // Recharger le rendu du calendrier lorsque la sidebar est ouverte/fermée
     document.getElementById('sidebarToggleTop').addEventListener('click', () => {
         setTimeout(() => {
-            calendar.render(); // Recharge le rendu après l'animation de la sidebar
+            calendar.render();
+            console.log('[JS] Calendar re-rendered after sidebar toggle');
         }, 10);
     });
 
     // Navigation entre les jours
-    prevDayBtn.addEventListener('click', () => calendar.prev());
-    todayBtn.addEventListener('click', () => calendar.today());
-    nextDayBtn.addEventListener('click', () => calendar.next());
+    prevDayBtn.addEventListener('click', () => {
+        calendar.prev();
+        console.log('[JS] prevDay clicked');
+    });
+    todayBtn.addEventListener('click', () => {
+        calendar.today();
+        console.log('[JS] today clicked');
+    });
+    nextDayBtn.addEventListener('click', () => {
+        calendar.next();
+        console.log('[JS] nextDay clicked');
+    });
+
+    // Boutons de changement de vue
+    monthViewBtn.addEventListener('click', () => {
+        calendar.changeView('dayGridMonth');
+        console.log('[JS] monthView clicked');
+    });
+    weekViewBtn.addEventListener('click', () => {
+        calendar.changeView('timeGridWeek');
+        console.log('[JS] weekView clicked');
+    });
+    dayViewBtn.addEventListener('click', () => {
+        calendar.changeView('timeGridDay');
+        console.log('[JS] dayView clicked');
+    });
 
     // Gestion de la recherche dynamique
     techSearchInput.addEventListener('input', function () {
         const query = this.value.trim();
+        console.log('[JS] Searching for tech:', query);
 
         if (query.length < 2) {
             techSearchResults.style.display = 'none';
+            console.log('[JS] Query too short, ignoring');
             return;
         }
 
         fetch(`{{ route('assistant.search_technicians') }}?query=${encodeURIComponent(query)}`)
-            .then(response => response.json())
+            .then(response => {
+                console.log('[JS] Response status:', response.status);
+                return response.json();
+            })
             .then(data => {
-                techSearchResults.innerHTML = ''; // Nettoyer les résultats précédents
+                console.log('[JS] Technicians search result:', data);
+                techSearchResults.innerHTML = ''; 
 
                 if (data.length > 0) {
                     data.forEach(tech => {
@@ -200,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         resultItem.textContent = `${tech.prenom} ${tech.nom}`;
                         resultItem.addEventListener('click', (event) => {
                             event.preventDefault();
+                            console.log('[JS] Loading appointments for tech:', tech.id);
                             loadTechAppointments(tech.id);
                             techSearchInput.value = `${tech.prenom} ${tech.nom}`;
                             techSearchResults.style.display = 'none';
@@ -215,11 +255,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     techSearchResults.style.display = 'block';
                 }
             })
-            .catch(error => console.error('Erreur lors de la recherche :', error));
+            .catch(error => {
+                console.error('[JS] Erreur lors de la recherche :', error);
+            });
     });
+
+    // Fonction pour charger les RDV
+    window.loadTechAppointments = function(techId) {
+        console.log('[JS] loadTechAppointments() for techId:', techId);
+        fetch(`{{ route('assistant.tech_appointments') }}?tech_id=${encodeURIComponent(techId)}`)
+            .then(response => {
+                console.log('[JS] getTechAppointments response status:', response.status);
+                return response.json();
+            })
+            .then(events => {
+                console.log('[JS] Received events:', events);
+                calendar.removeAllEvents();
+                calendar.addEventSource(events);
+            })
+            .catch(error => {
+                console.error('[JS] Erreur lors du chargement des RDV :', error);
+            });
+    };
 
     // Fermer le modal
     window.closeAppointmentModal = function () {
+        console.log('[JS] closeAppointmentModal()');
         $('#appointmentModal').modal('hide');
     };
 });

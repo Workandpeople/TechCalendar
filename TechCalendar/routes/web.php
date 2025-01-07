@@ -27,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/assistant/manage-user', [ManageUsersController::class, 'createUser'])->name('assistant.create_user');
     Route::put('/assistant/manage-user/{id}', [ManageUsersController::class, 'updateUser'])->name('assistant.update_user');
     Route::delete('/assistant/manage-user/{id}', [ManageUsersController::class, 'deleteUser'])->name('assistant.delete_user');
+    Route::post('/assistant/manage-user/{id}/restore', [ManageUsersController::class, 'restoreUser'])->name('assistant.restore_user');
 
     // Routes pour la gestion des prestations
     Route::get('/assistant/manage-service', [ManageServicesController::class, 'manageService'])->name('assistant.manage_service');
@@ -50,5 +51,5 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes technicien
     Route::get('/tech/dashboard', [DashboardController::class, 'index'])->name('tech.dashboard');
-    Route::get('/tech/dashboard/appointments', [DashboardController::class, 'getAppointments'])->name('dashboard.appointments');
+    Route::get('/tech/appointments', [DashboardController::class, 'getAppointments'])->name('tech.getAppointments');
 });

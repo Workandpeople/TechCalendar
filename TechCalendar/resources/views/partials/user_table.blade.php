@@ -10,14 +10,18 @@
         </thead>
         <tbody>
             @foreach ($users as $index => $user)
-                <tr>
+                <tr class="{{ $user->trashed() ? 'table-danger' : '' }}">
                     <td>{{ ($users->currentPage() - 1) * $users->perPage() + $index + 1 }}</td>
                     <td>{{ $user->prenom }} {{ $user->nom }}</td>
                     <td>{{ ucfirst($user->role) }}</td>
                     <td>
                         <button class="btn btn-sm btn-info" onclick="showUserDetails({{ json_encode($user) }})">Voir</button>
-                        <button class="btn btn-sm btn-warning" onclick="showEditUser({{ json_encode($user) }})">Modifier</button>
-                        <button class="btn btn-sm btn-danger" onclick="showDeleteConfirmation('{{ $user->id }}')">Supprimer</button>
+                        @if ($user->trashed())
+                            <button class="btn btn-sm btn-success" onclick="restoreUser('{{ $user->id }}')">Restaurer</button>
+                        @else
+                            <button class="btn btn-sm btn-warning" onclick="showEditUser({{ json_encode($user) }})">Modifier</button>
+                            <button class="btn btn-sm btn-danger" onclick="showDeleteConfirmation('{{ $user->id }}')">Supprimer</button>
+                        @endif
                     </td>
                 </tr>
             @endforeach
