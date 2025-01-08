@@ -39,6 +39,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/assistant/take-appointements', [AppointmentController::class, 'takeAppointement'])->name('assistant.take_appointements');
     Route::post('/assistant/submit-appointment', [AppointmentController::class, 'submitAppointment'])->name('assistant.submit_appointment');
     Route::post('/assistant/manual-appointment', [AppointmentController::class, 'manualAppointment'])->name('assistant.manual_appointment');
+    Route::put('/assistant/appointment/{id}', [AppointmentController::class, 'editAppointment'])->name('assistant.edit_appointment');
+    Route::delete('/assistant/appointments/{id}', [AppointmentController::class, 'deleteAppointment'])->name('assistant.delete_appointment');
+    Route::put('/assistant/appointments/{id}', [AppointmentController::class, 'editAppointment'])->name('assistant.update_appointment');
 
     // Routes pour la gestion de l'agenda comparatif
     Route::get('/assistant/tech-calendar', [CalendarController::class, 'techCalendar'])->name('assistant.tech_calendar');

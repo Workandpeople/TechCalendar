@@ -172,4 +172,80 @@ class AppointmentController extends Controller
 
         return redirect()->route('assistant.take_appointements')->with('success', 'Rendez-vous placé avec succès !');
     }
+
+    public function deleteAppointment($id)
+    {
+        try {
+            $appointment = WAPetGCAppointment::findOrFail($id);
+            $appointment->delete();
+
+            Log::info('[AppointmentController] Rendez-vous supprimé : '.$id);
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            Log::error('[AppointmentController] Erreur deleteAppointment : '.$e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function editAppointment(Request $request, $id)
+    {
+        try {
+            Log::info('[AppointmentController] editAppointment() - raw input', [
+                'request_all' => $request->all()
+            ]);
+
+            $validated = $request->validate([
+                'client_fname'    => 'required|string|max:255',
+                'client_lname'    => 'required|string|max:255',
+                'client_phone'    => 'nullable|string|max:15',
+                'client_adresse'  => 'required|string|max:255',
+                'client_zip_code' => 'required|string|max:5',
+                'client_city'     => 'required|string|max:255',
+                'comment'         => 'nullable|string',
+
+                'techId'          => 'required|exists:WAPetGC_Tech,id',
+                'serviceId'       => 'required|exists:WAPetGC_Services,id',
+                'appointmentDate' => 'required|date',
+                'startTime'       => 'required|date_format:H:i',
+                'endTime'         => 'nullable|date_format:H:i', 
+                'duration'        => 'required|integer|min:1',
+            ]);
+
+            $appointment = WAPetGCAppointment::findOrFail($id);
+
+            // Reconstruire start_at
+            $start_at = "{$validated['appointmentDate']} {$validated['startTime']}";
+
+            // endTime : soit fourni, soit on recalcule
+            if (!empty($validated['endTime'])) {
+                $end_at = "{$validated['appointmentDate']} {$validated['endTime']}";
+            } else {
+                $end_at = date('Y-m-d H:i', strtotime("$start_at +{$validated['duration']} minutes"));
+            }
+
+            $appointment->update([
+                'client_fname'   => $validated['client_fname'],
+                'client_lname'   => $validated['client_lname'],
+                'client_phone'   => $validated['client_phone'],
+                'client_adresse' => $validated['client_adresse'],
+                'client_zip_code'=> $validated['client_zip_code'],
+                'client_city'    => $validated['client_city'],
+                'comment'        => $validated['comment'],
+
+                'tech_id'        => $validated['techId'],
+                'service_id'     => $validated['serviceId'],
+                'start_at'       => $start_at,
+                'end_at'         => $end_at,
+                'duration'       => $validated['duration'],
+            ]);
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            Log::error('Erreur editAppointment : '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

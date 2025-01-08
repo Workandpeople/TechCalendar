@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\WAPetGCAppointment;
 use App\Models\WAPetGCTech;
+use App\Models\WAPetGCService;
 use Illuminate\Support\Facades\Log;
 
 class CalendarController extends Controller
@@ -26,6 +27,9 @@ class CalendarController extends Controller
 
             // Récupérer tous les techniciens
             $technicians = WAPetGCTech::with('user')->get();
+
+            // Récupérer les services
+            $services = WAPetGCService::all();
 
             // Filtrer les rendez-vous selon les techniciens sélectionnés
             $appointments = WAPetGCAppointment::with('tech.user')
@@ -50,18 +54,26 @@ class CalendarController extends Controller
                 return [
                     'title' => "{$appointment->client_fname} {$appointment->client_lname}",
                     'start' => $appointment->start_at,
-                    'end' => $appointment->end_at,
+                    'end'   => $appointment->end_at,
                     'color' => $color,
-                    'description' => [
-                        'durée' => $appointment->duration . ' minutes',
-                        'commentaire' => $appointment->comment ?? 'Non spécifié',
+                    // On stocke nos champs customs dans extendedProps
+                    'extendedProps' => [
+                        'appId' => $appointment->id,  // <-- Ici !
+                        'description' => [
+                            'durée'       => $appointment->duration . ' minutes',
+                            'commentaire' => $appointment->comment ?? 'Non spécifié',
+                        ],
+                        // etc.
                     ],
                 ];
             });
 
+            Log::info('Événements formatés : ', $events->toArray());
+
             return view('assistant.comparative_schedule', [
                 'events' => $events,
                 'technicians' => $technicians,
+                'services' => $services,
                 'preSelectedTechIds' => $techIds,
             ]);
         } catch (\Throwable $e) {
@@ -88,31 +100,49 @@ class CalendarController extends Controller
                 ->get();
 
             $events = $appointments->map(function ($appointment) {
-                $colorMap = [
-                    'MAR' => '#007bff',
-                    'AUDIT' => '#28a745',
-                    'COFRAC' => '#ffc107',
-                ];
+            $colorMap = [
+                'MAR'   => '#007bff',
+                'AUDIT' => '#28a745',
+                'COFRAC'=> '#ffc107',
+            ];
 
-                $type = $appointment->service->type ?? 'MAR';
-                $color = $colorMap[$type] ?? '#007bff';
+            $type  = $appointment->service->type ?? 'MAR';
+            $color = $colorMap[$type] ?? '#007bff';
 
-                return [
-                    'title' => "{$appointment->client_fname} {$appointment->client_lname}",
-                    'start' => $appointment->start_at,
-                    'end' => $appointment->end_at,
-                    'color' => $color,
-                    'description' => [
-                        'durée' => $appointment->duration . ' minutes',
+            return [
+                'title' => "{$appointment->client_fname} {$appointment->client_lname}",
+                'start' => $appointment->start_at,
+                'end'   => $appointment->end_at,
+                'color' => $color,
+                'extendedProps' => [
+                    'appId'          => $appointment->id,
+                    // On ajoute tous les champs qu'on veut pour le form
+                    'clientFirstName'=> $appointment->client_fname,
+                    'clientLastName' => $appointment->client_lname,
+                    'clientPhone'    => $appointment->client_phone,
+                    'fullAddress'    => $appointment->client_adresse . ', ' . $appointment->client_zip_code . ' ' . $appointment->client_city,
+                    'techName'   => $appointment->tech->user->prenom . ' ' . $appointment->tech->user->nom,
+                    'clientAddressStreet'    => $appointment->client_adresse,
+                    'clientAddressPostalCode'=> $appointment->client_zip_code,
+                    'clientAddressCity'      => $appointment->client_city,
+                    'techId'         => $appointment->tech_id,
+                    'serviceId'      => $appointment->service_id,
+                    'duration'       => $appointment->duration,
+                    // On peut déduire startTime / endTime d'après $appointment->start_at / end_at
+                    'startTime'      => \Carbon\Carbon::parse($appointment->start_at)->format('H:i'),
+                    'appointmentDate'=> \Carbon\Carbon::parse($appointment->start_at)->format('Y-m-d'),
+                    // On peut calculer l'endTime aussi, si besoin
+                    'endTime'        => \Carbon\Carbon::parse($appointment->end_at)->format('H:i'),
+                    'comments'       => $appointment->comment,
+                    
+                    // Optionnel : la description précédente, si tu veux.
+                    'description'    => [
+                        'durée'       => $appointment->duration . ' minutes',
                         'commentaire' => $appointment->comment ?? 'Non spécifié',
                     ],
-                    'extendedProps' => [
-                        'techName' => $appointment->tech->user->prenom . ' ' . $appointment->tech->user->nom,
-                        // On peut stocker l'adresse de manière concaténée
-                        'fullAddress' => trim("{$appointment->client_adresse}, {$appointment->client_zip_code} {$appointment->client_city}"),
-                    ],
-                ];
-            });
+                ],
+            ];
+        });
 
             return response()->json($events);
         } catch (\Throwable $e) {
