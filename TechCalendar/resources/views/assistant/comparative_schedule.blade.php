@@ -133,142 +133,142 @@
 <!-- Modal -->
 <div class="modal fade" id="appointmentModal" tabindex="-1" role="dialog" aria-labelledby="appointmentModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            
-            <!-- HEADER -->
-            <div class="modal-header">
-                <h5 id="appointmentModalLabel" class="modal-title">Détails du Rendez-vous</h5>
-                <button type="button" class="close" aria-label="Close" onclick="closeAppointmentModal()">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            
-            <!-- BLOC LECTURE SEULE -->
-            <div class="modal-body" id="appointmentModalReadonly">
-                <p><strong>Client :</strong> <span id="modal-client"></span></p>
-                <p><strong>Adresse :</strong> <span id="modal-adresse"></span></p>
-                <p><strong>Technicien :</strong> <span id="modal-tech"></span></p>
-                <p><strong>Durée :</strong> <span id="modal-duree"></span></p>
-                <p><strong>Commentaire :</strong> <span id="modal-commentaire"></span></p>
-            </div>
-
-            <!-- BLOC ÉDITION : caché par défaut via .d-none -->
-            <div class="modal-body d-none" id="appointmentModalEditForm">
-                <form id="editAppointmentForm">
-                    <!-- ID caché -->
-                    <input type="hidden" id="editAppId" name="id" />
-
-                    <!-- Prénom, Nom, Téléphone -->
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
-                            <label for="editClientFname">Prénom du client</label>
-                            <!-- name="client_fname" => correspond à la validation -->
-                            <input type="text" class="form-control" id="editClientFname" name="client_fname" required>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="editClientLname">Nom du client</label>
-                            <!-- name="client_lname" -->
-                            <input type="text" class="form-control" id="editClientLname" name="client_lname" required>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="editClientPhone">Téléphone du client</label>
-                            <!-- name="client_phone" -->
-                            <input type="text" class="form-control" id="editClientPhone" name="client_phone">
-                        </div>
-                    </div>
-
-                    <!-- Adresse, CP, Ville -->
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="editClientAdresse">Adresse (Rue)</label>
-                            <!-- name="client_adresse" -->
-                            <input type="text" class="form-control" id="editClientAdresse" name="client_adresse" required>
-                        </div>
-                        <div class="form-group col-md-3">
-                            <label for="editClientZip">Code postal</label>
-                            <!-- name="client_zip_code" -->
-                            <input type="text" class="form-control" id="editClientZip" name="client_zip_code" required>
-                        </div>
-                        <div class="form-group col-md-3">
-                            <label for="editClientCity">Ville</label>
-                            <!-- name="client_city" -->
-                            <input type="text" class="form-control" id="editClientCity" name="client_city" required>
-                        </div>
-                    </div>
-
-                    <!-- Technicien, Prestation -->
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="editTechId">Technicien</label>
-                            <!-- name="techId" => "required|exists:WAPetGC_Tech,id" -->
-                            <select id="editTechId" name="techId" class="form-control" required>
-                                <option value="" disabled>Choisissez un technicien</option>
-                                @foreach($technicians as $tech)
-                                    <option value="{{ $tech->id }}">{{ $tech->user->prenom }} {{ $tech->user->nom }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="editServiceId">Prestation</label>
-                            <!-- name="serviceId" => "required|exists:WAPetGC_Services,id" -->
-                            <select id="editServiceId" name="serviceId" class="form-control" required>
-                                <option value="" disabled>Choisissez une prestation</option>
-                                @foreach($services as $service)
-                                    <option value="{{ $service->id }}" data-default-time="{{ $service->default_time }}">
-                                        {{ $service->name }} ({{ $service->type }})
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Date, Heure début, Heure fin, Durée -->
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
-                            <label for="editAppointmentDate">Date</label>
-                            <!-- name="appointmentDate" => "required|date" -->
-                            <input type="date" id="editAppointmentDate" name="appointmentDate" class="form-control" required>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="editStartTime">Heure de début</label>
-                            <!-- name="startTime" => "required|date_format:H:i" -->
-                            <input type="time" id="editStartTime" name="startTime" class="form-control" required>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="editEndTime">Heure de fin</label>
-                            <!-- name="endTime" => "nullable|date_format:H:i" -->
-                            <input type="time" id="editEndTime" name="endTime" class="form-control" readonly>
-                        </div>
-                    </div>
-
-                    <!-- Durée + Commentaires -->
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
-                            <label for="editDuration">Durée (minutes)</label>
-                            <!-- name="duration" => "required|integer|min:1" -->
-                            <input type="number" id="editDuration" name="duration" class="form-control" min="1" required>
-                        </div>
-                        <div class="form-group col-md-8">
-                            <label for="editComment">Commentaires</label>
-                            <!-- name="comment" => "nullable|string" -->
-                            <textarea class="form-control" id="editComment" name="comment" rows="2"></textarea>
-                        </div>
-                    </div>
-
-                    <!-- Boutons Enregistrer / Annuler -->
-                    <button type="submit" class="btn btn-primary">Enregistrer</button>
-                    <button type="button" class="btn btn-secondary" id="cancelEditBtn">Annuler</button>
-                </form>
-            </div>
-
-            <!-- FOOTER (mode lecture seule) -->
-            <div class="modal-footer" id="modalFooterButtons">
-                <button type="button" class="btn btn-sm btn-warning" id="editButton">Editer</button>
-                <button type="button" class="btn btn-sm btn-danger" id="deleteButton">Supprimer</button>
-            </div>
+      <div class="modal-content">
+        
+        <!-- HEADER -->
+        <div class="modal-header">
+          <h5 id="appointmentModalLabel" class="modal-title">Détails du Rendez-vous</h5>
+          <button type="button" class="close" aria-label="Close" onclick="closeAppointmentModal()">
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
+        
+        <!-- BLOC LECTURE SEULE -->
+        <div class="modal-body" id="appointmentModalReadonly">
+          <p><strong>Client :</strong> <span id="modal-client"></span></p>
+          <p><strong>Adresse :</strong> <span id="modal-adresse"></span></p>
+          <p><strong>Technicien :</strong> <span id="modal-tech"></span></p>
+          <p><strong>Durée :</strong> <span id="modal-duree"></span></p>
+          <p><strong>Commentaire :</strong> <span id="modal-commentaire"></span></p>
+        </div>
+  
+        <!-- BLOC ÉDITION : caché par défaut via .d-none -->
+        <div class="modal-body d-none" id="appointmentModalEditForm">
+          <form id="editAppointmentForm">
+            <!-- ID caché -->
+            <input type="hidden" id="editAppId" name="id" />
+  
+            <!-- Prénom, Nom, Téléphone -->
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="editClientFname">Prénom du client</label>
+                <!-- name="client_fname" => correspond à la validation -->
+                <input type="text" class="form-control" id="editClientFname" name="client_fname" required>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="editClientLname">Nom du client</label>
+                <!-- name="client_lname" -->
+                <input type="text" class="form-control" id="editClientLname" name="client_lname" required>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="editClientPhone">Téléphone du client</label>
+                <!-- name="client_phone" -->
+                <input type="text" class="form-control" id="editClientPhone" name="client_phone">
+              </div>
+            </div>
+  
+            <!-- Adresse, CP, Ville -->
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label for="editClientAdresse">Adresse (Rue)</label>
+                <!-- name="client_adresse" -->
+                <input type="text" class="form-control" id="editClientAdresse" name="client_adresse" required>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="editClientZip">Code postal</label>
+                <!-- name="client_zip_code" -->
+                <input type="text" class="form-control" id="editClientZip" name="client_zip_code" required>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="editClientCity">Ville</label>
+                <!-- name="client_city" -->
+                <input type="text" class="form-control" id="editClientCity" name="client_city" required>
+              </div>
+            </div>
+  
+            <!-- Technicien, Prestation -->
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label for="editTechId">Technicien</label>
+                <!-- name="techId" => "required|exists:WAPetGC_Tech,id" -->
+                <select id="editTechId" name="techId" class="form-control" required>
+                  <option value="" disabled>Choisissez un technicien</option>
+                  @foreach($technicians as $tech)
+                    <option value="{{ $tech->id }}">{{ $tech->user->prenom }} {{ $tech->user->nom }}</option>
+                  @endforeach
+                </select>
+              </div>
+              <div class="form-group col-md-6">
+                <label for="editServiceId">Prestation</label>
+                <!-- name="serviceId" => "required|exists:WAPetGC_Services,id" -->
+                <select id="editServiceId" name="serviceId" class="form-control" required>
+                  <option value="" disabled>Choisissez une prestation</option>
+                  @foreach($services as $service)
+                    <option value="{{ $service->id }}" data-default-time="{{ $service->default_time }}">
+                      {{ $service->name }} ({{ $service->type }})
+                    </option>
+                  @endforeach
+                </select>
+              </div>
+            </div>
+  
+            <!-- Date, Heure début, Heure fin, Durée -->
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="editAppointmentDate">Date</label>
+                <!-- name="appointmentDate" => "required|date" -->
+                <input type="date" id="editAppointmentDate" name="appointmentDate" class="form-control" required>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="editStartTime">Heure de début</label>
+                <!-- name="startTime" => "required|date_format:H:i" -->
+                <input type="time" id="editStartTime" name="startTime" class="form-control" required>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="editEndTime">Heure de fin</label>
+                <!-- name="endTime" => "nullable|date_format:H:i" -->
+                <input type="time" id="editEndTime" name="endTime" class="form-control" readonly>
+              </div>
+            </div>
+  
+            <!-- Durée + Commentaires -->
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="editDuration">Durée (minutes)</label>
+                <!-- name="duration" => "required|integer|min:1" -->
+                <input type="number" id="editDuration" name="duration" class="form-control" min="1" required>
+              </div>
+              <div class="form-group col-md-8">
+                <label for="editComment">Commentaires</label>
+                <!-- name="comment" => "nullable|string" -->
+                <textarea class="form-control" id="editComment" name="comment" rows="2"></textarea>
+              </div>
+            </div>
+  
+            <!-- Boutons Enregistrer / Annuler -->
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <button type="button" class="btn btn-secondary" id="cancelEditBtn">Annuler</button>
+          </form>
+        </div>
+  
+        <!-- FOOTER (mode lecture seule) -->
+        <div class="modal-footer" id="modalFooterButtons">
+          <button type="button" class="btn btn-sm btn-warning" id="editButton">Editer</button>
+          <button type="button" class="btn btn-sm btn-danger" id="deleteButton">Supprimer</button>
+        </div>
+      </div>
     </div>
-</div>
+  </div>
 
 @endsection
 
@@ -434,6 +434,13 @@
         // =====================
         techniciansList.addEventListener('change', (event) => {
             if (event.target.classList.contains('tech-checkbox')) {
+                const checkedTechIds = Array.from(document.querySelectorAll('.tech-checkbox:checked'))
+                                            .map(checkbox => checkbox.value);
+                
+                // Stocke dans le localStorage sous forme de JSON
+                localStorage.setItem('selectedTechIds', JSON.stringify(checkedTechIds));
+
+                // (Optionnel) recharger les events tout de suite
                 reloadCalendarEvents();
             }
         });
@@ -603,42 +610,39 @@
             e.preventDefault();
 
             const formData = new FormData(editAppointmentForm);
-            console.log('[JS] Submitting editAppointment form data:', formData);
+
+            // On rajoute _method=PUT
+            formData.append('_method', 'PUT');
+
             const id = editAppId.value;
 
-            // Log ce qu'on envoie
-            console.log('[JS] Submitting edit for appointment id:', id);
-            console.log('[JS] FormData content:');
-            for (let [key, value] of formData.entries()) {
-                console.log(' -', key, ':', value);
-            }
+            console.log('[JS] Envoi du form en POST + _method=PUT pour l\'ID:', id);
 
             fetch(`{{ url('/assistant/appointments') }}/${id}`, {
-                method: 'PUT',
-                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
                 body: formData,
             })
-            .then(resp => {
-                console.log('[JS] Response status:', resp.status);
-                return resp.json();
-            })
+            .then(resp => resp.json())
             .then(data => {
-                console.log('[JS] editAppointment response data:', data);
-
+                console.log('Réponse update :', data);
                 if (data.success) {
-                console.log('[JS] Rendez-vous édité avec succès');
-                $('#appointmentModal').modal('hide');
-                calendar.refetchEvents();
+                    console.log('Rendez-vous édité avec succès');
+                    $('#appointmentModal').modal('hide');
+                    calendar.refetchEvents();
                 } else {
-                console.error('[JS] Erreur update :', data);
-                alert('Erreur lors de la mise à jour : ' + (data.error || ''));
+                    console.error('Erreur update :', data);
+                    alert('Erreur : ' + data.error);
                 }
             })
             .catch(err => {
-                console.error('[JS] Erreur fetch update :', err);
-                alert('Erreur lors de la mise à jour : ' + err);
+                console.error('Erreur fetch update :', err);
+                alert('Erreur : ' + err);
             });
         });
+
         // =====================
         // FERMER LE MODAL
         // =====================

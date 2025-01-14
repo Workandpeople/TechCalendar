@@ -124,7 +124,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    console.debug('[JS] DOMContentLoaded - Initializing calendar...');
+    console.log('[JS] DOMContentLoaded - Initializing calendar...');
 
     const calendarEl = document.getElementById('calendar');
     const prevDayBtn  = document.getElementById('prevDay');
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allDaySlot: false,
         events: [], 
         eventClick: function (info) {
-            console.debug('[JS] eventClick - event:', info.event);
+            console.log('[JS] eventClick - event:', info.event);
 
             // Récupération des infos étendues
             const extProps = info.event.extendedProps;
@@ -159,44 +159,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     calendar.render();
-    console.debug('[JS] Calendar rendered');
+    console.log('[JS] Calendar rendered');
 
     // Navigation entre les jours
     prevDayBtn.addEventListener('click', () => {
         calendar.prev();
-        console.debug('[JS] prevDay clicked');
+        console.log('[JS] prevDay clicked');
     });
     todayBtn.addEventListener('click', () => {
         calendar.today();
-        console.debug('[JS] today clicked');
+        console.log('[JS] today clicked');
     });
     nextDayBtn.addEventListener('click', () => {
         calendar.next();
-        console.debug('[JS] nextDay clicked');
+        console.log('[JS] nextDay clicked');
     });
 
     // Boutons pour changer de vue
     monthViewBtn.addEventListener('click', () => {
         calendar.changeView('dayGridMonth');
-        console.debug('[JS] monthView clicked');
+        console.log('[JS] monthView clicked');
     });
     weekViewBtn.addEventListener('click', () => {
         calendar.changeView('timeGridWeek');
-        console.debug('[JS] weekView clicked');
+        console.log('[JS] weekView clicked');
     });
     dayViewBtn.addEventListener('click', () => {
         calendar.changeView('timeGridDay');
-        console.debug('[JS] dayView clicked');
+        console.log('[JS] dayView clicked');
     });
 
     // Charger les RDV du technicien connecté
     fetch("{{ route('tech.getAppointments') }}")
         .then(response => {
-            console.debug('[JS] getAppointments response status:', response.status);
+            console.log('[JS] getAppointments response status:', response.status);
             return response.json();
         })
         .then(events => {
-            console.debug('[JS] Received events:', events);
+            console.log('[JS] Received events:', events);
             calendar.addEventSource(events); // Injection des événements dans FullCalendar
         })
         .catch(error => {
@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fermer le modal
     window.closeAppointmentModal = function () {
-        console.debug('[JS] closeAppointmentModal()');
+        console.log('[JS] closeAppointmentModal()');
         $('#appointmentModal').modal('hide');
     };
 });

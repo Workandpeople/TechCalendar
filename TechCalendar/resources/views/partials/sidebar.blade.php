@@ -56,12 +56,12 @@
                 <span>Agenda des Tech</span>
             </a>
         </li>
-        <li class="nav-item {{ Route::is('assistant.single_tech_schedule') ? 'active' : '' }}">
+        <!-- {{-- <li class="nav-item {{ Route::is('assistant.single_tech_schedule') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('assistant.single_tech_schedule') }}">
                 <i class="fas fa-fw fa-tachometer-alt"></i>
                 <span>Tech Dashboard</span>
             </a>
-        </li>
+        </li> --}} -->
 
         <!-- Divider -->
         <hr class="sidebar-divider">

@@ -191,9 +191,7 @@ class AppointmentController extends Controller
     public function editAppointment(Request $request, $id)
     {
         try {
-            Log::info('[AppointmentController] editAppointment() - raw input', [
-                'request_all' => $request->all()
-            ]);
+            Log::info('editAppointment: raw input = ', $request->all());
 
             $validated = $request->validate([
                 'client_fname'    => 'required|string|max:255',
