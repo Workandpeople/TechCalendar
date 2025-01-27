@@ -27,37 +27,32 @@
     @if ($userRole === 'admin')
         <div class="sidebar-heading">Admin</div>
 
-        <!-- Manage Links -->
-        <li class="nav-item {{ request()->is('manage-*') ? 'active' : '' }}">
-            <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseManage"
-               aria-expanded="true" aria-controls="collapseManage">
-                <i class="fas fa-fw fa-cog"></i>
-                <span>Manage</span>
+        <li class="nav-item {{ request()->routeIs('manage-users.index') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('manage-users.index') }}">
+            <i class="fas fa-fw fa-cog"></i>
+            <span>Gestion des utilisateurs</span>
             </a>
-            <div id="collapseManage" class="collapse {{ request()->is('manage-*') ? 'show' : '' }}" aria-labelledby="headingManage" data-parent="#accordionSidebar">
-                <div class="bg-white py-2 collapse-inner rounded">
-                    <a class="collapse-item {{ request()->routeIs('manage-users.index') ? 'active' : '' }}" href="{{ route('manage-users.index') }}">User Manage</a>
-                    <a class="collapse-item {{ request()->routeIs('manage-providers.index') ? 'active' : '' }}" href="{{ route('manage-providers.index') }}">Provider Manage</a>
-                    <a class="collapse-item {{ request()->routeIs('manage-appointments.index') ? 'active' : '' }}" href="{{ route('manage-appointments.index') }}">Appointment Manage</a>
-                </div>
-            </div>
         </li>
 
-        <!-- Nav Item - Utilities Collapse Menu -->
-        <li class="nav-item {{ request()->is('stats*') ? 'active' : '' }}">
-            <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseUtilities"
-                aria-expanded="true" aria-controls="collapseUtilities">
-                <i class="fas fa-fw fa-chart-simple"></i>
-                <span>Statistiques</span>
+        <li class="nav-item {{ request()->routeIs('manage-providers.index') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('manage-providers.index') }}">
+            <i class="fas fa-fw fa-cog"></i>
+            <span>Gestion des services</span>
             </a>
-            <div id="collapseUtilities" class="collapse {{ request()->is('stats*') ? 'show' : '' }}" aria-labelledby="headingUtilities" data-parent="#accordionSidebar">
-                <div class="bg-white py-2 collapse-inner rounded">
-                    <a class="collapse-item {{ request()->routeIs('stats.index') ? 'active' : '' }}" href="{{ route('stats.index') }}">Statistiques de Kilométrage</a>
-                    <a class="collapse-item" href="#">Stats 2</a>
-                    <a class="collapse-item" href="#">Stats 3</a>
-                    <a class="collapse-item" href="#">Stats 4</a>
-                </div>
-            </div>
+        </li>
+
+        <li class="nav-item {{ request()->routeIs('manage-appointments.index') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('manage-appointments.index') }}">
+            <i class="fas fa-fw fa-cog"></i>
+            <span>Gestion des RDV</span>
+            </a>
+        </li>
+
+        <li class="nav-item {{ request()->routeIs('stats.index') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('stats.index') }}">
+                <i class="fas fa-fw fa-chart-simple"></i>
+            <span>Statistiques</span>
+            </a>
         </li>
     @endif
 
@@ -87,7 +82,7 @@
 
         <li class="nav-item {{ request()->routeIs('tech-dashboard.index') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('tech-dashboard.index') }}">
-                <i class="fas fa-fw fa-bookmark"></i>
+                <i class="fas fa-fw fa-tachometer-alt"></i>
                 <span>Dashboard</span>
             </a>
         </li>

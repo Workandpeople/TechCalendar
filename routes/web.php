@@ -43,6 +43,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes pour ManageAppointmentController
     Route::get('manage-appointments', [ManageAppointmentController::class, 'index'])->name('manage-appointments.index');
+    Route::get('manage-appointments/search', [ManageAppointmentController::class, 'search'])->name('manage-appointments.search');
     Route::get('manage-appointments/create', [ManageAppointmentController::class, 'create'])->name('manage-appointments.create');
     Route::post('manage-appointments', [ManageAppointmentController::class, 'store'])->name('manage-appointments.store');
     Route::get('manage-appointments/{id}', [ManageAppointmentController::class, 'show'])->name('manage-appointments.show');
@@ -54,13 +55,12 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes pour ManageProviderController
     Route::get('manage-providers', [ManageProviderController::class, 'index'])->name('manage-providers.index');
-    Route::get('manage-providers/create', [ManageProviderController::class, 'create'])->name('manage-providers.create');
+    Route::get('manage-providers/search', [ManageProviderController::class, 'search'])->name('manage-providers.search');
     Route::post('manage-providers', [ManageProviderController::class, 'store'])->name('manage-providers.store');
-    Route::get('manage-providers/{id}', [ManageProviderController::class, 'show'])->name('manage-providers.show');
     Route::get('manage-providers/{id}/edit', [ManageProviderController::class, 'edit'])->name('manage-providers.edit');
     Route::put('manage-providers/{id}', [ManageProviderController::class, 'update'])->name('manage-providers.update');
     Route::delete('manage-providers/{id}', [ManageProviderController::class, 'destroy'])->name('manage-providers.destroy');
-    Route::get('manage-providers/{id}/restore', [ManageProviderController::class, 'restore'])->name('manage-providers.restore');
+    Route::post('manage-providers/{id}/restore', [ManageProviderController::class, 'restore'])->name('manage-providers.restore');
     Route::delete('manage-providers/{id}/hard-delete', [ManageProviderController::class, 'hardDelete'])->name('manage-providers.hard-delete');
 
     // Route pour StatController
