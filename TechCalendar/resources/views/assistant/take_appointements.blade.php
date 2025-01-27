@@ -139,7 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         Adresse: ${tech.adresse}, ${tech.zip_code} ${tech.city}<br>
                         Distance : ${tech.distance_km} km<br>
                         Temps estimé : ${tech.duration_minutes} minutes<br>
-                        <a href="/assistant/agenda/${tech.id}" class="btn btn-sm btn-secondary">Agenda</a>
                     `;
                     resultsList.appendChild(listItem);
                 });
