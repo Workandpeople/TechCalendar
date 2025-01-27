@@ -1,101 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <!-- CSS only -->
-    <link href="{{ asset('css/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
-    <title>Login</title>
-    <style>
-        .password-wrapper {
-            position: relative;
-        }
-        .toggle-password {
-            position: absolute;
-            top: 50%;
-            right: 1rem;
-            transform: translateY(-50%);
-            cursor: pointer;
-        }
-        .toggle-password img {
-            width: 20px;
-            height: 20px;
-            opacity: 0.6;
-        }
-        .toggle-password img:hover {
-            opacity: 1;
-        }
-    </style>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>SB Admin 2 - Login</title>
+
+    <!-- Custom fonts for this template-->
+    <link href="{{ asset('css/fontAwesome/css/all.css') }}" rel="stylesheet" type="text/css">
+    <link
+        href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i"
+        rel="stylesheet">
+
+    <!-- Custom styles for this template-->
+    <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
+
 </head>
-<body class="bg-light py-3 py-md-5">
-    <section>
-        <div class="container">
-            <div class="row justify-content-center">
-                <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5 col-xxl-4">
-                    <div class="card border border-light-subtle rounded-3 shadow-sm">
-                        <div class="card-body p-3 p-md-4 p-xl-5">
-                            <div class="text-center mb-3">
-                                <a href="#!">
-                                    <img src="{{ asset('assets/banniere.png') }}" alt="BootstrapBrain Logo" width="100%" height="auto">
-                                </a>
+
+<body class="bg-gradient-primary">
+
+    <div class="container">
+
+        <!-- Outer Row -->
+        <div class="row justify-content-center">
+
+            <div class="col-xl-10 col-lg-12 col-md-9">
+
+                <div class="card o-hidden border-0 shadow-lg my-5">
+                    <div class="card-body p-0">
+                        <!-- Nested Row within Card Body -->
+                        <div class="row">
+                            <div class="col-lg-6 d-none d-lg-block bg-login-image"></div>
+                            <div class="col-lg-6">
+                                <div class="p-5">
+                                    <div class="text-center">
+                                        <h1 class="h4 text-gray-900 mb-4">Welcome Back!</h1>
+                                    </div>
+                                    <form class="user">
+                                        <div class="form-group">
+                                            <input type="email" class="form-control form-control-user"
+                                                id="exampleInputEmail" aria-describedby="emailHelp"
+                                                placeholder="Enter Email Address...">
+                                        </div>
+                                        <div class="form-group">
+                                            <input type="password" class="form-control form-control-user"
+                                                id="exampleInputPassword" placeholder="Password">
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="custom-control custom-checkbox small">
+                                                <input type="checkbox" class="custom-control-input" id="customCheck">
+                                                <label class="custom-control-label" for="customCheck">Remember
+                                                    Me</label>
+                                            </div>
+                                        </div>
+                                        <a href="index.html" class="btn btn-primary btn-user btn-block">
+                                            Login
+                                        </a>
+                                        <hr>
+                                        <a href="index.html" class="btn btn-google btn-user btn-block">
+                                            <i class="fab fa-google fa-fw"></i> Login with Google
+                                        </a>
+                                        <a href="index.html" class="btn btn-facebook btn-user btn-block">
+                                            <i class="fab fa-facebook-f fa-fw"></i> Login with Facebook
+                                        </a>
+                                    </form>
+                                    <hr>
+                                    <div class="text-center">
+                                        <a class="small" href="forgot-password.html">Forgot Password?</a>
+                                    </div>
+                                    <div class="text-center">
+                                        <a class="small" href="register.html">Create an Account!</a>
+                                    </div>
+                                </div>
                             </div>
-                            <h2 class="fs-6 fw-normal text-center text-secondary mb-4">Connectez-vous à votre compte</h2>
-                            
-                            <!-- Affichage des erreurs de connexion -->
-                            @if ($errors->any())
-                                <div class="alert alert-danger">
-                                    <ul class="mb-0">
-                                        @foreach ($errors->all() as $error)
-                                            <li>{{ $error }}</li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @endif
-                            
-                            <form action="{{ route('login.submit') }}" method="POST">
-                                @csrf
-                                <div class="row gy-2 overflow-hidden">
-                                    <div class="col-12">
-                                        <div class="form-floating mb-3">
-                                            <input type="email" class="form-control" name="email" id="email" placeholder="name@example.com" required>
-                                            <label for="email" class="form-label">Email</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="form-floating mb-3 password-wrapper">
-                                            <input type="password" class="form-control" name="password" id="password" placeholder="Password" required>
-                                            <label for="password" class="form-label">Password</label>
-                                            <span class="toggle-password" onclick="togglePassword()">
-                                                <img src="{{ asset('assets/eye.png') }}" alt="Show Password">
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="d-flex gap-2 justify-content-between">
-                                            <a href="#!" class="link-primary text-decoration-none">Mot de passe oublié?</a>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="d-grid my-3">
-                                            <button class="btn btn-primary btn-lg" type="submit">Connexion</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
 
-    <script>
-        function togglePassword() {
-            const passwordInput = document.getElementById('password');
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-        }
-    </script>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Bootstrap core JavaScript-->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Core plugin JavaScript-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.4.1/jquery.easing.min.js"></script>
+
+    <!-- Custom scripts for all pages-->
+    <script src="{{ asset('js/sb-admin-2.js') }}"></script>
+
 </body>
+
 </html>
