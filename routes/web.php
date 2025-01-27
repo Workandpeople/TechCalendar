@@ -31,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
     // Routes pour ManageUserController
     Route::get('manage-users', [ManageUserController::class, 'index'])->name('manage-users.index');
     Route::put('manage-users/{id}/password', [ManageUserController::class, 'updatePassword'])->name('manage-users.updatePassword');
+    Route::get('manage-users/search', [ManageUserController::class, 'search'])->name('manage-users.search');
     Route::get('manage-users/create', [ManageUserController::class, 'create'])->name('manage-users.create');
     Route::post('manage-users', [ManageUserController::class, 'store'])->name('manage-users.store');
     Route::get('manage-users/{id}', [ManageUserController::class, 'show'])->name('manage-users.show');

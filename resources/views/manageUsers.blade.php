@@ -6,6 +6,15 @@
     <link href="{{ asset('css/manageUser.css') }}" rel="stylesheet">
 @endsection
 
+@section('topbarSearch')
+    <form id="searchForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
+        <div class="input-group">
+            <input type="text" id="searchInput" class="form-control bg-light border-0 small" placeholder="Rechercher un utilisateur..."
+                aria-label="Search" aria-describedby="search-addon">
+        </div>
+    </form>
+@endsection
+
 @section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
     <h1 class="h3 mb-0 text-gray-800">Gérer les utilisateurs</h1>
@@ -47,6 +56,61 @@
 <script>
 $(document).ready(function () {
     console.log('Page de gestion des utilisateurs chargée');
+
+    $('#searchInput').on('input', function () {
+        const query = $(this).val();
+        console.log('Recherche déclenchée avec :', query);
+
+        $.ajax({
+            url: '{{ route('manage-users.search') }}',
+            type: 'GET',
+            data: { query: query },
+            success: function (data) {
+                console.log('Résultats de la recherche :', data);
+
+                const tbody = $('table tbody');
+                tbody.empty();
+
+                if (data.data.length === 0) {
+                    tbody.append('<tr><td colspan="5" class="text-center">Aucun utilisateur trouvé</td></tr>');
+                } else {
+                    data.data.forEach(user => {
+                        const isTrashed = user.deleted_at !== null;
+
+                        const userRow = `
+                            <tr class="${isTrashed ? 'table-danger' : ''}">
+                                <td><strong>${user.nom.toUpperCase()}</strong> ${user.prenom}</td>
+                                <td class="d-none d-md-table-cell">${user.email}</td>
+                                <td>
+                                    ${isTrashed ? '' : `
+                                        <button class="btn btn-sm btn-warning" data-toggle="modal" data-target="#userEditPasswordModal" data-id="${user.id}">
+                                            Modifier
+                                        </button>
+                                    `}
+                                </td>
+                                <td class="d-none d-md-table-cell">${user.role}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        ${isTrashed ? `
+                                            <button class="btn btn-sm btn-success" data-toggle="modal" data-target="#userRestoreModal" data-id="${user.id}">Restaurer</button>
+                                            <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userHardDeleteModal" data-id="${user.id}">Supprimer définitivement</button>
+                                        ` : `
+                                            <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#userEditModal" data-id="${user.id}">Modifier</button>
+                                            <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userDeleteModal" data-id="${user.id}">Supprimer</button>
+                                        `}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.append(userRow);
+                    });
+                }
+            },
+            error: function (xhr) {
+                console.error('Erreur lors de la recherche :', xhr.responseText);
+            }
+        });
+    });
 
     // Fonction pour charger les données utilisateur dans le modal d'édition
     function loadUserData(userId) {

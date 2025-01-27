@@ -31,6 +31,18 @@ class ManageUserController extends Controller
         return view('manageUsers', compact('users'));
     }
 
+    public function search(Request $request)
+    {
+        $query = $request->get('query', '');
+
+        $users = WAPetGCUser::withTrashed()
+            ->where('nom', 'LIKE', '%' . $query . '%')
+            ->orWhere('prenom', 'LIKE', '%' . $query . '%')
+            ->paginate(10);
+
+        return response()->json($users);
+    }
+
     public function store(Request $request)
     {
         Log::info('Tentative de création d\'un nouvel utilisateur.', $request->all());
