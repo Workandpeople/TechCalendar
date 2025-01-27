@@ -30,13 +30,14 @@ Route::middleware(['auth'])->group(function () {
 
     // Routes pour ManageUserController
     Route::get('manage-users', [ManageUserController::class, 'index'])->name('manage-users.index');
+    Route::put('manage-users/{id}/password', [ManageUserController::class, 'updatePassword'])->name('manage-users.updatePassword');
     Route::get('manage-users/create', [ManageUserController::class, 'create'])->name('manage-users.create');
     Route::post('manage-users', [ManageUserController::class, 'store'])->name('manage-users.store');
     Route::get('manage-users/{id}', [ManageUserController::class, 'show'])->name('manage-users.show');
     Route::get('manage-users/{id}/edit', [ManageUserController::class, 'edit'])->name('manage-users.edit');
     Route::put('manage-users/{id}', [ManageUserController::class, 'update'])->name('manage-users.update');
     Route::delete('manage-users/{id}', [ManageUserController::class, 'destroy'])->name('manage-users.destroy');
-    Route::get('manage-users/{id}/restore', [ManageUserController::class, 'restore'])->name('manage-users.restore');
+    Route::post('manage-users/{id}/restore', [ManageUserController::class, 'restore'])->name('manage-users.restore');
     Route::delete('manage-users/{id}/hard-delete', [ManageUserController::class, 'hardDelete'])->name('manage-users.hard-delete');
 
     // Routes pour ManageAppointmentController

@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder
         $services = WAPetGCService::factory(20)->create();
 
         // Créer les techniciens avec des rendez-vous associés
-        WAPetGCTech::factory(25)
+        WAPetGCTech::factory(17)
             ->has(
                 WAPetGCAppointment::factory(200)->state(function () use ($services) {
                     return [

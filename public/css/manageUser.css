@@ -1,0 +1,8 @@
+.table th a {
+    text-decoration: none;
+    color: inherit;
+}
+
+.table th a:hover {
+    color: #6c757d; /* Couleur de survol */
+}

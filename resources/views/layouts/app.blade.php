@@ -62,7 +62,7 @@
     </div>
     <!-- End of Page Wrapper -->
 
-    @include('partials.modal.logout')
+    @include('partials.modals.logout')
 
     <!-- Bootstrap core JavaScript-->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -76,6 +76,13 @@
 
     <!-- Page level plugins -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Vérifiez que Bootstrap JS est bien chargé -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('Bootstrap JS chargé correctement.');
+        });
+    </script>
 
     <!-- Section for additional JavaScript -->
     @yield('js')
