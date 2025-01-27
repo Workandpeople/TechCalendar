@@ -35,6 +35,8 @@ class AuthController extends Controller
 
         // Authentification et session
         Auth::login($user);
+        session(['user_role' => $user->role]); // Partager le rôle dans la session
+
         Log::info("Connexion réussie pour l'utilisateur : " . $user->email . " (Role: " . $user->role . ")");
 
         // Rediriger en fonction du rôle
