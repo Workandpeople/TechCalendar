@@ -27,6 +27,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Route pour AppointmentController
     Route::get('/appointment', [AppointmentController::class, 'index'])->name('appointment.index');
+    Route::post('/appointment', [AppointmentController::class, 'store'])->name('appointment.store');
+    Route::get('/search-appointments', [AppointmentController::class, 'search'])->name('appointments.search');
 
     // Routes pour ManageUserController
     Route::get('manage-users', [ManageUserController::class, 'index'])->name('manage-users.index');

@@ -21,6 +21,9 @@
     <!-- Custom styles for this template-->
     <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
 
+    <!-- Custom styles for this page -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/index.global.min.css" rel="stylesheet" />
+
     <!-- Section for additional CSS -->
     @yield('css')
 
@@ -78,6 +81,9 @@
     <!-- Page level plugins -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- FullCalendar CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/index.global.min.js"></script>
     <!-- Vérifiez que Bootstrap JS est bien chargé -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
