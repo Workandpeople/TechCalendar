@@ -18,7 +18,7 @@
 @section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
     <h1 class="h3 mb-0 text-gray-800">Gérer les services</h1>
-    <a href="#" class="btn btn-sm btn-primary shadow-sm" data-toggle="modal" data-target="#serviceCreateModal">
+    <a href="#" class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#serviceCreateModal">
         <i class="fas fa-plus fa-sm text-white-50"></i> Créer un service
     </a>
 </div>

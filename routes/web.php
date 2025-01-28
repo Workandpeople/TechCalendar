@@ -47,10 +47,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('manage-appointments/create', [ManageAppointmentController::class, 'create'])->name('manage-appointments.create');
     Route::post('manage-appointments', [ManageAppointmentController::class, 'store'])->name('manage-appointments.store');
     Route::get('manage-appointments/{id}', [ManageAppointmentController::class, 'show'])->name('manage-appointments.show');
+    Route::get('manage-appointments/{id}/view-client', [ManageAppointmentController::class, 'viewClient'])->name('manage-appointments.view-client');
+    Route::put('manage-appointments/{id}/reassign-tech', [ManageAppointmentController::class, 'reassignTech'])->name('manage-appointments.reassign-tech');
     Route::get('manage-appointments/{id}/edit', [ManageAppointmentController::class, 'edit'])->name('manage-appointments.edit');
     Route::put('manage-appointments/{id}', [ManageAppointmentController::class, 'update'])->name('manage-appointments.update');
     Route::delete('manage-appointments/{id}', [ManageAppointmentController::class, 'destroy'])->name('manage-appointments.destroy');
-    Route::get('manage-appointments/{id}/restore', [ManageAppointmentController::class, 'restore'])->name('manage-appointments.restore');
+    Route::post('manage-appointments/{id}/restore', [ManageAppointmentController::class, 'restore'])->name('manage-appointments.restore');
     Route::delete('manage-appointments/{id}/hard-delete', [ManageAppointmentController::class, 'hardDelete'])->name('manage-appointments.hard-delete');
 
     // Routes pour ManageProviderController
