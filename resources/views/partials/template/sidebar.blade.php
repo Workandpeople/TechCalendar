@@ -60,7 +60,7 @@
     @if (in_array($userRole, ['admin', 'assistante']))
         <div class="sidebar-heading">Assistant</div>
 
-        <li class="nav-item {{ request()->routeIs('appointment.index') ? 'active' : '' }}">
+        <li class="nav-item {{ request()->is('search-appointments*') || request()->routeIs('appointment.index') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('appointment.index') }}">
                 <i class="fas fa-fw fa-bookmark"></i>
                 <span>Prise de RDV</span>

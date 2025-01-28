@@ -16,8 +16,13 @@ class AppointmentController extends Controller
         $technicians = WAPetGCTech::with('user')->get();
         $services    = WAPetGCService::all();
 
-        // Passer ces variables à la vue "takeAppointment"
-        return view('takeAppointment', compact('technicians', 'services'));
+        // Passer les variables à la vue "takeAppointment" avec des valeurs par défaut
+        return view('takeAppointment', [
+            'technicians' => $technicians,
+            'services' => $services,
+            'selectedTechs' => [], // Liste vide par défaut
+            'appointments' => [],  // Liste vide par défaut
+        ]);
     }
 
     public function store(Request $request)

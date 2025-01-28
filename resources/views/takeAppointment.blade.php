@@ -173,19 +173,23 @@ document.addEventListener('DOMContentLoaded', function() {
         locale: 'fr',
 
         // Vue par défaut
-        initialView: 'dayGridMonth',
+        initialView: 'timeGridWeek',
 
         // On affiche les boutons pour la MonthView, la WeekView et la DayView
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            right: 'timeGridWeek,timeGridDay'
         },
 
         slotMinTime: '08:00:00',
         slotMaxTime: '21:00:00',
 
         hiddenDays: [0, 6],
+
+        validRange: {
+            start: new Date().toISOString().split('T')[0] // Date d'aujourd'hui
+        },
 
         // Les événements générés côté serveur
         events: {!! json_encode($events) !!},
