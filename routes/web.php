@@ -67,6 +67,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Route pour StatController
     Route::get('/stats', [StatController::class, 'index'])->name('stats.index');
+    Route::get('/tech-search', [StatController::class, 'search'])->name('stats.search');
 
     // Route pour TechDashboardController
     Route::get('/tech-dashboard', [TechDashboardController::class, 'index'])->name('tech-dashboard.index');

@@ -1,48 +1,99 @@
-@extends('layouts.app') <!-- Indique que cette vue utilise le layout app -->
+@extends('layouts.app')
 
-@section('title', 'Accueil') <!-- Titre de la page -->
+@section('title', 'Dashboard')
 
-@section('css') <!-- Section pour les styles spécifiques à cette page -->
-<link rel="stylesheet" href="{{ asset('css/custom-dashboard.css') }}">
-@endsection
-
-@section('pageHeading') <!-- Titre ou en-tête de la page -->
+@section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
     <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
-    <a href="#" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm">
-        <i class="fas fa-download fa-sm text-white-50"></i> Generate Report
-    </a>
+    <div class="button-group">
+        <a href="#" class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#appointmentCreateModal">
+            <i class="fas fa-plus fa-sm text-white-50"></i> Générer un rapport
+        </a>
+    </div>
 </div>
+
+@if(session('success'))
+<div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+    {{ session('success') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+@endif
+
+@if(session('error'))
+<div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+    {{ session('error') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+@endif
 @endsection
 
-@section('content') <!-- Contenu principal de la page -->
-<div class="row">
 
-    <!-- Earnings (Monthly) Card Example -->
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card border-left-primary shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                            Earnings (Monthly)</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">$40,000</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-calendar fa-2x text-gray-300"></i>
-                    </div>
+@section('content')
+<div class="card mb-4">
+    <div class="card-body">
+        <form id="reportForm" method="GET" action="{{ route('home.index') }}">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <label for="start_date" class="form-label">Date de début</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ $startDate }}">
+                </div>
+                <div class="col-md-5 mb-3">
+                    <label for="end_date" class="form-label">Date de fin</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ $endDate }}">
+                </div>
+                <div class="col-md-2 d-flex justify-content-end">
+                    <button type="button" class="btn btn-secondary w-100" id="resetFilters">
+                        Réinitialiser
+                    </button>
                 </div>
             </div>
-        </div>
+        </form>
     </div>
+</div>
 
-    <!-- Other Content Goes Here -->
+<div class="row">
+    <!-- Graphique RDV effectués et à venir -->
+    <div class="col-6 col-md-3 mb-4">
+        @include('partials.charts.appointmentsPie')
+    </div>
+    <!-- Répartition des services -->
+    <div class="col-6 col-md-3 mb-4">
+        @include('partials.charts.servicesBreakdown')
+    </div>
+    <!-- Coûts kilométriques -->
+    <div class="col-12 col-md-6 mb-4">
+        @include('partials.charts.kmCostsBar')
+    </div>
+</div>
 
+<div class="row">
+    <!-- RDV menés à bien par mois -->
+    <div class="col-md-12">
+        @include('partials.charts.monthlyAppointmentsLine')
+    </div>
 </div>
 @endsection
 
-@section('js') <!-- Section pour les scripts spécifiques à cette page -->
+
+@section('js')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    console.log('Dashboard Page Loaded');
+    document.addEventListener('DOMContentLoaded', () => {
+        const startInput = document.getElementById('start_date');
+        const endInput   = document.getElementById('end_date');
+        const form       = document.getElementById('reportForm');
+        const resetBtn   = document.getElementById('resetFilters');
+
+        // Soumettre le form lorsqu'on change les dates
+        startInput.addEventListener('change', () => form.submit());
+        endInput.addEventListener('change', () => form.submit());
+
+        // Réinitialiser : on vide les champs et on soumet le form
+        resetBtn.addEventListener('click', () => {
+            startInput.value = '';
+            endInput.value   = '';
+            form.submit();
+        });
+    });
 </script>
 @endsection
