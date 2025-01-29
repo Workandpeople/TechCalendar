@@ -17,9 +17,6 @@
                 <p><strong>Heure :</strong> <span id="modalTime"></span></p>
                 <p><strong>Commentaire :</strong> <span id="modalComment"></span></p>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-            </div>
         </div>
     </div>
 </div>

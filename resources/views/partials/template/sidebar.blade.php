@@ -80,13 +80,13 @@
     @if (in_array($userRole, ['admin', 'tech']))
         <div class="sidebar-heading">Technicien</div>
 
-        <li class="nav-item {{ request()->routeIs('tech-dashboard.index') ? 'active' : '' }}">
+        <li class="nav-item {{ request()->routeIs('techDashboard.index') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('tech-dashboard.index') }}">
                 <i class="fas fa-fw fa-tachometer-alt"></i>
                 <span>Dashboard</span>
             </a>
         </li>
-        <li class="nav-item {{ request()->routeIs('tech-calendar.index') ? 'active' : '' }}">
+        <li class="nav-item {{ request()->routeIs('techCalendar.index') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('tech-calendar.index') }}">
                 <i class="fas fa-fw fa-table"></i>
                 <span>Calendrier</span>

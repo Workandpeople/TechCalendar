@@ -48,7 +48,7 @@ class TechDashboardController extends Controller
             ->where('start_at', '>=', now())
             ->count();
 
-        return view('tech-dashboard', compact(
+        return view('techDashboard', compact(
             'techId', 'rdvEffectuesAujd', 'rdvAVenirAujd', 'rdvEffectuesMois', 'rdvAVenirMois'
         ));
     }
