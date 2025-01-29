@@ -73,9 +73,11 @@ Route::middleware(['auth'])->group(function () {
 
     // Route pour TechDashboardController
     Route::get('/tech-dashboard', [TechDashboardController::class, 'index'])->name('tech-dashboard.index');
+    Route::get('/tech-dashboard/appointments', [TechDashboardController::class, 'getAppointments'])->name('tech-dashboard.appointments');
 
     // Route pour TechCalendarController
     Route::get('/tech-calendar', [TechCalendarController::class, 'index'])->name('tech-calendar.index');
+    Route::get('/tech-calendar/appointments', [TechCalendarController::class, 'getAppointments'])->name('tech-calendar.appointments');
 
     // Route pour CalendarController
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
