@@ -55,6 +55,29 @@
 @section('js')
 <script>
 $(document).ready(function () {
+    $('#role').on('change', function() {
+        if ($(this).val() === 'tech') {
+            $('#tech-fields').removeClass('d-none');
+        } else {
+            $('#tech-fields').addClass('d-none');
+        }
+    });
+
+    $(document).on('change', '#edit-default_start_at, #edit-default_end_at', function () {
+        const val = $(this).val();        // Ex: "08:30"
+        if (val && val.length === 5) {
+            $(this).val(val + ':00');     // devient "08:30:00"
+        }
+    });
+
+    // Même principe si vous voulez le faire pour le formulaire de création
+    $(document).on('change', '#default_start_at, #default_end_at', function () {
+        const val = $(this).val();
+        if (val && val.length === 5) {
+            $(this).val(val + ':00');
+        }
+    });
+
     console.log('Page de gestion des utilisateurs chargée');
 
     $('#searchInput').on('input', function () {

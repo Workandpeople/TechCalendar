@@ -132,8 +132,8 @@ class ManageUserController extends Controller
             'adresse' => 'nullable|string|max:255',
             'zip_code' => 'nullable|string|max:10',
             'city' => 'nullable|string|max:255',
-            'default_start_at' => 'nullable|date_format:H:i',
-            'default_end_at' => 'nullable|date_format:H:i',
+            'default_start_at' => 'nullable|date_format:H:i:s',
+            'default_end_at'   => 'nullable|date_format:H:i:s',
             'default_rest_time' => 'nullable|integer|min:0',
         ]);
 
