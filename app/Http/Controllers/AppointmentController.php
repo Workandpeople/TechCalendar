@@ -25,13 +25,13 @@ class AppointmentController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, \App\Providers\MapboxService $mapboxService)
     {
-        Log::info('Tentative de création d\'un nouveau rendez-vous.', $request->all());
+        Log::info('Tentative de création d\'un nouveau rendez-vous.', ['requestData' => $request->all()]);
 
         // Validation des données
         $validated = $request->validate([
-            'tech_id'         => 'nullable|exists:WAPetGC_Tech,id',
+            'tech_id'         => 'required|exists:WAPetGC_Tech,id',
             'service_id'      => 'required|exists:WAPetGC_Services,id',
             'client_fname'    => 'required|string|max:255',
             'client_lname'    => 'required|string|max:255',
@@ -41,34 +41,73 @@ class AppointmentController extends Controller
             'client_phone'    => 'required|string|max:20',
             'start_at'        => 'required|date',
             'duration'        => 'required|integer|min:1',
-            'end_at'          => 'required|date|after:start_at',
+            'end_at'          => 'required|string', // On accepte temporairement en string
             'comment'         => 'nullable|string',
         ]);
 
+        Log::info('Données validées avec succès.', ['validatedData' => $validated]);
+
         try {
-            // Exemple : Ajouter des valeurs par défaut
-            $validated['trajet_time']     = 100;
-            $validated['trajet_distance'] = 100;
+            // ✅ Convertir `end_at` en format MySQL (YYYY-MM-DD HH:MM:SS)
+            $endAtFormatted = \DateTime::createFromFormat('d/m/Y H:i', $validated['end_at']);
+            if ($endAtFormatted) {
+                $validated['end_at'] = $endAtFormatted->format('Y-m-d H:i:s');
+            } else {
+                Log::error('Format de end_at invalide.', ['end_at' => $validated['end_at']]);
+                return redirect()->route('appointment.index')
+                    ->withErrors("Format de l'heure de fin invalide.");
+            }
+
+            // Vérifier si `tech_id` est vide et le remplacer par `NULL`
+            if (empty($validated['tech_id'])) {
+                $validated['tech_id'] = null;
+            }
+
+            // Gestion du trajet uniquement si un technicien est assigné
+            if ($validated['tech_id']) {
+                $tech = WAPetGCTech::find($validated['tech_id']);
+
+                if (!$tech) {
+                    Log::error("Technicien introuvable.", ['tech_id' => $validated['tech_id']]);
+                    return redirect()->route('appointment.index')->withErrors("Technicien introuvable.");
+                }
+
+                $lastAppointment = WAPetGCAppointment::where('tech_id', $validated['tech_id'])
+                    ->whereDate('start_at', $validated['start_at'])
+                    ->orderBy('end_at', 'desc')
+                    ->first();
+
+                if ($lastAppointment) {
+                    $fromAddress = "{$lastAppointment->client_adresse} {$lastAppointment->client_zip_code} {$lastAppointment->client_city}";
+                } else {
+                    $fromAddress = "{$tech->adresse} {$tech->zip_code} {$tech->city}";
+                }
+
+                $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, "{$validated['client_adresse']} {$validated['client_zip_code']} {$validated['client_city']}");
+
+                if ($route) {
+                    $validated['trajet_time'] = $route['duration_minutes'];
+                    $validated['trajet_distance'] = $route['distance_km'];
+                } else {
+                    $validated['trajet_time'] = 100;
+                    $validated['trajet_distance'] = 100;
+                }
+            } else {
+                $validated['trajet_time'] = 100;
+                $validated['trajet_distance'] = 100;
+            }
 
             // Création du rendez-vous
             $appointment = WAPetGCAppointment::create($validated);
 
-            Log::info('Rendez-vous créé avec succès.', [
-                'id' => $appointment->id
-            ]);
+            Log::info('Rendez-vous créé avec succès.', ['id' => $appointment->id]);
 
-            return redirect()
-                ->route('appointment.index') // Ou 'take-appointment.index'
-                ->with('success', 'Rendez-vous créé avec succès.');
+            return redirect()->route('appointment.index')->with('success', 'Rendez-vous créé avec succès.');
+
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la création du rendez-vous.', [
-                'error' => $e->getMessage(),
-                'data'  => $request->all(),
-            ]);
+            Log::error('Erreur lors de la création du rendez-vous.', ['error' => $e->getMessage(), 'data' => $request->all()]);
 
-            return redirect()
-                ->route('appointment.index') // Ou 'take-appointment.index'
-                ->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
+            return redirect()->route('appointment.index')->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
         }
     }
 

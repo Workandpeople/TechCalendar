@@ -101,59 +101,6 @@ class ManageAppointmentController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        Log::info('Tentative de création d\'un nouveau rendez-vous.', $request->all());
-
-        // Validation des données
-        $validated = $request->validate([
-            'tech_id' => 'nullable|exists:WAPetGC_Tech,id',
-            'service_id' => 'required|exists:WAPetGC_Services,id',
-            'client_fname' => 'required|string|max:255',
-            'client_lname' => 'required|string|max:255',
-            'client_adresse' => 'required|string|max:255',
-            'client_zip_code' => 'required|string|max:10',
-            'client_city' => 'required|string|max:255',
-            'client_phone' => 'required|string|max:20',
-            'start_at' => 'required|date',
-            'duration' => 'required|integer|min:1',
-            'end_at' => 'required|date|after:start_at',
-            'comment' => 'nullable|string',
-        ]);
-
-        try {
-            // Ajouter des valeurs par défaut
-            $validated['trajet_time'] = 100; // Valeur par défaut pour trajet_time
-            $validated['trajet_distance'] = 100; // Valeur par défaut pour trajet_distance
-
-            // Création du rendez-vous
-            $appointment = WAPetGCAppointment::create($validated);
-
-            Log::info('Rendez-vous créé avec succès.', [
-                'id' => $appointment->id,
-                'tech_id' => $appointment->tech_id,
-                'service_id' => $appointment->service_id,
-                'start_at' => $appointment->start_at,
-                'end_at' => $appointment->end_at,
-                'trajet_time' => $appointment->trajet_time,
-                'trajet_distance' => $appointment->trajet_distance,
-            ]);
-
-            return redirect()
-                ->route('manage-appointments.index')
-                ->with('success', 'Rendez-vous créé avec succès.');
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la création du rendez-vous.', [
-                'error' => $e->getMessage(),
-                'data' => $request->all(),
-            ]);
-
-            return redirect()
-                ->route('manage-appointments.index')
-                ->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
-        }
-    }
-
     public function edit($id)
     {
         try {

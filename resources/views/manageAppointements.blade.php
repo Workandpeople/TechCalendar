@@ -25,7 +25,7 @@
         </a>
 
         <!-- Bouton "Créer un RDV" -->
-        <a href="#" class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#appointmentCreateModal">
+        <a href="{{ route('appointment.index') }}" class="btn btn-sm btn-success shadow-sm">
             <i class="fas fa-plus fa-sm text-white-50"></i> Créer un RDV
         </a>
     </div>

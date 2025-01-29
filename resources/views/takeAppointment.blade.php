@@ -12,7 +12,7 @@
         </a>
 
         <!-- Bouton "Créer un RDV" -->
-        <a href="#" class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#appointmentCreateModal2">
+        <a href="#" class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#appointmentCreateModal">
             <i class="fas fa-plus fa-sm text-white-50"></i> Créer un RDV manuellement
         </a>
 
@@ -38,7 +38,7 @@
 
 @section('content')
     <!-- Modal de création RDV -->
-    @include('partials.modals.appointmentCreate2')
+    @include('partials.modals.appointmentCreate')
 
     <!-- Form de recherche (adresse, code postal, ville, etc.) -->
     @include('partials.forms.searchForm')
@@ -48,6 +48,9 @@
         'selectedTechs' => $selectedTechs,
         'appointments'  => $appointments
     ])
+
+    <!-- Affichage des RDV -->
+    @include('partials.modals.appointmentDetails')
 @endsection
 
 @section('js')
@@ -67,22 +70,147 @@
 
     // Construire $events
     $events = [];
-    foreach(($appointments ?? []) as $appoint) {
-        $clientFullname = $appoint->client_fname.' '.$appoint->client_lname;
-        $techId         = $appoint->tech_id;
+    foreach (($appointments ?? []) as $appoint) {
+        $clientFullname = $appoint->client_fname . ' ' . $appoint->client_lname;
+        $techName = optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom;
+        $serviceName = optional($appoint->service)->name;
+        $comment = $appoint->comment ?? 'Aucun commentaire';
+        $clientAddress = $appoint->client_adresse . ', ' . $appoint->client_zip_code . ' ' . $appoint->client_city;
+
         $events[] = [
-            'id'               => $appoint->id,
-            'title'            => $clientFullname,
-            'start'            => $appoint->start_at,
-            'end'              => $appoint->end_at,
-            'backgroundColor'  => $techColorMap[$techId]['color'] ?? '#cccccc',
+            'id' => $appoint->id,
+            'title' => $clientFullname,
+            'start' => $appoint->start_at,
+            'end' => $appoint->end_at,
+            'backgroundColor' => $techColorMap[$appoint->tech_id]['color'] ?? '#cccccc',
             'extendedProps' => [
-                'serviceType' => $appoint->service->type ?? ''
+                'techName' => trim($techName) ?: 'Non spécifié',
+                'serviceName' => $serviceName ?: 'Non spécifié',
+                'comment' => $comment,
+                'clientAddress' => $clientAddress
             ]
         ];
     }
 @endphp
 <script>
+$(document).ready(function () {
+    let timer;
+
+    // Fonction de recherche AJAX des techniciens
+    function fetchTechSuggestions(query, targetInput, targetId, suggestionBox) {
+        $.ajax({
+            url: '/tech-search?q=' + encodeURIComponent(query),
+            type: 'GET',
+            success: function(data) {
+                renderTechSuggestions(data, targetInput, targetId, suggestionBox);
+            },
+            error: function(err) {
+                console.error(err);
+            }
+        });
+    }
+
+    // Fonction pour afficher les suggestions
+    function renderTechSuggestions(list, targetInput, targetId, suggestionBox) {
+        if (!list.length) {
+            $(suggestionBox).html('<div class="p-2 text-muted">Aucun résultat</div>');
+            return;
+        }
+
+        let html = '';
+        list.forEach(function(item) {
+            html += `
+                <div class="p-2 suggestion-item" style="cursor: pointer;" data-id="${item.id}" data-name="${item.fullname}">
+                    ${item.fullname}
+                </div>
+            `;
+        });
+
+        $(suggestionBox).html(html);
+
+        // Sélection d'un technicien
+        $('.suggestion-item').on('click', function(e) {
+            const chosenName = $(this).data('name');
+            const chosenId = $(this).data('id');
+
+            $(targetInput).val(chosenName);
+            $(targetId).val(chosenId);
+            $(suggestionBox).html('');
+        });
+    }
+
+    // Recherche dynamique pour le formulaire principal
+    $('#search_tech').on('input', function() {
+        clearTimeout(timer);
+        const query = $(this).val().trim();
+        if (!query) {
+            $('#techSuggestions').html('');
+            $('#search_tech_id').val('');
+            return;
+        }
+        timer = setTimeout(() => {
+            fetchTechSuggestions(query, '#search_tech', '#search_tech_id', '#techSuggestions');
+        }, 300);
+    });
+
+    // Recherche dynamique pour le modal de création de rendez-vous
+    $('#tech_search_modal').on('input', function() {
+        clearTimeout(timer);
+        const query = $(this).val().trim();
+        if (!query) {
+            $('#techSuggestionsModal').html('');
+            $('#tech_id_modal').val('');
+            return;
+        }
+        timer = setTimeout(() => {
+            fetchTechSuggestions(query, '#tech_search_modal', '#tech_id_modal', '#techSuggestionsModal');
+        }, 300);
+    });
+
+    // Fonction pour calculer l'heure de fin
+    function updateEndTime() {
+        const startTime = $('#start_at').val();
+        const duration = parseInt($('#duration').val(), 10);
+
+        if (startTime && duration > 0) {
+            let startDate = new Date(startTime); // Date en format ISO
+
+            startDate.setMinutes(startDate.getMinutes() + duration); // Ajoute la durée
+
+            // Formatage de la date en JJ/MM/YYYY HH:MM
+            let day = String(startDate.getDate()).padStart(2, '0');
+            let month = String(startDate.getMonth() + 1).padStart(2, '0'); // Mois commence à 0
+            let year = startDate.getFullYear();
+            let hours = String(startDate.getHours()).padStart(2, '0');
+            let minutes = String(startDate.getMinutes()).padStart(2, '0');
+
+            let formattedEndDate = `${day}/${month}/${year} ${hours}:${minutes}`;
+            $('#end_at').val(formattedEndDate);
+        } else {
+            $('#end_at').val(''); // Réinitialise si vide
+        }
+    }
+
+    // ✅ Ajout d'un déclencheur au changement du service
+    $('#service_id').on('change', function () {
+        const selectedOption = $(this).find(':selected');
+        const duration = selectedOption.data('duration');
+
+        if (duration) {
+            $('#duration').val(duration);
+            updateEndTime();
+        }
+    });
+
+    // ✅ Mise à jour en temps réel
+    $('#start_at, #duration').on('input change keyup', function () {
+        updateEndTime();
+    });
+
+    // ✅ Initialisation au chargement
+    updateEndTime();
+});
+
 document.addEventListener('DOMContentLoaded', function() {
     // Mise à jour de la durée en fonction du service choisi
     const serviceSelect = document.getElementById('service_id2');
@@ -96,10 +224,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 $(document).ready(function () {
-    // Fermer le modal
+    // Gestion de la fermeture des modals via les boutons "data-bs-dismiss"
     $('button[data-bs-dismiss="modal"]').on('click', function () {
         const modal = $(this).closest('.modal');
         if (modal.length) {
+            console.log('Fermeture du modal:', modal.attr('id'));
             modal.modal('hide');
         }
     });
@@ -194,9 +323,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Les événements générés côté serveur
         events: {!! json_encode($events) !!},
 
-        // Pour chaque événement, on applique votre logique de style
+        // Appliquer le style à chaque événement
         eventDidMount: function(info) {
-            // Couleur de fond (technicien)
             info.el.style.backgroundColor = info.event.backgroundColor;
 
             // Bordure selon le type de service
@@ -208,6 +336,27 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (type === 'cofrac') {
                 info.el.style.border = '2px solid blue';
             }
+        },
+
+        // Lorsqu'on clique sur un rendez-vous, on affiche le modal
+        eventClick: function(info) {
+            var event = info.event;
+            var props = event.extendedProps;
+
+            console.log("RDV sélectionné :", event);
+
+            // Remplir les données du modal
+            document.getElementById('modalClientName').textContent = event.title;
+            document.getElementById('modalTechName').textContent = props.techName || 'Non spécifié';
+            document.getElementById('modalService').textContent = props.serviceName || 'Non spécifié';
+            document.getElementById('modalDate').textContent = new Date(event.start).toLocaleDateString();
+            document.getElementById('modalTime').textContent = new Date(event.start).toLocaleTimeString() + ' - ' + new Date(event.end).toLocaleTimeString();
+            document.getElementById('modalComment').textContent = props.comment || 'Aucun commentaire';
+            document.getElementById('modalClientAddress').textContent = props.clientAddress || 'Adresse non disponible';
+
+            // Afficher le modal
+            var modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
+            modal.show();
         }
     });
 
