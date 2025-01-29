@@ -79,4 +79,5 @@ Route::middleware(['auth'])->group(function () {
 
     // Route pour CalendarController
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
+    Route::get('/api/calendar', [CalendarController::class, 'getAppointments'])->name('calendar.fetch');
 });
