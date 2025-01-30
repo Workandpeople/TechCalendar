@@ -68,7 +68,7 @@
                                 Modifier
                             </button>
                             <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#appointmentDeleteModal" data-id="{{ $appointment->id }}">
-                                Supprimer
+                                Mettre en attente
                             </button>
                         @else
                             <button class="btn btn-sm btn-success" data-toggle="modal" data-target="#appointmentRestoreModal" data-id="{{ $appointment->id }}">

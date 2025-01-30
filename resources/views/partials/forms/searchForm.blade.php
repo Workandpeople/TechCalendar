@@ -36,26 +36,8 @@
                     <input type="number" class="form-control" id="duration2" name="duration" placeholder="0">
                 </div>
             </div>
-
-            <!-- Ligne 3 : Technicien + bouton Rechercher -->
-            <div class="row align-items-end">
-                <div class="col-md-8 mb-3" style="position: relative;">
-                    <label for="search_tech" class="form-label">Technicien</label>
-                    <input type="text" class="form-control" id="search_tech" placeholder="Nom ou prénom du tech">
-
-                    <!-- Champ caché pour stocker l'ID du tech -->
-                    <input type="hidden" id="search_tech_id" name="search_tech_id">
-
-                    <!-- Zone suggestions dynamiques -->
-                    <div id="techSuggestions"
-                         style="position: absolute; top: 100%; left: 0; right: 0;
-                                background: #fff; border: 1px solid #ccc; z-index: 999;">
-                    </div>
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <button type="submit" class="btn btn-primary w-100">Rechercher</button>
-                </div>
+            <div class="col-12 mb-3">
+                <button type="submit" class="btn btn-primary w-100">Rechercher</button>
             </div>
         </form>
     </div>

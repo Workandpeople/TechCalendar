@@ -185,7 +185,7 @@ $(document).ready(function () {
                                             <button class="btn btn-sm btn-danger" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentHardDeleteModal">Supprimer définitivement</button>
                                         ` : `
                                             <button class="btn btn-sm btn-primary" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentEditModal">Modifier</button>
-                                            <button class="btn btn-sm btn-danger" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentDeleteModal">Supprimer</button>
+                                            <button class="btn btn-sm btn-danger" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentDeleteModal">Mettre en attente</button>
                                         `}
                                     </div>
                                 </td>

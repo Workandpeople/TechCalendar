@@ -51,7 +51,7 @@
                                 Modifier
                             </button>
                             <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userDeleteModal" data-id="{{ $user->id }}">
-                                Supprimer
+                                Désactiver
                             </button>
                         @else
                             <button class="btn btn-sm btn-success" data-toggle="modal" data-target="#userRestoreModal" data-id="{{ $user->id }}">

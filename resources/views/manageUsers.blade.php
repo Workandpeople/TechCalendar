@@ -83,7 +83,6 @@ $(document).ready(function () {
     $('#searchInput').on('input', function () {
         const query = $(this).val();
         console.log('Recherche déclenchée avec :', query);
-        showLoadingOverlay();
 
         $.ajax({
             url: '{{ route('manage-users.search') }}',
@@ -120,7 +119,7 @@ $(document).ready(function () {
                                             <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userHardDeleteModal" data-id="${user.id}">Supprimer définitivement</button>
                                         ` : `
                                             <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#userEditModal" data-id="${user.id}">Modifier</button>
-                                            <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userDeleteModal" data-id="${user.id}">Supprimer</button>
+                                            <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#userDeleteModal" data-id="${user.id}">Désactiver</button>
                                         `}
                                     </div>
                                 </td>
@@ -132,9 +131,6 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors de la recherche :', xhr.responseText);
-            },
-            complete: function() {
-                hideLoadingOverlay();
             }
         });
     });

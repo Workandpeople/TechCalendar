@@ -83,7 +83,7 @@ $(document).ready(function () {
                                             <button class="btn btn-sm btn-danger" data-id="${service.id}" data-toggle="modal" data-target="#serviceHardDeleteModal">Supprimer définitivement</button>
                                         ` : `
                                             <button class="btn btn-sm btn-primary" data-id="${service.id}" data-toggle="modal" data-target="#serviceEditModal">Modifier</button>
-                                            <button class="btn btn-sm btn-danger" data-id="${service.id}" data-toggle="modal" data-target="#serviceDeleteModal">Supprimer</button>
+                                            <button class="btn btn-sm btn-danger" data-id="${service.id}" data-toggle="modal" data-target="#serviceDeleteModal">Désactiver</button>
                                         `}
                                     </div>
                                 </td>

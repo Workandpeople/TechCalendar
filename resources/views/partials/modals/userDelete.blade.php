@@ -11,7 +11,7 @@
                 @csrf
                 @method('DELETE')
                 <div class="modal-body">
-                    <p>Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cette action est réversible.</p>
+                    <p>Êtes-vous sûr de vouloir désactiver cet utilisateur ? Cette action sera réversible.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-danger">Supprimer</button>

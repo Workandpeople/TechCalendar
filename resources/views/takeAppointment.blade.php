@@ -96,61 +96,17 @@
 $(document).ready(function () {
     let timer;
 
-    // Fonction de recherche AJAX des techniciens
-    function fetchTechSuggestions(query, targetInput, targetId, suggestionBox) {
-        $.ajax({
-            url: '/tech-search?q=' + encodeURIComponent(query),
-            type: 'GET',
-            success: function(data) {
-                renderTechSuggestions(data, targetInput, targetId, suggestionBox);
-            },
-            error: function(err) {
-                console.error(err);
-            }
-        });
-    }
+    $('#searchForm').on('submit', function () {
+        showLoadingOverlay(); // Afficher le chargement
 
-    // Fonction pour afficher les suggestions
-    function renderTechSuggestions(list, targetInput, targetId, suggestionBox) {
-        if (!list.length) {
-            $(suggestionBox).html('<div class="p-2 text-muted">Aucun résultat</div>');
-            return;
-        }
+        // Désactiver le bouton pour éviter un double clic
+        $('#searchSubmitBtn').prop('disabled', true);
+    });
 
-        let html = '';
-        list.forEach(function(item) {
-            html += `
-                <div class="p-2 suggestion-item" style="cursor: pointer;" data-id="${item.id}" data-name="${item.fullname}">
-                    ${item.fullname}
-                </div>
-            `;
-        });
-
-        $(suggestionBox).html(html);
-
-        // Sélection d'un technicien
-        $('.suggestion-item').on('click', function(e) {
-            const chosenName = $(this).data('name');
-            const chosenId = $(this).data('id');
-
-            $(targetInput).val(chosenName);
-            $(targetId).val(chosenId);
-            $(suggestionBox).html('');
-        });
-    }
-
-    // Recherche dynamique pour le formulaire principal
-    $('#search_tech').on('input', function() {
-        clearTimeout(timer);
-        const query = $(this).val().trim();
-        if (!query) {
-            $('#techSuggestions').html('');
-            $('#search_tech_id').val('');
-            return;
-        }
-        timer = setTimeout(() => {
-            fetchTechSuggestions(query, '#search_tech', '#search_tech_id', '#techSuggestions');
-        }, 300);
+    // Quand la page est complètement chargée (après le rechargement)
+    $(window).on('load', function () {
+        hideLoadingOverlay(); // Masquer le chargement
+        $('#searchSubmitBtn').prop('disabled', false); // Réactiver le bouton
     });
 
     // Recherche dynamique pour le modal de création de rendez-vous
@@ -257,14 +213,18 @@ $(document).ready(function () {
     });
 
     function fetchTechSuggestions(query) {
+        showLoadingOverlay();  // 🔹 AFFICHER LE CHARGEMENT ICI
+
         $.ajax({
             url: '/tech-search?q=' + encodeURIComponent(query),
             type: 'GET',
             success: function(data) {
                 renderTechSuggestions(data);
+                hideLoadingOverlay();  // 🔹 CACHER LE CHARGEMENT APRÈS SUCCÈS
             },
             error: function(err) {
                 console.error(err);
+                hideLoadingOverlay();  // 🔹 CACHER LE CHARGEMENT EN CAS D'ERREUR
             }
         });
     }
@@ -296,6 +256,7 @@ $(document).ready(function () {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
+    showLoadingOverlay();
     var calendarEl = document.getElementById('calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
         // Langue
@@ -361,6 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     calendar.render();
+    hideLoadingOverlay();
 });
 </script>
 @endsection
