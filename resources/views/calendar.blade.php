@@ -119,6 +119,8 @@ $(document).ready(function () {
 
         console.log("🔄 Mise à jour du calendrier pour les techniciens :", selectedTechs);
 
+        showLoadingOverlay();
+
         $.ajax({
             url: '/api/calendar',
             type: 'GET',
@@ -138,6 +140,9 @@ $(document).ready(function () {
             },
             error: function(xhr, status, error) {
                 console.error("❌ Erreur AJAX :", xhr);
+            },
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
             }
         });
     }
@@ -148,6 +153,7 @@ $(document).ready(function () {
     $('#toggleAllTechs').on('change', function () {
         let isChecked = $(this).prop('checked');
         $('.tech-checkbox').prop('checked', isChecked);
+        showLoadingOverlay();
         updateCalendar();
     });
 
@@ -155,6 +161,7 @@ $(document).ready(function () {
      * Gestion de la sélection des techniciens
      */
     $('.tech-checkbox').on('change', function () {
+        showLoadingOverlay();
         updateCalendar();
     });
 

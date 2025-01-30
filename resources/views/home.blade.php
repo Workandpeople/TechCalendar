@@ -84,12 +84,18 @@
         const form       = document.getElementById('reportForm');
         const resetBtn   = document.getElementById('resetFilters');
 
-        // Soumettre le form lorsqu'on change les dates
-        startInput.addEventListener('change', () => form.submit());
-        endInput.addEventListener('change', () => form.submit());
+        startInput.addEventListener('change', () => {
+            showLoadingOverlay(); // Affiche le chargement
+            form.submit();
+        });
 
-        // Réinitialiser : on vide les champs et on soumet le form
+        endInput.addEventListener('change', () => {
+            showLoadingOverlay();
+            form.submit();
+        });
+
         resetBtn.addEventListener('click', () => {
+            showLoadingOverlay();
             startInput.value = '';
             endInput.value   = '';
             form.submit();

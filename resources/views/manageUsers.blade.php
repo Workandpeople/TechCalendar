@@ -83,6 +83,7 @@ $(document).ready(function () {
     $('#searchInput').on('input', function () {
         const query = $(this).val();
         console.log('Recherche déclenchée avec :', query);
+        showLoadingOverlay();
 
         $.ajax({
             url: '{{ route('manage-users.search') }}',
@@ -131,6 +132,9 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors de la recherche :', xhr.responseText);
+            },
+            complete: function() {
+                hideLoadingOverlay();
             }
         });
     });
@@ -138,6 +142,7 @@ $(document).ready(function () {
     // Fonction pour charger les données utilisateur dans le modal d'édition
     function loadUserData(userId) {
         console.log('Chargement des données pour l\'utilisateur ID:', userId);
+        showLoadingOverlay();
 
         $.ajax({
             url: '/manage-users/' + userId + '/edit',
@@ -173,6 +178,9 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors de la récupération des données utilisateur:', xhr.responseText);
+            },
+            complete: function() {
+                hideLoadingOverlay(); // <--- AJOUT
             }
         });
     }

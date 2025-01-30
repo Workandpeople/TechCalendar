@@ -144,6 +144,8 @@ $(document).ready(function () {
     function performSearch(page = 1) {
         const query = $('#searchInput').val();
 
+        showLoadingOverlay();
+
         $.ajax({
             url: '{{ route("manage-appointments.search") }}',
             type: 'GET',
@@ -198,6 +200,9 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors de la recherche :', xhr.responseText);
+            },
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
             }
         });
     }
@@ -232,6 +237,8 @@ $(document).ready(function () {
         console.log('Submitting reassign tech form');
         console.log('Appointment ID:', appointmentId);
         console.log('New Tech ID:', techId);
+
+        showLoadingOverlay();
 
         $.ajax({
             url: `/manage-appointments/${appointmentId}/reassign-tech`,
@@ -268,6 +275,8 @@ $(document).ready(function () {
         const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
         const appointmentId = button.data('id'); // ID du rendez-vous
 
+        showLoadingOverlay();
+
         // Vide les champs pour éviter d'afficher d'anciennes données
         $('#client-fname, #client-lname, #client-adresse, #client-zip-code, #client-city, #client-phone').text('Chargement...');
 
@@ -293,6 +302,9 @@ $(document).ready(function () {
                 console.error('Erreur lors du chargement des détails client:', xhr.responseText);
                 $('#viewClientModal .modal-body').html('<p class="text-danger">Une erreur est survenue.</p>');
             },
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
+            },
         });
     });
 
@@ -300,9 +312,10 @@ $(document).ready(function () {
         const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
         const appointmentId = button.data('id'); // ID du rendez-vous
 
+        showLoadingOverlay();
+
         // Ajoutez dynamiquement l'URL au formulaire
         $('#editAppointmentForm').attr('action', `/manage-appointments/${appointmentId}`);
-
         // Réinitialiser les champs
         $('#editAppointmentForm')[0].reset();
 
@@ -333,6 +346,9 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors du chargement des détails:', xhr.responseText);
+            },
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
             },
         });
     });

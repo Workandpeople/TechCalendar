@@ -55,6 +55,7 @@
 $(document).ready(function () {
     $('#searchInput').on('input', function () {
         const query = $(this).val();
+        showLoadingOverlay();
 
         $.ajax({
             url: '{{ route('manage-providers.search') }}',
@@ -94,6 +95,9 @@ $(document).ready(function () {
             },
             error: function (xhr) {
                 console.error('Erreur lors de la recherche :', xhr.responseText);
+            },
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
             }
         });
     });
@@ -113,6 +117,7 @@ $(document).ready(function () {
         const serviceId = button.data('id'); // Récupérer l'ID du service
 
         console.log('Ouverture du modal pour modifier le service ID:', serviceId);
+        showLoadingOverlay();
 
         // Effectuer une requête AJAX pour récupérer les données du service
         $.ajax({
@@ -129,8 +134,8 @@ $(document).ready(function () {
                 // Mettre à jour l'action du formulaire
                 $('#editServiceForm').attr('action', `/manage-providers/${data.id}`);
             },
-            error: function (xhr) {
-                console.error('Erreur lors de la récupération des données :', xhr.responseText);
+            complete: function () {
+                hideLoadingOverlay(); // Cacher le chargement
             }
         });
     });
@@ -153,6 +158,7 @@ $(document).ready(function () {
         // Mettre à jour l'action du formulaire avec l'URL correcte
         const formAction = '{{ route('manage-providers.destroy', ':id') }}'.replace(':id', serviceId);
         $('#deleteServiceForm').attr('action', formAction);
+
     });
 
     // Réinitialiser l'action du formulaire lorsque le modal est fermé
@@ -170,6 +176,7 @@ $(document).ready(function () {
         // Mettre à jour l'action du formulaire avec l'URL correcte
         const formAction = '{{ route('manage-providers.restore', ':id') }}'.replace(':id', serviceId);
         $('#restoreServiceForm').attr('action', formAction);
+
     });
 
     // Réinitialiser l'action du formulaire lorsque le modal est fermé
