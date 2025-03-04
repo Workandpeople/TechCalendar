@@ -35,8 +35,8 @@ class WAPetGCUserFactory extends Factory
     public function customAdmin()
     {
         return $this->state(fn () => [
-            'email' => 'contact@lucas-dinnichert.fr',
-            'password' => bcrypt('password'),
+            'email' => 'contact@workandpeople.fr',
+            'password' => bcrypt('Alexdavid2652!'),
             'role' => 'admin',
         ]);
     }
