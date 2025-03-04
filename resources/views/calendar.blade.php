@@ -65,9 +65,11 @@
 <script>
 $(document).ready(function () {
     let calendar;
+    let currentStart = null;
+    let currentEnd = null;
 
     /**
-     * Initialisation du calendrier FullCalendar
+     * Initialisation du calendrier FullCalendar.
      */
     function initFullCalendar() {
         let calendarEl = document.getElementById('calendar');
@@ -77,18 +79,23 @@ $(document).ready(function () {
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                right: 'timeGridWeek,timeGridDay'
             },
             slotMinTime: '08:00:00',
             slotMaxTime: '21:00:00',
             hiddenDays: [0, 6],
-            events: [], // Pas d'événements au chargement
+            events: [], // Aucun événement au chargement
+            // À chaque navigation, on récupère le début et la fin de la vue
+            datesSet: function(info) {
+                currentStart = info.startStr;
+                currentEnd = info.endStr;
+                console.log("Nouvelle plage :", currentStart, currentEnd);
+                updateCalendar();
+            },
             eventClick: function(info) {
                 var event = info.event;
                 var props = event.extendedProps;
-
                 console.log("📌 RDV sélectionné :", event);
-
                 let clientAddress = props.clientAddress || "Adresse non disponible";
 
                 document.getElementById('modalClientName').textContent = event.title || 'Inconnu';
@@ -105,68 +112,87 @@ $(document).ready(function () {
                 modal.show();
             }
         });
-
         calendar.render();
     }
 
     /**
-     * Récupération des rendez-vous des techniciens sélectionnés
+     * Mise à jour du calendrier.
+     * Envoie en AJAX la liste des tech sélectionnés ainsi que la plage de dates (currentStart / currentEnd)
+     * pour n'obtenir que les rendez-vous correspondants à la vue actuelle.
      */
     function updateCalendar() {
         let selectedTechs = $('.tech-checkbox:checked').map(function () {
             return $(this).val();
         }).get();
 
-        console.log("🔄 Mise à jour du calendrier pour les techniciens :", selectedTechs);
+        console.log("🔄 RDV pour techs :", selectedTechs);
+        console.log("Plage de dates :", currentStart, currentEnd);
+
+        if (selectedTechs.length === 0) {
+            $("#calendar-container").hide();
+            if (calendar) {
+                calendar.removeAllEvents();
+            }
+            hideLoadingOverlay();
+            return;
+        } else {
+            $("#calendar-container").show();
+        }
 
         showLoadingOverlay();
 
         $.ajax({
             url: '/api/calendar',
             type: 'GET',
-            data: { techs: selectedTechs },
+            data: {
+                techs: selectedTechs,
+                start: currentStart,
+                end: currentEnd
+            },
             success: function(response) {
                 if (response.success) {
                     console.log("✅ RDV chargés :", response.appointments);
-
                     calendar.removeAllEvents();
                     response.appointments.forEach(event => {
                         calendar.addEvent(event);
                     });
-
                 } else {
-                    console.error("❌ Erreur lors du chargement des RDV :", response.message);
+                    console.error("❌ Erreur lors du chargement :", response.message);
                 }
             },
             error: function(xhr, status, error) {
                 console.error("❌ Erreur AJAX :", xhr);
             },
             complete: function () {
-                hideLoadingOverlay(); // Cacher le chargement
+                hideLoadingOverlay();
             }
         });
     }
 
     /**
-     * Gestion du switch "Tout sélectionner"
+     * Gestion du switch "Tout sélectionner".
      */
     $('#toggleAllTechs').on('change', function () {
         let isChecked = $(this).prop('checked');
         $('.tech-checkbox').prop('checked', isChecked);
-        showLoadingOverlay();
-        updateCalendar();
+        setTimeout(function(){
+            showLoadingOverlay();
+            updateCalendar();
+        }, 50);
     });
 
     /**
-     * Gestion de la sélection des techniciens
+     * Gestion de la sélection individuelle.
      */
     $('.tech-checkbox').on('change', function () {
-        showLoadingOverlay();
-        updateCalendar();
+        setTimeout(function(){
+            showLoadingOverlay();
+            updateCalendar();
+        }, 50);
     });
 
     /**
-     * Recherche dynamique dans la liste des techniciens
+     * Recherche dynamique dans la liste des techniciens.
      */
     $('#search_tech').on('input', function () {
         let query = $(this).val().toLowerCase().trim();
@@ -176,8 +202,9 @@ $(document).ready(function () {
         });
     });
 
-    // Initialisation du calendrier au chargement
+    // Initialisation
     initFullCalendar();
+    updateCalendar();
 });
 </script>
 @endsection

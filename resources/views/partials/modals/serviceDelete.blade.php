@@ -9,7 +9,7 @@
                 @csrf
                 @method('DELETE')
                 <div class="modal-body">
-                    <p>Êtes-vous sûr de vouloir désactiver ce service ? Cette action sera réversible.</p>
+                    <p>Êtes-vous sûr de vouloir désactiver ce service ?</p>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-danger">Supprimer</button>

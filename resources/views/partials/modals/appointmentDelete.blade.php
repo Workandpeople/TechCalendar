@@ -11,7 +11,7 @@
                 @csrf
                 @method('DELETE')
                 <div class="modal-body">
-                    <p>Êtes-vous sûr de vouloir anuler ce rendez-vous ? Cette action sera réversible.</p>
+                    <p>Êtes-vous sûr de vouloir mettre en attente ce rendez-vous ?</p>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-danger">Supprimer</button>
