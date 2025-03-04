@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
     public function run()
     {
         // Créer les utilisateurs (techniciens, assistantes, admins)
-        WAPetGCUser::factory(25)->create(); // 50 techniciens
+        WAPetGCUser::factory(50)->create(); // 50 techniciens
         WAPetGCUser::factory(5)->assistante()->create(); // 10 assistantes
         WAPetGCUser::factory(3)->admin()->create(); // 10 admins
         WAPetGCUser::factory()->customAdmin()->create(); // Specific admin user
@@ -22,9 +22,9 @@ class DatabaseSeeder extends Seeder
         $services = WAPetGCService::factory(20)->create();
 
         // Créer les techniciens avec des rendez-vous associés
-        WAPetGCTech::factory(17)
+        WAPetGCTech::factory(41)
             ->has(
-                WAPetGCAppointment::factory(200)->state(function () use ($services) {
+                WAPetGCAppointment::factory(800)->state(function () use ($services) {
                     return [
                         'service_id' => $services->random()->id, // Associer un service existant
                     ];

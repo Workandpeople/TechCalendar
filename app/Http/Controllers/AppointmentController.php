@@ -48,15 +48,23 @@ class AppointmentController extends Controller
         Log::info('Données validées avec succès.', ['validatedData' => $validated]);
 
         try {
-            // ✅ Convertir `end_at` en format MySQL (YYYY-MM-DD HH:MM:SS)
-            $endAtFormatted = \DateTime::createFromFormat('d/m/Y H:i', $validated['end_at']);
-            if ($endAtFormatted) {
-                $validated['end_at'] = $endAtFormatted->format('Y-m-d H:i:s');
-            } else {
+            // 1) Convertir end_at "05/03/2025 à 07:50" => "05/03/2025 07:50"
+            $endAtStr = $validated['end_at'];
+            $endAtStr = str_replace(' à ', ' ', $endAtStr);
+
+            // 2) Parser "05/03/2025 07:50"
+            $endAtFormatted = \DateTime::createFromFormat('d/m/Y H:i', $endAtStr);
+
+            // Si non reconnu, on teste éventuellement d’autres formats
+            if (!$endAtFormatted) {
+                // Par exemple, tenter "Y-m-d\TH:i" si besoin, ou renvoyer une erreur
                 Log::error('Format de end_at invalide.', ['end_at' => $validated['end_at']]);
                 return redirect()->route('appointment.index')
-                    ->withErrors("Format de l'heure de fin invalide.");
+                    ->withErrors("Format de l'heure de fin invalide (end_at).");
             }
+
+            // On remplace la valeur dans validated par le bon format pour la BDD
+            $validated['end_at'] = $endAtFormatted->format('Y-m-d H:i:s');
 
             // Vérifier si `tech_id` est vide et le remplacer par `NULL`
             if (empty($validated['tech_id'])) {
@@ -66,12 +74,13 @@ class AppointmentController extends Controller
             // Gestion du trajet uniquement si un technicien est assigné
             if ($validated['tech_id']) {
                 $tech = WAPetGCTech::find($validated['tech_id']);
-
                 if (!$tech) {
                     Log::error("Technicien introuvable.", ['tech_id' => $validated['tech_id']]);
-                    return redirect()->route('appointment.index')->withErrors("Technicien introuvable.");
+                    return redirect()->route('appointment.index')
+                        ->withErrors("Technicien introuvable.");
                 }
 
+                // Récupérer le dernier RDV du jour
                 $lastAppointment = WAPetGCAppointment::where('tech_id', $validated['tech_id'])
                     ->whereDate('start_at', $validated['start_at'])
                     ->orderBy('end_at', 'desc')
@@ -83,17 +92,22 @@ class AppointmentController extends Controller
                     $fromAddress = "{$tech->adresse} {$tech->zip_code} {$tech->city}";
                 }
 
-                $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, "{$validated['client_adresse']} {$validated['client_zip_code']} {$validated['client_city']}");
+                // Appel Mapbox
+                $route = $mapboxService->calculateRouteBetweenAddresses(
+                    $fromAddress,
+                    "{$validated['client_adresse']} {$validated['client_zip_code']} {$validated['client_city']}"
+                );
 
                 if ($route) {
-                    $validated['trajet_time'] = $route['duration_minutes'];
+                    $validated['trajet_time']     = $route['duration_minutes'];
                     $validated['trajet_distance'] = $route['distance_km'];
                 } else {
-                    $validated['trajet_time'] = 100;
+                    // Valeurs par défaut si on ne peut pas calculer
+                    $validated['trajet_time']     = 100;
                     $validated['trajet_distance'] = 100;
                 }
             } else {
-                $validated['trajet_time'] = 100;
+                $validated['trajet_time']     = 100;
                 $validated['trajet_distance'] = 100;
             }
 
@@ -102,32 +116,33 @@ class AppointmentController extends Controller
 
             Log::info('Rendez-vous créé avec succès.', ['id' => $appointment->id]);
 
-            return redirect()->route('appointment.index')->with('success', 'Rendez-vous créé avec succès.');
-
+            return redirect()->route('appointment.index')
+                ->with('success', 'Rendez-vous créé avec succès.');
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la création du rendez-vous.', ['error' => $e->getMessage(), 'data' => $request->all()]);
+            Log::error('Erreur lors de la création du rendez-vous.', [
+                'error' => $e->getMessage(),
+                'data'  => $request->all(),
+            ]);
 
-            return redirect()->route('appointment.index')->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
+            return redirect()
+                ->route('appointment.index')
+                ->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
         }
     }
-
+    
     public function search(Request $request, \App\Providers\MapboxService $mapboxService)
     {
         Log::info('Début de la recherche de techniciens.', ['requestData' => $request->all()]);
 
-        // Étape 1 : Construire l'adresse complète du client
         $clientAddress = trim($request->input('client_adresse') . ' ' . $request->input('client_zip_code') . ' ' . $request->input('client_city'));
         Log::info('Adresse complète du client construite.', ['clientAddress' => $clientAddress]);
 
-        // Étape 2 : Extraire le département
         $dept = substr($request->input('client_zip_code'), 0, 2);
         Log::info('Département extrait.', ['dept' => $dept]);
 
-        // Étape 3 : Récupérer les techniciens du même département
-        $deptTech = \App\Models\WAPetGCTech::where('zip_code', 'like', $dept . '%')->get();
-        Log::info('Techniciens récupérés dans le département.', ['count' => $deptTech->count(), 'deptTech' => $deptTech->toArray()]);
+        $deptTech = WAPetGCTech::where('zip_code', 'like', $dept . '%')->get();
+        Log::info('Techniciens récupérés dans le département.', ['count' => $deptTech->count()]);
 
-        // Étape 4 : Calculer les distances/temps pour les techniciens du département
         $deptDistances = [];
         foreach ($deptTech as $tech) {
             $techAddress = $tech->adresse . ' ' . $tech->zip_code . ' ' . $tech->city;
@@ -139,23 +154,15 @@ class AppointmentController extends Controller
                     'distance' => $route['distance_km'],
                     'duration' => $route['duration_minutes'],
                 ];
-                Log::info('Distance et durée calculées pour un technicien.', [
-                    'tech_id' => $tech->id,
-                    'distance' => $route['distance_km'],
-                    'duration' => $route['duration_minutes'],
-                ]);
-            } else {
-                Log::warning('Aucune route trouvée pour un technicien.', ['tech_id' => $tech->id, 'techAddress' => $techAddress]);
             }
         }
         usort($deptDistances, fn($a, $b) => $a['duration'] <=> $b['duration']);
-        Log::info('Techniciens du département triés par durée.', ['deptDistances' => $deptDistances]);
 
-        // Étape 5 : Compléter avec les techniciens hors département si besoin
-        $selectedTechs = $deptDistances;
-        if (count($selectedTechs) < 3) {
-            $others = \App\Models\WAPetGCTech::where('zip_code', 'not like', $dept . '%')->get();
-            Log::info('Techniciens hors département récupérés.', ['count' => $others->count(), 'others' => $others->toArray()]);
+        $selectedTechs = array_slice($deptDistances, 0, 5); // Maintenant 5 techniciens
+
+        if (count($selectedTechs) < 5) {
+            $others = WAPetGCTech::where('zip_code', 'not like', $dept . '%')->get();
+            Log::info('Techniciens hors département récupérés.', ['count' => $others->count()]);
 
             $otherDistances = [];
             foreach ($others as $tech) {
@@ -168,37 +175,23 @@ class AppointmentController extends Controller
                         'distance' => $route['distance_km'],
                         'duration' => $route['duration_minutes'],
                     ];
-                    Log::info('Distance et durée calculées pour un technicien hors département.', [
-                        'tech_id' => $tech->id,
-                        'distance' => $route['distance_km'],
-                        'duration' => $route['duration_minutes'],
-                    ]);
-                } else {
-                    Log::warning('Aucune route trouvée pour un technicien hors département.', ['tech_id' => $tech->id, 'techAddress' => $techAddress]);
                 }
             }
             usort($otherDistances, fn($a, $b) => $a['duration'] <=> $b['duration']);
-            Log::info('Techniciens hors département triés par durée.', ['otherDistances' => $otherDistances]);
 
-            // Compléter jusqu'à avoir 3 techniciens
-            $needed = 3 - count($selectedTechs);
+            $needed = 5 - count($selectedTechs);
             $selectedTechs = array_merge($selectedTechs, array_slice($otherDistances, 0, $needed));
         }
 
         Log::info('Liste finale des techniciens sélectionnés.', ['selectedTechs' => $selectedTechs]);
 
-        // Étape 6 : Récupérer les rendez-vous des techniciens sélectionnés
         $techIds = array_map(fn($t) => $t['tech']->id, $selectedTechs);
-        $appointments = \App\Models\WAPetGCAppointment::whereIn('tech_id', $techIds)
+        $appointments = WAPetGCAppointment::whereIn('tech_id', $techIds)
             ->with(['service', 'tech.user'])
             ->get();
-        Log::info('Rendez-vous récupérés pour les techniciens sélectionnés.', ['appointments' => $appointments->toArray()]);
 
-        // Étape 7 : Récupérer la liste des services
-        $services = \App\Models\WAPetGCService::all();
-        Log::info('Liste des services récupérée.', ['services' => $services->toArray()]);
+        $services = WAPetGCService::all();
 
-        // Étape 8 : Retourner la vue avec toutes les données nécessaires
         return view('takeAppointment', [
             'technicians' => WAPetGCTech::with('user')->get(),
             'selectedTechs' => $selectedTechs,
@@ -206,5 +199,51 @@ class AppointmentController extends Controller
             'services' => $services,
             'requestData' => $request->all(),
         ]);
+    }
+
+    public function calculateRoute(Request $request, \App\Providers\MapboxService $mapboxService)
+    {
+        $techId = $request->input('tech_id');
+        $dateSelected = $request->input('date');
+        $clientAddress = trim($request->input('client_adresse') . ' ' . $request->input('client_zip_code') . ' ' . $request->input('client_city'));
+
+        if (!$techId) {
+            // Sélectionner le premier technicien si aucun n'est spécifié
+            $firstTech = WAPetGCTech::first();
+            if (!$firstTech) {
+                return response()->json(['error' => 'Aucun technicien disponible'], 404);
+            }
+            $techId = $firstTech->id;
+        }
+
+        $tech = WAPetGCTech::find($techId);
+        if (!$tech) {
+            return response()->json(['error' => 'Technicien introuvable'], 404);
+        }
+
+        // Vérifier s'il existe un rendez-vous avant la date sélectionnée ce jour-là
+        $lastAppointment = WAPetGCAppointment::where('tech_id', $techId)
+            ->whereDate('start_at', $dateSelected)
+            ->where('start_at', '<', $dateSelected) // RDV avant le créneau sélectionné
+            ->orderBy('end_at', 'desc')
+            ->first();
+
+        if ($lastAppointment) {
+            $fromAddress = "{$lastAppointment->client_adresse} {$lastAppointment->client_zip_code} {$lastAppointment->client_city}";
+        } else {
+            $fromAddress = "{$tech->adresse} {$tech->zip_code} {$tech->city}";
+        }
+
+        // Calcul de l'itinéraire
+        $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, $clientAddress);
+
+        if ($route) {
+            return response()->json([
+                'distance_km' => $route['distance_km'],
+                'duration_minutes' => $route['duration_minutes'],
+            ]);
+        }
+
+        return response()->json(['error' => 'Impossible de calculer le trajet'], 500);
     }
 }

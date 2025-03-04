@@ -15,14 +15,29 @@ class WAPetGCTechFactory extends Factory
     {
         return [
             'id' => Str::uuid()->toString(),
-            'user_id' => WAPetGCUser::factory(), // Automatically create a user
-            'phone' => $this->faker->phoneNumber,
-            'adresse' => $this->faker->address,
-            'zip_code' => $this->faker->postcode,
+            'user_id' => WAPetGCUser::factory(), // Génère automatiquement un utilisateur
+            'phone' => $this->generateFrenchPhoneNumber(),
+            'adresse' => $this->generateFrenchAddress(),
+            'zip_code' => $this->faker->numerify('#####'), // Génère un code postal à 5 chiffres
             'city' => $this->faker->city,
             'default_start_at' => '08:00',
             'default_end_at' => '18:00',
-            'default_rest_time' => 60, // in minutes
+            'default_rest_time' => 60, // en minutes
         ];
+    }
+
+    private function generateFrenchPhoneNumber()
+    {
+        $prefix = $this->faker->randomElement(['06', '07']);
+        $suffix = $this->faker->numerify('########');
+        return $prefix . $suffix;
+    }
+
+    private function generateFrenchAddress()
+    {
+        $streetTypes = ['rue', 'avenue', 'boulevard', 'allée', 'chemin', 'place'];
+        return $this->faker->numberBetween(1, 999) . ' ' .
+               $this->faker->randomElement($streetTypes) . ' ' .
+               $this->faker->streetName;
     }
 }

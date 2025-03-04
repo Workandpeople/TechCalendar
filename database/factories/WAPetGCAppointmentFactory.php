@@ -16,7 +16,7 @@ class WAPetGCAppointmentFactory extends Factory
     {
         // Générer une date entre le lundi et le vendredi
         $startAt = $this->faker->dateTimeBetween('2025-01-01', '2025-12-31');
-        while (in_array($startAt->format('N'), [6, 7])) { // Vérifier que ce n'est pas samedi (6) ou dimanche (7)
+        while (in_array($startAt->format('N'), [6, 7])) { // Évite samedi (6) et dimanche (7)
             $startAt = $this->faker->dateTimeBetween('2025-01-01', '2025-12-31');
         }
 
@@ -32,10 +32,10 @@ class WAPetGCAppointmentFactory extends Factory
             'service_id' => WAPetGCService::inRandomOrder()->first()->id ?? WAPetGCService::factory(),
             'client_fname' => $this->faker->firstName,
             'client_lname' => $this->faker->lastName,
-            'client_adresse' => $this->faker->address,
-            'client_zip_code' => $this->faker->postcode,
+            'client_adresse' => $this->generateFrenchAddress(),
+            'client_zip_code' => $this->faker->numerify('#####'), // Génère un code postal à 5 chiffres
             'client_city' => $this->faker->city,
-            'client_phone' => $this->faker->phoneNumber,
+            'client_phone' => $this->generateFrenchPhoneNumber(),
             'start_at' => $startAt,
             'duration' => $duration,
             'end_at' => $endAt,
@@ -43,5 +43,20 @@ class WAPetGCAppointmentFactory extends Factory
             'trajet_time' => $this->faker->numberBetween(10, 60),
             'trajet_distance' => $this->faker->randomFloat(2, 1, 100),
         ];
+    }
+
+    private function generateFrenchPhoneNumber()
+    {
+        $prefix = $this->faker->randomElement(['06', '07']);
+        $suffix = $this->faker->numerify('########');
+        return $prefix . $suffix;
+    }
+
+    private function generateFrenchAddress()
+    {
+        $streetTypes = ['rue', 'avenue', 'boulevard', 'allée', 'chemin', 'place'];
+        return $this->faker->numberBetween(1, 999) . ' ' .
+               $this->faker->randomElement($streetTypes) . ' ' .
+               $this->faker->streetName;
     }
 }
