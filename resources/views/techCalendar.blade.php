@@ -3,6 +3,22 @@
 @section('title', 'Calendrier')
 
 @section('css')
+<style>
+    /* Optionnel : style pour la pastille orange ajoutée sur un RDV soft deleted */
+    .deleted-dot {
+        background-color: orange;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        position: absolute;
+        top: 2px;
+        right: 2px;
+    }
+    /* Style pour le modal en soft delete */
+    .modal-softdeleted {
+        background-color: #ffe6cc !important;
+    }
+</style>
 @endsection
 
 @section('pageHeading')
@@ -46,10 +62,13 @@
 <!-- Modal pour afficher les détails du RDV -->
 <div class="modal fade" id="appointmentModal" tabindex="-1" aria-labelledby="appointmentModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content">
+        <div class="modal-content" id="appointmentModalContent">
             <div class="modal-header">
                 <h5 class="modal-title" id="appointmentModalLabel">Détails du rendez-vous</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <!-- Bouton de fermeture Bootstrap 4 -->
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
             <div class="modal-body">
                 <p><strong>Client :</strong> <span id="modalClientName"></span></p>
@@ -57,6 +76,7 @@
                 <p><strong>Date :</strong> <span id="modalDate"></span></p>
                 <p><strong>Heure :</strong> <span id="modalTime"></span></p>
                 <p><strong>Adresse :</strong> <span id="modalClientAddress"></span></p>
+                <p><strong>Téléphone :</strong> <span id="modalClientPhone"></span></p>
                 <p><strong>Commentaire :</strong> <span id="modalComment"></span></p>
             </div>
         </div>
@@ -69,77 +89,94 @@
 $(document).ready(function () {
     let calendar;
 
-    // Vérifier si l'utilisateur est un technicien
+    /**
+     * Initialisation du calendrier FullCalendar.
+     */
+    function initFullCalendar() {
+        let calendarEl = document.getElementById('calendar');
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            locale: 'fr',
+            initialView: 'timeGridWeek',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'timeGridWeek,timeGridDay'
+            },
+            slotMinTime: '08:00:00',
+            slotMaxTime: '21:00:00',
+            hiddenDays: [0, 6],
+            events: [],
+            // Ajout d'un callback pour modifier l'affichage des événements soft deleted
+            eventDidMount: function(info) {
+                if (info.event.extendedProps.isDeleted) {
+                    // Ajouter une pastille orange sur l'événement
+                    let dot = document.createElement('span');
+                    dot.className = 'deleted-dot';
+                    info.el.style.position = 'relative';
+                    info.el.appendChild(dot);
+                }
+            },
+            eventClick: function(info) {
+                var event = info.event;
+                var props = event.extendedProps;
+                console.log("📌 RDV sélectionné :", event);
+                let clientAddress = props.clientAddress || "Adresse non disponible";
+
+                document.getElementById('modalClientName').textContent = event.title || 'Inconnu';
+                document.getElementById('modalService').textContent = props.serviceName || 'Non spécifié';
+                document.getElementById('modalDate').textContent = event.start ? new Date(event.start).toLocaleDateString() : 'Non défini';
+                document.getElementById('modalTime').textContent = event.start
+                    ? `${new Date(event.start).toLocaleTimeString()} - ${new Date(event.end).toLocaleTimeString()}`
+                    : 'Non défini';
+                document.getElementById('modalClientAddress').textContent = clientAddress;
+                document.getElementById('modalClientPhone').textContent = props.clientPhone || 'Non renseigné';
+                document.getElementById('modalComment').textContent = props.comment || 'Aucun commentaire';
+
+                // Si le RDV est soft deleted, appliquer un fond orange clair au modal
+                if (props.isDeleted) {
+                    document.getElementById('appointmentModalContent').classList.add('modal-softdeleted');
+                } else {
+                    document.getElementById('appointmentModalContent').classList.remove('modal-softdeleted');
+                }
+
+                var modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
+                modal.show();
+            }
+        });
+        calendar.render();
+    }
+
+    /**
+     * Chargement des rendez-vous du technicien connecté.
+     */
+    function loadTechAppointments() {
+        showLoadingOverlay();
+        $.ajax({
+            url: '{{ route("tech-calendar.appointments") }}',
+            type: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    console.log("✅ RDV chargés :", response.appointments);
+                    calendar.removeAllEvents();
+                    response.appointments.forEach(event => {
+                        calendar.addEvent(event);
+                    });
+                } else {
+                    console.error("❌ Erreur lors du chargement des RDV :", response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("❌ Erreur AJAX :", xhr);
+            },
+            complete: function () {
+                hideLoadingOverlay();
+            }
+        });
+    }
+
+    // Initialisation du calendrier et chargement des rendez-vous si l'utilisateur est technicien.
     let isTech = @json($techId) !== null;
-
     if (isTech) {
-        /**
-         * Initialisation du calendrier FullCalendar
-         */
-        function initFullCalendar() {
-            let calendarEl = document.getElementById('calendar');
-            calendar = new FullCalendar.Calendar(calendarEl, {
-                locale: 'fr',
-                initialView: 'timeGridWeek',
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'timeGridWeek,timeGridDay'
-                },
-                slotMinTime: '08:00:00',
-                slotMaxTime: '21:00:00',
-                hiddenDays: [0, 6],
-                events: [],
-                eventClick: function(info) {
-                    var event = info.event;
-                    var props = event.extendedProps;
-
-                    console.log("📌 RDV sélectionné :", event);
-
-                    let clientAddress = props.clientAddress || "Adresse non disponible";
-
-                    document.getElementById('modalClientName').textContent = event.title || 'Inconnu';
-                    document.getElementById('modalService').textContent = props.serviceName || 'Non spécifié';
-                    document.getElementById('modalDate').textContent = event.start ? new Date(event.start).toLocaleDateString() : 'Non défini';
-                    document.getElementById('modalTime').textContent = event.start
-                        ? `${new Date(event.start).toLocaleTimeString()} - ${new Date(event.end).toLocaleTimeString()}`
-                        : 'Non défini';
-                    document.getElementById('modalClientAddress').textContent = clientAddress;
-                    document.getElementById('modalComment').textContent = props.comment || 'Aucun commentaire';
-
-                    var modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
-                    modal.show();
-                }
-            });
-
-            calendar.render();
-        }
-
-        /**
-         * Récupération des rendez-vous du technicien connecté
-         */
-        function loadTechAppointments() {
-            $.ajax({
-                url: '{{ route("tech-calendar.appointments") }}',
-                type: 'GET',
-                success: function(response) {
-                    if (response.success) {
-                        console.log("✅ RDV chargés :", response.appointments);
-                        calendar.removeAllEvents();
-                        response.appointments.forEach(event => {
-                            calendar.addEvent(event);
-                        });
-                    } else {
-                        console.error("❌ Erreur lors du chargement des RDV :", response.message);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error("❌ Erreur AJAX :", xhr);
-                }
-            });
-        }
-
-        // Initialisation du calendrier et chargement des RDV si l'utilisateur est un technicien
         initFullCalendar();
         loadTechAppointments();
     }

@@ -15,7 +15,6 @@ class TechCalendarController extends Controller
     {
         // Récupérer l'ID du technicien connecté
         $techId = Auth::user()->tech->id ?? null;
-
         return view('techCalendar', compact('techId'));
     }
 
@@ -40,17 +39,26 @@ class TechCalendarController extends Controller
                 ->with(['service', 'tech.user'])
                 ->get()
                 ->map(function ($appoint) {
+                    // Couleur de fond par défaut basée sur le tech_id
+                    $bgColor = '#' . substr(md5($appoint->tech_id), 0, 6);
+                    $isDeleted = $appoint->deleted_at !== null;
+                    if ($isDeleted) {
+                        // Si soft deleted, on utilise une couleur orange
+                        $bgColor = '#FFA500';
+                    }
                     return [
                         'id' => $appoint->id,
                         'title' => $appoint->client_fname . ' ' . $appoint->client_lname,
                         'start' => $appoint->start_at,
                         'end' => $appoint->end_at,
-                        'backgroundColor' => '#'.substr(md5($appoint->tech_id), 0, 6),
+                        'backgroundColor' => $bgColor,
                         'extendedProps' => [
                             'techName' => optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom,
                             'serviceName' => optional($appoint->service)->name ?? 'Non spécifié',
                             'comment' => $appoint->comment ?? 'Aucun commentaire',
                             'clientAddress' => trim("{$appoint->client_adresse}, {$appoint->client_zip_code} {$appoint->client_city}"),
+                            'clientPhone' => $appoint->client_phone,
+                            'isDeleted' => $isDeleted,
                         ]
                     ];
                 });
