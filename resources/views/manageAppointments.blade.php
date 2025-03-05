@@ -7,10 +7,24 @@
 @endsection
 
 @section('topbarSearch')
+<form id="searchTechForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
+    <div class="input-group">
+        <input type="text" id="searchTechInput" class="form-control bg-light border-0 small"
+            placeholder="Par technicien..." aria-label="Search Tech">
+    </div>
+</form>
+
 <form id="searchForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
     <div class="input-group">
-        <input type="text" id="searchInput" class="form-control bg-light border-0 small" placeholder="Rechercher par nom de client ou technicien..."
-            aria-label="Search" aria-describedby="search-addon">
+        <input type="text" id="searchInput" class="form-control bg-light border-0 small"
+            placeholder="Par client..." aria-label="Search">
+    </div>
+</form>
+
+<form id="searchDepartmentForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
+    <div class="input-group">
+        <input type="text" id="searchDepartmentInput" class="form-control bg-light border-0 small"
+            placeholder="Par département (ex: 75)..." aria-label="Search Department" maxlength="2">
     </div>
 </form>
 @endsection
@@ -57,9 +71,80 @@
 
 @section('js')
 <script>
-// Ajouter les interactions AJAX similaires aux vues précédentes (services)
 $(document).ready(function () {
-    // Gestion de la fermeture des modals via les boutons "data-bs-dismiss"
+    const techSearchInput = document.getElementById('tech-search');
+    const newTechIdHidden = document.getElementById('new-tech-id-hidden');
+    const suggestions = document.getElementById('reassignTechSuggestions');
+    let timer;
+
+    techSearchInput.addEventListener('input', () => {
+        const query = techSearchInput.value.trim();
+        clearTimeout(timer);
+        if (!query) {
+            suggestions.innerHTML = '';
+            newTechIdHidden.value = '';
+            return;
+        }
+        timer = setTimeout(() => {
+            fetch('{{ route('stats.search') }}?q=' + encodeURIComponent(query))
+                .then(res => res.json())
+                .then(data => renderSuggestions(data))
+                .catch(console.error);
+        }, 300);
+    });
+
+    // Clic en dehors => fermeture des suggestions
+    document.addEventListener('click', (e) => {
+        if (!techSearchInput.contains(e.target)) {
+            suggestions.innerHTML = '';
+        }
+    });
+
+    function renderSuggestions(list) {
+        if (!list.length) {
+            suggestions.innerHTML = '<div class="p-2 text-muted">Aucun résultat</div>';
+            return;
+        }
+        let html = '';
+        list.forEach(item => {
+            html += `
+                <div class="p-2 suggestion-item" style="cursor:pointer;">
+                    ${item.fullname}
+                </div>
+            `;
+        });
+        suggestions.innerHTML = html;
+
+        // Au clic sur une suggestion, on remplit le champ de recherche et le champ caché
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        items.forEach((el, index) => {
+            el.addEventListener('click', () => {
+                const chosen = list[index];
+                techSearchInput.value = chosen.fullname;
+                newTechIdHidden.value = chosen.id;
+                suggestions.innerHTML = '';
+            });
+        });
+    }
+
+    // Déclaration initiale (les valeurs par défaut proviennent de la requête)
+    let currentSort = '{{ request("sort", "start_at") }}';
+    let currentDirection = '{{ request("direction", "asc") }}';
+
+    // Gestion du clic sur un en-tête triable
+    $(document).on('click', '.sortable', function(e) {
+        e.preventDefault();
+        const clickedSort = $(this).data('sort');
+        if (currentSort === clickedSort) {
+            currentDirection = (currentDirection === 'asc') ? 'desc' : 'asc';
+        } else {
+            currentSort = clickedSort;
+            currentDirection = 'asc';
+        }
+        performSearch(1);
+    });
+
+    // === FERMETURE DES MODALS VIA data-bs-dismiss ===
     $('button[data-bs-dismiss="modal"]').on('click', function () {
         const modal = $(this).closest('.modal');
         if (modal.length) {
@@ -68,7 +153,7 @@ $(document).ready(function () {
         }
     });
 
-    // Filtrage dynamique des techniciens
+    // === FILTRE DYNAMIQUE DANS LE FORMULAIRE DE CREATION D'UN RDV (tech) ===
     $('#tech_search').on('input', function () {
         const query = $(this).val().toLowerCase();
         $('#tech_id option').each(function () {
@@ -77,14 +162,14 @@ $(document).ready(function () {
         });
     });
 
-    // Mise à jour automatique de la durée en fonction du service sélectionné
+    // === MISE À JOUR AUTOMATIQUE DE LA DURÉE EN FONCTION DU SERVICE ===
     $('#service_id').on('change', function () {
         const duration = $(this).find(':selected').data('duration');
         $('#duration').val(duration || '');
         calculateEndTime();
     });
 
-    // Calcul automatique de l'heure de fin
+    // === CALCUL AUTOMATIQUE DE L'HEURE DE FIN ===
     $('#start_at, #duration').on('input change', function () {
         calculateEndTime();
     });
@@ -102,23 +187,17 @@ $(document).ready(function () {
         }
     }
 
-    // Met à jour la durée lorsqu'un service est sélectionné
-    $('#service_id').on('change', function () {
-        const selectedService = $(this).find(':selected');
-        const duration = selectedService.data('duration');
-        $('#duration').val(duration || '');
-        calculateEndTime();
-    });
+    // Au chargement, on pré-remplit la durée par défaut du premier service
+    $('#service_id').trigger('change');
 
-    // Calcul automatique de l'heure de fin
+    // CALCUL AUTOMATIQUE DE L'HEURE DE FIN (FORMULAIRE #2)
     $('#start_at, #duration').on('input change', function () {
-        calculateEndTime();
+        calculateEndTime2();
     });
 
-    function calculateEndTime() {
+    function calculateEndTime2() {
         const startAt = $('#start_at').val();
         const duration = parseInt($('#duration').val());
-
         if (startAt && duration) {
             const endTime = new Date(new Date(startAt).getTime() + duration * 60000);
             const formattedEndTime = endTime.toISOString().slice(0, 16).replace('T', ' ');
@@ -128,65 +207,67 @@ $(document).ready(function () {
         }
     }
 
-    // Pré-remplir la durée par défaut du premier service au chargement
-    $('#service_id').trigger('change');
-
-    $('#searchInput').on('input', function () {
+    // === RECHERCHE PAR CLIENT / TECH / DEPARTEMENT (AJAX) ===
+    $('#searchInput, #searchTechInput, #searchDepartmentInput').on('input', function () {
         performSearch(1);
     });
 
+    // === PAGINATION (clique sur la pagination) ===
     $(document).on('click', '.pagination a', function (e) {
         e.preventDefault();
         const page = $(this).attr('href').split('page=')[1];
         performSearch(page);
     });
 
+    // === FONCTION AJAX DE RECHERCHE + FILTRES ===
     function performSearch(page = 1) {
         const query = $('#searchInput').val();
+        const techSearch = $('#searchTechInput').val();
+        const department = $('#searchDepartmentInput').val();
 
-        showLoadingOverlay();
+        console.log('Recherche avec :', { query, techSearch, department, sort: currentSort, direction: currentDirection });
 
         $.ajax({
             url: '{{ route("manage-appointments.search") }}',
             type: 'GET',
-            data: { query: query, page: page },
+            data: {
+                query: query,
+                tech_search: techSearch,
+                department: department,
+                page: page,
+                sort: currentSort,
+                direction: currentDirection
+            },
             success: function (data) {
                 const tbody = $('table tbody');
                 tbody.empty();
-
                 if (data.appointments.length === 0) {
                     tbody.append('<tr><td colspan="5" class="text-center">Aucun rendez-vous trouvé</td></tr>');
                 } else {
                     data.appointments.forEach(appointment => {
                         const isTrashed = appointment.deleted_at !== null;
-
+                        const departmentTech = appointment.tech?.zip_code ? appointment.tech.zip_code.substring(0,2) : 'N/A';
+                        const departmentClient = appointment.client_zip_code ? appointment.client_zip_code.substring(0,2) : 'N/A';
                         const row = `
                             <tr class="${isTrashed ? 'table-warning' : ''}">
                                 <td>
-                                    <strong>${appointment.tech?.user?.nom?.toUpperCase() || 'Non attribué'}</strong> ${appointment.tech?.user?.prenom || ''}
-                                    <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#reassignTechModal" data-id="${appointment.id}">
-                                        Réattribuer
-                                    </button>
+                                    <strong>${appointment.tech?.user?.nom?.toUpperCase() || 'Non attribué'}</strong>
+                                    ${appointment.tech?.user?.prenom || ''} (${departmentTech})
                                 </td>
                                 <td>${appointment.service?.type || 'N/A'} - ${appointment.service?.name || 'Aucun service'}</td>
                                 <td>
                                     <strong>${appointment.client_fname} ${appointment.client_lname}</strong>
-                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#viewClientModal" data-id="${appointment.id}">
-                                        Voir
-                                    </button>
+                                    (${departmentClient})
                                 </td>
                                 <td>
-                                    Le ${appointment.start_at_formatted.date} du ${appointment.start_at_formatted.time} au ${appointment.end_at_formatted.time}
+                                    Le ${appointment.start_at_formatted.date}
+                                    du ${appointment.start_at_formatted.time}
+                                    au ${appointment.end_at_formatted.time}
                                 </td>
                                 <td>
                                     <div class="btn-group">
-                                        ${isTrashed ? `
-                                            <button class="btn btn-sm btn-success" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentRestoreModal">Restaurer</button>
-                                            <button class="btn btn-sm btn-danger" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentHardDeleteModal">Supprimer définitivement</button>
-                                        ` : `
-                                            <button class="btn btn-sm btn-primary" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentEditModal">Modifier</button>
-                                            <button class="btn btn-sm btn-danger" data-id="${appointment.id}" data-toggle="modal" data-target="#appointmentDeleteModal">Mettre en attente</button>
-                                        `}
+                                        <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#appointmentEditModal" data-id="${appointment.id}">Modifier</button>
+                                        <button class="btn btn-sm btn-danger" data-toggle="modal" data-target="#appointmentDeleteModal" data-id="${appointment.id}">Mettre en attente</button>
                                     </div>
                                 </td>
                             </tr>
@@ -194,31 +275,26 @@ $(document).ready(function () {
                         tbody.append(row);
                     });
                 }
-
-                // Mettre à jour la pagination
                 $('.pagination-container').html(data.pagination);
             },
             error: function (xhr) {
                 console.error('Erreur lors de la recherche :', xhr.responseText);
-            },
-            complete: function () {
-                hideLoadingOverlay(); // Cacher le chargement
             }
         });
     }
 
+    // === RÉATTRIBUTION D'UN TECH ===
     $('#reassignTechModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // Récupère l'ID du rendez-vous
-        const currentTech = button.data('tech'); // Récupère le technicien actuel
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
+        const currentTech   = button.data('tech');
 
-        // Remplit les champs du modal
-        $('#reassignTechForm').data('id', appointmentId); // Associe l'ID au formulaire
-        $('#appointment-id').val(appointmentId); // Associe l'ID caché si nécessaire
-        $('#current-tech').text(currentTech || 'Non attribué'); // Affiche le technicien actuel
+        $('#reassignTechForm').data('id', appointmentId);
+        $('#appointment-id').val(appointmentId);
+        $('#current-tech').text(currentTech || 'Non attribué');
     });
 
-    // Recherche dynamique dans la liste des techniciens
+    // Filtre dynamique sur la liste des tech (dans le modal Reassign)
     $('#tech-search').on('input', function () {
         const query = $(this).val().toLowerCase();
         $('#new-tech-id option').each(function () {
@@ -228,16 +304,13 @@ $(document).ready(function () {
     });
 
     // Soumission du formulaire de réattribution
-        $('#reassignTechForm').on('submit', function (e) {
+    $('#reassignTechForm').on('submit', function (e) {
         e.preventDefault();
 
-        const appointmentId = $(this).data('id'); // Récupère l'ID du rendez-vous depuis le formulaire
-        const techId = $('#new-tech-id').val(); // Récupère l'ID du technicien sélectionné
+        const appointmentId = $(this).data('id');
+        const techId = $('#new-tech-id-hidden').val();
 
-        console.log('Submitting reassign tech form');
-        console.log('Appointment ID:', appointmentId);
-        console.log('New Tech ID:', techId);
-
+        console.log('Submitting reassign tech form', { appointmentId, techId });
         showLoadingOverlay();
 
         $.ajax({
@@ -245,48 +318,35 @@ $(document).ready(function () {
             type: 'POST',
             data: {
                 tech_id: techId,
-                _method: 'PUT', // Simule une requête PUT
+                _method: 'PUT',
                 _token: '{{ csrf_token() }}',
             },
             success: function () {
-                // Recharge la page pour afficher le message de succès/erreur
-                location.reload();
+                window.location.href = '{{ route("manage-appointments.index") }}';
             },
             error: function (xhr) {
                 console.error('Error reassigning tech:', xhr.responseText);
-
-                // Ferme le modal, mais la page ne se recharge pas
                 $('#reassignTechModal').modal('hide');
-
-                // Affiche un message d'erreur temporaire
-                const errorMessage = `
-                    <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
-                        Une erreur est survenue lors de la réattribution.
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                `;
-                $('#pageHeading').after(errorMessage);
+                window.location.href = '{{ route("manage-appointments.index") }}';
             },
         });
     });
 
-    // Affichage des détails du client
+    // === AFFICHAGE DES DÉTAILS DU CLIENT ===
     $('#viewClientModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // ID du rendez-vous
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
 
         showLoadingOverlay();
 
-        // Vide les champs pour éviter d'afficher d'anciennes données
+        // Nettoyer le modal avant de le remplir
         $('#client-fname, #client-lname, #client-adresse, #client-zip-code, #client-city, #client-phone').text('Chargement...');
 
-        // Requête AJAX pour récupérer les détails du client
         $.ajax({
             url: `/manage-appointments/${appointmentId}/view-client`,
             type: 'GET',
             success: function (response) {
                 if (response.success) {
-                    // Met à jour les informations dans le modal
                     $('#client-fname').text(response.data.fname);
                     $('#client-lname').text(response.data.lname);
                     $('#client-adresse').text(response.data.adresse);
@@ -295,39 +355,36 @@ $(document).ready(function () {
                     $('#client-phone').text(response.data.phone);
                 } else {
                     console.error('Erreur:', response.message);
-                    $('#viewClientModal .modal-body').html('<p class="text-danger">Impossible de charger les détails du client.</p>');
+                    $('#viewClientModal .modal-body')
+                        .html('<p class="text-danger">Impossible de charger les détails du client.</p>');
                 }
             },
             error: function (xhr) {
                 console.error('Erreur lors du chargement des détails client:', xhr.responseText);
-                $('#viewClientModal .modal-body').html('<p class="text-danger">Une erreur est survenue.</p>');
+                $('#viewClientModal .modal-body')
+                    .html('<p class="text-danger">Une erreur est survenue.</p>');
             },
             complete: function () {
-                hideLoadingOverlay(); // Cacher le chargement
+                hideLoadingOverlay();
             },
         });
     });
 
+    // === ÉDITION D'UN RDV (MODAL) ===
     $('#appointmentEditModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // ID du rendez-vous
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
 
         showLoadingOverlay();
-
-        // Ajoutez dynamiquement l'URL au formulaire
         $('#editAppointmentForm').attr('action', `/manage-appointments/${appointmentId}`);
-        // Réinitialiser les champs
         $('#editAppointmentForm')[0].reset();
 
-        // Requête AJAX pour récupérer les données
         $.ajax({
             url: `/manage-appointments/${appointmentId}/edit`,
             type: 'GET',
             success: function (response) {
                 if (response.success) {
                     const data = response.data;
-
-                    // Remplit les champs avec les données existantes
                     $('#edit-service_id').val(data.service_id);
                     $('#edit-client_fname').val(data.client_fname);
                     $('#edit-client_lname').val(data.client_lname);
@@ -337,9 +394,7 @@ $(document).ready(function () {
                     $('#edit-start_at').val(data.start_at);
                     $('#edit-duration').val(data.duration);
                     $('#edit-comment').val(data.comment || '');
-
-                    // Calculer et afficher l'heure de fin
-                    calculateEndTime();
+                    calculateEndTimeEdit();
                 } else {
                     console.error('Erreur:', response.message);
                 }
@@ -348,20 +403,19 @@ $(document).ready(function () {
                 console.error('Erreur lors du chargement des détails:', xhr.responseText);
             },
             complete: function () {
-                hideLoadingOverlay(); // Cacher le chargement
+                hideLoadingOverlay();
             },
         });
     });
 
-    // Calcul automatique de l'heure de fin
+    // Calcul de l'heure de fin (modal Edit)
     $('#edit-start_at, #edit-duration').on('input change', function () {
-        calculateEndTime();
+        calculateEndTimeEdit();
     });
 
-    function calculateEndTime() {
+    function calculateEndTimeEdit() {
         const startAt = $('#edit-start_at').val();
         const duration = parseInt($('#edit-duration').val());
-
         if (startAt && duration) {
             const endTime = new Date(new Date(startAt).getTime() + duration * 60000);
             const formattedEndTime = endTime.toISOString().slice(0, 16).replace('T', ' ');
@@ -371,38 +425,32 @@ $(document).ready(function () {
         }
     }
 
-    // Mettre à jour la durée lorsqu'un service est sélectionné
+    // Service change => met à jour la durée par défaut (modal Edit)
     $('#edit-service_id').on('change', function () {
-        const selectedService = $(this).find(':selected'); // Trouve l'option sélectionnée
-        const duration = selectedService.data('duration'); // Récupère la durée par défaut du service
-        $('#edit-duration').val(duration || ''); // Met à jour le champ durée
-        calculateEndTime(); // Recalcule l'heure de fin
+        const selectedService = $(this).find(':selected');
+        const duration = selectedService.data('duration');
+        $('#edit-duration').val(duration || '');
+        calculateEndTimeEdit();
     });
 
-    // Soumission du formulaire de modification
+    // === DELETE RDV (METTRE EN ATTENTE) ===
     $('#appointmentDeleteModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // ID du rendez-vous
-
-        // Met à jour l'attribut action du formulaire pour inclure l'ID du rendez-vous
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
         $('#deleteAppointmentForm').attr('action', `/manage-appointments/${appointmentId}`);
     });
 
-    // Soumission du formulaire de restauration
+    // === RESTORE RDV ===
     $('#appointmentRestoreModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // ID du rendez-vous
-
-        // Met à jour l'attribut action du formulaire pour inclure l'ID du rendez-vous
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
         $('#restoreAppointmentForm').attr('action', `/manage-appointments/${appointmentId}/restore`);
     });
 
-    // Soumission du formulaire de suppression définitive
+    // === HARD DELETE RDV ===
     $('#appointmentHardDeleteModal').on('show.bs.modal', function (e) {
-        const button = $(e.relatedTarget); // Bouton qui a ouvert le modal
-        const appointmentId = button.data('id'); // ID du rendez-vous
-
-        // Met à jour l'action du formulaire pour inclure l'ID
+        const button = $(e.relatedTarget);
+        const appointmentId = button.data('id');
         $('#hardDeleteAppointmentForm').attr('action', `/manage-appointments/${appointmentId}/hard-delete`);
     });
 });

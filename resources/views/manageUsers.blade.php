@@ -9,8 +9,15 @@
 @section('topbarSearch')
     <form id="searchForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
         <div class="input-group">
-            <input type="text" id="searchInput" class="form-control bg-light border-0 small" placeholder="Rechercher un utilisateur..."
+            <input type="text" id="searchInput" class="form-control bg-light border-0 small" placeholder="Par nom ou prénom..."
                 aria-label="Search" aria-describedby="search-addon">
+        </div>
+    </form>
+    <!-- Nouveau champ de recherche par département -->
+    <form id="searchDepartmentForm" class="d-inline-block form-inline ml-md-3 my-2 my-md-0 mw-100">
+        <div class="input-group">
+            <input type="text" id="searchDepartmentInput" class="form-control bg-light border-0 small" placeholder="Par département..."
+                aria-label="Search Department" aria-describedby="search-department-addon" maxlength="2">
         </div>
     </form>
 @endsection
@@ -80,14 +87,16 @@ $(document).ready(function () {
 
     console.log('Page de gestion des utilisateurs chargée');
 
-    $('#searchInput').on('input', function () {
-        const query = $(this).val();
-        console.log('Recherche déclenchée avec :', query);
+    $('#searchInput, #searchDepartmentInput').on('input', function () {
+        const query = $('#searchInput').val();
+        const department = $('#searchDepartmentInput').val();
+
+        console.log('Recherche déclenchée avec :', query, 'Département :', department);
 
         $.ajax({
             url: '{{ route('manage-users.search') }}',
             type: 'GET',
-            data: { query: query },
+            data: { query: query, department: department },
             success: function (data) {
                 console.log('Résultats de la recherche :', data);
 
@@ -99,10 +108,11 @@ $(document).ready(function () {
                 } else {
                     data.data.forEach(user => {
                         const isTrashed = user.deleted_at !== null;
+                        const department = user.department ? `(${user.department})` : '';
 
                         const userRow = `
                             <tr class="${isTrashed ? 'table-danger' : ''}">
-                                <td><strong>${user.nom.toUpperCase()}</strong> ${user.prenom}</td>
+                                <td><strong>${user.nom.toUpperCase()}</strong> ${user.prenom} ${department}</td>
                                 <td class="d-none d-md-table-cell">${user.email}</td>
                                 <td>
                                     ${isTrashed ? '' : `
@@ -138,7 +148,6 @@ $(document).ready(function () {
     // Fonction pour charger les données utilisateur dans le modal d'édition
     function loadUserData(userId) {
         console.log('Chargement des données pour l\'utilisateur ID:', userId);
-        showLoadingOverlay();
 
         $.ajax({
             url: '/manage-users/' + userId + '/edit',
@@ -176,7 +185,6 @@ $(document).ready(function () {
                 console.error('Erreur lors de la récupération des données utilisateur:', xhr.responseText);
             },
             complete: function() {
-                hideLoadingOverlay(); // <--- AJOUT
             }
         });
     }

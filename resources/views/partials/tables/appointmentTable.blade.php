@@ -2,7 +2,7 @@
     <thead class="thead-dark">
         <tr>
             <th>
-                <a href="?sort=tech&direction={{ request('sort') === 'tech' && request('direction') === 'asc' ? 'desc' : 'asc' }}">
+                <a class="sortable" href="?sort=tech&direction={{ request('sort') === 'tech' && request('direction') === 'asc' ? 'desc' : 'asc' }}&search={{ request('search') }}&tech_search={{ request('tech_search') }}&department={{ request('department') }}" data-sort="tech">
                     Technicien
                     @if(request('sort') === 'tech')
                         <i class="fas fa-arrow-{{ request('direction') === 'asc' ? 'up' : 'down' }}"></i>
@@ -10,7 +10,7 @@
                 </a>
             </th>
             <th>
-                <a href="?sort=service&direction={{ request('sort') === 'service' && request('direction') === 'asc' ? 'desc' : 'asc' }}">
+                <a class="sortable" href="?sort=service&direction={{ request('sort') === 'service' && request('direction') === 'asc' ? 'desc' : 'asc' }}&search={{ request('search') }}&tech_search={{ request('tech_search') }}&department={{ request('department') }}" data-sort="service">
                     Service
                     @if(request('sort') === 'service')
                         <i class="fas fa-arrow-{{ request('direction') === 'asc' ? 'up' : 'down' }}"></i>
@@ -18,7 +18,7 @@
                 </a>
             </th>
             <th>
-                <a href="?sort=client&direction={{ request('sort') === 'client' && request('direction') === 'asc' ? 'desc' : 'asc' }}">
+                <a class="sortable" href="?sort=client&direction={{ request('sort') === 'client' && request('direction') === 'asc' ? 'desc' : 'asc' }}&search={{ request('search') }}&tech_search={{ request('tech_search') }}&department={{ request('department') }}" data-sort="client">
                     Client
                     @if(request('sort') === 'client')
                         <i class="fas fa-arrow-{{ request('direction') === 'asc' ? 'up' : 'down' }}"></i>
@@ -26,7 +26,7 @@
                 </a>
             </th>
             <th>
-                <a href="?sort=start_at&direction={{ request('sort') === 'start_at' && request('direction') === 'asc' ? 'desc' : 'asc' }}">
+                <a class="sortable" href="?sort=start_at&direction={{ request('sort') === 'start_at' && request('direction') === 'asc' ? 'desc' : 'asc' }}&search={{ request('search') }}&tech_search={{ request('tech_search') }}&department={{ request('department') }}" data-sort="start_at">
                     Horaires
                     @if(request('sort') === 'start_at')
                         <i class="fas fa-arrow-{{ request('direction') === 'asc' ? 'up' : 'down' }}"></i>
@@ -40,13 +40,14 @@
         @foreach ($appointments as $appointment)
             <tr class="{{ $appointment->trashed() ? 'table-warning' : '' }}">
                 <td>
-                    <strong>{{ strtoupper($appointment->tech->user->nom ?? 'Non attribué') }}</strong> {{ ucfirst($appointment->tech->user->prenom ?? '') }}
+                    <strong>{{ strtoupper($appointment->tech->user->nom ?? 'Non attribué') }}</strong>
+                    {{ ucfirst($appointment->tech->user->prenom ?? '') }}
                     <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#reassignTechModal"
                         data-id="{{ $appointment->id }}"
                         data-tech="{{ $appointment->tech ? $appointment->tech->user->nom . ' ' . $appointment->tech->user->prenom : '' }}">
                         Réattribuer
                     </button>
-                    </td>
+                </td>
                 <td>
                     {{ $appointment->service->type ?? 'N/A' }} - {{ $appointment->service->name ?? 'Aucun service' }}
                 </td>
@@ -85,7 +86,6 @@
     </tbody>
 </table>
 
-<!-- Pagination -->
 <div class="pagination-container d-flex justify-content-center mt-3">
     {{ $appointments->withQueryString()->links() }}
 </div>

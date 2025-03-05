@@ -14,10 +14,7 @@ class ManageAppointmentController extends Controller
     {
         Log::info('Affichage des rendez-vous.');
 
-        // Définir les colonnes triables
         $sortableColumns = ['tech', 'service', 'client', 'start_at'];
-
-        // Récupérer les paramètres de tri
         $sortColumn = $request->get('sort', 'start_at');
         $direction = $request->get('direction', 'asc');
 
@@ -27,18 +24,31 @@ class ManageAppointmentController extends Controller
 
         $appointmentsQuery = WAPetGCAppointment::with(['tech.user', 'service'])->withTrashed();
 
+        // Recherche par nom/prénom du client
         if ($request->filled('search')) {
             $search = $request->input('search');
             $appointmentsQuery->where(function ($query) use ($search) {
                 $query->where('client_fname', 'LIKE', "%{$search}%")
-                    ->orWhere('client_lname', 'LIKE', "%{$search}%")
-                    ->orWhereHas('tech.user', function ($techQuery) use ($search) {
-                        $techQuery->where('nom', 'LIKE', "%{$search}%")
-                                  ->orWhere('prenom', 'LIKE', "%{$search}%");
-                    });
+                      ->orWhere('client_lname', 'LIKE', "%{$search}%");
             });
         }
 
+        // Recherche par nom/prénom du technicien
+        if ($request->filled('tech_search')) {
+            $techSearch = $request->input('tech_search');
+            $appointmentsQuery->whereHas('tech.user', function ($techQuery) use ($techSearch) {
+                $techQuery->where('nom', 'LIKE', "%{$techSearch}%")
+                          ->orWhere('prenom', 'LIKE', "%{$techSearch}%");
+            });
+        }
+
+        // Filtrage par département de l'adresse du RDV
+        if ($request->filled('department')) {
+            $department = $request->input('department');
+            $appointmentsQuery->where('client_zip_code', 'LIKE', $department . '%');
+        }
+
+        // Gestion du tri
         switch ($sortColumn) {
             case 'tech':
                 $appointmentsQuery->join('WAPetGC_Tech', 'WAPetGC_Appointments.tech_id', '=', 'WAPetGC_Tech.id')
@@ -59,45 +69,99 @@ class ManageAppointmentController extends Controller
                 break;
         }
 
-        $appointments = $appointmentsQuery->paginate(10)
-            ->appends($request->query()); // Conserve les paramètres
+        $appointments = $appointmentsQuery->paginate(10)->appends($request->query());
 
+        // ✅ Correction : Ajout de la variable `$technicians`
         $technicians = WAPetGCTech::with('user')->get();
+
+        // ✅ Correction : Ajout de la variable `$services`
         $services = WAPetGCService::all();
 
-        return view('manageAppointements', compact('appointments', 'technicians', 'services'));
+        return view('manageAppointments', compact('appointments', 'technicians', 'services'));
     }
 
     public function search(Request $request)
     {
-        $query = $request->get('query', '');
+        // Récupération des 3 filtres
+        $query       = $request->get('query', '');        // Par client
+        $techSearch  = $request->get('tech_search', '');  // Par technicien
+        $department  = $request->get('department', '');   // Par département
 
-        $appointmentsQuery = WAPetGCAppointment::with(['tech.user', 'service'])
-            ->where(function ($q) use ($query) {
-                $q->where('client_fname', 'LIKE', "%{$query}%")
-                  ->orWhere('client_lname', 'LIKE', "%{$query}%")
-                  ->orWhereHas('tech.user', function ($techQuery) use ($query) {
-                      $techQuery->where('nom', 'LIKE', "%{$query}%")
-                                ->orWhere('prenom', 'LIKE', "%{$query}%");
-                  });
+        // Récupération du tri
+        $sortableColumns = ['tech', 'service', 'client', 'start_at'];
+        $sortColumn = $request->get('sort', 'start_at');
+        $direction  = $request->get('direction', 'asc');
+        if (!in_array($sortColumn, $sortableColumns)) {
+            $sortColumn = 'start_at';
+        }
+
+        $appointmentsQuery = WAPetGCAppointment::with(['tech.user', 'service']);
+
+        // 1) Filtre client => "client_fname/lname LIKE '$query%'"
+        if (!empty($query)) {
+            $appointmentsQuery->where(function ($q) use ($query) {
+                $q->where('client_fname', 'LIKE', $query.'%')
+                  ->orWhere('client_lname', 'LIKE', $query.'%');
             });
+        }
 
-        $appointments = $appointmentsQuery->paginate(10)->appends(['query' => $query]);
+        // 2) Filtre technicien => "tech.user.nom/prenom LIKE '$techSearch%'"
+        if (!empty($techSearch)) {
+            $appointmentsQuery->whereHas('tech.user', function ($techQ) use ($techSearch) {
+                $techQ->where('nom', 'LIKE', $techSearch.'%')
+                      ->orWhere('prenom', 'LIKE', $techSearch.'%');
+            });
+        }
 
-        $appointments->getCollection()->transform(function ($appointment) {
-            $appointment->start_at_formatted = [
-                'date' => \Carbon\Carbon::parse($appointment->start_at)->format('d-m-Y'),
-                'time' => \Carbon\Carbon::parse($appointment->start_at)->format('H:i'),
+        // 3) Filtre département => "client_zip_code LIKE '$department%'"
+        if (!empty($department)) {
+            $appointmentsQuery->where('client_zip_code', 'LIKE', $department.'%');
+        }
+
+        // 4) Gestion du tri
+        switch ($sortColumn) {
+            case 'tech':
+                // Jointure sur WAPetGC_Tech + WAPetGC_Users
+                $appointmentsQuery
+                    ->join('WAPetGC_Tech', 'WAPetGC_Appointments.tech_id', '=', 'WAPetGC_Tech.id')
+                    ->join('WAPetGC_Users', 'WAPetGC_Tech.user_id', '=', 'WAPetGC_Users.id')
+                    ->orderBy('WAPetGC_Users.nom', $direction);
+                break;
+            case 'service':
+                $appointmentsQuery
+                    ->join('WAPetGC_Services', 'WAPetGC_Appointments.service_id', '=', 'WAPetGC_Services.id')
+                    ->orderBy('WAPetGC_Services.name', $direction);
+                break;
+            case 'client':
+                $appointmentsQuery
+                    ->orderBy('client_lname', $direction)
+                    ->orderBy('client_fname', $direction);
+                break;
+            case 'start_at':
+            default:
+                $appointmentsQuery->orderBy('start_at', $direction);
+                break;
+        }
+
+        // 5) Pagination
+        // On utilise ->appends($request->all()) pour conserver tous les filtres + tri
+        $appointments = $appointmentsQuery->paginate(10)->appends($request->all());
+
+        // 6) Transformer pour renvoyer les dates formatées
+        $appointments->getCollection()->transform(function ($appoint) {
+            $appoint->start_at_formatted = [
+                'date' => \Carbon\Carbon::parse($appoint->start_at)->format('d-m-Y'),
+                'time' => \Carbon\Carbon::parse($appoint->start_at)->format('H:i'),
             ];
-            $appointment->end_at_formatted = [
-                'time' => \Carbon\Carbon::parse($appointment->end_at)->format('H:i'),
+            $appoint->end_at_formatted = [
+                'time' => \Carbon\Carbon::parse($appoint->end_at)->format('H:i'),
             ];
-            return $appointment;
+            return $appoint;
         });
 
         return response()->json([
             'appointments' => $appointments->items(),
-            'pagination' => $appointments->links('pagination::bootstrap-4')->render(),
+            'pagination'   => $appointments->links('pagination::bootstrap-4')->render(),
         ]);
     }
 

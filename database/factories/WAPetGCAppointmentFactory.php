@@ -7,6 +7,7 @@ use App\Models\WAPetGCTech;
 use App\Models\WAPetGCService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class WAPetGCAppointmentFactory extends Factory
 {
@@ -14,17 +15,9 @@ class WAPetGCAppointmentFactory extends Factory
 
     public function definition()
     {
-        // Générer une date entre le lundi et le vendredi
-        $startAt = $this->faker->dateTimeBetween('2025-01-01', '2025-12-31');
-        while (in_array($startAt->format('N'), [6, 7])) { // Évite samedi (6) et dimanche (7)
-            $startAt = $this->faker->dateTimeBetween('2025-01-01', '2025-12-31');
-        }
-
-        // Ajuster l'heure entre 8h et 18h
-        $startAt->setTime($this->faker->numberBetween(8, 17), $this->faker->numberBetween(0, 59));
-
-        $duration = $this->faker->numberBetween(30, 120); // Durée aléatoire entre 30 et 120 minutes
-        $endAt = (clone $startAt)->modify("+{$duration} minutes");
+        $startAt = Carbon::create(2025, 3, rand(1, 31), rand(8, 16), rand(0, 59), 0);
+        $duration = $this->faker->randomElement([30, 60, 90, 120]);
+        $endAt = (clone $startAt)->addMinutes($duration);
 
         return [
             'id' => Str::uuid()->toString(),
@@ -33,12 +26,12 @@ class WAPetGCAppointmentFactory extends Factory
             'client_fname' => $this->faker->firstName,
             'client_lname' => $this->faker->lastName,
             'client_adresse' => $this->generateFrenchAddress(),
-            'client_zip_code' => $this->faker->numerify('#####'), // Génère un code postal à 5 chiffres
+            'client_zip_code' => $this->faker->postcode,
             'client_city' => $this->faker->city,
             'client_phone' => $this->generateFrenchPhoneNumber(),
-            'start_at' => $startAt,
+            'start_at' => $startAt->format('Y-m-d H:i:s'),
             'duration' => $duration,
-            'end_at' => $endAt,
+            'end_at' => $endAt->format('Y-m-d H:i:s'),
             'comment' => $this->faker->sentence,
             'trajet_time' => $this->faker->numberBetween(10, 60),
             'trajet_distance' => $this->faker->randomFloat(2, 1, 100),
@@ -47,16 +40,11 @@ class WAPetGCAppointmentFactory extends Factory
 
     private function generateFrenchPhoneNumber()
     {
-        $prefix = $this->faker->randomElement(['06', '07']);
-        $suffix = $this->faker->numerify('########');
-        return $prefix . $suffix;
+        return '0' . $this->faker->randomElement(['6', '7']) . $this->faker->numerify('########');
     }
 
     private function generateFrenchAddress()
     {
-        $streetTypes = ['rue', 'avenue', 'boulevard', 'allée', 'chemin', 'place'];
-        return $this->faker->numberBetween(1, 999) . ' ' .
-               $this->faker->randomElement($streetTypes) . ' ' .
-               $this->faker->streetName;
+        return $this->faker->numberBetween(1, 999) . ' ' . $this->faker->randomElement(['rue', 'avenue', 'boulevard']) . ' ' . $this->faker->streetName;
     }
 }

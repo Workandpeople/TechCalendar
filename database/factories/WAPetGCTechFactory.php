@@ -15,29 +15,24 @@ class WAPetGCTechFactory extends Factory
     {
         return [
             'id' => Str::uuid()->toString(),
-            'user_id' => WAPetGCUser::factory(), // Génère automatiquement un utilisateur
+            'user_id' => WAPetGCUser::factory(),
             'phone' => $this->generateFrenchPhoneNumber(),
             'adresse' => $this->generateFrenchAddress(),
-            'zip_code' => $this->faker->numerify('#####'), // Génère un code postal à 5 chiffres
+            'zip_code' => $this->faker->postcode,
             'city' => $this->faker->city,
             'default_start_at' => '08:00',
             'default_end_at' => '18:00',
-            'default_rest_time' => 60, // en minutes
+            'default_rest_time' => 60,
         ];
     }
 
     private function generateFrenchPhoneNumber()
     {
-        $prefix = $this->faker->randomElement(['06', '07']);
-        $suffix = $this->faker->numerify('########');
-        return $prefix . $suffix;
+        return '0' . $this->faker->randomElement(['6', '7']) . $this->faker->numerify('########');
     }
 
     private function generateFrenchAddress()
     {
-        $streetTypes = ['rue', 'avenue', 'boulevard', 'allée', 'chemin', 'place'];
-        return $this->faker->numberBetween(1, 999) . ' ' .
-               $this->faker->randomElement($streetTypes) . ' ' .
-               $this->faker->streetName;
+        return $this->faker->numberBetween(1, 999) . ' ' . $this->faker->randomElement(['rue', 'avenue', 'boulevard']) . ' ' . $this->faker->streetName;
     }
 }

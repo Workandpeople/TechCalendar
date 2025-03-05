@@ -33,7 +33,10 @@
         @foreach ($users as $user)
             <tr class="{{ $user->trashed() ? 'table-warning' : '' }}">
                 <td>
-                    <strong>{{ strtoupper($user->nom) }}</strong> {{ ucfirst($user->prenom) }}
+                    <strong>{{ strtoupper($user->nom) }}</strong> {{ $user->prenom }}
+                    @if($user->tech)
+                        ({{ substr($user->tech->zip_code, 0, 2) }})
+                    @endif
                 </td>
                 <td class="d-none d-md-table-cell">{{ $user->email }}</td>
                 <td>

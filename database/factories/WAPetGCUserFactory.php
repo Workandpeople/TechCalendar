@@ -18,7 +18,7 @@ class WAPetGCUserFactory extends Factory
             'prenom' => $this->faker->firstName,
             'email' => $this->faker->unique()->safeEmail,
             'password' => bcrypt('password'),
-            'role' => 'tech', // Default role, override in seeders if necessary
+            'role' => 'tech',
         ];
     }
 

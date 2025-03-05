@@ -15,8 +15,8 @@ class WAPetGCServiceFactory extends Factory
         return [
             'id' => Str::uuid()->toString(),
             'type' => $this->faker->randomElement(['MAR', 'COFRAC', 'AUDIT']),
-            'name' => $this->faker->words(2, true),
-            'default_time' => $this->faker->numberBetween(30, 120),
+            'name' => ucfirst($this->faker->word) . ' ' . ucfirst($this->faker->word),
+            'default_time' => $this->faker->randomElement([30, 60, 90, 120]),
         ];
     }
 }

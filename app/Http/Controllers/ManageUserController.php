@@ -34,11 +34,29 @@ class ManageUserController extends Controller
     public function search(Request $request)
     {
         $query = $request->get('query', '');
+        $department = $request->get('department', '');
 
         $users = WAPetGCUser::withTrashed()
-            ->where('nom', 'LIKE', '%' . $query . '%')
-            ->orWhere('prenom', 'LIKE', '%' . $query . '%')
-            ->paginate(10);
+            ->with('tech')
+            ->where(function ($q) use ($query) {
+                $q->where('nom', 'LIKE', '%' . $query . '%')
+                ->orWhere('prenom', 'LIKE', '%' . $query . '%');
+            });
+
+        // Filtrer par département si renseigné
+        if (!empty($department)) {
+            $users->whereHas('tech', function ($q) use ($department) {
+                $q->where('zip_code', 'LIKE', $department . '%');
+            });
+        }
+
+        $users = $users->paginate(10);
+
+        // Ajout du département dans la réponse JSON
+        $users->getCollection()->transform(function ($user) {
+            $user->department = $user->tech ? substr($user->tech->zip_code, 0, 2) : null;
+            return $user;
+        });
 
         return response()->json($users);
     }
