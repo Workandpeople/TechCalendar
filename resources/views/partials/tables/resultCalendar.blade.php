@@ -1,6 +1,10 @@
 <div class="card mb-4">
     <div class="card-header">
         Calendrier des Rendez-vous
+        <!-- Bouton "Voir la carte interactive" -->
+        <button class="mx-5 btn btn-info btn-sm shadow-sm" data-toggle="modal" data-target="#mapModal">
+            <i class="fas fa-map"></i> Voir la carte interactive
+        </button>
     </div>
     <div class="card-body">
 

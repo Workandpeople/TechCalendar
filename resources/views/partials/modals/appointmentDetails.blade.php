@@ -15,6 +15,7 @@
                 <p><strong>Service :</strong> <span id="modalService"></span></p>
                 <p><strong>Date :</strong> <span id="modalDate"></span></p>
                 <p><strong>Heure :</strong> <span id="modalTime"></span></p>
+                <p><strong>Téléphone du Client :</strong> <span id="modalClientPhone"></span></p>
                 <p><strong>Commentaire :</strong> <span id="modalComment"></span></p>
             </div>
         </div>

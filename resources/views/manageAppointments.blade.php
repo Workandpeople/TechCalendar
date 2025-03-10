@@ -31,10 +31,10 @@
 
 @section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
-    <h1 class="h3 mb-0 text-gray-800">Gérer les services</h1>
+    <h1 class="h3 mb-0 text-gray-800">Gérer les RDV</h1>
     <div class="button-group">
         <!-- Bouton "Voir le calendrier" -->
-        <a href="{{--{{ route('calendar.view') }}--}}#" class="btn btn-sm btn-info shadow-sm">
+        <a href="{{ route('calendar.index') }}#" class="btn btn-sm btn-info shadow-sm">
             <i class="fas fa-calendar-alt fa-sm text-white-50"></i> Voir le calendrier
         </a>
 

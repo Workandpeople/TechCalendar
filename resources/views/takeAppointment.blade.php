@@ -12,7 +12,7 @@
 
 @section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
-    <h1 class="h3 mb-0 text-gray-800">Gérer les services</h1>
+    <h1 class="h3 mb-0 text-gray-800">Prendre un RDV</h1>
     <div class="button-group">
 
         <!-- Bouton "Créer un RDV" -->
@@ -60,6 +60,8 @@
         ])
     @endif
 
+    @include('partials.modals.interactiveMap')
+
     <!-- Affichage des RDV -->
     @include('partials.modals.appointmentDetails')
 @endsection
@@ -98,7 +100,8 @@
                 'techName' => trim($techName) ?: 'Non spécifié',
                 'serviceName' => $serviceName ?: 'Non spécifié',
                 'comment' => $comment,
-                'clientAddress' => $clientAddress
+                'clientAddress' => $clientAddress,
+                'clientPhone' => $appoint->client_phone ?? 'Non spécifié'
             ]
         ];
     }
@@ -183,15 +186,12 @@
         // Fonction pour calculer l'heure de fin (modal de création MANUELLE)
         function updateEndTime() {
             const startTime = $('#start_at').val();
-            console.log("startTime =", startTime);
 
             const duration = parseInt($('#duration').val(), 10);
-            console.log("duration =", duration);
 
             if (startTime && duration > 0) {
                 // Tentative de parsing
                 let startDate = new Date(startTime);
-                console.log("startDate =", startDate.toString());  // Voir si c'est "Invalid Date"
 
                 if (isNaN(startDate.getTime())) {
                     console.error("Impossible de parser la date");
@@ -208,7 +208,6 @@
                 let minutes = String(startDate.getMinutes()).padStart(2, '0');
 
                 let endString = `${day}/${month}/${year} ${hours}:${minutes}`;
-                console.log("end_at =", endString);
 
                 $('#end_at').val(endString);
             } else {
@@ -469,6 +468,9 @@
                                 new Date(event.start).toLocaleTimeString() + ' - ' +
                                 new Date(event.end).toLocaleTimeString();
                         }
+                        if (document.getElementById('modalClientPhone')) {
+                            document.getElementById('modalClientPhone').textContent = props.clientPhone || 'Non spécifié';
+                        }
                         if (document.getElementById('modalComment')) {
                             document.getElementById('modalComment').textContent = props.comment || 'Aucun commentaire';
                         }
@@ -550,5 +552,132 @@
         // Mise à jour initiale (cas où des valeurs seraient déjà présentes)
         updateEndTimeCalendar();
     });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Clé API Mapbox
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw';
+
+        // Désactiver la télémétrie pour éviter ERR_BLOCKED_BY_CLIENT
+        mapboxgl.config.EVENTS_URL = null;
+
+        // Récupérer les adresses depuis Laravel
+        let clientAdresse = {!! json_encode(request()->input('client_adresse', '')) !!};
+        let clientZipCode = {!! json_encode(request()->input('client_zip_code', '')) !!};
+        let clientCity = {!! json_encode(request()->input('client_city', '')) !!};
+        let techsAdresses = {!! json_encode($selectedTechs ?? []) !!}; // Liste des 5 techniciens
+
+        let fullAddressClient = `${clientAdresse}, ${clientZipCode} ${clientCity}`;
+
+        let mapContainer = document.getElementById('map');
+        if (!mapContainer) return;
+
+        // Couleurs des techniciens selon la légende
+        let techColors = ['#ff9999', '#99ff99', '#9999ff', '#ffcc99', '#99ccff'];
+
+        // Récupération des coordonnées du client via Mapbox
+        fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddressClient)}.json?access_token=${mapboxgl.accessToken}`)
+            .then(response => response.json())
+            .then(clientData => {
+                if (!clientData.features || clientData.features.length === 0) return;
+                let clientCoords = clientData.features[0].center; // [lon, lat]
+
+                // Initialisation de la carte en mode sombre
+                let map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/dark-v11', // Mode sombre
+                    center: clientCoords,
+                    zoom: 12
+                });
+
+                // Marqueur rouge pour l'adresse client
+                new mapboxgl.Marker({ color: "red" })
+                    .setLngLat(clientCoords)
+                    .setPopup(new mapboxgl.Popup().setText(`Client: ${fullAddressClient}`))
+                    .addTo(map);
+                console.log("📌 Marqueur client ajouté aux coordonnées :", clientCoords);
+
+                // Fonction asynchrone pour récupérer les coordonnées des techniciens et tracer les itinéraires
+                async function getTechCoordsAndRoutes() {
+                    for (let index = 0; index < techsAdresses.length; index++) {
+                        let tech = techsAdresses[index];
+                        let techAddress = `${tech.tech.adresse}, ${tech.tech.zip_code} ${tech.tech.city}`;
+
+                        console.log(`🔍 Recherche des coordonnées pour : ${tech.tech.user.prenom} ${tech.tech.user.nom} - ${techAddress}`);
+
+                        let response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(techAddress)}.json?access_token=${mapboxgl.accessToken}`);
+                        let data = await response.json();
+
+                        if (data.features && data.features.length > 0) {
+                            let techCoords = data.features[0].center; // [lon, lat]
+
+                            console.log(`✅ Coordonnées trouvées pour ${tech.tech.user.prenom} ${tech.tech.user.nom} :`, techCoords);
+
+                            // Récupérer et tracer l'itinéraire entre le technicien et le client
+                            let routeUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${techCoords[0]},${techCoords[1]};${clientCoords[0]},${clientCoords[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+
+                            let routeResponse = await fetch(routeUrl);
+                            let routeData = await routeResponse.json();
+
+                            if (routeData.routes && routeData.routes.length > 0) {
+                                let route = routeData.routes[0].geometry;
+                                let distance = (routeData.routes[0].distance / 1000).toFixed(2); // en km
+                                let duration = Math.round(routeData.routes[0].duration / 60); // en minutes
+
+                                // Ajouter un marqueur pour le technicien avec les infos de trajet
+                                new mapboxgl.Marker({ color: techColors[index] })
+                                    .setLngLat(techCoords)
+                                    .setPopup(new mapboxgl.Popup().setHTML(`
+                                        <b>${tech.tech.user.prenom} ${tech.tech.user.nom}</b><br>
+                                        🚗 <b>Distance :</b> ${distance} km<br>
+                                        ⏳ <b>Durée :</b> ${duration} min
+                                    `))
+                                    .addTo(map);
+                                console.log(`📌 Marqueur ajouté pour ${tech.tech.user.prenom} ${tech.tech.user.nom} aux coordonnées :`, techCoords);
+
+                                // Ajout du trajet en ligne colorée
+                                map.addLayer({
+                                    id: `route-${index}`,
+                                    type: 'line',
+                                    source: {
+                                        type: 'geojson',
+                                        data: {
+                                            type: 'Feature',
+                                            properties: {},
+                                            geometry: route
+                                        }
+                                    },
+                                    layout: {
+                                        'line-join': 'round',
+                                        'line-cap': 'round'
+                                    },
+                                    paint: {
+                                        'line-color': techColors[index],
+                                        'line-width': 4,
+                                        'line-opacity': 0.8
+                                    }
+                                });
+
+                                console.log(`🚗 Itinéraire ajouté entre ${tech.tech.user.prenom} ${tech.tech.user.nom} et le client.`);
+                            } else {
+                                console.error(`❌ Impossible de récupérer l'itinéraire pour ${tech.tech.user.prenom} ${tech.tech.user.nom}`);
+                            }
+                        }
+                    }
+                }
+
+                // Charger les coordonnées des techniciens et tracer les itinéraires
+                getTechCoordsAndRoutes();
+
+                // Recentrer la carte lors de l'ouverture du modal
+                $('#mapModal').on('shown.bs.modal', function () {
+                    setTimeout(() => {
+                        map.resize();
+                        map.flyTo({ center: clientCoords, zoom: 12 });
+                    }, 300);
+                });
+            })
+            .catch(error => console.error("❌ Erreur lors du géocodage :", error));
+    });
+
 </script>
 @endsection

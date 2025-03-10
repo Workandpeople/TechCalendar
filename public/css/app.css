@@ -17,3 +17,25 @@
     color: #fff;
     font-size: 3rem;
 }
+
+#map {
+    width: 100% !important;
+    height: 500px !important; /* Taille correcte */
+    max-height: 80vh;
+    aspect-ratio: 16/9; /* Garde un bon ratio d'affichage */
+}
+
+.mapboxgl-canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.modal-dialog {
+    max-width: 90vw; /* Pour éviter que la modal soit trop réduite */
+}
+
+.modal-body {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+}
