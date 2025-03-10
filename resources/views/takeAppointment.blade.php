@@ -113,6 +113,42 @@
      * On ajoute également des vérifications pour s'assurer que les éléments existent avant de les manipuler.
      */
     $(document).ready(function () {
+        const searchForm = $('#searchForm');
+        const searchInputs = searchForm.find('input, select');
+        const restoreButton = $('#restoreSearchBtn');
+
+        // Vérifier s'il y a une recherche stockée et afficher le bouton de restauration
+        if (localStorage.getItem('lastSearch')) {
+            restoreButton.show();
+        }
+
+        // Sauvegarder la recherche lors de la soumission
+        searchForm.on('submit', function () {
+            let searchParams = {};
+            searchInputs.each(function () {
+                let name = $(this).attr('name');
+                let value = $(this).val();
+                if (name) {
+                    searchParams[name] = value;
+                }
+            });
+            localStorage.setItem('lastSearch', JSON.stringify(searchParams));
+        });
+
+        // Restaurer la dernière recherche
+        restoreButton.on('click', function () {
+            let savedSearch = localStorage.getItem('lastSearch');
+            if (savedSearch) {
+                savedSearch = JSON.parse(savedSearch);
+                searchInputs.each(function () {
+                    let name = $(this).attr('name');
+                    if (savedSearch[name] !== undefined) {
+                        $(this).val(savedSearch[name]).trigger('change');
+                    }
+                });
+            }
+        });
+
         // ===========================================
         // ========== [ Bloc 1 : Recherche ] =========
         // ===========================================

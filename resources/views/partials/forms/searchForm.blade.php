@@ -17,8 +17,11 @@
                     <input type="text" class="form-control" id="client_city" name="client_city">
                 </div>
             </div>
-            <div class="col-12 mb-3">
-                <button type="submit" class="btn btn-primary w-100">Rechercher</button>
+            <div class="col-12 mb-3 d-flex flex-column flex-md-row" style="gap: 1rem;">
+                <button type="submit" class="btn btn-primary w-100 mb-2 mb-md-0 me-md-2">Rechercher</button>
+                <button type="button" class="btn btn-secondary w-100 w-md-auto" id="restoreSearchBtn" style="display: none;">
+                    Restaurer la dernière recherche
+                </button>
             </div>
         </form>
     </div>
