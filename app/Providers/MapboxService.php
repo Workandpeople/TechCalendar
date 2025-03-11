@@ -19,7 +19,7 @@ class MapboxService
     {
         $url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" . urlencode($address) . ".json";
 
-        $response = Http::get($url, [
+        $response = Http::timeout(30)->get($url, [
             'access_token' => $this->mapboxToken,
             'limit' => 1
         ]);
@@ -42,7 +42,7 @@ class MapboxService
     {
         $url = "https://api.mapbox.com/directions/v5/mapbox/driving/{$startCoordinates[0]},{$startCoordinates[1]};{$endCoordinates[0]},{$endCoordinates[1]}";
 
-        $response = Http::get($url, [
+        $response = Http::timeout(30)->get($url, [
             'access_token' => $this->mapboxToken,
             'geometries' => 'geojson'
         ]);
