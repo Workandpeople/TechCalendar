@@ -121,7 +121,23 @@
      * "Cannot read properties of null (reading 'addEventListener')".
      * On ajoute également des vérifications pour s'assurer que les éléments existent avant de les manipuler.
      */
-     function initFullCalendar() {
+
+    // ===========================================
+    // ====== [ Nouveau : cache local JS ] =======
+    // ===========================================
+    /**
+     * cachedEventsMap :
+     *   {
+     *     techId: {
+     *       "2025-03-17|2025-03-24": [ ... events ...],
+     *       "2025-03-24|2025-03-31": [ ... events ...]
+     *     }
+     *   }
+     * Il permet de ne pas recharger plusieurs fois les mêmes techniciens pour la même plage.
+     */
+    let cachedEventsMap = {};
+
+    function initFullCalendar() {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return; // Sécurité si l'élément n'existe pas
 
@@ -520,7 +536,6 @@
             //    Ainsi, PAS de requête AJAX la première fois.
             const initialEvents = {!! json_encode($events) !!};
 
-            // 2) On crée le calendrier AVEC ces events "statiques".
             var calendar = new FullCalendar.Calendar(calendarEl, {
                 locale: 'fr',
                 initialView: 'timeGridWeek',
@@ -536,13 +551,9 @@
                     start: new Date().toISOString().split('T')[0]
                 },
                 allDaySlot: false,
-
                 // On injecte directement nos "events" calculés par search().
                 events: initialEvents,
 
-                // Pas de "events: function..." => évite le double chargement.
-
-                // dateClick => pour créer un RDV...
                 dateClick: function(info) {
                     let date = new Date(info.dateStr);
                     let formattedDate = date.toISOString().slice(0, 16);
@@ -572,7 +583,6 @@
                     }
                 },
 
-                // eventDidMount => applique la couleur de fond, tooltip, etc.
                 eventDidMount: function(info) {
                     // Couleur de fond
                     info.el.style.backgroundColor = info.event.backgroundColor;
@@ -603,7 +613,6 @@
                     });
                 },
 
-                // eventContent => pour afficher "title" + "distance/time" DANS le bloc
                 eventContent: function(arg) {
                     const distance = arg.event.extendedProps.distanceSearch || 0;
                     const time     = arg.event.extendedProps.timeSearch     || 0;
@@ -619,7 +628,6 @@
                     return { html: html };
                 },
 
-                // eventClick => ouverture du modal RDV existant
                 eventClick: function(info) {
                     var event = info.event;
                     var props = event.extendedProps;
@@ -658,67 +666,115 @@
                     }
                 },
 
-                // datesSet => quand on change de semaine (prev/next), on recharge via AJAX
+                // Quand on change la plage (next/prev/today) :
                 datesSet: function(info) {
-                    // info.startStr / info.endStr => ex: "2025-03-17"
-                    // On vérifie si ce n’est pas la semaine courante déjà affichée
-                    // ou on appelle systématiquement l’AJAX s’il s’agit d’une semaine différente.
-                    let startStr = info.startStr;
-                    let endStr   = info.endStr;
+                    let startStr = info.startStr; // ex "2025-03-17"
+                    let endStr   = info.endStr;   // ex "2025-03-24"
 
-                    // On compare si (startStr, endStr) != la semaine initiale
-                    // ou plus simple => on recharge systématiquement (à vous de voir)
                     loadAjaxEvents(startStr, endStr);
                 }
             });
 
-            // 3) On ajoute nos events "statiques" (déjà inclus via 'events: initialEvents')
+            // 3) Render initial
             calendar.render();
 
-            // 4) Gestion des checkboxes "tech-visibility": on relance la requête AJAX dès qu'on (dé)coche
-            $('.tech-visibility').on('change', function() {
-                const startStr = calendar.view?.currentStart?.toISOString().split('T')[0] || '';
-                const endStr   = calendar.view?.currentEnd?.toISOString().split('T')[0] || '';
+            // ================================
+            // [Nouveau] getCachedEventsForRange
+            // ================================
+            async function getCachedEventsForRange(selectedTechIds, start, end) {
+                // rangeKey => identifie la plage
+                let rangeKey = `${start}|${end}`;
+                let techIdsToFetch = [];
 
-                // Rafraîchir le calendrier avec les techniciens actuellement cochés
-                loadAjaxEvents(startStr, endStr);
-            });
+                // Déterminer quels tech n'ont pas encore de cache pour cette plage
+                selectedTechIds.forEach(tid => {
+                    if (!cachedEventsMap[tid] || !cachedEventsMap[tid][rangeKey]) {
+                        techIdsToFetch.push(tid);
+                    }
+                });
 
-            // 5) Fonction AJAX pour recharger les événements FullCalendar
-            function loadAjaxEvents(start, end) {
-                // 1) Récupérer les IDs des tech cochés
+                // Si tous sont déjà en cache, on ne fetch pas
+                if (!techIdsToFetch.length) {
+                    return;
+                }
+
+                // Fetch seulement ceux qui manquent
+                showCalendarLoading();
+                try {
+                    let response = await $.ajax({
+                        url: '{{ route("appointments.ajax") }}',
+                        type: 'GET',
+                        data: {
+                            start: start,
+                            end: end,
+                            client_adresse:  '{{ request()->input("client_adresse", "") }}',
+                            client_zip_code: '{{ request()->input("client_zip_code", "") }}',
+                            client_city:     '{{ request()->input("client_city", "") }}',
+                            tech_ids: techIdsToFetch,
+                        }
+                    });
+
+                    // Regrouper par tech_id
+                    let eventsByTech = {};
+                    response.forEach(evt => {
+                        let tId = evt.extendedProps.tech_id;
+                        if (!eventsByTech[tId]) {
+                            eventsByTech[tId] = [];
+                        }
+                        eventsByTech[tId].push(evt);
+                    });
+
+                    // Stocker en cache
+                    techIdsToFetch.forEach(tid => {
+                        if (!cachedEventsMap[tid]) {
+                            cachedEventsMap[tid] = {};
+                        }
+                        cachedEventsMap[tid][rangeKey] = eventsByTech[tid] || [];
+                    });
+                } catch (err) {
+                    console.error("Erreur AJAX loadAjaxEvents:", err);
+                }
+                hideCalendarLoading();
+            }
+
+            // ================================
+            // [Nouveau] refreshCalendarFromCache
+            // ================================
+            function refreshCalendarFromCache(selectedTechIds, start, end) {
+                let rangeKey = `${start}|${end}`;
+                // On retire tous les événements
+                calendar.removeAllEvents();
+
+                // Puis, pour chaque tech, on récupère ses events en cache
+                selectedTechIds.forEach(tid => {
+                    let arr = (cachedEventsMap[tid] && cachedEventsMap[tid][rangeKey]) || [];
+                    calendar.addEventSource(arr);
+                });
+            }
+
+            // ================================
+            // [Modifié] loadAjaxEvents => utilise le cache
+            // ================================
+            async function loadAjaxEvents(start, end) {
+                // Récupérer les IDs des tech cochés
                 const selectedTechIds = [];
                 document.querySelectorAll('.tech-visibility:checked').forEach(chk => {
                     selectedTechIds.push(chk.dataset.techId);
                 });
 
-                showCalendarLoading();
+                // 1) Charger en cache uniquement ceux qui manquent
+                await getCachedEventsForRange(selectedTechIds, start, end);
 
-                // 2) Envoyer la requête AJAX au contrôleur
-                $.ajax({
-                    url: '{{ route("appointments.ajax") }}',
-                    type: 'GET',
-                    data: {
-                        start: start,
-                        end: end,
-                        client_adresse:  '{{ request()->input("client_adresse", "") }}',
-                        client_zip_code: '{{ request()->input("client_zip_code", "") }}',
-                        client_city:     '{{ request()->input("client_city", "") }}',
-                        // IMPORTANT: les IDs cochés
-                        tech_ids:        selectedTechIds,
-                    },
-                    success: function(responseEvents) {
-                        // Retirer tous les événements actuels, puis injecter ceux reçus du serveur
-                        calendar.removeAllEvents();
-                        calendar.addEventSource(responseEvents);
-                        hideCalendarLoading();
-                    },
-                    error: function() {
-                        hideCalendarLoading();
-                        console.error("Erreur lors du chargement AJAX des événements.");
-                    }
-                });
+                // 2) Mettre à jour l'affichage
+                refreshCalendarFromCache(selectedTechIds, start, end);
             }
+
+            // 4) Au clic sur les checkboxes, on recharge via le cache
+            $('.tech-visibility').on('change', function() {
+                let startStr = calendar.view?.currentStart?.toISOString().split('T')[0] || '';
+                let endStr   = calendar.view?.currentEnd?.toISOString().split('T')[0] || '';
+                loadAjaxEvents(startStr, endStr);
+            });
         }
 
         hideLoadingOverlay();
@@ -791,7 +847,7 @@
         // Récupérer les adresses depuis Laravel
         let clientAdresse = {!! json_encode(request()->input('client_adresse', '')) !!};
         let clientZipCode = {!! json_encode(request()->input('client_zip_code', '')) !!};
-        let clientCity = {!! json_encode(request()->input('client_city', '')) !!};
+        let clientCity    = {!! json_encode(request()->input('client_city', '')) !!};
         let techsAdresses = {!! json_encode($selectedTechs ?? []) !!}; // Liste des 5 techniciens
 
         let fullAddressClient = `${clientAdresse}, ${clientZipCode} ${clientCity}`;
@@ -828,7 +884,6 @@
                     for (let index = 0; index < techsAdresses.length; index++) {
                         let tech = techsAdresses[index];
                         let techAddress = `${tech.tech.adresse}, ${tech.tech.zip_code} ${tech.tech.city}`;
-
 
                         let response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(techAddress)}.json?access_token=${mapboxgl.accessToken}`);
                         let data = await response.json();
