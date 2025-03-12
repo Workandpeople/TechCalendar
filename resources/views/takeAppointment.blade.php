@@ -52,13 +52,11 @@
     <!-- Form de recherche (adresse, code postal, ville, etc.) -->
     @include('partials.forms.searchForm')
 
-    <!-- Affichage du calendrier -->
-    @if(!empty($appointments) && count($appointments) > 0)
-        @include('partials.tables.resultCalendar', [
-            'selectedTechs' => $selectedTechs,
-            'appointments'  => $appointments
-        ])
-    @endif
+    <!-- Toujours afficher le calendrier et la légende, même vide -->
+    @include('partials.tables.resultCalendar', [
+        'selectedTechs' => $selectedTechs ?? [],
+        'appointments'  => $appointments ?? []
+    ])
 
     @include('partials.modals.interactiveMap')
 
@@ -81,28 +79,39 @@
         ];
     }
 
-    // Construire $events
+    // Construire $events (toujours là si vous voulez un affichage initial)
     $events = [];
     foreach (($appointments ?? []) as $appoint) {
-        $clientFullname = $appoint->client_fname . ' ' . $appoint->client_lname;
-        $techName = optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom;
-        $serviceName = optional($appoint->service)->name;
-        $comment = $appoint->comment ?? 'Aucun commentaire';
-        $clientAddress = $appoint->client_adresse . ', ' . $appoint->client_zip_code . ' ' . $appoint->client_city;
+        $clientFullname  = $appoint->client_fname . ' ' . $appoint->client_lname;
+        $dept            = substr($appoint->client_zip_code, 0, 2) ?: 'XX'; // "34", "75", etc.
+        $clientFullnameWithDept = $clientFullname.' ('.$dept.')';
+        $techName        = optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom;
+        $serviceName     = optional($appoint->service)->name;
+        $comment         = $appoint->comment ?? 'Aucun commentaire';
+        $clientAddress   = $appoint->client_adresse . ', ' . $appoint->client_zip_code . ' ' . $appoint->client_city;
+
+        // Récupérer les distances calculées dans la propriété du modèle
+        $distFromSearch = $appoint->distance_from_search ?? 0;
+        $timeFromSearch = $appoint->time_from_search     ?? 0;
 
         $events[] = [
-            'id' => $appoint->id,
-            'title' => $clientFullname,
-            'start' => $appoint->start_at,
-            'end' => $appoint->end_at,
+            'id'              => $appoint->id,
+            'title'           => $clientFullnameWithDept,
+            'start'           => $appoint->start_at,
+            'end'             => $appoint->end_at,
             'backgroundColor' => $techColorMap[$appoint->tech_id]['color'] ?? '#cccccc',
-            'extendedProps' => [
-                'techName' => trim($techName) ?: 'Non spécifié',
-                'serviceName' => $serviceName ?: 'Non spécifié',
-                'comment' => $comment,
+            'extendedProps'   => [
+                'tech_id'       => $appoint->tech_id,
+                'techName'      => trim($techName) ?: 'Non spécifié',
+                'serviceName'   => $serviceName ?: 'Non spécifié',
+                'comment'       => $comment,
                 'clientAddress' => $clientAddress,
-                'clientPhone' => $appoint->client_phone ?? 'Non spécifié'
-            ]
+                'clientPhone'   => $appoint->client_phone ?? 'Non spécifié',
+
+                // On utilise les variables locales que l'on vient de définir
+                'distanceSearch' => $distFromSearch,
+                'timeSearch'     => $timeFromSearch,
+            ],
         ];
     }
 @endphp
@@ -112,7 +121,53 @@
      * "Cannot read properties of null (reading 'addEventListener')".
      * On ajoute également des vérifications pour s'assurer que les éléments existent avant de les manipuler.
      */
+     function initFullCalendar() {
+        const calendarEl = document.getElementById('calendar');
+        if (!calendarEl) return; // Sécurité si l'élément n'existe pas
+
+        const initialEvents = {!! json_encode($events) !!}; // Données passées depuis PHP
+
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            locale: 'fr',
+            initialView: 'timeGridWeek',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'timeGridWeek,timeGridDay'
+            },
+            slotMinTime: '08:00:00',
+            slotMaxTime: '21:00:00',
+            hiddenDays: [0, 6],
+            validRange: {
+                start: new Date().toISOString().split('T')[0]
+            },
+            allDaySlot: false,
+            events: initialEvents, // Injecter les événements déjà calculés
+            dateClick: function(info) {
+                let date = new Date(info.dateStr);
+                let formattedDate = date.toISOString().slice(0, 16);
+
+                let startAtField = document.getElementById('start_at_calendar');
+                if (startAtField) startAtField.value = formattedDate;
+
+                fetchRouteCalculation();
+                updateEndTimeCalendar();
+
+                let modalEl = document.getElementById('appointmentCreateFromCalendarModal');
+                if (modalEl) {
+                    let modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                }
+            }
+        });
+
+        calendar.render();
+    }
+
     $(document).ready(function () {
+        // =======================
+        // ===== [ Recherche ] ===
+        // =======================
         const searchForm = $('#searchForm');
         const searchInputs = searchForm.find('input, select');
         const restoreButton = $('#restoreSearchBtn');
@@ -149,11 +204,7 @@
             }
         });
 
-        // ===========================================
-        // ========== [ Bloc 1 : Recherche ] =========
-        // ===========================================
         let timer;
-
         // Soumission du formulaire de recherche
         $('#searchForm').on('submit', function () {
             showLoadingOverlay(); // Afficher le chargement
@@ -166,7 +217,9 @@
             $('#searchSubmitBtn').prop('disabled', false);
         });
 
-        // Recherche dynamique pour le modal de création de rendez-vous
+        // ================================
+        // ===== [ Suggestions tech ] =====
+        // ================================
         $('#tech_search_modal').on('input', function() {
             clearTimeout(timer);
             const query = $(this).val().trim();
@@ -180,7 +233,6 @@
             }, 300);
         });
 
-        // -- Fonction utilitaire de suggestion (pour le "tech_search_modal") --
         function fetchTechSuggestionsForModal(query, inputSelector, idSelector, outputSelector) {
             showLoadingOverlay();
             $.ajax({
@@ -216,25 +268,19 @@
             });
         }
 
-        // ================================================
-        // =========== [ Bloc 1-bis : Modal #1 ] ==========
-        // ================================================
-        // Fonction pour calculer l'heure de fin (modal de création MANUELLE)
+        // ==============================================
+        // ===== [ Modal de création RDV (manuel) ] =====
+        // ==============================================
         function updateEndTime() {
             const startTime = $('#start_at').val();
-
             const duration = parseInt($('#duration').val(), 10);
 
             if (startTime && duration > 0) {
-                // Tentative de parsing
                 let startDate = new Date(startTime);
-
                 if (isNaN(startDate.getTime())) {
                     console.error("Impossible de parser la date");
                     return;
                 }
-
-                // Si c'est une vraie date
                 startDate.setMinutes(startDate.getMinutes() + duration);
 
                 let day     = String(startDate.getDate()).padStart(2, '0');
@@ -244,14 +290,12 @@
                 let minutes = String(startDate.getMinutes()).padStart(2, '0');
 
                 let endString = `${day}/${month}/${year} ${hours}:${minutes}`;
-
                 $('#end_at').val(endString);
             } else {
                 $('#end_at').val('');
             }
         }
 
-        // Déclencheurs (changement de service ou de champs) dans le premier formulaire
         $('#service_id').on('change', function () {
             const selectedOption = $(this).find(':selected');
             const duration = selectedOption.data('duration');
@@ -263,14 +307,9 @@
         $('#start_at, #duration').on('input change keyup', function () {
             updateEndTime();
         });
-        // Initialisation (modal 1)
-        updateEndTime();
+        updateEndTime(); // init
 
-
-        // ================================================
-        // ========== [ Bloc 2 : Durée service #2 ] =======
-        // ================================================
-        // Mise à jour de la durée en fonction du service choisi (2ème form, si existant)
+        // Form 2 (si existant)
         const serviceSelect = document.getElementById('service_id2');
         const durationInput = document.getElementById('duration2');
         if (serviceSelect && durationInput) {
@@ -281,27 +320,23 @@
             });
         }
 
-        // ===========================================
-        // ========== [ Bloc 3 : Divers JS ] =========
-        // ===========================================
-        // Fermeture des modals via data-bs-dismiss
+        // =========================
+        // ===== [ Divers JS ] =====
+        // =========================
         $('button[data-bs-dismiss="modal"]').on('click', function () {
             const modal = $(this).closest('.modal');
             if (modal.length) {
-                console.log('Fermeture du modal:', modal.attr('id'));
                 modal.modal('hide');
             }
         });
 
-        // Mise à jour de la durée du service dans le 1er formulaire
         $('#service_id').on('change', function () {
             const duration = $(this).find(':selected').data('duration');
             $('#duration').val(duration || '');
         });
-        // On déclenche manuellement pour initialiser
         $('#service_id').trigger('change');
 
-        // Recherche dynamique tech (auto-complétion) pour un autre champ (#search_tech)
+        // Suggestions tech (recherche)
         let timer2;
         $('#search_tech').on('input', function() {
             clearTimeout(timer2);
@@ -316,7 +351,6 @@
             }, 300);
         });
 
-        // -- Fonction utilitaire de suggestion (pour le "search_tech") --
         function fetchTechSuggestions(query) {
             showLoadingOverlay();
             $.ajax({
@@ -343,7 +377,6 @@
             });
             $('#techSuggestions').html(html);
 
-            // Au clic sur une suggestion
             $('.suggestion-item').on('click', function(e) {
                 const index = $(this).index();
                 const chosen = list[index];
@@ -353,12 +386,11 @@
             });
         }
 
-        // ================================================
-        // ========== [ Bloc 4 : Calendrier + modal ] =====
-        // ================================================
+        // ================================
+        // ===== [ Calendrier + modal ] ===
+        // ================================
         showLoadingOverlay();
 
-        // Fonction pour le calcul de trajet
         function fetchRouteCalculation() {
             let clientAdresse = {!! json_encode(request()->input('client_adresse', '')) !!};
             let clientZipCode = {!! json_encode(request()->input('client_zip_code', '')) !!};
@@ -404,20 +436,91 @@
             }
         }
 
-        // Récupération des éléments potentiels
+        // Fonction qui recharge les événements après la recherche
+        function reloadCalendarEvents() {
+            if (typeof calendar === 'undefined' || !calendar) {
+                console.error("📌 Le calendrier n'est pas encore initialisé !");
+                return;
+            }
+
+            showCalendarLoading(); // ✅ Afficher le loading du calendrier uniquement
+
+            $.ajax({
+                url: '{{ route("appointments.ajax") }}', // Assure-toi que cette route retourne bien les événements JSON
+                type: 'GET',
+                data: {
+                    start: calendar.view?.currentStart?.toISOString().split('T')[0] || '',
+                    end: calendar.view?.currentEnd?.toISOString().split('T')[0] || ''
+                },
+                success: function(responseEvents) {
+                    console.log("📌 Événements mis à jour :", responseEvents);
+
+                    calendar.removeAllEvents(); // Supprimer les anciens événements
+                    calendar.addEventSource(responseEvents); // Ajouter les nouveaux événements
+
+                    hideCalendarLoading(); // ✅ Cacher le loading du calendrier uniquement
+                },
+                error: function() {
+                    hideCalendarLoading();
+                    console.error("❌ Erreur lors du chargement AJAX des événements.");
+                }
+            });
+        }
+
+        // Après soumission du formulaire de recherche
+        $('#searchForm').on('submit', function(event) {
+            event.preventDefault(); // Empêcher le rechargement de la page
+            showLoadingOverlay();
+
+            let formData = $(this).serialize();
+            $.ajax({
+                url: '{{ route("appointments.search") }}',
+                type: 'GET',
+                data: formData,
+                success: function(response) {
+                    // Met à jour la section qui contient la légende et le calendrier
+                    $('#calendarContainer').html(response);
+                    console.log("Calendrier et légende mis à jour");
+
+                    // Attendre que le DOM soit mis à jour avant d'initialiser le calendrier
+                    setTimeout(function() {
+                        if (document.getElementById('calendar')) {
+                            initFullCalendar();
+                            reloadCalendarEvents(); // Recharger les événements après l'init du calendrier
+                        } else {
+                            console.error("❌ Impossible d'initialiser le calendrier : élément introuvable.");
+                        }
+                    }, 300); // Délai pour s'assurer que le DOM est bien mis à jour
+
+                    hideLoadingOverlay();
+                },
+                error: function() {
+                    hideLoadingOverlay();
+                    console.error("❌ Erreur lors de la recherche.");
+                }
+            });
+        });
+
         const startAtCalendar     = document.getElementById('start_at_calendar');
         const techIdModalCalendar = document.getElementById('tech_id_modal_calendar');
         if (startAtCalendar) {
-            // Événements pour lancer le calcul de trajet
             startAtCalendar.addEventListener('change', fetchRouteCalculation);
         }
         if (techIdModalCalendar) {
             techIdModalCalendar.addEventListener('change', fetchRouteCalculation);
         }
 
-        // Si le calendrier existe dans la page
+        // ================================
+        // ===== [ FullCalendar init ] ====
+        // ================================
         const calendarEl = document.getElementById('calendar');
         if (calendarEl) {
+
+            // 1) Au premier chargement, on affiche directement vos $events (ceux déjà calculés dans search()).
+            //    Ainsi, PAS de requête AJAX la première fois.
+            const initialEvents = {!! json_encode($events) !!};
+
+            // 2) On crée le calendrier AVEC ces events "statiques".
             var calendar = new FullCalendar.Calendar(calendarEl, {
                 locale: 'fr',
                 initialView: 'timeGridWeek',
@@ -430,13 +533,19 @@
                 slotMaxTime: '21:00:00',
                 hiddenDays: [0, 6],
                 validRange: {
-                    start: new Date().toISOString().split('T')[0] // Date d'aujourd'hui
+                    start: new Date().toISOString().split('T')[0]
                 },
-                events: {!! json_encode($events) !!},
+                allDaySlot: false,
 
+                // On injecte directement nos "events" calculés par search().
+                events: initialEvents,
+
+                // Pas de "events: function..." => évite le double chargement.
+
+                // dateClick => pour créer un RDV...
                 dateClick: function(info) {
                     let date = new Date(info.dateStr);
-                    let formattedDate = date.toISOString().slice(0, 16); // ex: "2025-03-04T14:00"
+                    let formattedDate = date.toISOString().slice(0, 16);
 
                     let startAtField   = document.getElementById('start_at_calendar');
                     let durationField  = document.getElementById('duration_calendar');
@@ -450,15 +559,12 @@
                         durationField.value = selectedOption ? selectedOption.dataset.duration || '' : '';
                     }
                     if (firstTechField) {
-                        // Définit la valeur par défaut au premier technicien dispo (ou vide si inexistant)
                         firstTechField.value = document.querySelector('#tech_id_modal_calendar option:first-child')?.value || '';
                     }
 
-                    // On calcule la route et on met à jour la fin
                     fetchRouteCalculation();
                     updateEndTimeCalendar();
 
-                    // Ouvrir le modal
                     let modalEl = document.getElementById('appointmentCreateFromCalendarModal');
                     if (modalEl) {
                         let modal = new bootstrap.Modal(modalEl);
@@ -466,8 +572,12 @@
                     }
                 },
 
+                // eventDidMount => applique la couleur de fond, tooltip, etc.
                 eventDidMount: function(info) {
+                    // Couleur de fond
                     info.el.style.backgroundColor = info.event.backgroundColor;
+
+                    // Exemple de bordure selon serviceType
                     const type = info.event.extendedProps.serviceType;
                     if (type === 'mar') {
                         info.el.style.border = '2px solid red';
@@ -476,17 +586,46 @@
                     } else if (type === 'cofrac') {
                         info.el.style.border = '2px solid blue';
                     }
+
+                    // Tooltip
+                    const distance = info.event.extendedProps.distanceSearch || 0;
+                    const time     = info.event.extendedProps.timeSearch     || 0;
+                    let tooltipContent = `
+                        <b>${info.event.title}</b><br/>
+                        Distance : ${distance} km<br/>
+                        Temps : ${time} min
+                    `;
+                    $(info.el).tooltip({
+                        title: tooltipContent,
+                        html: true,
+                        container: 'body',
+                        placement: 'top'
+                    });
                 },
 
+                // eventContent => pour afficher "title" + "distance/time" DANS le bloc
+                eventContent: function(arg) {
+                    const distance = arg.event.extendedProps.distanceSearch || 0;
+                    const time     = arg.event.extendedProps.timeSearch     || 0;
+
+                    let html = `
+                        <div class="fc-event-title">
+                            ${arg.event.title}
+                        </div>
+                        <div class="fc-event-time" style="margin-top: 2px;">
+                            ${distance} km - ${time} min
+                        </div>
+                    `;
+                    return { html: html };
+                },
+
+                // eventClick => ouverture du modal RDV existant
                 eventClick: function(info) {
                     var event = info.event;
                     var props = event.extendedProps;
 
-                    console.log("RDV sélectionné :", event);
-
                     let modalEl = document.getElementById('appointmentModal');
                     if (modalEl) {
-                        // Remplir les données du modal (si les éléments existent)
                         if (document.getElementById('modalClientName')) {
                             document.getElementById('modalClientName').textContent = event.title;
                         }
@@ -514,21 +653,79 @@
                             document.getElementById('modalClientAddress').textContent = props.clientAddress || 'Adresse non disponible';
                         }
 
-                        // Afficher le modal
                         var modal = new bootstrap.Modal(modalEl);
                         modal.show();
                     }
+                },
+
+                // datesSet => quand on change de semaine (prev/next), on recharge via AJAX
+                datesSet: function(info) {
+                    // info.startStr / info.endStr => ex: "2025-03-17"
+                    // On vérifie si ce n’est pas la semaine courante déjà affichée
+                    // ou on appelle systématiquement l’AJAX s’il s’agit d’une semaine différente.
+                    let startStr = info.startStr;
+                    let endStr   = info.endStr;
+
+                    // On compare si (startStr, endStr) != la semaine initiale
+                    // ou plus simple => on recharge systématiquement (à vous de voir)
+                    loadAjaxEvents(startStr, endStr);
                 }
             });
+
+            // 3) On ajoute nos events "statiques" (déjà inclus via 'events: initialEvents')
             calendar.render();
+
+            // 4) Gestion des checkboxes "tech-visibility": on relance la requête AJAX dès qu'on (dé)coche
+            $('.tech-visibility').on('change', function() {
+                const startStr = calendar.view?.currentStart?.toISOString().split('T')[0] || '';
+                const endStr   = calendar.view?.currentEnd?.toISOString().split('T')[0] || '';
+
+                // Rafraîchir le calendrier avec les techniciens actuellement cochés
+                loadAjaxEvents(startStr, endStr);
+            });
+
+            // 5) Fonction AJAX pour recharger les événements FullCalendar
+            function loadAjaxEvents(start, end) {
+                // 1) Récupérer les IDs des tech cochés
+                const selectedTechIds = [];
+                document.querySelectorAll('.tech-visibility:checked').forEach(chk => {
+                    selectedTechIds.push(chk.dataset.techId);
+                });
+
+                showCalendarLoading();
+
+                // 2) Envoyer la requête AJAX au contrôleur
+                $.ajax({
+                    url: '{{ route("appointments.ajax") }}',
+                    type: 'GET',
+                    data: {
+                        start: start,
+                        end: end,
+                        client_adresse:  '{{ request()->input("client_adresse", "") }}',
+                        client_zip_code: '{{ request()->input("client_zip_code", "") }}',
+                        client_city:     '{{ request()->input("client_city", "") }}',
+                        // IMPORTANT: les IDs cochés
+                        tech_ids:        selectedTechIds,
+                    },
+                    success: function(responseEvents) {
+                        // Retirer tous les événements actuels, puis injecter ceux reçus du serveur
+                        calendar.removeAllEvents();
+                        calendar.addEventSource(responseEvents);
+                        hideCalendarLoading();
+                    },
+                    error: function() {
+                        hideCalendarLoading();
+                        console.error("Erreur lors du chargement AJAX des événements.");
+                    }
+                });
+            }
         }
 
         hideLoadingOverlay();
 
         // ================================================
-        // ========== [ Bloc 5 : Maj fin modal #2 ] =======
+        // ===== [ Bloc 5 : Mise à jour fin modal #2 ] ====
         // ================================================
-        // Mise à jour "Se termine à" pour le formulaire dans le modal calendrier
         function updateEndTimeCalendar() {
             let startAtField  = document.getElementById('start_at_calendar');
             let durationField = document.getElementById('duration_calendar');
@@ -536,32 +733,27 @@
 
             if (!startAtField || !durationField || !endAtField) return;
 
-            let startTime = startAtField.value; // ex: "2025-03-04T14:00"
+            let startTime = startAtField.value;
             let duration  = parseInt(durationField.value, 10) || 0;
 
             if (startTime && duration > 0) {
                 let startDate = new Date(startTime);
-                // Vérifier parsing
                 if (isNaN(startDate.getTime())) {
                     console.error("Impossible de parser la date (Calendrier).");
                     endAtField.value = "";
                     return;
                 }
-                // Calcul
                 startDate.setMinutes(startDate.getMinutes() + duration);
 
-                // Format final
                 let formattedEndDate = startDate.toLocaleDateString('fr-FR') + " à " +
                     String(startDate.getHours()).padStart(2, '0') + ":" +
                     String(startDate.getMinutes()).padStart(2, '0');
-
                 endAtField.value = formattedEndDate;
             } else {
                 endAtField.value = "";
             }
         }
 
-        // Écouteurs pour la date/heure & durée du modal calendrier
         if (startAtCalendar) {
             startAtCalendar.addEventListener('input', updateEndTimeCalendar);
             startAtCalendar.addEventListener('change', updateEndTimeCalendar);
@@ -572,7 +764,6 @@
             durationCalendar.addEventListener('change', updateEndTimeCalendar);
         }
 
-        // Écouteur sur #service_id_calendar pour affecter la durée + recalcul
         const serviceSelectCalendar = document.getElementById('service_id_calendar');
         if (serviceSelectCalendar && durationCalendar) {
             serviceSelectCalendar.addEventListener('change', function() {
@@ -584,11 +775,12 @@
                 }
             });
         }
-
-        // Mise à jour initiale (cas où des valeurs seraient déjà présentes)
         updateEndTimeCalendar();
     });
 
+    // =============================
+    // ===== [ Mapbox en DOMContentLoaded ] ===
+    // =============================
     document.addEventListener("DOMContentLoaded", function () {
         // Clé API Mapbox
         mapboxgl.accessToken = 'pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw';
@@ -630,7 +822,6 @@
                     .setLngLat(clientCoords)
                     .setPopup(new mapboxgl.Popup().setText(`Client: ${fullAddressClient}`))
                     .addTo(map);
-                console.log("📌 Marqueur client ajouté aux coordonnées :", clientCoords);
 
                 // Fonction asynchrone pour récupérer les coordonnées des techniciens et tracer les itinéraires
                 async function getTechCoordsAndRoutes() {
@@ -638,15 +829,12 @@
                         let tech = techsAdresses[index];
                         let techAddress = `${tech.tech.adresse}, ${tech.tech.zip_code} ${tech.tech.city}`;
 
-                        console.log(`🔍 Recherche des coordonnées pour : ${tech.tech.user.prenom} ${tech.tech.user.nom} - ${techAddress}`);
 
                         let response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(techAddress)}.json?access_token=${mapboxgl.accessToken}`);
                         let data = await response.json();
 
                         if (data.features && data.features.length > 0) {
                             let techCoords = data.features[0].center; // [lon, lat]
-
-                            console.log(`✅ Coordonnées trouvées pour ${tech.tech.user.prenom} ${tech.tech.user.nom} :`, techCoords);
 
                             // Récupérer et tracer l'itinéraire entre le technicien et le client
                             let routeUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${techCoords[0]},${techCoords[1]};${clientCoords[0]},${clientCoords[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
@@ -668,7 +856,6 @@
                                         ⏳ <b>Durée :</b> ${duration} min
                                     `))
                                     .addTo(map);
-                                console.log(`📌 Marqueur ajouté pour ${tech.tech.user.prenom} ${tech.tech.user.nom} aux coordonnées :`, techCoords);
 
                                 // Ajout du trajet en ligne colorée
                                 map.addLayer({
@@ -693,7 +880,6 @@
                                     }
                                 });
 
-                                console.log(`🚗 Itinéraire ajouté entre ${tech.tech.user.prenom} ${tech.tech.user.nom} et le client.`);
                             } else {
                                 console.error(`❌ Impossible de récupérer l'itinéraire pour ${tech.tech.user.prenom} ${tech.tech.user.nom}`);
                             }
@@ -714,6 +900,5 @@
             })
             .catch(error => console.error("❌ Erreur lors du géocodage :", error));
     });
-
 </script>
 @endsection

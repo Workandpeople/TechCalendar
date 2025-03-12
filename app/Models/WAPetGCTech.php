@@ -52,4 +52,10 @@ class WAPetGCTech extends Model
     {
         return $this->hasMany(WAPetGCAppointment::class, 'tech_id', 'id');
     }
+
+    public function getDepartmentAttribute()
+    {
+        // On sécurise un peu si zip_code fait moins de 2 caractères
+        return substr($this->zip_code ?? '', 0, 2) ?: 'XX';
+    }
 }

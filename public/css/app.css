@@ -18,9 +18,23 @@
     font-size: 3rem;
 }
 
+/* Overlay de chargement spécifique au calendrier */
+.calendar-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(3px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+}
+
 #map {
     width: 100% !important;
-    height: 500px !important; /* Taille correcte */
     max-height: 80vh;
     aspect-ratio: 16/9; /* Garde un bon ratio d'affichage */
 }

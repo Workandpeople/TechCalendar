@@ -15,19 +15,40 @@
             @endphp
 
             @foreach(($selectedTechs ?? []) as $index => $techData)
-                @php
-                    $tech    = $techData['tech'];
-                    $user    = $tech->user;
-                    $name    = ($user->prenom ?? '').' '.($user->nom ?? '');
-                    $color   = $colors[$index] ?? '#dddddd';
-                    $distance = round($techData['distance'], 1) . ' km'; // Afficher la distance
-                @endphp
+            @php
+                $tech       = $techData['tech'];
+                $user       = $tech->user;
+                $name       = ($user->prenom ?? '').' '.($user->nom ?? '');
+                $color      = $colors[$index] ?? '#dddddd';
+                $distance   = round($techData['distance'], 1) . ' km';
+                $department = $tech->department; // via accessor
+            @endphp
 
-                <div class="d-flex align-items-center">
-                    <span style="width:20px; height:20px; background-color:{{ $color }}; margin-right:5px;"></span>
-                    <span>{{ trim($name) ?: 'Technicien #'.($index+1) }} ({{ $distance }})</span>
-                </div>
+            <div class="d-flex align-items-center">
+
+                {{-- Cocher seulement si $index < 3 --}}
+                <input
+                    type="checkbox"
+                    class="tech-visibility"
+                    data-tech-id="{{ $tech->id }}"
+                    @if ($index < 3) checked @endif
+                    style="margin-right:5px;"
+                />
+
+                {{-- Pastille de couleur --}}
+                <span style="width:20px; height:20px; background-color:{{ $color }}; margin-right:5px;"></span>
+
+                <span>
+                    {{ trim($name) ?: 'Technicien #'.($index+1) }} ({{ $department }}) ({{ $distance }})
+                </span>
+            </div>
             @endforeach
+        </div>
+
+        <div id="calendarLoadingOverlay" class="calendar-loading-overlay d-none">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
         </div>
 
         <!-- Le calendrier -->

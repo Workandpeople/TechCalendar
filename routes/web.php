@@ -36,6 +36,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/appointment', [AppointmentController::class, 'store'])->name('appointment.store');
         Route::get('/search-appointments', [AppointmentController::class, 'search'])->name('appointments.search');
         Route::get('/calculate-route', [AppointmentController::class, 'calculateRoute'])->name('appointments.calculate-route');
+        Route::get('/appointments-ajax', [AppointmentController::class, 'ajaxEvents'])->name('appointments.ajax');
 
         // Routes pour ManageUserController
         Route::get('manage-users', [ManageUserController::class, 'index'])->name('manage-users.index');
