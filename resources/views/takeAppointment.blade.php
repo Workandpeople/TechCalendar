@@ -52,11 +52,16 @@
     <!-- Form de recherche (adresse, code postal, ville, etc.) -->
     @include('partials.forms.searchForm')
 
-    <!-- Toujours afficher le calendrier et la légende, même vide -->
-    @include('partials.tables.resultCalendar', [
-        'selectedTechs' => $selectedTechs ?? [],
-        'appointments'  => $appointments ?? []
-    ])
+    @if(
+        request()->filled('client_adresse') ||
+        request()->filled('client_zip_code') ||
+        request()->filled('client_city')
+     )
+         @include('partials.tables.resultCalendar', [
+             'selectedTechs' => $selectedTechs ?? [],
+             'appointments'  => $appointments ?? []
+         ])
+     @endif
 
     @include('partials.modals.interactiveMap')
 
@@ -485,36 +490,7 @@
 
         // Après soumission du formulaire de recherche
         $('#searchForm').on('submit', function(event) {
-            event.preventDefault(); // Empêcher le rechargement de la page
             showLoadingOverlay();
-
-            let formData = $(this).serialize();
-            $.ajax({
-                url: '{{ route("appointments.search") }}',
-                type: 'GET',
-                data: formData,
-                success: function(response) {
-                    // Met à jour la section qui contient la légende et le calendrier
-                    $('#calendarContainer').html(response);
-                    console.log("Calendrier et légende mis à jour");
-
-                    // Attendre que le DOM soit mis à jour avant d'initialiser le calendrier
-                    setTimeout(function() {
-                        if (document.getElementById('calendar')) {
-                            initFullCalendar();
-                            reloadCalendarEvents(); // Recharger les événements après l'init du calendrier
-                        } else {
-                            console.error("❌ Impossible d'initialiser le calendrier : élément introuvable.");
-                        }
-                    }, 300); // Délai pour s'assurer que le DOM est bien mis à jour
-
-                    hideLoadingOverlay();
-                },
-                error: function() {
-                    hideLoadingOverlay();
-                    console.error("❌ Erreur lors de la recherche.");
-                }
-            });
         });
 
         const startAtCalendar     = document.getElementById('start_at_calendar');
