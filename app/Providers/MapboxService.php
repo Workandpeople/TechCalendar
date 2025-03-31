@@ -21,8 +21,6 @@ class MapboxService
         $url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" . urlencode($address) . ".json";
 
         try {
-            Log::info("📍 Envoi de la requête Mapbox Geocoding pour : $address");
-
             $response = Http::withoutVerifying()
                 ->timeout(30)
                 ->get($url, [
@@ -30,12 +28,8 @@ class MapboxService
                     'limit' => 1
                 ]);
 
-            Log::info("🔄 Réponse reçue de Mapbox : HTTP " . $response->status());
-
             if ($response->successful()) {
                 $data = $response->json();
-                Log::info("✅ Réponse JSON : " . json_encode($data));
-
                 if (isset($data['features'][0]['center'])) {
                     return $data['features'][0]['center']; // [longitude, latitude]
                 } else {
@@ -57,7 +51,6 @@ class MapboxService
         $url = "https://api.mapbox.com/directions/v5/mapbox/driving/{$startCoordinates[0]},{$startCoordinates[1]};{$endCoordinates[0]},{$endCoordinates[1]}";
 
         try {
-            Log::info("🚗 Calcul de l'itinéraire entre " . json_encode($startCoordinates) . " et " . json_encode($endCoordinates));
 
             $response = Http::withoutVerifying()
                 ->timeout(30)
@@ -66,11 +59,9 @@ class MapboxService
                     'geometries' => 'geojson'
                 ]);
 
-            Log::info("🔄 Réponse reçue de Mapbox Directions : HTTP " . $response->status());
 
             if ($response->successful()) {
                 $data = $response->json();
-                Log::info("✅ Réponse JSON : " . json_encode($data));
 
                 if (!empty($data['routes'])) {
                     $route = $data['routes'][0];
@@ -94,13 +85,11 @@ class MapboxService
     // Fonction pour obtenir la distance et le temps de trajet entre deux adresses
     public function calculateRouteBetweenAddresses($startAddress, $endAddress)
     {
-        Log::info("📌 Début du calcul d'itinéraire entre : $startAddress et $endAddress");
 
         $startCoordinates = $this->geocodeAddress($startAddress);
         $endCoordinates = $this->geocodeAddress($endAddress);
 
         if ($startCoordinates && $endCoordinates) {
-            Log::info("✅ Coordonnées obtenues : Départ -> " . json_encode($startCoordinates) . " | Arrivée -> " . json_encode($endCoordinates));
             return $this->getRoute($startCoordinates, $endCoordinates);
         }
 

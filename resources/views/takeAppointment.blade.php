@@ -112,6 +112,7 @@
                 'comment'       => $comment,
                 'clientAddress' => $clientAddress,
                 'clientPhone'   => $appoint->client_phone ?? 'Non spécifié',
+                'clientName' => trim($appoint->client_fname . ' ' . $appoint->client_lname),
 
                 // On utilise les variables locales que l'on vient de définir
                 'distanceSearch' => $distFromSearch,
@@ -440,6 +441,8 @@
                         date: startAt
                     },
                     success: function(response) {
+                        console.log("🚗 Réponse de /calculate-route :", response); // 👈 ajoute ceci
+
                         if (response.distance_km && response.duration_minutes) {
                             let distanceField = document.getElementById('trajet_distance_calendar');
                             let timeField     = document.getElementById('trajet_time_calendar');
@@ -560,33 +563,80 @@
                 },
 
                 eventDidMount: function(info) {
-                    // Couleur de fond
-                    info.el.style.backgroundColor = info.event.backgroundColor;
+                    const props = info.event.extendedProps;
 
-                    // Exemple de bordure selon serviceType
-                    const type = info.event.extendedProps.serviceType;
-                    if (type === 'mar') {
-                        info.el.style.border = '2px solid red';
-                    } else if (type === 'audit') {
-                        info.el.style.border = '2px solid green';
-                    } else if (type === 'cofrac') {
-                        info.el.style.border = '2px solid blue';
+                    // Si la distance est déjà calculée, on affiche le tooltip immédiatement
+                    if (props.distanceSearch && props.timeSearch) {
+                        attachTooltip(info.el, props);
+                    } else {
+                        info.el.addEventListener('mouseenter', function () {
+                            if (info.event.extendedProps._calculating) return;
+                            info.event.extendedProps._calculating = true;
+
+                            const fullAddress = info.event.extendedProps.clientAddress;
+                            let adresse = '', zip = '', city = '';
+
+                            if (fullAddress.includes(',')) {
+                                // Cas habituel avec virgule
+                                const parts = fullAddress.split(',');
+                                adresse = parts[0].trim();
+                                const zipCity = parts[1].trim();
+                                const zipMatch = zipCity.match(/^(\d{5})\s+(.*)$/);
+                                if (!zipMatch) {
+                                    console.warn("Code postal + ville mal formés :", zipCity);
+                                    return;
+                                }
+                                zip = zipMatch[1];
+                                city = zipMatch[2];
+                            } else {
+                                // Fallback sans virgule
+                                const match = fullAddress.match(/^(.+?)\s+(\d{5})\s+(.+)$/);
+                                if (!match) {
+                                    console.warn("Adresse mal formée (sans virgule) :", fullAddress);
+                                    return;
+                                }
+                                adresse = match[1].trim();
+                                zip = match[2];
+                                city = match[3].trim();
+                            }
+
+                            $.ajax({
+                                url: '/calculate-route',
+                                type: 'GET',
+                                data: {
+                                    tech_id: info.event.extendedProps.tech_id,
+                                    date: info.event.startStr,
+                                    client_adresse: adresse,
+                                    client_zip_code: zip,
+                                    client_city: city
+                                },
+                                success: function (res) {
+                                    console.log("📦 Résultat AJAX du calcul de trajet :", res);
+                                    if (res.distance_km && res.duration_minutes) {
+                                        info.event.setExtendedProp('distanceSearch', res.distance_km);
+                                        info.event.setExtendedProp('timeSearch', res.duration_minutes);
+
+                                        attachTooltip(info.el, {
+                                            ...info.event.extendedProps,
+                                            distanceSearch: res.distance_km,
+                                            timeSearch: res.duration_minutes
+                                        });
+                                    }
+                                },
+                                error: function () {
+                                    console.warn('Erreur lors du calcul du trajet');
+
+                                    attachTooltip(info.el, {
+                                        clientName: info.event.extendedProps.clientName || 'Client',
+                                        distanceSearch: 'Récupération impossible',
+                                        timeSearch: ''
+                                    });
+
+                                    $(info.el).tooltip('show');
+                                }
+                            });
+                        });
                     }
-
-                    // Tooltip
-                    const distance = info.event.extendedProps.distanceSearch || 0;
-                    const time     = info.event.extendedProps.timeSearch     || 0;
-                    let tooltipContent = `
-                        <b>${info.event.title}</b><br/>
-                        Distance : ${distance} km<br/>
-                        Temps : ${time} min
-                    `;
-                    $(info.el).tooltip({
-                        title: tooltipContent,
-                        html: true,
-                        container: 'body',
-                        placement: 'top'
-                    });
                 },
 
                 eventContent: function(arg) {
@@ -596,9 +646,6 @@
                     let html = `
                         <div class="fc-event-title">
                             ${arg.event.title}
-                        </div>
-                        <div class="fc-event-time" style="margin-top: 2px;">
-                            ${distance} km - ${time} min
                         </div>
                     `;
                     return { html: html };
@@ -650,6 +697,33 @@
                     loadAjaxEvents(startStr, endStr);
                 }
             });
+
+            function attachTooltip(el, props) {
+                let distance = props.distanceSearch;
+                let time     = props.timeSearch;
+
+                if (distance === 'Récupération impossible') {
+                    distance = 'Récupération impossible';
+                    time = '';
+                } else {
+                    distance = distance !== undefined ? distance + ' km' : 'N/A';
+                    time     = time !== undefined ? time + ' min' : 'N/A';
+                }
+                console.log("distance:", distance, "time:", time); // 👈 ici aussi
+
+                const tooltipContent = `
+                    <b>${props.clientName || 'Client'}</b><br/>
+                    ${distance} – ${time}
+                `;
+
+                // Forcer la réinitialisation du tooltip s'il existait
+                $(el).tooltip('dispose').tooltip({
+                    title: tooltipContent,
+                    html: true,
+                    container: 'body',
+                    placement: 'top'
+                });
+            }
 
             // 3) Render initial
             calendar.render();
@@ -814,122 +888,145 @@
     // ===== [ Mapbox en DOMContentLoaded ] ===
     // =============================
     document.addEventListener("DOMContentLoaded", function () {
-        // Clé API Mapbox
-        mapboxgl.accessToken = 'pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw';
+    // Clé API Mapbox et désactivation de la télémétrie
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw';
+    mapboxgl.config.EVENTS_URL = null;
 
-        // Désactiver la télémétrie pour éviter ERR_BLOCKED_BY_CLIENT
-        mapboxgl.config.EVENTS_URL = null;
+    // Récupération des informations client et techniciens depuis Laravel
+    let clientAdresse = {!! json_encode(request()->input('client_adresse', '')) !!};
+    let clientZipCode = {!! json_encode(request()->input('client_zip_code', '')) !!};
+    let clientCity    = {!! json_encode(request()->input('client_city', '')) !!};
+    let techsAdresses = {!! json_encode($selectedTechs ?? []) !!}; // Liste des 5 techniciens
 
-        // Récupérer les adresses depuis Laravel
-        let clientAdresse = {!! json_encode(request()->input('client_adresse', '')) !!};
-        let clientZipCode = {!! json_encode(request()->input('client_zip_code', '')) !!};
-        let clientCity    = {!! json_encode(request()->input('client_city', '')) !!};
-        let techsAdresses = {!! json_encode($selectedTechs ?? []) !!}; // Liste des 5 techniciens
+    let fullAddressClient = `${clientAdresse}, ${clientZipCode} ${clientCity}`;
+    console.log("Adresse client complète :", fullAddressClient);
 
-        let fullAddressClient = `${clientAdresse}, ${clientZipCode} ${clientCity}`;
+    let mapContainer = document.getElementById('map');
+    if (!mapContainer) {
+        console.error("Aucun conteneur pour la carte trouvé.");
+        return;
+    }
 
-        let mapContainer = document.getElementById('map');
-        if (!mapContainer) return;
+    // Initialisation de la carte avec un centre par défaut sur Paris
+    let map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [2.333333, 48.866667],
+        zoom: 12
+    });
+    console.log("Carte initialisée.");
 
-        // Couleurs des techniciens selon la légende
-        let techColors = ['#ff9999', '#99ff99', '#9999ff', '#ffcc99', '#99ccff'];
-
-        // Récupération des coordonnées du client via Mapbox
-        fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddressClient)}.json?access_token=${mapboxgl.accessToken}`)
-            .then(response => response.json())
-            .then(clientData => {
-                if (!clientData.features || clientData.features.length === 0) return;
-                let clientCoords = clientData.features[0].center; // [lon, lat]
-
-                // Initialisation de la carte en mode sombre
-                let map = new mapboxgl.Map({
-                    container: 'map',
-                    style: 'mapbox://styles/mapbox/dark-v11', // Mode sombre
-                    center: clientCoords,
-                    zoom: 12
-                });
-
-                // Marqueur rouge pour l'adresse client
+    // Géocodage de l'adresse du client et ajout d'un marqueur rouge
+    fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddressClient)}.json?access_token=${mapboxgl.accessToken}`)
+        .then(response => response.json())
+        .then(clientData => {
+            if (clientData.features && clientData.features.length > 0) {
+                let clientCoords = clientData.features[0].center;
+                map.setCenter(clientCoords);
                 new mapboxgl.Marker({ color: "red" })
                     .setLngLat(clientCoords)
                     .setPopup(new mapboxgl.Popup().setText(`Client: ${fullAddressClient}`))
                     .addTo(map);
+            } else {
+                console.error("Aucune donnée de géocodage pour le client.");
+            }
+        })
+        .catch(error => console.error("Erreur lors du géocodage du client :", error));
 
-                // Fonction asynchrone pour récupérer les coordonnées des techniciens et tracer les itinéraires
-                async function getTechCoordsAndRoutes() {
-                    for (let index = 0; index < techsAdresses.length; index++) {
-                        let tech = techsAdresses[index];
-                        let techAddress = `${tech.tech.adresse}, ${tech.tech.zip_code} ${tech.tech.city}`;
+    // Variables globales pour les filtres
+    let selectedDay = null;  // jour sélectionné, par ex. "Monday"
+    let selectedHour = 8;    // heure sélectionnée via le curseur (par défaut 8)
 
-                        let response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(techAddress)}.json?access_token=${mapboxgl.accessToken}`);
-                        let data = await response.json();
-
-                        if (data.features && data.features.length > 0) {
-                            let techCoords = data.features[0].center; // [lon, lat]
-
-                            // Récupérer et tracer l'itinéraire entre le technicien et le client
-                            let routeUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${techCoords[0]},${techCoords[1]};${clientCoords[0]},${clientCoords[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
-
-                            let routeResponse = await fetch(routeUrl);
-                            let routeData = await routeResponse.json();
-
-                            if (routeData.routes && routeData.routes.length > 0) {
-                                let route = routeData.routes[0].geometry;
-                                let distance = (routeData.routes[0].distance / 1000).toFixed(2); // en km
-                                let duration = Math.round(routeData.routes[0].duration / 60); // en minutes
-
-                                // Ajouter un marqueur pour le technicien avec les infos de trajet
-                                new mapboxgl.Marker({ color: techColors[index] })
-                                    .setLngLat(techCoords)
-                                    .setPopup(new mapboxgl.Popup().setHTML(`
-                                        <b>${tech.tech.user.prenom} ${tech.tech.user.nom}</b><br>
-                                        🚗 <b>Distance :</b> ${distance} km<br>
-                                        ⏳ <b>Durée :</b> ${duration} min
-                                    `))
-                                    .addTo(map);
-
-                                // Ajout du trajet en ligne colorée
-                                map.addLayer({
-                                    id: `route-${index}`,
-                                    type: 'line',
-                                    source: {
-                                        type: 'geojson',
-                                        data: {
-                                            type: 'Feature',
-                                            properties: {},
-                                            geometry: route
-                                        }
-                                    },
-                                    layout: {
-                                        'line-join': 'round',
-                                        'line-cap': 'round'
-                                    },
-                                    paint: {
-                                        'line-color': techColors[index],
-                                        'line-width': 4,
-                                        'line-opacity': 0.8
-                                    }
-                                });
-
-                            } else {
-                                console.error(`❌ Impossible de récupérer l'itinéraire pour ${tech.tech.user.prenom} ${tech.tech.user.nom}`);
-                            }
-                        }
-                    }
-                }
-
-                // Charger les coordonnées des techniciens et tracer les itinéraires
-                getTechCoordsAndRoutes();
-
-                // Recentrer la carte lors de l'ouverture du modal
-                $('#mapModal').on('shown.bs.modal', function () {
-                    setTimeout(() => {
-                        map.resize();
-                        map.flyTo({ center: clientCoords, zoom: 12 });
-                    }, 300);
-                });
-            })
-            .catch(error => console.error("❌ Erreur lors du géocodage :", error));
+    // Mise à jour du label du curseur et rechargement des RDV sur la carte
+    $('#mapTimeSlider').on('input change', function () {
+        selectedHour = parseFloat($(this).val());
+        $('#mapTimeLabel').text(selectedHour + ":00");
+        console.log("Heure sélectionnée :", selectedHour);
+        loadMapAppointments();
     });
+
+    // Gestion des boutons jour
+    $('.map-day-btn').on('click', function () {
+        $('.map-day-btn').removeClass('active');
+        $(this).addClass('active');
+        selectedDay = $(this).data('day');
+        console.log("Jour sélectionné :", selectedDay);
+        loadMapAppointments();
+    });
+    // Sélectionner par défaut le premier bouton (ex: Lundi)
+    $('.map-day-btn').first().click();
+
+    // Recharger la carte lorsque l'utilisateur modifie les cases à cocher de la légende
+    $('.map-tech-visibility').on('change', function () {
+        console.log("Modification de la légende, recharge de la carte.");
+        loadMapAppointments();
+    });
+
+    // Fonction pour charger les rendez-vous et afficher les marqueurs sur la carte
+    function loadMapAppointments() {
+        let selectedTechIds = [];
+        $('.map-tech-visibility:checked').each(function () {
+            selectedTechIds.push($(this).data('techId'));
+        });
+        console.log("Tech IDs sélectionnés :", selectedTechIds);
+        if (!selectedTechIds.length) {
+            console.log("Aucun technicien sélectionné. Suppression des marqueurs.");
+            if (window.mapMarkers && window.mapMarkers.length) {
+                window.mapMarkers.forEach(marker => marker.remove());
+                window.mapMarkers = [];
+            }
+            return;
+        }
+        let params = {
+            tech_ids: selectedTechIds,
+            day: selectedDay,
+            start_hour: selectedHour,
+            client_adresse: {!! json_encode(request()->input('client_adresse', '')) !!},
+            client_zip_code: {!! json_encode(request()->input('client_zip_code', '')) !!},
+            client_city: {!! json_encode(request()->input('client_city', '')) !!}
+        };
+        console.log("Paramètres envoyés à /map-appointments :", params);
+
+        $.ajax({
+            url: '/map-appointments',
+            type: 'GET',
+            data: params,
+            success: function(responseAppointments) {
+                console.log("Réponse des rendez-vous pour la carte :", responseAppointments);
+                // Suppression des marqueurs existants
+                if (window.mapMarkers && window.mapMarkers.length) {
+                    window.mapMarkers.forEach(marker => marker.remove());
+                }
+                window.mapMarkers = [];
+                responseAppointments.forEach(function(appt) {
+                    if (appt.coords) {
+                        let marker = new mapboxgl.Marker()
+                            .setLngLat(appt.coords)
+                            .setPopup(new mapboxgl.Popup().setHTML(`
+                                <strong>${appt.title}</strong><br>
+                                Début : ${appt.start}<br>
+                                ${appt.techName}
+                            `))
+                            .addTo(map);
+                        window.mapMarkers.push(marker);
+                    } else {
+                        console.warn("Aucune coordonnée pour le RDV ID :", appt.id);
+                    }
+                });
+            },
+            error: function(err) {
+                console.error("Erreur lors du chargement des rendez-vous pour la carte :", err);
+            }
+        });
+    }
+
+    // Recharger la carte lors de l'ouverture du modal
+    $('#mapModal').on('shown.bs.modal', function () {
+        setTimeout(() => {
+            map.resize();
+            loadMapAppointments();
+        }, 300);
+    });
+});
 </script>
 @endsection

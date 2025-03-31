@@ -144,8 +144,6 @@ class AppointmentController extends Controller
 
     public function search(Request $request, \App\Providers\MapboxService $mapboxService)
     {
-        Log::info('Début de la recherche de techniciens.', ['requestData' => $request->all()]);
-
         // 1) Construit l'adresse
         $clientAddress = trim(
             $request->input('client_adresse', '').' '.
@@ -224,48 +222,63 @@ class AppointmentController extends Controller
 
     public function calculateRoute(Request $request, \App\Providers\MapboxService $mapboxService)
     {
-        $techId = $request->input('tech_id');
-        $dateSelected = $request->input('date');
-        $clientAddress = trim($request->input('client_adresse') . ' ' . $request->input('client_zip_code') . ' ' . $request->input('client_city'));
+        try {
+            $techId = $request->input('tech_id');
+            $dateSelected = $request->input('date');
+            $clientAddress = trim($request->input('client_adresse') . ' ' . $request->input('client_zip_code') . ' ' . $request->input('client_city'));
 
-        if (!$techId) {
-            // Sélectionner le premier technicien si aucun n'est spécifié
-            $firstTech = WAPetGCTech::first();
-            if (!$firstTech) {
-                return response()->json(['error' => 'Aucun technicien disponible'], 404);
+            if (!$techId) {
+                $firstTech = WAPetGCTech::first();
+                if (!$firstTech) {
+                    return response()->json(['error' => 'Aucun technicien disponible'], 404);
+                }
+                $techId = $firstTech->id;
             }
-            $techId = $firstTech->id;
-        }
 
-        $tech = WAPetGCTech::find($techId);
-        if (!$tech) {
-            return response()->json(['error' => 'Technicien introuvable'], 404);
-        }
+            $tech = WAPetGCTech::find($techId);
+            if (!$tech) {
+                return response()->json(['error' => 'Technicien introuvable'], 404);
+            }
 
-        // Vérifier s'il existe un rendez-vous avant la date sélectionnée ce jour-là
-        $lastAppointment = WAPetGCAppointment::where('tech_id', $techId)
-            ->whereDate('start_at', $dateSelected)
-            ->where('start_at', '<', $dateSelected) // RDV avant le créneau sélectionné
-            ->orderBy('end_at', 'desc')
-            ->first();
+            $lastAppointment = WAPetGCAppointment::where('tech_id', $techId)
+                ->whereDate('start_at', $dateSelected)
+                ->where('start_at', '<', $dateSelected)
+                ->orderBy('end_at', 'desc')
+                ->first();
 
-        if ($lastAppointment) {
-            $fromAddress = "{$lastAppointment->client_adresse} {$lastAppointment->client_zip_code} {$lastAppointment->client_city}";
-        } else {
-            $fromAddress = "{$tech->adresse} {$tech->zip_code} {$tech->city}";
-        }
+            $fromAddress = $lastAppointment
+                ? "{$lastAppointment->client_adresse} {$lastAppointment->client_zip_code} {$lastAppointment->client_city}"
+                : "{$tech->adresse} {$tech->zip_code} {$tech->city}";
 
-        // Calcul de l'itinéraire
-        $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, $clientAddress);
+            $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, $clientAddress);
 
-        if ($route) {
-            return response()->json([
-                'distance_km' => $route['distance_km'],
-                'duration_minutes' => $route['duration_minutes'],
+            if ($route) {
+                Log::info("✅ Route trouvée", [
+                    'from' => $fromAddress,
+                    'to' => $clientAddress,
+                    'result' => $route
+                ]);
+
+                return response()->json([
+                    'distance_km' => $route['distance_km'],
+                    'duration_minutes' => $route['duration_minutes'],
+                ]);
+            }
+
+            Log::warning("❌ Aucune route trouvée", [
+                'from' => $fromAddress,
+                'to' => $clientAddress
             ]);
-        }
 
-        return response()->json(['error' => 'Impossible de calculer le trajet'], 500);
+            return response()->json(['error' => 'Impossible de calculer le trajet'], 500);
+
+        } catch (\Throwable $e) {
+            Log::error("Erreur calculateRoute: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'input' => $request->all(),
+            ]);
+            return response()->json(['error' => 'Erreur interne'], 500);
+        }
     }
 
     // ----- Ajout : la méthode "ajaxEvents" ------
@@ -303,12 +316,12 @@ class AppointmentController extends Controller
         foreach ($appointments as $appoint) {
             // Calcul de la distance/temps entre l'adresse client *actuel*
             // et l'adresse client saisie dans le formulaire (pour l'affichage)
-            $route = $mapboxService->calculateRouteBetweenAddresses(
-                $clientAddress,
-                $appoint->client_adresse.' '.$appoint->client_zip_code.' '.$appoint->client_city
-            );
-            $dist = $route ? $route['distance_km']       : 0;
-            $time = $route ? $route['duration_minutes']  : 0;
+            // $route = $mapboxService->calculateRouteBetweenAddresses(
+            //     $clientAddress,
+            //     $appoint->client_adresse.' '.$appoint->client_zip_code.' '.$appoint->client_city
+            // );
+            // $dist = $route ? $route['distance_km']       : 0;
+            // $time = $route ? $route['duration_minutes']  : 0;
 
             // (Optionnel) Récupérer une couleur stockée en session, ou définir une couleur par défaut
             $color = session("color_for_{$appoint->tech_id}", '#cccccc');
@@ -330,13 +343,88 @@ class AppointmentController extends Controller
                     'comment'        => $appoint->comment,
                     'clientAddress'  => $appoint->client_adresse.' '.$appoint->client_zip_code.' '.$appoint->client_city,
                     'clientPhone'    => $appoint->client_phone,
-                    'distanceSearch' => $dist,
-                    'timeSearch'     => $time,
+                    // 'distanceSearch' => $dist,
+                    // 'timeSearch'     => $time,
                 ],
             ];
         }
 
         // 6) Renvoie les événements au format JSON (pour FullCalendar)
         return response()->json($events);
+    }
+
+    public function mapAppointments(Request $request, \App\Providers\MapboxService $mapboxService)
+    {
+        Log::info('MapAppointments - paramètres reçus', $request->all());
+
+        // Récupérer les paramètres
+        $techIds = $request->input('tech_ids', []);
+        $day = $request->input('day'); // ex: "Monday"
+        $startHour = $request->input('start_hour'); // ex: 8
+
+        Log::info("MapAppointments - techIds:", $techIds);
+        Log::info("MapAppointments - day: {$day}, start_hour: {$startHour}");
+
+        if (empty($techIds)) {
+            Log::info("MapAppointments - aucun technicien sélectionné.");
+            return response()->json([]);
+        }
+
+        // Récupérer tous les rendez-vous pour les techniciens sélectionnés
+        $appointments = WAPetGCAppointment::whereIn('tech_id', $techIds)->get();
+        Log::info("MapAppointments - nombre de rendez-vous récupérés avant filtrage: " . $appointments->count());
+
+        // Conversion du jour en numéro (en utilisant le format ISO où Monday = 1, etc.)
+        $dayMap = [
+            'Monday'    => 2,
+            'Tuesday'   => 3,
+            'Wednesday' => 4,
+            'Thursday'  => 5,
+            'Friday'    => 6,
+            'Saturday'  => 7,
+            'Sunday'    => 1,
+        ];
+        $targetDay = $dayMap[$day] ?? null;
+        if (!$targetDay) {
+            Log::info("MapAppointments - jour cible non valide.");
+            return response()->json([]);
+        }
+
+        // Filtrer les rendez-vous selon le jour et l'heure (heure de début >= $startHour)
+        $appointments = $appointments->filter(function($appoint) use ($targetDay, $startHour) {
+            $startAt = \Carbon\Carbon::parse($appoint->start_at);
+            // On ajuste selon dayOfWeekIso (Monday=1, etc.) puis on ajoute 1 pour correspondre à notre mapping
+            return (($startAt->dayOfWeekIso + 1) == $targetDay || ($startAt->dayOfWeek == 0 && $targetDay == 1))
+                && ((int)$startAt->format('H')) >= $startHour;
+        });
+        Log::info("MapAppointments - nombre de rendez-vous après filtrage: " . $appointments->count());
+
+        // Préparer le résultat en géocodant l'adresse de chaque rendez-vous
+        $results = [];
+        foreach ($appointments as $appoint) {
+            $apptAddress = trim($appoint->client_adresse . ', ' . $appoint->client_zip_code . ', ' . $appoint->client_city);
+            $url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" . urlencode($apptAddress)
+                 . ".json?access_token=pk.eyJ1IjoiZGlubmljaGVydGwiLCJhIjoiY20zaGZ4dmc5MGJjdzJrcXpvcTU2ajg5ZiJ9.gfuUn87ezzfPm-hxtEDotw" . config('services.mapbox.token');
+            $json = @file_get_contents($url);
+            if ($json === false) {
+                Log::warning("MapAppointments - géocodage échoué pour l'adresse: {$apptAddress}");
+                continue;
+            }
+            $data = json_decode($json, true);
+            $coords = isset($data['features'][0]['center']) ? $data['features'][0]['center'] : null;
+            Log::info("MapAppointments - RDV ID {$appoint->id} coordonnées :", $coords ?? []);
+            if ($coords) {
+                $results[] = [
+                    'id'       => $appoint->id,
+                    'title'    => $appoint->client_fname . ' ' . $appoint->client_lname,
+                    'start'    => $appoint->start_at,
+                    'techName' => optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom,
+                    'coords'   => $coords,
+                ];
+            }
+        }
+
+        Log::info("MapAppointments - Nombre de RDV renvoyés: " . count($results));
+        return response()->json($results);
     }
 }
