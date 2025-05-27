@@ -24,7 +24,7 @@
 @section('pageHeading')
 <div class="d-sm-flex align-items-center justify-content-between mb-4">
     <h1 class="h3 mb-0 text-gray-800">Votre calendrier</h1>
-    <a href="#" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm">
+    <a href="{{ route('tech-dashboard.index') }}" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm">
         <i class="fas fa-tachometer fa-sm text-white-50"></i> Dashboard
     </a>
 </div>
@@ -96,7 +96,7 @@ $(document).ready(function () {
         let calendarEl = document.getElementById('calendar');
         calendar = new FullCalendar.Calendar(calendarEl, {
             locale: 'fr',
-            initialView: 'timeGridWeek',
+            initialView: 'timeGridDay',
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
@@ -105,6 +105,7 @@ $(document).ready(function () {
             slotMinTime: '08:00:00',
             slotMaxTime: '21:00:00',
             hiddenDays: [0, 6],
+            allDaySlot: false,
             events: [],
             // Ajout d'un callback pour modifier l'affichage des événements soft deleted
             eventDidMount: function(info) {

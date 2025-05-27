@@ -53,3 +53,7 @@
     flex-direction: column;
     height: auto;
 }
+
+.tech-only-sidebar {
+    display: none !important;
+}

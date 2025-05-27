@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\WAPetGCAppointment;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
 
 class TechDashboardController extends Controller
 {
@@ -54,46 +57,96 @@ class TechDashboardController extends Controller
     }
 
     /**
-     * Récupérer les rendez-vous du technicien connecté pour le mois en cours via AJAX.
+     * Récupérer les rendez-vous du technicien connecté via AJAX.
      */
     public function getAppointments(Request $request)
     {
-        $user = Auth::user();
-        $techId = $user->tech->id ?? null;
+        try {
+            // Récupérer l'ID du technicien connecté
+            $techId = Auth::user()->tech->id ?? null;
 
-        if (!$techId) {
+            if (!$techId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aucun technicien associé à votre compte.',
+                ], 403);
+            }
+
+            // Récupérer les rendez-vous du technicien connecté
+            $appointments = WAPetGCAppointment::where('tech_id', $techId)
+                ->with(['service', 'tech.user'])
+                ->get()
+                ->map(function ($appoint) {
+                    // Couleur de fond par défaut basée sur le tech_id
+                    $bgColor = '#' . substr(md5($appoint->tech_id), 0, 6);
+                    $isDeleted = $appoint->deleted_at !== null;
+                    if ($isDeleted) {
+                        // Si soft deleted, on utilise une couleur orange
+                        $bgColor = '#FFA500';
+                    }
+                    return [
+                        'id' => $appoint->id,
+                        'title' => $appoint->client_fname . ' ' . $appoint->client_lname,
+                        'start' => $appoint->start_at,
+                        'end' => $appoint->end_at,
+                        'backgroundColor' => $bgColor,
+                        'extendedProps' => [
+                            'techName' => optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom,
+                            'serviceName' => optional($appoint->service)->name ?? 'Non spécifié',
+                            'comment' => $appoint->comment ?? 'Aucun commentaire',
+                            'clientAddress' => trim("{$appoint->client_adresse}, {$appoint->client_zip_code} {$appoint->client_city}"),
+                            'clientPhone' => $appoint->client_phone,
+                            'isDeleted' => $isDeleted,
+                        ]
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'appointments' => $appointments,
+            ]);
+
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Vous n\'êtes pas un technicien.',
-            ], 403);
+                'message' => 'Erreur interne du serveur',
+            ], 500);
+        }
+    }
+
+    public function sync()
+    {
+        $techId = Auth::user()->tech->id ?? null;
+
+        if (!$techId) {
+            Log::warning("Sync échouée : utilisateur sans tech_id.");
+            return response()->json(['success' => false, 'message' => 'Aucun technicien trouvé.'], 403);
         }
 
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
-
         $appointments = WAPetGCAppointment::where('tech_id', $techId)
-            ->whereBetween('start_at', [$startOfMonth, $endOfMonth])
-            ->with(['service', 'tech.user'])
-            ->get()
-            ->map(function ($appoint) {
-                return [
-                    'id' => $appoint->id,
-                    'title' => $appoint->client_fname . ' ' . $appoint->client_lname,
-                    'start' => $appoint->start_at,
-                    'end' => $appoint->end_at,
-                    'backgroundColor' => '#' . substr(md5($appoint->tech_id), 0, 6),
-                    'extendedProps' => [
-                        'techName' => optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom,
-                        'serviceName' => optional($appoint->service)->name ?? 'Non spécifié',
-                        'comment' => $appoint->comment ?? 'Aucun commentaire',
-                        'clientAddress' => trim("{$appoint->client_adresse}, {$appoint->client_zip_code} {$appoint->client_city}"),
-                    ]
-                ];
-            });
+            ->where('start_at', '>=', now())
+            ->get();
 
-        return response()->json([
-            'success' => true,
-            'appointments' => $appointments,
-        ]);
+        Log::info("Génération ICS pour {$appointments->count()} RDV (tech_id: $techId)");
+
+        $icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//TechCalendar//FR\n";
+        foreach ($appointments as $appt) {
+            $start = \Carbon\Carbon::parse($appt->start_at)->format('Ymd\THis');
+            $end = \Carbon\Carbon::parse($appt->end_at)->format('Ymd\THis');
+            $icsContent .= "BEGIN:VEVENT\n";
+            $icsContent .= "UID:appt-{$appt->id}@techcalendar\n";
+            $icsContent .= "DTSTAMP:".now()->format('Ymd\THis')."\n";
+            $icsContent .= "DTSTART:$start\n";
+            $icsContent .= "DTEND:$end\n";
+            $icsContent .= "SUMMARY:RDV avec {$appt->client_fname} {$appt->client_lname}\n";
+            $icsContent .= "LOCATION:{$appt->client_adresse}, {$appt->client_zip_code} {$appt->client_city}\n";
+            $icsContent .= "DESCRIPTION:Technicien: {$appt->tech->user->prenom} {$appt->tech->user->nom}\n";
+            $icsContent .= "END:VEVENT\n";
+        }
+        $icsContent .= "END:VCALENDAR";
+
+        return response($icsContent, 200)
+            ->header('Content-Type', 'text/calendar')
+            ->header('Content-Disposition', 'attachment; filename="rendez-vous.ics"');
     }
 }

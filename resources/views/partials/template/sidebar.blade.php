@@ -1,6 +1,5 @@
 <!-- Sidebar -->
-<ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar">
-
+<ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion {{ isset($userRole) && in_array($userRole, ['tech']) ? 'tech-only-sidebar' : '' }}" id="accordionSidebar">
     <!-- Sidebar - Brand -->
     <a class="sidebar-brand d-flex align-items-center justify-content-center" href="{{ route('home.index') }}">
         <div class="sidebar-brand-icon rotate-n-15">
@@ -89,13 +88,13 @@
                 <span>Dashboard</span>
             </a>
         </li>
-
+{{--
         <li class="nav-item {{ request()->routeIs('techCalendar.index') ? 'active' : '' }}">
             <a class="nav-link" href="{{ route('tech-calendar.index') }}">
                 <i class="fas fa-fw fa-calendar-day"></i>
                 <span>Calendrier</span>
             </a>
-        </li>
+        </li> --}}
 
         <!-- Divider -->
         <hr class="sidebar-divider">
