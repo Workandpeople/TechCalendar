@@ -28,15 +28,15 @@ class DatabaseSeeder extends Seeder
         });
 
         // Générer 2 RDV par jour pour chaque technicien en mars 2025
-        $this->generateAppointmentsForApril($techniciens, $services);
+        $this->generateAppointmentsForJune($techniciens, $services);
     }
 
-    private function generateAppointmentsForApril($techniciens, $services)
+    private function generateAppointmentsForJune($techniciens, $services)
     {
         foreach ($techniciens as $tech) {
-            $date = Carbon::create(2025, 4, 1, 8, 0, 0); // Début Avril 2025 à 08h00
+            $date = Carbon::create(2025, 6, 1, 8, 0, 0); // Début Juin 2025 à 08h00
 
-            while ($date->month === 4) {
+            while ($date->month === 6) { // Tant que le mois est Juin
                 if (!$date->isWeekend()) {
                     $morningService = $services->random();
                     $afternoonService = $services->random();
