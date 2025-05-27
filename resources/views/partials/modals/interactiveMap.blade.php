@@ -51,7 +51,7 @@
                     </div>
                 </div>
                 <!-- Conteneur de la carte -->
-                <div id="map" class="map-container" style="height: 500px;"></div>
+                <div id="map" class="map-container" style="height: 70vh;"></div>
             </div>
         </div>
     </div>

@@ -356,6 +356,8 @@ class AppointmentController extends Controller
     public function mapAppointments(Request $request, \App\Providers\MapboxService $mapboxService)
     {
         Log::info('MapAppointments - paramètres reçus', $request->all());
+        $weekStart = $request->input('week_start'); // ex. "2025-05-19"
+        $weekEnd   = $request->input('week_end');   // ex. "2025-05-25"
 
         // Récupérer les paramètres
         $techIds = $request->input('tech_ids', []);
@@ -371,7 +373,13 @@ class AppointmentController extends Controller
         }
 
         // Récupérer tous les rendez-vous pour les techniciens sélectionnés
-        $appointments = WAPetGCAppointment::whereIn('tech_id', $techIds)->get();
+        $query = WAPetGCAppointment::whereIn('tech_id', $techIds);
+        if ($weekStart && $weekEnd) {
+            $query->whereDate('start_at', '>=', $weekStart)
+                ->whereDate('start_at', '<=', $weekEnd);
+        }
+        $appointments = $query->get();
+        Log::info("avant filtres jours/heures: ".$appointments->count());
         Log::info("MapAppointments - nombre de rendez-vous récupérés avant filtrage: " . $appointments->count());
 
         // Conversion du jour en numéro (en utilisant le format ISO où Monday = 1, etc.)

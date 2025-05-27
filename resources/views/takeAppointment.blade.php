@@ -122,25 +122,10 @@
     }
 @endphp
 <script>
-    /**
-     * On regroupe tout le code JS dans un seul bloc pour éviter les conflits et les erreurs
-     * "Cannot read properties of null (reading 'addEventListener')".
-     * On ajoute également des vérifications pour s'assurer que les éléments existent avant de les manipuler.
-     */
-
     // ===========================================
     // ====== [ Nouveau : cache local JS ] =======
     // ===========================================
-    /**
-     * cachedEventsMap :
-     *   {
-     *     techId: {
-     *       "2025-03-17|2025-03-24": [ ... events ...],
-     *       "2025-03-24|2025-03-31": [ ... events ...]
-     *     }
-     *   }
-     * Il permet de ne pas recharger plusieurs fois les mêmes techniciens pour la même plage.
-     */
+
     let cachedEventsMap = {};
 
     function initFullCalendar() {
@@ -182,7 +167,7 @@
                 }
             }
         });
-
+        window.fcCalendar = calendar;
         calendar.render();
     }
 
@@ -726,6 +711,7 @@
             }
 
             // 3) Render initial
+            window.fcCalendar = calendar;
             calendar.render();
 
             // ================================
@@ -977,10 +963,23 @@
             }
             return;
         }
+
+        // Sécurité : vérifier que window.fcCalendar et window.fcCalendar.view existent
+        if (!window.fcCalendar || !window.fcCalendar.view) {
+            console.warn("Calendrier non encore prêt, nouvelle tentative dans 200ms...");
+            setTimeout(loadMapAppointments, 200);
+            return;
+        }
+        const view = window.fcCalendar.view;
+        const weekStart = view.currentStart.toISOString().split('T')[0];
+        const weekEnd   = view.currentEnd  .toISOString().split('T')[0];
+
         let params = {
             tech_ids: selectedTechIds,
             day: selectedDay,
             start_hour: selectedHour,
+            week_start:   weekStart,
+            week_end:     weekEnd,
             client_adresse: {!! json_encode(request()->input('client_adresse', '')) !!},
             client_zip_code: {!! json_encode(request()->input('client_zip_code', '')) !!},
             client_city: {!! json_encode(request()->input('client_city', '')) !!}
