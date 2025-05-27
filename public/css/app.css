@@ -46,11 +46,10 @@
 
 .modal-dialog {
     max-width: 90vw; /* Pour éviter que la modal soit trop réduite */
-    height: 90vh;
 }
 
 .modal-body {
     display: flex;
     flex-direction: column;
-    height: 85vh;
+    height: auto;
 }

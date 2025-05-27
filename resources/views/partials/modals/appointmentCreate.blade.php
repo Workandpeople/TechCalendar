@@ -84,9 +84,11 @@
                             <input type="number" class="form-control" id="duration" name="duration" min="1" required>
                         </div>
                     </div>
-                    <div class="col-12 mb-3">
-                        <label for="end_at" class="form-label">Se termine à</label>
-                        <input type="text" class="form-control" id="end_at" name="end_at" readonly>
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label for="end_at" class="form-label">Se termine à</label>
+                            <input type="text" class="form-control" id="end_at" name="end_at" readonly>
+                        </div>
                     </div>
 
                     <!-- Commentaire -->
@@ -94,7 +96,6 @@
                         <label for="comment" class="form-label">Commentaire</label>
                         <textarea class="form-control" id="comment" name="comment" rows="3"></textarea>
                     </div>
-
                 </div> <!-- modal-body -->
 
                 <div class="modal-footer">

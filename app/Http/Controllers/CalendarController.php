@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\WAPetGCTech;
 use App\Models\WAPetGCAppointment;
+use App\Models\WAPetGCService;
 use Illuminate\Support\Facades\Log;
 
 class CalendarController extends Controller
@@ -16,8 +17,9 @@ class CalendarController extends Controller
     {
         // Récupérer tous les techniciens avec leurs informations utilisateur
         $technicians = WAPetGCTech::with('user')->get();
+        $services    = WAPetGCService::all();
 
-        return view('calendar', compact('technicians'));
+        return view('calendar', compact('technicians', 'services'));
     }
 
     /**
@@ -50,9 +52,9 @@ class CalendarController extends Controller
             $appointments = $query->get()->map(function ($appoint) {
                 return [
                     'id' => $appoint->id,
-                    'title' => $appoint->client_fname . ' ' . $appoint->client_lname,
-                    'start' => $appoint->start_at,
-                    'end' => $appoint->end_at,
+                    'title' => $appoint->client_fname . ' ' . $appoint->client_lname . ' (' . substr($appoint->client_zip_code, 0, 2) . ')',
+                    'start' => \Carbon\Carbon::parse($appoint->start_at)->toIso8601String(),
+                    'end'   => \Carbon\Carbon::parse($appoint->end_at)->toIso8601String(),
                     'backgroundColor' => '#' . substr(md5($appoint->tech_id), 0, 6),
                     'extendedProps' => [
                         'techName' => optional($appoint->tech->user)->prenom . ' ' . optional($appoint->tech->user)->nom,
@@ -76,4 +78,6 @@ class CalendarController extends Controller
             ], 500);
         }
     }
+
+
 }

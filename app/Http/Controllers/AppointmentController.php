@@ -55,12 +55,9 @@ class AppointmentController extends Controller
             // 3) Parser "05/03/2025 07:50" => DateTime
             $endAtFormatted = \DateTime::createFromFormat('d/m/Y H:i', $endAtStr);
             if (!$endAtFormatted) {
-                // Si échec de conversion
                 Log::error('Format de end_at invalide.', ['end_at' => $validated['end_at']]);
-                return redirect()->route('appointment.index')
-                    ->withErrors("Format de l'heure de fin invalide (end_at).");
+                return back()->withErrors("Format de l'heure de fin invalide (end_at).");
             }
-            // 4) On stocke dans validated le format SQL "Y-m-d H:i:s"
             $validated['end_at'] = $endAtFormatted->format('Y-m-d H:i:s');
 
             // 5) Vérifier si `tech_id` est vide => null
@@ -73,8 +70,7 @@ class AppointmentController extends Controller
                 $tech = WAPetGCTech::find($validated['tech_id']);
                 if (!$tech) {
                     Log::error("Technicien introuvable.", ['tech_id' => $validated['tech_id']]);
-                    return redirect()->route('appointment.index')
-                        ->withErrors("Technicien introuvable.");
+                    return back()->withErrors("Technicien introuvable.");
                 }
 
                 // Chercher le dernier RDV du jour pour ce tech
@@ -98,7 +94,6 @@ class AppointmentController extends Controller
                     $validated['trajet_time']     = $route['duration_minutes'];
                     $validated['trajet_distance'] = $route['distance_km'];
                 } else {
-                    // Valeurs par défaut si échec
                     $validated['trajet_time']     = 100;
                     $validated['trajet_distance'] = 100;
                 }
@@ -111,34 +106,14 @@ class AppointmentController extends Controller
             $appointment = WAPetGCAppointment::create($validated);
             Log::info('Rendez-vous créé avec succès.', ['id' => $appointment->id]);
 
-            // 8) Au lieu de rediriger vers .index() qui est vide,
-            //    on redirige vers la recherche en reprenant l'adresse du client stockée en session
-            //    (ou dans les inputs si besoin).
-            $clientAdresse = session('client_adresse', $request->input('client_adresse'));
-            $clientZipCode = session('client_zip_code', $request->input('client_zip_code'));
-            $clientCity    = session('client_city', $request->input('client_city'));
-
-            // Si l'on n'a aucun paramètre pour la recherche, on peut fallback sur .index()
-            if (!$clientZipCode) {
-                return redirect()->route('appointment.index')
-                    ->with('success', 'Rendez-vous créé avec succès (aucune recherche en cours).');
-            }
-
-            // Sinon, on recharge la recherche
-            return redirect()->route('appointments.search', [
-                'client_adresse'  => $clientAdresse,
-                'client_zip_code' => $clientZipCode,
-                'client_city'     => $clientCity,
-            ])->with('success', 'Rendez-vous créé avec succès.');
+            return back()->with('success', 'Rendez-vous créé avec succès.');
         } catch (\Exception $e) {
             Log::error('Erreur lors de la création du rendez-vous.', [
                 'error' => $e->getMessage(),
                 'data'  => $request->all(),
             ]);
 
-            return redirect()
-                ->route('appointment.index')
-                ->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
+            return back()->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
         }
     }
 
