@@ -51,12 +51,35 @@
                             <input type="text" class="form-control" id="edit-city" name="city">
                         </div>
                         <div class="mb-3">
-                            <label for="edit-default_start_at" class="form-label">Début de journée</label>
-                            <input type="time" class="form-control" id="edit-default_start_at" name="default_start_at">
+                            <label class="form-label">Début de journée</label>
+                            <div class="d-flex" style="gap: 2rem;">
+                                <select id="edit_start_hour" class="form-control">
+                                    @for ($h = 7; $h <= 22; $h++)
+                                        <option value="{{ str_pad($h, 2, '0', STR_PAD_LEFT) }}">{{ str_pad($h, 2, '0', STR_PAD_LEFT) }}h</option>
+                                    @endfor
+                                </select>
+                                <select id="edit_start_minute" class="form-control">
+                                    <option value="00">00</option>
+                                    <option value="30">30</option>
+                                </select>
+                                <input type="hidden" id="edit_default_start_at" name="default_start_at" value="08:30">
+                            </div>
                         </div>
+
                         <div class="mb-3">
-                            <label for="edit-default_end_at" class="form-label">Fin de journée</label>
-                            <input type="time" class="form-control" id="edit-default_end_at" name="default_end_at">
+                            <label class="form-label">Fin de journée</label>
+                            <div class="d-flex" style="gap: 2rem;">
+                                <select id="edit_end_hour" class="form-control">
+                                    @for ($h = 7; $h <= 22; $h++)
+                                        <option value="{{ str_pad($h, 2, '0', STR_PAD_LEFT) }}">{{ str_pad($h, 2, '0', STR_PAD_LEFT) }}h</option>
+                                    @endfor
+                                </select>
+                                <select id="edit_end_minute" class="form-control">
+                                    <option value="00">00</option>
+                                    <option value="30">30</option>
+                                </select>
+                                <input type="hidden" id="edit_default_end_at" name="default_end_at" value="17:30">
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label for="edit-default_rest_time" class="form-label">Durée de pause (minutes)</label>

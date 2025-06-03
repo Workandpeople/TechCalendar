@@ -62,6 +62,54 @@
 @section('js')
 <script>
 $(document).ready(function () {
+    // Initialisation valeurs par défaut pour le modal de création
+    $('#create_start_hour').val('08');
+    $('#create_start_minute').val('30');
+    $('#create_end_hour').val('17');
+    $('#create_end_minute').val('30');
+    updateTimeHiddenFields('create');
+    bindTimeSelectors('create');
+
+    // Fonction de mise à jour du champ hidden (create/edit)
+    function updateTimeHiddenFields(context) {
+        const sh = $(`#${context}_start_hour`).val();
+        const sm = $(`#${context}_start_minute`).val();
+        const eh = $(`#${context}_end_hour`).val();
+        const em = $(`#${context}_end_minute`).val();
+
+        $(`#${context}_default_start_at`).val(`${sh}:${sm}`);
+        $(`#${context}_default_end_at`).val(`${eh}:${em}`);
+    }
+
+    // Ajout listeners aux selects
+    function bindTimeSelectors(context) {
+        $(`#${context}_start_hour, #${context}_start_minute`).on('change', () => updateTimeHiddenFields(context));
+        $(`#${context}_end_hour, #${context}_end_minute`).on('change', () => updateTimeHiddenFields(context));
+    }
+
+    // Ouverture du modal d'édition
+    $('#userEditModal').on('shown.bs.modal', function () {
+        bindTimeSelectors('edit');
+
+        const startVal = $('#edit_default_start_at').val() || '08:30';
+        const endVal = $('#edit_default_end_at').val() || '17:30';
+
+        const [sh, sm] = startVal.split(':');
+        const [eh, em] = endVal.split(':');
+
+        $('#edit_start_hour').val(sh);
+        $('#edit_start_minute').val(sm);
+        $('#edit_end_hour').val(eh);
+        $('#edit_end_minute').val(em);
+
+        updateTimeHiddenFields('edit');
+    });
+
+    // Mise à jour avant soumission du formulaire de création
+    $('form[action="{{ route('manage-users.store') }}"]').on('submit', function () {
+        updateTimeHiddenFields('create');
+    });
+
     $('#role').on('change', function() {
         if ($(this).val() === 'tech') {
             $('#tech-fields').removeClass('d-none');
@@ -70,36 +118,15 @@ $(document).ready(function () {
         }
     });
 
-    $(document).on('change', '#edit-default_start_at, #edit-default_end_at', function () {
-        const val = $(this).val();        // Ex: "08:30"
-        if (val && val.length === 5) {
-            $(this).val(val + ':00');     // devient "08:30:00"
-        }
-    });
-
-    // Même principe si vous voulez le faire pour le formulaire de création
-    $(document).on('change', '#default_start_at, #default_end_at', function () {
-        const val = $(this).val();
-        if (val && val.length === 5) {
-            $(this).val(val + ':00');
-        }
-    });
-
-    console.log('Page de gestion des utilisateurs chargée');
-
     $('#searchInput, #searchDepartmentInput').on('input', function () {
         const query = $('#searchInput').val();
         const department = $('#searchDepartmentInput').val();
-
-        console.log('Recherche déclenchée avec :', query, 'Département :', department);
 
         $.ajax({
             url: '{{ route('manage-users.search') }}',
             type: 'GET',
             data: { query: query, department: department },
             success: function (data) {
-                console.log('Résultats de la recherche :', data);
-
                 const tbody = $('table tbody');
                 tbody.empty();
 
@@ -166,13 +193,24 @@ $(document).ready(function () {
                 if (data.role === 'tech' && data.tech) {
                     console.log('Utilisateur est un technicien. Affichage des champs spécifiques.');
                     $('#edit-tech-fields').removeClass('d-none');
+
                     $('#edit-phone').val(data.tech.phone || '');
                     $('#edit-adresse').val(data.tech.adresse || '');
                     $('#edit-zip_code').val(data.tech.zip_code || '');
                     $('#edit-city').val(data.tech.city || '');
-                    $('#edit-default_start_at').val(data.tech.default_start_at || '08:30');
-                    $('#edit-default_end_at').val(data.tech.default_end_at || '17:30');
                     $('#edit-default_rest_time').val(data.tech.default_rest_time || '60');
+
+                    // Ajout ICI : remplissage heures/minutes depuis default_start_at
+                    const [sh, sm] = (data.tech.default_start_at || '08:30').split(':');
+                    const [eh, em] = (data.tech.default_end_at || '17:30').split(':');
+
+                    $('#edit_start_hour').val(sh);
+                    $('#edit_start_minute').val(sm);
+                    $('#edit_end_hour').val(eh);
+                    $('#edit_end_minute').val(em);
+
+                    $('#edit_default_start_at').val(`${sh}:${sm}`);
+                    $('#edit_default_end_at').val(`${eh}:${em}`);
                 } else {
                     console.log('Utilisateur n\'est pas un technicien. Masquage des champs spécifiques.');
                     $('#edit-tech-fields').addClass('d-none');
