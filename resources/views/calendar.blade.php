@@ -40,7 +40,7 @@
                 <div class="card-header">
                     <h5 class="card-title">Calendrier des rendez-vous</h5>
                 </div>
-                <div class="card-body" style="height: 65vh; overflow-y: hidden;">
+                <div class="card-body">
                     <div id="calendar-container">
                         <div id="calendar"></div>
                     </div>
@@ -54,7 +54,7 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title">Sélectionner les techniciens</h5>
                 </div>
-                <div class="card-body" style="height: 65vh; overflow-y: auto;">
+                <div class="card-body">
                     <input type="text" id="search_tech" class="form-control mb-2" placeholder="Rechercher un technicien...">
                     <!-- Switch pour cocher/décocher tous les techniciens -->
                     <div class="form-check form-switch">
