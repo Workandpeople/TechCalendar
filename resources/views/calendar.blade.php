@@ -35,7 +35,7 @@
     <div class="row">
 
         <!-- Calendrier -->
-        <div class="col-12 col-md-8">
+        <div class="col-12">
             <div class="card">
                 <div class="card-header">
                     <h5 class="card-title">Calendrier des rendez-vous</h5>
@@ -49,7 +49,7 @@
         </div>
 
         <!-- Liste des techniciens -->
-        <div class="col-12 col-md-4 mt-4 mt-md-0">
+        <div class="col-12 my-4">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title">Sélectionner les techniciens</h5>

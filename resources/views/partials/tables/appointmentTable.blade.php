@@ -33,6 +33,7 @@
                     @endif
                 </a>
             </th>
+            <th>Lieu</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -62,6 +63,7 @@
                     du {{ \Carbon\Carbon::parse($appointment->start_at)->format('H\hi') }}
                     au {{ \Carbon\Carbon::parse($appointment->end_at)->format('H\hi') }}
                 </td>
+                <td>{{ $appointment->client_city }}, {{ $appointment->client_zip_code }}</td>
                 <td>
                     <div class="btn-group">
                         @if (!$appointment->trashed())
