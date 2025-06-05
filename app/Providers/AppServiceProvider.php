@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\Paginator;
+use Laravel\Sanctum\Sanctum;
+use App\Models\PersonalAccessToken;
 
 class AppServiceProvider extends ServiceProvider
 {
