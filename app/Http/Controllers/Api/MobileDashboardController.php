@@ -121,13 +121,9 @@ class MobileDashboardController extends Controller
         }
     }
 
-    /**
-     * GET /api/dashboard/appointments
-     *
-     * Vérification manuelle du Bearer-token puis retour des rendez-vous.
-     */
     public function appointments(Request $request)
     {
+        Log::info('appointments: Début de la récupération des rendez-vous');
         try {
             // 1) Récupérer le Bearer-token
             $bearer = $request->bearerToken();
@@ -193,11 +189,15 @@ class MobileDashboardController extends Controller
                 ->orderBy('start_at')
                 ->get()
                 ->map(function ($a) {
+                    // parser manuellement start_at et end_at pour éviter l’erreur
+                    $startCarbon = Carbon::parse($a->start_at);
+                    $endCarbon   = Carbon::parse($a->end_at);
+
                     return [
                         'id'          => $a->id,
                         'client_name' => "{$a->client_fname} {$a->client_lname}",
-                        'start_at'    => $a->start_at->format('H:i'),
-                        'end_at'      => $a->end_at->format('H:i'),
+                        'start_at'    => $startCarbon->format('H:i'),
+                        'end_at'      => $endCarbon->format('H:i'),
                         'service'     => optional($a->service)->name,
                         'comment'     => $a->comment,
                         'address'     => "{$a->client_adresse}, {$a->client_zip_code} {$a->client_city}",
