@@ -24,6 +24,11 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Identifiants invalides'], 401);
             }
 
+            if ($request->filled('onesignal_player_id')) {
+                $user->onesignal_player_id = $request->onesignal_player_id;
+                $user->save();
+            }
+
             if ($user->role !== 'tech') {
                 return response()->json(['message' => 'Accès refusé. Vous n\'avez pas le rôle requis.'], 403);
             }

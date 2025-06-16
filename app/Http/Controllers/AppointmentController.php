@@ -8,6 +8,8 @@ use App\Models\WAPetGCAppointment;
 use App\Models\WAPetGCTech;
 use App\Models\WAPetGCService;
 use Carbon\Carbon;
+use App\Models\WAPetGCUser;
+use Illuminate\Support\Facades\Http;
 
 class AppointmentController extends Controller
 {
@@ -30,7 +32,7 @@ class AppointmentController extends Controller
     {
         Log::info('Tentative de création d\'un nouveau rendez-vous.', ['requestData' => $request->all()]);
 
-        // 1) Validation des données
+        // 1) Validation
         $validated = $request->validate([
             'tech_id'         => 'required|exists:WAPetGC_Tech,id',
             'service_id'      => 'required|exists:WAPetGC_Services,id',
@@ -42,69 +44,73 @@ class AppointmentController extends Controller
             'client_phone'    => 'required|string|max:20',
             'start_at'        => 'required|date',
             'duration'        => 'required|integer|min:1',
-            'end_at'          => 'required|string', // on accepte temporairement une chaîne
+            'end_at'          => 'required|string',
             'comment'         => 'nullable|string',
         ]);
 
         Log::info('Données validées avec succès.', ['validatedData' => $validated]);
 
         try {
-            // 2) Convertir `end_at` du format "05/03/2025 à 07:50" => "05/03/2025 07:50"
+            // 2) Formatage `end_at`
             $endAtStr = str_replace(' à ', ' ', $validated['end_at']);
-
-            // 3) Parser "05/03/2025 07:50" => DateTime
             $endAtFormatted = \DateTime::createFromFormat('d/m/Y H:i', $endAtStr);
+
             if (!$endAtFormatted) {
                 Log::error('Format de end_at invalide.', ['end_at' => $validated['end_at']]);
                 return back()->withErrors("Format de l'heure de fin invalide (end_at).");
             }
+
             $validated['end_at'] = $endAtFormatted->format('Y-m-d H:i:s');
 
-            // 5) Vérifier si `tech_id` est vide => null
+            // 3) Si aucun technicien
             if (empty($validated['tech_id'])) {
                 $validated['tech_id'] = null;
             }
 
-            // 6) Gestion du temps de trajet si un technicien est assigné
+            $technicien = null;
+
+            // 4) Si technicien => calcul trajet
             if ($validated['tech_id']) {
-                $tech = WAPetGCTech::find($validated['tech_id']);
-                if (!$tech) {
+                $technicien = WAPetGCTech::find($validated['tech_id']);
+
+                if (!$technicien) {
                     Log::error("Technicien introuvable.", ['tech_id' => $validated['tech_id']]);
                     return back()->withErrors("Technicien introuvable.");
                 }
 
-                // Chercher le dernier RDV du jour pour ce tech
                 $lastAppointment = WAPetGCAppointment::where('tech_id', $validated['tech_id'])
                     ->whereDate('start_at', $validated['start_at'])
                     ->orderBy('end_at', 'desc')
                     ->first();
 
-                // Adresse de départ : la précédente visite ou l'adresse du tech
                 $fromAddress = $lastAppointment
                     ? "{$lastAppointment->client_adresse} {$lastAppointment->client_zip_code} {$lastAppointment->client_city}"
-                    : "{$tech->adresse} {$tech->zip_code} {$tech->city}";
+                    : "{$technicien->adresse} {$technicien->zip_code} {$technicien->city}";
 
-                // Appel Mapbox pour calculer
-                $route = $mapboxService->calculateRouteBetweenAddresses(
-                    $fromAddress,
-                    "{$validated['client_adresse']} {$validated['client_zip_code']} {$validated['client_city']}"
-                );
+                $toAddress = "{$validated['client_adresse']} {$validated['client_zip_code']} {$validated['client_city']}";
 
-                if ($route) {
-                    $validated['trajet_time']     = $route['duration_minutes'];
-                    $validated['trajet_distance'] = $route['distance_km'];
-                } else {
-                    $validated['trajet_time']     = 100;
-                    $validated['trajet_distance'] = 100;
-                }
+                $route = $mapboxService->calculateRouteBetweenAddresses($fromAddress, $toAddress);
+
+                $validated['trajet_time']     = $route['duration_minutes'] ?? 100;
+                $validated['trajet_distance'] = $route['distance_km'] ?? 100;
             } else {
                 $validated['trajet_time']     = 100;
                 $validated['trajet_distance'] = 100;
             }
 
-            // 7) Création du rendez-vous
+            // 5) Création du rendez-vous
             $appointment = WAPetGCAppointment::create($validated);
-            Log::info('Rendez-vous créé avec succès.', ['id' => $appointment->id]);
+            Log::info('Rendez-vous créé.', ['id' => $appointment->id]);
+
+            // 6) Notification push
+            if ($technicien && $technicien->user && $technicien->user->onesignal_player_id) {
+                $this->notifyUser(
+                    $technicien->user,
+                    "Nouveau RDV",
+                    "Vous avez un rendez-vous le " . \Carbon\Carbon::parse($validated['start_at'])->format('d/m à H:i') . " à {$validated['client_city']}."
+                );
+                Log::info('Notification OneSignal envoyée.', ['tech_user_id' => $technicien->user->id]);
+            }
 
             return back()->with('success', 'Rendez-vous créé avec succès.');
         } catch (\Exception $e) {
@@ -115,6 +121,23 @@ class AppointmentController extends Controller
 
             return back()->withErrors('Une erreur s\'est produite lors de la création du rendez-vous.');
         }
+    }
+
+    public function notifyUser(WAPetGCUser $user, string $title, string $body): array
+    {
+        if (!$user->onesignal_player_id) return [];
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Basic ' . config('services.onesignal.api_key'),
+            'Content-Type' => 'application/json',
+        ])->post('https://onesignal.com/api/v1/notifications', [
+            'app_id' => config('services.onesignal.app_id'),
+            'include_player_ids' => [$user->onesignal_player_id],
+            'headings' => ['en' => $title],
+            'contents' => ['en' => $body],
+        ]);
+
+        return $response->json();
     }
 
     public function search(Request $request, \App\Providers\MapboxService $mapboxService)

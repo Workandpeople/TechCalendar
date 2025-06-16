@@ -23,6 +23,7 @@ class WAPetGCUser extends Authenticatable
         'email',
         'password',
         'role',
+        'onesignal_player_id',
     ];
 
     protected $hidden = [

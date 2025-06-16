@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('password');
             $table->enum('role', ['tech', 'assistante', 'admin']);
+            $table->string('onesignal_player_id')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });
