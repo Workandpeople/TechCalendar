@@ -1,3 +1,7 @@
 @import "bootstrap/dist/css/bootstrap.min.css";
-@import "fullcalendar/index.global.min.css";
+@import "@fullcalendar/core/index.css";
+@import "@fullcalendar/daygrid/index.css";
+@import "@fullcalendar/timegrid/index.css";
+@import "@fullcalendar/list/index.css";
+@import "@fullcalendar/multimonth/index.css";
 @import "mapbox-gl/dist/mapbox-gl.css";

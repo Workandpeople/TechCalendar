@@ -6,12 +6,17 @@
         "dev": "vite"
     },
     "devDependencies": {
+        "@fullcalendar/core": "^6.1.20",
+        "@fullcalendar/daygrid": "^6.1.20",
+        "@fullcalendar/interaction": "^6.1.20",
+        "@fullcalendar/list": "^6.1.20",
+        "@fullcalendar/multimonth": "^6.1.20",
+        "@fullcalendar/timegrid": "^6.1.20",
         "autoprefixer": "^10.4.20",
         "axios": "^1.7.4",
         "bootstrap": "^4.6.2",
         "chart.js": "^4.5.1",
         "concurrently": "^9.0.1",
-        "fullcalendar": "^6.1.19",
         "jquery": "^3.7.1",
         "jquery.easing": "^1.4.1",
         "laravel-vite-plugin": "^1.0",
