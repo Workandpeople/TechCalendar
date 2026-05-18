@@ -2,7 +2,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
+        "vendor:copy": "mkdir -p public/vendor/jquery public/vendor/bootstrap public/vendor/jquery-easing && cp node_modules/jquery/dist/jquery.min.js public/vendor/jquery/jquery.min.js && cp node_modules/bootstrap/dist/js/bootstrap.bundle.min.js public/vendor/bootstrap/bootstrap.bundle.min.js && cp node_modules/jquery.easing/jquery.easing.min.js public/vendor/jquery-easing/jquery.easing.min.js",
+        "build": "npm run vendor:copy && vite build",
         "dev": "vite"
     },
     "devDependencies": {

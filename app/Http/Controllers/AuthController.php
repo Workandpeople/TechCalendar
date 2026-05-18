@@ -35,6 +35,7 @@ class AuthController extends Controller
 
         // Authentification et session
         Auth::login($user);
+        $request->session()->regenerate();
         session(['user_role' => $user->role]); // Partager le rôle dans la session
 
         Log::info("Connexion réussie pour l'utilisateur : " . $user->email . " (Role: " . $user->role . ")");
@@ -60,9 +61,11 @@ class AuthController extends Controller
     }
 
     // Gère la déconnexion
-    public function logout()
+    public function logout(Request $request)
     {
         Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         return redirect()->route('login')->with('success', 'Vous êtes déconnecté.');
     }
 
