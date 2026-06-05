@@ -9,3 +9,221 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+:root {
+    --gc-bg: #ececec;
+    --gc-surface: #ffffff;
+    --gc-border: #d8d8d8;
+    --gc-text: #31424c;
+    --gc-text-soft: #6b7780;
+    --gc-primary: #31424c;
+    --gc-primary-hover: #3f515b;
+    --gc-accent: #d8c27a;
+    --gc-accent-soft: #fcf8ea;
+    --gc-danger: #be123c;
+}
+
+@layer base {
+    body {
+        background-color: var(--gc-bg);
+        color: var(--gc-text);
+    }
+
+    input[type='checkbox'],
+    input[type='radio'] {
+        accent-color: var(--gc-accent);
+    }
+}
+
+@layer components {
+    .gc-card {
+        @apply rounded-2xl border bg-white shadow-sm;
+        border-color: var(--gc-border);
+    }
+
+    .gc-label {
+        @apply mb-2 block text-sm font-medium;
+        color: var(--gc-text);
+    }
+
+    .gc-input {
+        @apply w-full rounded-lg border px-3 py-2 text-sm outline-none transition focus:ring-2;
+        border-color: #c7cdd1;
+        --tw-ring-color: var(--gc-accent);
+    }
+
+    .gc-check {
+        @apply rounded border focus:ring-2;
+        border-color: #c7cdd1;
+        color: var(--gc-accent);
+        --tw-ring-color: var(--gc-accent);
+    }
+
+    .gc-btn-primary {
+        @apply rounded-lg px-4 py-2.5 text-sm font-medium text-white transition;
+        background-color: var(--gc-primary);
+    }
+
+    .gc-btn-primary:hover {
+        background-color: var(--gc-primary-hover);
+    }
+
+    .gc-btn-soft {
+        @apply rounded-lg border px-3 py-1.5 text-xs font-medium transition;
+        border-color: #c7cdd1;
+        color: var(--gc-text);
+        background-color: #fff;
+    }
+
+    .gc-btn-soft:hover {
+        background-color: var(--gc-accent-soft);
+        border-color: #d8c27a;
+    }
+
+    .gc-btn-danger {
+        @apply rounded-lg border px-3 py-1.5 text-xs font-medium transition;
+        border-color: #f8b4c0;
+        color: #9f1239;
+        background-color: #fff1f2;
+    }
+
+    .gc-btn-danger:hover {
+        background-color: #ffe4e6;
+        border-color: #f43f5e;
+    }
+
+    .gc-link {
+        @apply text-sm font-medium transition;
+        color: var(--gc-text);
+    }
+
+    .gc-link:hover {
+        color: var(--gc-accent);
+    }
+
+    .gc-alert {
+        @apply mb-4 rounded-lg border px-4 py-3 text-sm;
+        border-color: #e3d3a0;
+        background-color: var(--gc-accent-soft);
+        color: var(--gc-text);
+    }
+
+    .gc-error {
+        @apply mt-2 text-sm;
+        color: var(--gc-danger);
+    }
+
+    .sidebar-link {
+        @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition;
+        color: var(--gc-text);
+    }
+
+    .sidebar-item {
+        @apply flex;
+    }
+
+    .sidebar-link:hover {
+        background-color: var(--gc-accent-soft);
+    }
+
+    .sidebar-link-active {
+        background-color: var(--gc-accent-soft);
+        font-weight: 600;
+    }
+
+    .app-sidebar {
+        width: 18rem;
+        transition: width 240ms ease;
+    }
+
+    .sidebar-logo {
+        transition: opacity 180ms ease;
+    }
+
+    .sidebar-toggle {
+        transition: transform 220ms ease;
+    }
+
+    .sidebar-chevron {
+        transition: transform 220ms ease;
+        transform-origin: center;
+    }
+
+    .sidebar-link-label,
+    .sidebar-section-title {
+        transition: opacity 180ms ease;
+    }
+
+    .sidebar-collapsed {
+        width: 80px;
+    }
+
+    .sidebar-collapsed .sidebar-header {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .sidebar-collapsed .sidebar-logo {
+        display: none;
+    }
+
+    .sidebar-collapsed .sidebar-chevron {
+        transform: rotate(180deg);
+    }
+
+    .sidebar-collapsed .sidebar-item {
+        justify-content: center;
+    }
+
+    .sidebar-collapsed .sidebar-link {
+        width: 44px;
+        justify-content: center;
+        gap: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .sidebar-collapsed .sidebar-link-label,
+    .sidebar-collapsed .sidebar-section-title {
+        opacity: 0;
+        pointer-events: none;
+        width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .gc-modal {
+        @apply fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4;
+    }
+
+    .gc-modal-panel {
+        @apply w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-xl;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+        border-color: var(--gc-border);
+    }
+
+    .gc-modal-panel-xl {
+        @apply max-w-6xl;
+    }
+
+    .gc-modal-actions {
+        @apply sticky bottom-0 -mx-6 -mb-6 mt-6 flex justify-end gap-2 border-t bg-white px-6 py-4;
+        border-color: var(--gc-border);
+    }
+
+    .gc-mapbox-suggestions {
+        @apply absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border bg-white shadow-lg;
+        border-color: var(--gc-border);
+    }
+
+    .gc-mapbox-item {
+        @apply block w-full px-3 py-2 text-left text-sm;
+        color: var(--gc-text);
+    }
+
+    .gc-mapbox-item:hover {
+        background-color: var(--gc-accent-soft);
+    }
+}

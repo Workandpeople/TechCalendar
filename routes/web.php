@@ -1,7 +1,115 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminSettingController;
+use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Account\FirstLoginPasswordController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Manager\ManagerDashboardController;
+use App\Http\Controllers\Manager\ManagerServiceController;
+use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\PlannerAppointmentController;
+use App\Http\Controllers\Planner\PlannerDashboardController;
+use App\Http\Controllers\Planner\PlannerTrackingController;
+use App\Http\Controllers\Tech\TechPlanningController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+Route::middleware('guest')->group(function (): void {
+    Route::get('/login', [AuthenticatedSessionController::class, 'create'])
+        ->name('login');
+    Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+
+    Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])
+        ->name('password.request');
+    Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->name('password.email');
+
+    Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])
+        ->name('password.reset');
+    Route::post('/reset-password', [NewPasswordController::class, 'store'])
+        ->name('password.store');
+});
+
+Route::middleware('auth')->group(function (): void {
+    Route::get('/', function () {
+        $user = auth()->user();
+
+        if ($user->admin) {
+            return redirect()->route('admin.dashboard');
+        }
+
+        if ($user->role === 0) {
+            return redirect()->route('manager.dashboard');
+        }
+
+        if ($user->role === 1) {
+            return redirect()->route('planner.dashboard');
+        }
+
+        return redirect()->route('tech.planning');
+    })->name('dashboard');
+
+    Route::view('/profile', 'app.page', [
+        'section' => 'Compte',
+        'title' => 'Mon profil',
+        'description' => 'Page profil en cours de construction.',
+    ])->name('profile');
+    Route::post('/account/first-password', [FirstLoginPasswordController::class, 'update'])
+        ->name('account.first-password.update');
+
+    Route::get('/admin/dashboard', AdminDashboardController::class)->name('admin.dashboard');
+
+    Route::get('/admin/users', [AdminUserController::class, 'index'])->name('admin.users');
+    Route::post('/admin/users', [AdminUserController::class, 'store'])->name('admin.users.store');
+    Route::put('/admin/users/{user}', [AdminUserController::class, 'update'])->name('admin.users.update');
+    Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])->name('admin.users.destroy');
+    Route::post('/admin/users/{user}/restore', [AdminUserController::class, 'restore'])->name('admin.users.restore');
+    Route::delete('/admin/users/{user}/force', [AdminUserController::class, 'forceDelete'])->name('admin.users.force-delete');
+    Route::post('/admin/users/{user}/send-reset-link', [AdminUserController::class, 'sendResetLink'])->name('admin.users.send-reset-link');
+
+    Route::get('/admin/settings', [AdminSettingController::class, 'index'])->name('admin.settings');
+    Route::put('/admin/settings', [AdminSettingController::class, 'update'])->name('admin.settings.update');
+    Route::delete('/admin/settings', [AdminSettingController::class, 'destroy'])->name('admin.settings.destroy');
+
+    Route::get('/manager/dashboard', ManagerDashboardController::class)->name('manager.dashboard');
+    Route::get('/manager/users', [ManagerUserController::class, 'index'])->name('manager.users');
+    Route::post('/manager/users', [ManagerUserController::class, 'store'])->name('manager.users.store');
+    Route::put('/manager/users/{user}', [ManagerUserController::class, 'update'])->name('manager.users.update');
+    Route::delete('/manager/users/{user}', [ManagerUserController::class, 'destroy'])->name('manager.users.destroy');
+    Route::post('/manager/users/{user}/restore', [ManagerUserController::class, 'restore'])->name('manager.users.restore');
+    Route::delete('/manager/users/{user}/force', [ManagerUserController::class, 'forceDelete'])->name('manager.users.force-delete');
+    Route::post('/manager/users/{user}/send-reset-link', [ManagerUserController::class, 'sendResetLink'])->name('manager.users.send-reset-link');
+    Route::get('/manager/services', [ManagerServiceController::class, 'index'])->name('manager.services');
+    Route::post('/manager/services', [ManagerServiceController::class, 'store'])->name('manager.services.store');
+    Route::put('/manager/services/{service}', [ManagerServiceController::class, 'update'])->name('manager.services.update');
+    Route::delete('/manager/services/{service}', [ManagerServiceController::class, 'destroy'])->name('manager.services.destroy');
+    Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
+
+    Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
+    Route::get('/planner/book', [PlannerAppointmentController::class, 'index'])->name('planner.book');
+    Route::post('/planner/book', [PlannerAppointmentController::class, 'store'])->name('planner.book.store');
+    Route::get('/planner/book/crm-appointments', [PlannerAppointmentController::class, 'crmAppointments'])
+        ->name('planner.book.crm-appointments');
+    Route::post('/planner/book/suggest-technicians', [PlannerAppointmentController::class, 'suggestTechnicians'])
+        ->name('planner.book.suggest-technicians');
+    Route::post('/planner/book/calendar-events', [PlannerAppointmentController::class, 'calendarEvents'])
+        ->name('planner.book.calendar-events');
+    Route::post('/planner/book/suggest-technicians-for-slot', [PlannerAppointmentController::class, 'suggestTechniciansForSlot'])
+        ->name('planner.book.suggest-technicians-for-slot');
+    Route::patch('/planner/book/appointments/{appointment}/comment', [PlannerAppointmentController::class, 'updateComment'])
+        ->name('planner.book.appointments.comment');
+    Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
+    Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
+    Route::delete('/planner/tracking/appointments/{appointment}', [PlannerTrackingController::class, 'destroy'])
+        ->name('planner.tracking.appointments.destroy');
+    Route::post('/planner/tracking/appointments/{appointment}/restore', [PlannerTrackingController::class, 'restore'])
+        ->name('planner.tracking.appointments.restore');
+
+    Route::get('/tech/planning', [TechPlanningController::class, 'index'])->name('tech.planning');
+    Route::post('/tech/planning/events', [TechPlanningController::class, 'events'])->name('tech.planning.events');
+
+    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+        ->name('logout');
 });

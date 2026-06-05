@@ -21,8 +21,7 @@ services:
             IGNITION_LOCAL_SITES_PATH: '${PWD}'
         volumes:
             - '.:/var/www/html'
-        tmpfs:
-            - '/var/www/html/node_modules'
+            - 'sail-node-modules:/var/www/html/node_modules'
         networks:
             - sail
         depends_on:
@@ -57,4 +56,6 @@ networks:
         driver: bridge
 volumes:
     sail-mysql:
+        driver: local
+    sail-node-modules:
         driver: local
