@@ -271,7 +271,7 @@
         };
 
         const mapboxDebug = (message, context = {}) => {
-            console.debug('[Mapbox Debug][Planner Book]', message, {
+            console.log('[Mapbox Debug][Planner Book]', message, {
                 ...mapboxStatus(),
                 ...context,
             });
@@ -279,6 +279,33 @@
 
         mapboxDebug('script bootstrap');
         window.addEventListener('load', () => mapboxDebug('window loaded'));
+        window.addEventListener('error', (event) => {
+            console.error('[Mapbox Debug][Planner Book] window error', {
+                message: event.message,
+                source: event.filename,
+                line: event.lineno,
+                column: event.colno,
+                error: event.error,
+            });
+        });
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('[Mapbox Debug][Planner Book] unhandled promise rejection', event.reason);
+        });
+
+        const showMapboxUnavailable = (containerId, reason) => {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-dashed px-5 text-center" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text);">
+                    <div>
+                        <p class="font-semibold">Mapbox indisponible</p>
+                        <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(reason)}</p>
+                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">token: ${bookingMapboxToken ? 'present' : 'absent'} · mapboxgl: ${window.mapboxgl ? 'present' : 'absent'}</p>
+                    </div>
+                </div>
+            `;
+        };
 
         const analysisSection = document.getElementById('booking-analysis-section');
         const bookingFeedback = document.getElementById('booking-feedback');
@@ -457,6 +484,9 @@
 
             if (!bookingMapboxToken || !window.mapboxgl) {
                 mapboxDebug('booking map blocked: missing token or mapboxgl');
+                showMapboxUnavailable('booking-map', !bookingMapboxToken
+                    ? 'Token Mapbox absent côté Laravel.'
+                    : 'La librairie Mapbox GL JS n est pas chargee. Verifie la CSP script-src/script-src-elem et le chargement du CDN.');
                 return null;
             }
 
@@ -830,6 +860,9 @@
 
             if (!bookingMapboxToken || !window.mapboxgl) {
                 mapboxDebug('detail map blocked: missing token or mapboxgl');
+                showMapboxUnavailable('booking-detail-map', !bookingMapboxToken
+                    ? 'Token Mapbox absent côté Laravel.'
+                    : 'La librairie Mapbox GL JS n est pas chargee. Verifie la CSP script-src/script-src-elem et le chargement du CDN.');
                 return null;
             }
 
