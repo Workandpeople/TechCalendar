@@ -545,6 +545,10 @@
             });
         });
 
+        window.addEventListener('techcalendar:layout-resized', () => {
+            Object.values(departmentMaps).forEach((mapState) => mapState?.map?.resize());
+        });
+
         if (filtersForm) {
             const searchInput = document.getElementById('q');
             const instantInputs = ['role', 'status']

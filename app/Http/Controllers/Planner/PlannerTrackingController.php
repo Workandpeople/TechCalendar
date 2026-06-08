@@ -30,6 +30,7 @@ class PlannerTrackingController extends Controller
             'technicians' => $technicians,
             'section' => $request->routeIs('manager.appointments') ? 'Gerant' : 'Planning',
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
+            'mapboxToken' => config('services.mapbox.token'),
         ]);
     }
 
@@ -60,7 +61,7 @@ class PlannerTrackingController extends Controller
         $appointments = Appointment::withTrashed()
             ->with([
                 'service:id,type,name',
-                'technician:id,first_name,last_name',
+                'technician:id,first_name,last_name,address,latitude,longitude',
                 'creator:id,first_name,last_name',
             ])
             ->whereIn('technician_id', $technicianIds)
@@ -69,12 +70,30 @@ class PlannerTrackingController extends Controller
             ->orderBy('starts_at')
             ->get();
 
+        $activeAppointmentsByTechnician = $appointments
+            ->filter(fn (Appointment $appointment): bool => ! $appointment->trashed())
+            ->groupBy('technician_id')
+            ->map(fn ($technicianAppointments) => $technicianAppointments->sortBy('starts_at')->values());
+
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnician): array {
                 $technicianName = $appointment->technician?->full_name ?? 'Technicien';
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
+                $previousAppointment = $activeAppointmentsByTechnician
+                    ->get($appointment->technician_id, collect())
+                    ->filter(fn (Appointment $candidate): bool => $candidate->id !== $appointment->id)
+                    ->filter(fn (Appointment $candidate): bool => (bool) $candidate->starts_at?->isSameDay($appointment->starts_at))
+                    ->filter(fn (Appointment $candidate): bool => (bool) $candidate->ends_at?->lte($appointment->starts_at))
+                    ->sortByDesc('ends_at')
+                    ->first();
+
+                $originLatitude = $previousAppointment?->latitude ?? $appointment->technician?->latitude;
+                $originLongitude = $previousAppointment?->longitude ?? $appointment->technician?->longitude;
+                $originName = $previousAppointment
+                    ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
+                    : ($appointment->technician?->address ?: 'Domicile technicien');
 
                 return [
                     'id' => $appointment->id,
@@ -88,6 +107,12 @@ class PlannerTrackingController extends Controller
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
+                        'latitude' => $appointment->latitude,
+                        'longitude' => $appointment->longitude,
+                        'origin_latitude' => $originLatitude,
+                        'origin_longitude' => $originLongitude,
+                        'origin_name' => $originName,
+                        'origin_label' => $previousAppointment ? 'RDV precedent' : 'Domicile',
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
                         'deleted_at' => $appointment->deleted_at?->toIso8601String(),
@@ -152,6 +177,26 @@ class PlannerTrackingController extends Controller
             'message' => 'Rendez-vous reactive.',
             'comment' => $appointment->comment,
             'deleted_at' => null,
+        ]);
+    }
+
+    public function updateComment(Request $request, int $appointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $appointment = Appointment::withTrashed()->findOrFail($appointment);
+
+        $payload = $request->validate([
+            'comment' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $appointment->update([
+            'comment' => $payload['comment'] ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Commentaire mis a jour.',
+            'comment' => $appointment->comment,
         ]);
     }
 

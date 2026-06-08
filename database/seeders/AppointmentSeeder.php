@@ -6,8 +6,8 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 
 class AppointmentSeeder extends Seeder
 {
@@ -15,10 +15,12 @@ class AppointmentSeeder extends Seeder
     {
         $services = Service::query()->orderBy('type')->orderBy('name')->get();
         $technicians = User::query()
+            ->with('services:id,type,name,average_duration_minutes')
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
-            ->orderBy('id')
+            ->where('email', 'like', 'tech-dept-%@demo.local')
+            ->orderBy('department_code')
             ->get();
         $creator = User::query()->where('admin', true)->orderBy('id')->first()
             ?? User::query()->whereIn('role', [0, 1])->orderBy('id')->first();
@@ -27,20 +29,25 @@ class AppointmentSeeder extends Seeder
             return;
         }
 
-        Appointment::query()->where('comment', 'like', '[seed-demo]%')->delete();
+        Appointment::withTrashed()
+            ->where('comment', 'like', '[seed-demo]%')
+            ->forceDelete();
 
-        $businessDays = collect(CarbonPeriod::create('2026-01-01', '2026-06-30'))
-            ->reject(fn (Carbon $date): bool => $date->isWeekend())
-            ->values();
+        $weekStarts = $this->weekStarts(Carbon::parse('2026-01-01'), Carbon::parse('2026-06-30'));
 
         foreach ($technicians as $technicianIndex => $technician) {
-            foreach ($businessDays as $dayIndex => $date) {
-                $appointmentsCount = (($technicianIndex + $dayIndex) % 3) === 0 ? 1 : 2;
-                $slots = $this->appointmentSlots($services, $technicianIndex, $dayIndex, $appointmentsCount);
+            foreach ($weekStarts as $weekIndex => $weekStart) {
+                $slots = $this->weeklyAppointmentSlots(
+                    $technician->services->isNotEmpty() ? $technician->services : $services,
+                    $technician,
+                    $technicianIndex,
+                    $weekIndex,
+                    $weekStart
+                );
 
                 foreach ($slots as $slotIndex => $slot) {
-                    $site = $this->customerSites()[($technicianIndex + $dayIndex + ($slotIndex * 7)) % count($this->customerSites())];
-                    $startsAt = Carbon::parse($date->format('Y-m-d').' '.$slot['starts_at']);
+                    $site = $this->customerSites()[($technicianIndex + $weekIndex + ($slotIndex * 11)) % count($this->customerSites())];
+                    $startsAt = Carbon::parse($slot['date']->format('Y-m-d').' '.$slot['starts_at']);
                     $endsAt = (clone $startsAt)->addMinutes((int) $slot['service']->average_duration_minutes);
 
                     Appointment::query()->create([
@@ -64,31 +71,75 @@ class AppointmentSeeder extends Seeder
     }
 
     /**
-     * @return array<int, array{starts_at:string, service:Service}>
+     * @return Collection<int, Carbon>
      */
-    private function appointmentSlots($services, int $technicianIndex, int $dayIndex, int $appointmentsCount): array
+    private function weekStarts(Carbon $startDate, Carbon $endDate): Collection
     {
-        $shortServices = $services
-            ->filter(fn (Service $service): bool => (int) $service->average_duration_minutes <= 180)
-            ->values();
+        $weekStart = $startDate->copy()->startOfWeek();
+        $weeks = collect();
 
-        if ($appointmentsCount === 1 || $shortServices->isEmpty()) {
-            return [[
-                'starts_at' => '08:30',
-                'service' => $services[($technicianIndex + $dayIndex) % $services->count()],
-            ]];
+        while ($weekStart->lte($endDate)) {
+            $weeks->push($weekStart->copy());
+            $weekStart->addWeek();
         }
 
-        return [
-            [
-                'starts_at' => '08:30',
-                'service' => $shortServices[($technicianIndex + $dayIndex) % $shortServices->count()],
-            ],
-            [
-                'starts_at' => '13:30',
-                'service' => $shortServices[($technicianIndex + $dayIndex + 3) % $shortServices->count()],
-            ],
-        ];
+        return $weeks;
+    }
+
+    /**
+     * @param Collection<int, Service> $services
+     * @return array<int, array{date:Carbon,starts_at:string,service:Service}>
+     */
+    private function weeklyAppointmentSlots(Collection $services, User $technician, int $technicianIndex, int $weekIndex, Carbon $weekStart): array
+    {
+        $appointmentsCount = (($technicianIndex + $weekIndex) % 4) === 0 ? 2 : 1;
+        $businessDayOffsets = [0, 1, 2, 3, 4];
+        $firstDayOffset = $businessDayOffsets[($technicianIndex + ($weekIndex * 2)) % count($businessDayOffsets)];
+        $secondDayOffset = $businessDayOffsets[($firstDayOffset + 2 + ($technicianIndex % 2)) % count($businessDayOffsets)];
+        $dayOffsets = $appointmentsCount === 2
+            ? array_values(array_unique([$firstDayOffset, $secondDayOffset]))
+            : [$firstDayOffset];
+
+        if (count($dayOffsets) < $appointmentsCount) {
+            $dayOffsets[] = $businessDayOffsets[($firstDayOffset + 3) % count($businessDayOffsets)];
+        }
+
+        return collect($dayOffsets)
+            ->take($appointmentsCount)
+            ->map(function (int $dayOffset, int $slotIndex) use ($services, $technician, $technicianIndex, $weekIndex, $weekStart): array {
+                $date = $weekStart->copy()->addDays($dayOffset);
+                $service = $services->values()[($technicianIndex + $weekIndex + ($slotIndex * 3)) % $services->count()];
+
+                return [
+                    'date' => $date,
+                    'starts_at' => $this->startsAtForSlot($date, $technician, $service, $technicianIndex, $weekIndex, $slotIndex),
+                    'service' => $service,
+                ];
+            })
+            ->all();
+    }
+
+    private function startsAtForSlot(Carbon $date, User $technician, Service $service, int $technicianIndex, int $weekIndex, int $slotIndex): string
+    {
+        $dayStart = Carbon::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
+        $dayEnd = Carbon::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
+        $offsets = [0, 15, 30, 45, 60, 75, 90];
+        $offset = $offsets[($technicianIndex + $weekIndex + $slotIndex) % count($offsets)];
+        $duration = (int) $service->average_duration_minutes;
+
+        $startsAt = (($technicianIndex + $weekIndex + $slotIndex) % 2) === 0
+            ? (clone $dayStart)->addMinutes($offset)
+            : (clone $dayEnd)->subMinutes($duration + $offset);
+
+        if ($startsAt->lt($dayStart)) {
+            $startsAt = clone $dayStart;
+        }
+
+        if ((clone $startsAt)->addMinutes($duration)->gt($dayEnd)) {
+            $startsAt = (clone $dayEnd)->subMinutes($duration);
+        }
+
+        return $startsAt->format('H:i');
     }
 
     /**

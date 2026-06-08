@@ -4,7 +4,7 @@
             <div>
                 <p class="text-sm" style="color:var(--gc-text-soft);">Planning</p>
                 <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Dashboard planning</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Pilotage des demandes CRM, placements et charge equipe.</p>
+                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Pilotage des placements existants et de la charge equipe.</p>
             </div>
             <a href="{{ route('planner.book') }}" class="gc-btn-primary self-start md:self-auto">Prendre un rdv</a>
         </div>
@@ -33,34 +33,8 @@
             @endforeach
         </section>
 
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_1.4fr]">
-            <div class="gc-card p-5">
-                <div class="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                        <p class="text-sm" style="color:var(--gc-text-soft);">A placer</p>
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Demandes CRM prioritaires</h2>
-                    </div>
-                    <span class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $pendingCrmAppointments->count() }} attente(s)</span>
-                </div>
-
-                <div class="space-y-3">
-                    @foreach ($pendingCrmAppointments as $appointment)
-                        <a href="{{ $appointment['book_url'] }}" class="block rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md" style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <span class="rounded-full px-2 py-1 text-xs" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
-                                    <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
-                                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
-                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $appointment['address'] }}</p>
-                                </div>
-                                <span class="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">Trouver un tech</span>
-                            </div>
-                        </a>
-                    @endforeach
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-6">
+        <section class="grid grid-cols-1 gap-6">
+            <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
                 <div class="gc-card p-5">
                     <div class="mb-4 flex items-center justify-between">
                         <div>

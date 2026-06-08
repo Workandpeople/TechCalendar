@@ -71,6 +71,7 @@
             }
 
             $showSidebar = $user->admin || in_array($user->role, [0, 1], true);
+            $isTechPlanningPage = request()->routeIs('tech.planning');
         @endphp
 
         <div class="flex h-screen overflow-hidden">
@@ -109,30 +110,29 @@
             @endif
 
             <div class="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-                <header class="h-16 shrink-0 border-b border-[color:var(--gc-border)] bg-white px-6">
+                <header class="h-16 shrink-0 border-b border-[color:var(--gc-border)] bg-white {{ $isTechPlanningPage ? 'px-3 sm:px-6' : 'px-6' }}">
                     <div class="flex h-full items-center justify-end">
-                        <div class="group relative">
-                            <button type="button" class="flex items-center gap-3 rounded-xl border border-[color:var(--gc-border)] px-3 py-2">
+                        <div id="header-user-menu" class="header-user-menu relative">
+                            <button id="header-user-menu-trigger" type="button" class="flex items-center gap-3 rounded-xl border border-[color:var(--gc-border)] px-3 py-2" aria-haspopup="menu" aria-expanded="false">
                                 <span class="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--gc-primary)] text-sm font-semibold text-white">{{ $user->initials }}</span>
-                                <span class="text-sm font-medium text-[color:var(--gc-text)]">{{ $user->full_name }}</span>
+                                <span class="text-sm font-medium text-[color:var(--gc-text)] {{ $isTechPlanningPage ? 'hidden sm:inline' : '' }}">{{ $user->full_name }}</span>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-4 w-4 text-[color:var(--gc-text-soft)]">
                                     <path d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
 
-                            <div class="invisible absolute right-0 top-full z-20 mt-2 w-48 rounded-xl border border-[color:var(--gc-border)] bg-white p-1 opacity-0 shadow-md transition group-hover:visible group-hover:opacity-100">
-                                <a href="{{ route('profile') }}" class="block rounded-lg px-3 py-2 text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Mon profil</a>
+                            <div id="header-user-menu-dropdown" role="menu" class="header-user-menu-dropdown absolute right-0 top-full z-20 mt-2 w-40 rounded-xl border border-[color:var(--gc-border)] bg-white p-1 shadow-md">
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
-                                    <button type="submit" class="w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Deconnexion</button>
+                                    <button type="submit" role="menuitem" class="w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Deconnexion</button>
                                 </form>
                             </div>
                         </div>
                     </div>
                 </header>
 
-                <main class="min-h-0 flex-1 overflow-y-auto p-6">
-                    <div class="gc-card p-6">
+                <main class="min-h-0 flex-1 overflow-y-auto {{ $isTechPlanningPage ? 'p-3 sm:p-6' : 'p-6' }}">
+                    <div class="{{ $isTechPlanningPage ? 'p-0 sm:rounded-2xl sm:border sm:border-[color:var(--gc-border)] sm:bg-white sm:p-6 sm:shadow-sm' : 'gc-card p-6' }}">
                         {{ $slot }}
                     </div>
                 </main>
@@ -165,12 +165,97 @@
         <script>
             const sidebar = document.getElementById('app-sidebar');
             const toggleButton = document.getElementById('sidebar-toggle');
+            const sidebarStorageKey = 'techcalendar.sidebar.collapsed';
+
+            const readStoredSidebarState = () => {
+                try {
+                    return localStorage.getItem(sidebarStorageKey) === '1';
+                } catch (error) {
+                    return false;
+                }
+            };
+
+            const storeSidebarState = (isCollapsed) => {
+                try {
+                    localStorage.setItem(sidebarStorageKey, isCollapsed ? '1' : '0');
+                } catch (error) {
+                    // localStorage can be unavailable in some restricted browser contexts.
+                }
+            };
+
+            const applySidebarState = (isCollapsed) => {
+                sidebar.classList.toggle('sidebar-collapsed', isCollapsed);
+                toggleButton.setAttribute('aria-expanded', String(!isCollapsed));
+            };
+
+            const dispatchSidebarResize = () => {
+                [80, 220, 420].forEach((delay) => {
+                    window.setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('techcalendar:layout-resized'));
+                    }, delay);
+                });
+            };
 
             if (sidebar && toggleButton) {
+                applySidebarState(readStoredSidebarState());
+
                 toggleButton.addEventListener('click', () => {
-                    sidebar.classList.toggle('sidebar-collapsed');
-                    const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-                    toggleButton.setAttribute('aria-expanded', String(!isCollapsed));
+                    const isCollapsed = !sidebar.classList.contains('sidebar-collapsed');
+                    applySidebarState(isCollapsed);
+                    storeSidebarState(isCollapsed);
+                    dispatchSidebarResize();
+                });
+            }
+
+            const headerUserMenu = document.getElementById('header-user-menu');
+            const headerUserMenuTrigger = document.getElementById('header-user-menu-trigger');
+            let headerUserMenuCloseTimer = null;
+
+            const openHeaderUserMenu = () => {
+                window.clearTimeout(headerUserMenuCloseTimer);
+                headerUserMenu?.classList.add('is-open');
+                headerUserMenuTrigger?.setAttribute('aria-expanded', 'true');
+            };
+
+            const closeHeaderUserMenu = () => {
+                window.clearTimeout(headerUserMenuCloseTimer);
+                headerUserMenu?.classList.remove('is-open');
+                headerUserMenuTrigger?.setAttribute('aria-expanded', 'false');
+            };
+
+            const scheduleHeaderUserMenuClose = () => {
+                window.clearTimeout(headerUserMenuCloseTimer);
+                headerUserMenuCloseTimer = window.setTimeout(closeHeaderUserMenu, 450);
+            };
+
+            if (headerUserMenu && headerUserMenuTrigger) {
+                headerUserMenu.addEventListener('mouseenter', openHeaderUserMenu);
+                headerUserMenu.addEventListener('mouseleave', scheduleHeaderUserMenuClose);
+                headerUserMenu.addEventListener('focusin', openHeaderUserMenu);
+                headerUserMenu.addEventListener('focusout', (event) => {
+                    if (!headerUserMenu.contains(event.relatedTarget)) {
+                        scheduleHeaderUserMenuClose();
+                    }
+                });
+
+                headerUserMenuTrigger.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    headerUserMenu.classList.contains('is-open') ? closeHeaderUserMenu() : openHeaderUserMenu();
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (!headerUserMenu.contains(event.target)) {
+                        closeHeaderUserMenu();
+                    }
+                });
+
+                document.addEventListener('keydown', (event) => {
+                    const menuIsActive = headerUserMenu.classList.contains('is-open') || headerUserMenu.contains(document.activeElement);
+
+                    if (event.key === 'Escape' && menuIsActive) {
+                        closeHeaderUserMenu();
+                        headerUserMenuTrigger.focus();
+                    }
                 });
             }
         </script>

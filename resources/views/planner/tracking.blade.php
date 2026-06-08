@@ -62,12 +62,28 @@
                 <div id="calendar-legend" class="flex flex-wrap gap-2"></div>
             </div>
 
-            <div id="tracking-calendar"></div>
+            <div class="relative min-h-[780px]">
+                <div id="tracking-calendar"></div>
+                <div id="tracking-calendar-loading" class="absolute inset-0 z-10 hidden items-start justify-center rounded-xl bg-white/85 px-4 pt-24 backdrop-blur-sm">
+                    <div class="w-full max-w-md rounded-2xl border bg-white p-5 shadow-lg" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p id="tracking-calendar-loading-title" class="text-sm font-semibold" style="color:var(--gc-text);">Chargement du calendrier</p>
+                                <p id="tracking-calendar-loading-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Preparation des paquets...</p>
+                            </div>
+                            <div class="h-9 w-9 shrink-0 animate-spin rounded-full border-4 border-[color:var(--gc-accent-soft)] border-t-[color:var(--gc-primary)]"></div>
+                        </div>
+                        <div class="mt-4 h-2 overflow-hidden rounded-full" style="background:var(--gc-accent-soft);">
+                            <div id="tracking-calendar-progress-bar" class="h-full rounded-full transition-all duration-200" style="width:0%;background:var(--gc-primary);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
 
     <div id="tracking-appointment-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel max-w-3xl">
+        <div class="gc-modal-panel max-w-6xl">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Rendez-vous</p>
@@ -76,41 +92,54 @@
                 <button type="button" id="tracking-detail-close" class="gc-link">Fermer</button>
             </div>
 
-            <div class="mt-5 rounded-xl border p-4" style="border-color:var(--gc-border);">
-                <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Technicien</dt>
-                        <dd id="tracking_detail_technician" class="font-medium" style="color:var(--gc-text);"></dd>
+            <div class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+                <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-medium" style="color:var(--gc-text);">Trajet</p>
+                            <p id="tracking_route_origin" class="text-xs" style="color:var(--gc-text-soft);"></p>
+                        </div>
                     </div>
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Client</dt>
-                        <dd id="tracking_detail_customer" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Telephone client</dt>
-                        <dd id="tracking_detail_customer_phone" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Duree</dt>
-                        <dd id="tracking_detail_duration" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Debut</dt>
-                        <dd id="tracking_detail_start" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div>
-                        <dt style="color:var(--gc-text-soft);">Fin</dt>
-                        <dd id="tracking_detail_end" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div class="md:col-span-2">
-                        <dt style="color:var(--gc-text-soft);">Cree par</dt>
-                        <dd id="tracking_detail_created_by" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                    <div class="md:col-span-2">
-                        <dt style="color:var(--gc-text-soft);">Adresse</dt>
-                        <dd id="tracking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
-                    </div>
-                </dl>
+                    <div id="tracking-detail-map" class="h-[360px] overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
+                    <div id="tracking_route_summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
+                </section>
+
+                <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-1">
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Technicien</dt>
+                            <dd id="tracking_detail_technician" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Client</dt>
+                            <dd id="tracking_detail_customer" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Telephone client</dt>
+                            <dd id="tracking_detail_customer_phone" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Duree</dt>
+                            <dd id="tracking_detail_duration" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Debut</dt>
+                            <dd id="tracking_detail_start" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Fin</dt>
+                            <dd id="tracking_detail_end" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Cree par</dt>
+                            <dd id="tracking_detail_created_by" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div>
+                            <dt style="color:var(--gc-text-soft);">Adresse</dt>
+                            <dd id="tracking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
+                        </div>
+                    </dl>
+                </section>
             </div>
 
             <form id="tracking-comment-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
@@ -128,7 +157,9 @@
     </div>
 
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <script>
         const technicianFilterInput = document.getElementById('technician_filter');
@@ -139,12 +170,23 @@
         const calendarLegend = document.getElementById('calendar-legend');
         const trackingAppointmentModal = document.getElementById('tracking-appointment-modal');
         const trackingCommentForm = document.getElementById('tracking-comment-form');
-        const trackingCommentUrlTemplate = @json(route('planner.book.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
         const trackingRestoreUrlTemplate = @json(route('planner.tracking.appointments.restore', ['appointment' => '__APPOINTMENT__']));
+        const trackingEventsUrl = @json(route('planner.tracking.events'));
+        const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        const trackingMapboxToken = @json($mapboxToken ?? null);
+        const trackingCalendarLoading = document.getElementById('tracking-calendar-loading');
+        const trackingCalendarLoadingDetail = document.getElementById('tracking-calendar-loading-detail');
+        const trackingCalendarProgressBar = document.getElementById('tracking-calendar-progress-bar');
+        const trackingEventsBatchSize = 80;
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
         let trackingCalendar = null;
         let trackingInitialComment = '';
+        let trackingDetailMap = null;
+        let trackingDetailMarkers = [];
+        let trackingEventsAbortController = null;
+        let trackingEventsRequestId = 0;
 
         const formatDateTime = (value) => {
             if (!value) return '-';
@@ -162,6 +204,174 @@
         const setText = (id, value) => {
             const element = document.getElementById(id);
             if (element) element.textContent = value || '-';
+        };
+
+        const trackingMarkerElement = (color, label) => {
+            const element = document.createElement('div');
+            element.style.width = '30px';
+            element.style.height = '30px';
+            element.style.borderRadius = '9999px';
+            element.style.background = color;
+            element.style.border = '3px solid #ffffff';
+            element.style.boxShadow = '0 8px 20px rgba(49,66,76,0.28)';
+            element.style.color = '#ffffff';
+            element.style.display = 'flex';
+            element.style.alignItems = 'center';
+            element.style.justifyContent = 'center';
+            element.style.fontSize = '12px';
+            element.style.fontWeight = '700';
+            element.textContent = label;
+
+            return element;
+        };
+
+        const ensureTrackingDetailMap = () => {
+            const container = document.getElementById('tracking-detail-map');
+
+            if (!trackingMapboxToken || !window.mapboxgl) {
+                container.innerHTML = '<div class="flex h-full items-center justify-center px-4 text-center text-sm" style="color:var(--gc-text-soft);">Carte indisponible: token Mapbox ou librairie manquante.</div>';
+                return null;
+            }
+
+            window.mapboxgl.accessToken = trackingMapboxToken;
+
+            if (!trackingDetailMap) {
+                trackingDetailMap = new window.mapboxgl.Map({
+                    container: 'tracking-detail-map',
+                    style: 'mapbox://styles/mapbox/light-v11',
+                    center: [2.2137, 46.2276],
+                    zoom: 5,
+                    interactive: false,
+                });
+            }
+
+            return trackingDetailMap;
+        };
+
+        const clearTrackingDetailMap = () => {
+            trackingDetailMarkers.forEach((marker) => marker.remove());
+            trackingDetailMarkers = [];
+
+            if (!trackingDetailMap) return;
+
+            if (trackingDetailMap.getLayer('tracking-detail-route')) {
+                trackingDetailMap.removeLayer('tracking-detail-route');
+            }
+
+            if (trackingDetailMap.getSource('tracking-detail-route')) {
+                trackingDetailMap.removeSource('tracking-detail-route');
+            }
+        };
+
+        const fetchTrackingRoute = async (origin, destination) => {
+            const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`);
+            url.searchParams.set('geometries', 'geojson');
+            url.searchParams.set('overview', 'full');
+            url.searchParams.set('access_token', trackingMapboxToken);
+
+            const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+
+            if (!response.ok) return null;
+
+            const payload = await response.json();
+
+            return payload.routes?.[0] || null;
+        };
+
+        const setTrackingRouteSummary = (message) => {
+            const summary = document.getElementById('tracking_route_summary');
+            if (summary) summary.textContent = message;
+        };
+
+        const renderTrackingDetailMap = async (event) => {
+            const props = event.extendedProps;
+            const map = ensureTrackingDetailMap();
+            const destination = {
+                lat: Number(props.latitude),
+                lng: Number(props.longitude),
+            };
+            const origin = {
+                lat: Number(props.origin_latitude),
+                lng: Number(props.origin_longitude),
+            };
+
+            setText('tracking_route_origin', props.origin_label ? `Depart: ${props.origin_label} - ${props.origin_name || '-'}` : null);
+
+            if (!map) {
+                setTrackingRouteSummary('Trajet non affiche.');
+                return;
+            }
+
+            if (!Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) {
+                clearTrackingDetailMap();
+                setTrackingRouteSummary('Coordonnees du RDV indisponibles.');
+                return;
+            }
+
+            if (!map.loaded()) {
+                map.once('load', () => renderTrackingDetailMap(event));
+                return;
+            }
+
+            clearTrackingDetailMap();
+
+            const bounds = new window.mapboxgl.LngLatBounds();
+
+            trackingDetailMarkers.push(new window.mapboxgl.Marker({ element: trackingMarkerElement('#31424c', 'R') })
+                .setLngLat([destination.lng, destination.lat])
+                .addTo(map));
+            bounds.extend([destination.lng, destination.lat]);
+
+            if (Number.isFinite(origin.lat) && Number.isFinite(origin.lng)) {
+                trackingDetailMarkers.push(new window.mapboxgl.Marker({ element: trackingMarkerElement('#d8c27a', 'D') })
+                    .setLngLat([origin.lng, origin.lat])
+                    .addTo(map));
+                bounds.extend([origin.lng, origin.lat]);
+
+                try {
+                    const route = await fetchTrackingRoute(origin, destination);
+
+                    if (route?.geometry) {
+                        map.addSource('tracking-detail-route', {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: route.geometry,
+                                properties: {},
+                            },
+                        });
+                        map.addLayer({
+                            id: 'tracking-detail-route',
+                            type: 'line',
+                            source: 'tracking-detail-route',
+                            layout: {
+                                'line-cap': 'round',
+                                'line-join': 'round',
+                            },
+                            paint: {
+                                'line-color': '#31424c',
+                                'line-width': 5,
+                                'line-opacity': 0.82,
+                            },
+                        });
+
+                        setTrackingRouteSummary(`${(route.distance / 1000).toFixed(1)} km en voiture - environ ${Math.round(route.duration / 60)} min.`);
+                    } else {
+                        setTrackingRouteSummary('Trace Mapbox indisponible, affichage des points uniquement.');
+                    }
+                } catch (error) {
+                    setTrackingRouteSummary('Trace Mapbox indisponible, affichage des points uniquement.');
+                }
+            } else {
+                setTrackingRouteSummary('Origine indisponible, affichage du RDV uniquement.');
+            }
+
+            map.fitBounds(bounds, {
+                padding: 64,
+                maxZoom: 13,
+                duration: 0,
+            });
+            map.resize();
         };
 
         const closeTrackingAppointmentModal = () => {
@@ -187,11 +397,96 @@
             document.getElementById('tracking-delete-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
             document.getElementById('tracking-restore-appointment-btn').classList.toggle('hidden', !props.deleted_at);
             trackingAppointmentModal.classList.remove('hidden');
+            window.setTimeout(() => renderTrackingDetailMap(event), 80);
         };
 
         const selectedTechnicianIds = () => technicianCheckboxes
             .filter((checkbox) => checkbox.checked)
             .map((checkbox) => Number(checkbox.value));
+
+        const chunkArray = (items, size) => {
+            const chunks = [];
+
+            for (let index = 0; index < items.length; index += size) {
+                chunks.push(items.slice(index, index + size));
+            }
+
+            return chunks;
+        };
+
+        const showTrackingCalendarLoader = (chunkCount, technicianCount) => {
+            trackingCalendarProgressBar.style.width = '0%';
+            trackingCalendarLoadingDetail.textContent = `${technicianCount} technicien(s), ${chunkCount} paquet(s) a charger.`;
+            trackingCalendarLoading.classList.remove('hidden');
+            trackingCalendarLoading.classList.add('flex');
+        };
+
+        const updateTrackingCalendarLoader = (loadedChunks, chunkCount, eventCount) => {
+            const progress = chunkCount > 0 ? Math.round((loadedChunks / chunkCount) * 100) : 100;
+            trackingCalendarProgressBar.style.width = `${progress}%`;
+            trackingCalendarLoadingDetail.textContent = `Paquet ${loadedChunks}/${chunkCount} charge - ${eventCount} RDV trouve(s).`;
+        };
+
+        const hideTrackingCalendarLoader = () => {
+            trackingCalendarLoading.classList.add('hidden');
+            trackingCalendarLoading.classList.remove('flex');
+        };
+
+        const fetchTrackingEventsChunk = async (technicianIds, fetchInfo, signal) => {
+            const response = await fetch(trackingEventsUrl, {
+                method: 'POST',
+                signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': trackingCsrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    technician_ids: technicianIds,
+                    start: fetchInfo.startStr,
+                    end: fetchInfo.endStr,
+                }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
+                throw new Error(firstError || 'Erreur calendrier.');
+            }
+
+            return payload.events || [];
+        };
+
+        const loadTrackingEventsInBatches = async (technicianIds, fetchInfo) => {
+            trackingEventsAbortController?.abort();
+
+            const requestId = ++trackingEventsRequestId;
+            const controller = new AbortController();
+            trackingEventsAbortController = controller;
+            const chunks = chunkArray(technicianIds, trackingEventsBatchSize);
+            const events = [];
+
+            showTrackingCalendarLoader(chunks.length, technicianIds.length);
+
+            try {
+                for (const [index, chunk] of chunks.entries()) {
+                    const chunkEvents = await fetchTrackingEventsChunk(chunk, fetchInfo, controller.signal);
+
+                    if (requestId !== trackingEventsRequestId) {
+                        return null;
+                    }
+
+                    events.push(...chunkEvents);
+                    updateTrackingCalendarLoader(index + 1, chunks.length, events.length);
+                }
+
+                return events;
+            } finally {
+                if (requestId === trackingEventsRequestId) {
+                    window.setTimeout(hideTrackingCalendarLoader, 220);
+                }
+            }
+        };
 
         const selectedTechnicianColorMap = () => selectedTechnicianIds().reduce((colors, id, index) => ({
             ...colors,
@@ -292,43 +587,42 @@
                     minute: '2-digit',
                     hour12: false,
                 },
-                slotMinTime: '07:00:00',
-                slotMaxTime: '20:00:00',
+                slotMinTime: '08:00:00',
+                slotMaxTime: '21:00:00',
                 height: 780,
                 nowIndicator: true,
                 weekends: false,
                 allDaySlot: false,
-                events: async (fetchInfo, successCallback, failureCallback) => {
-                    const technicianIds = selectedTechnicianIds();
+	                events: async (fetchInfo, successCallback, failureCallback) => {
+	                    const technicianIds = selectedTechnicianIds();
+	
+	                    if (technicianIds.length === 0) {
+	                        trackingEventsAbortController?.abort();
+	                        trackingEventsRequestId++;
+	                        hideTrackingCalendarLoader();
+	                        successCallback([]);
+	                        return;
+	                    }
+	
+	                    try {
+	                        const events = await loadTrackingEventsInBatches(technicianIds, fetchInfo);
 
-                    if (technicianIds.length === 0) {
-                        successCallback([]);
-                        return;
-                    }
+	                        if (events === null) {
+	                            successCallback([]);
+	                            return;
+	                        }
 
-                    try {
-                        const response = await fetch('{{ route('planner.tracking.events') }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                                'Accept': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                technician_ids: technicianIds,
-                                start: fetchInfo.startStr,
-                                end: fetchInfo.endStr,
-                            }),
-                        });
-                        const payload = await response.json();
+	                        successCallback(events.map(styleTrackingEvent));
+	                    } catch (error) {
+	                        if (error.name === 'AbortError') {
+	                            successCallback([]);
+	                            return;
+	                        }
 
-                        if (!response.ok) throw new Error(payload?.message || 'Erreur calendrier.');
-
-                        successCallback((payload.events || []).map(styleTrackingEvent));
-                    } catch (error) {
-                        failureCallback(error);
-                    }
-                },
+	                        trackingCalendarLoadingDetail.textContent = error.message || 'Impossible de charger le calendrier.';
+	                        failureCallback(error);
+	                    }
+	                },
                 eventDidMount: (info) => {
                     const props = info.event.extendedProps;
                     if (props.deleted_at) {
@@ -559,5 +853,9 @@
 
         initTrackingCalendar();
         updateLegend();
+
+        window.addEventListener('techcalendar:layout-resized', () => {
+            trackingCalendar?.updateSize();
+        });
     </script>
 </x-layouts.app>

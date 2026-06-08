@@ -10,7 +10,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Manager\ManagerDashboardController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
-use App\Http\Controllers\Planner\PlannerAppointmentController;
+use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
 use App\Http\Controllers\Planner\PlannerTrackingController;
 use App\Http\Controllers\Tech\TechPlanningController;
@@ -74,6 +74,8 @@ Route::middleware('auth')->group(function (): void {
     Route::delete('/admin/settings', [AdminSettingController::class, 'destroy'])->name('admin.settings.destroy');
 
     Route::get('/manager/dashboard', ManagerDashboardController::class)->name('manager.dashboard');
+    Route::get('/manager/dashboard/data', [ManagerDashboardController::class, 'data'])->name('manager.dashboard.data');
+    Route::post('/manager/dashboard/refresh', [ManagerDashboardController::class, 'refresh'])->name('manager.dashboard.refresh');
     Route::get('/manager/users', [ManagerUserController::class, 'index'])->name('manager.users');
     Route::post('/manager/users', [ManagerUserController::class, 'store'])->name('manager.users.store');
     Route::put('/manager/users/{user}', [ManagerUserController::class, 'update'])->name('manager.users.update');
@@ -88,20 +90,14 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
-    Route::get('/planner/book', [PlannerAppointmentController::class, 'index'])->name('planner.book');
-    Route::post('/planner/book', [PlannerAppointmentController::class, 'store'])->name('planner.book.store');
-    Route::get('/planner/book/crm-appointments', [PlannerAppointmentController::class, 'crmAppointments'])
-        ->name('planner.book.crm-appointments');
-    Route::post('/planner/book/suggest-technicians', [PlannerAppointmentController::class, 'suggestTechnicians'])
-        ->name('planner.book.suggest-technicians');
-    Route::post('/planner/book/calendar-events', [PlannerAppointmentController::class, 'calendarEvents'])
-        ->name('planner.book.calendar-events');
-    Route::post('/planner/book/suggest-technicians-for-slot', [PlannerAppointmentController::class, 'suggestTechniciansForSlot'])
-        ->name('planner.book.suggest-technicians-for-slot');
-    Route::patch('/planner/book/appointments/{appointment}/comment', [PlannerAppointmentController::class, 'updateComment'])
-        ->name('planner.book.appointments.comment');
+    Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
+    Route::post('/planner/book/analyze', [PlannerBookingController::class, 'analyze'])->name('planner.book.analyze');
+    Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
+    Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
+    Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])
+        ->name('planner.tracking.appointments.comment');
     Route::delete('/planner/tracking/appointments/{appointment}', [PlannerTrackingController::class, 'destroy'])
         ->name('planner.tracking.appointments.destroy');
     Route::post('/planner/tracking/appointments/{appointment}/restore', [PlannerTrackingController::class, 'restore'])

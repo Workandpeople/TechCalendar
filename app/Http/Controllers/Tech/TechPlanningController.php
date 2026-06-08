@@ -102,6 +102,8 @@ class TechPlanningController extends Controller
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
+                        'latitude' => $appointment->latitude,
+                        'longitude' => $appointment->longitude,
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
                     ],

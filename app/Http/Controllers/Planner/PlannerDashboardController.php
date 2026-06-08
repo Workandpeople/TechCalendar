@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
-use App\Services\SimulatedCrmAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +11,7 @@ use Illuminate\View\View;
 
 class PlannerDashboardController extends Controller
 {
-    public function __invoke(Request $request, SimulatedCrmAppointmentService $crmAppointments): View
+    public function __invoke(Request $request): View
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -50,17 +49,6 @@ class PlannerDashboardController extends Controller
             ->count('technician_id');
 
         return view('planner.dashboard', [
-            'pendingCrmAppointments' => $crmAppointments->pending(5)->map(function (array $appointment): array {
-                $appointment['book_url'] = route('planner.book', [
-                    'crm_source' => $appointment['source'],
-                    'crm_first_name' => $appointment['first_name'],
-                    'crm_last_name' => $appointment['last_name'],
-                    'crm_phone' => $appointment['phone'],
-                    'crm_address' => $appointment['address'],
-                ]);
-
-                return $appointment;
-            }),
             'stats' => [
                 [
                     'label' => 'RDV places cette semaine',

@@ -16,6 +16,15 @@ class TechnicianDailyRouteMetricService
      */
     public function ensureForPeriod(Carbon $startDate, Carbon $endDate): Collection
     {
+        return $this->ensureForPeriodWithProgress($startDate, $endDate);
+    }
+
+    /**
+     * @param callable(int $processed, int $total): void|null $progressCallback
+     * @return Collection<int, TechnicianDailyRouteMetric>
+     */
+    public function ensureForPeriodWithProgress(Carbon $startDate, Carbon $endDate, ?callable $progressCallback = null): Collection
+    {
         $appointments = Appointment::query()
             ->with('technician:id,first_name,last_name,address,latitude,longitude')
             ->whereBetween('starts_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
@@ -28,10 +37,28 @@ class TechnicianDailyRouteMetricService
             ->orderBy('starts_at')
             ->get();
 
-        return $appointments
+        $groups = $appointments
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at->toDateString())
-            ->map(fn (Collection $dayAppointments): TechnicianDailyRouteMetric => $this->ensureForDay($dayAppointments))
             ->values();
+        $total = $groups->count();
+        $processed = 0;
+
+        if ($progressCallback) {
+            $progressCallback($processed, $total);
+        }
+
+        $metrics = $groups->map(function (Collection $dayAppointments) use (&$processed, $total, $progressCallback): TechnicianDailyRouteMetric {
+            $metric = $this->ensureForDay($dayAppointments);
+            $processed++;
+
+            if ($progressCallback) {
+                $progressCallback($processed, $total);
+            }
+
+            return $metric;
+        });
+
+        return $metrics->values();
     }
 
     /**
