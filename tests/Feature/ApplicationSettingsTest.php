@@ -24,6 +24,29 @@ it('falls back to env or configured fallback when no database value exists', fun
     expect(app(ApplicationSettings::class)->get('test.setting'))->toBe('fallback-value');
 });
 
+it('keeps existing cached config values when env is unavailable', function () {
+    config([
+        'services.cached.secret' => 'cached-config-secret',
+        'application_settings.definitions' => [
+            'test.cached.secret' => [
+                'group' => 'Test',
+                'label' => 'Cached secret',
+                'type' => 'password',
+                'env' => 'MISSING_CACHED_SECRET',
+                'config' => 'services.cached.secret',
+                'rules' => ['nullable', 'string'],
+                'secret' => true,
+            ],
+        ],
+    ]);
+
+    $settings = app(ApplicationSettings::class);
+    $settings->applyToConfig();
+
+    expect($settings->get('test.cached.secret'))->toBe('cached-config-secret')
+        ->and(config('services.cached.secret'))->toBe('cached-config-secret');
+});
+
 it('uses encrypted database values before env values and applies them to config', function () {
     config(['application_settings.definitions' => [
         'test.secret' => [

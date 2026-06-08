@@ -13,6 +13,11 @@ class ApplicationSettings
     public const CACHE_KEY = 'application_settings.active_values';
 
     /**
+     * @var array<string, mixed>
+     */
+    private static array $initialConfigValues = [];
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public function definitions(): array
@@ -29,7 +34,15 @@ class ApplicationSettings
                 continue;
             }
 
-            config([$configKey => $this->get($key)]);
+            $this->rememberInitialConfigValue($configKey);
+
+            $value = $this->get($key);
+
+            if ($value === null) {
+                continue;
+            }
+
+            config([$configKey => $value]);
         }
     }
 
@@ -51,6 +64,16 @@ class ApplicationSettings
 
         if ($envValue !== null && $envValue !== '') {
             return $this->castValue($envValue, $definition['type'] ?? 'string');
+        }
+
+        $configKey = $definition['config'] ?? null;
+
+        if ($configKey) {
+            $configValue = $this->initialConfigValue($configKey);
+
+            if ($configValue !== null && $configValue !== '') {
+                return $this->castValue($configValue, $definition['type'] ?? 'string');
+            }
         }
 
         return $definition['fallback'] ?? null;
@@ -197,5 +220,23 @@ class ApplicationSettings
             'boolean' => filter_var($value, FILTER_VALIDATE_BOOLEAN),
             default => $value,
         };
+    }
+
+    private function rememberInitialConfigValue(string $configKey): void
+    {
+        if (array_key_exists($configKey, self::$initialConfigValues)) {
+            return;
+        }
+
+        self::$initialConfigValues[$configKey] = config($configKey);
+    }
+
+    private function initialConfigValue(string $configKey): mixed
+    {
+        if (array_key_exists($configKey, self::$initialConfigValues)) {
+            return self::$initialConfigValues[$configKey];
+        }
+
+        return config($configKey);
     }
 }
