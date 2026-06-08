@@ -14,11 +14,11 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $adminEmail = (string) env('ADMIN_MAIL');
-        $adminPassword = (string) env('ADMIN_PASSWORD');
+        $adminEmail = trim((string) config('admin.mail'));
+        $adminPassword = (string) config('admin.password');
 
         if ($adminEmail === '' || $adminPassword === '') {
-            throw new RuntimeException('ADMIN_MAIL et ADMIN_PASSWORD doivent etre definis dans le fichier .env.');
+            throw new RuntimeException('ADMIN_MAIL et ADMIN_PASSWORD doivent etre definis dans l environnement. Si la config est en cache, relancer php artisan config:cache.');
         }
 
         User::query()->updateOrCreate(
