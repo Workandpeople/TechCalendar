@@ -246,6 +246,40 @@
         let detailMapMarkers = [];
         let selectedCalendarEvent = null;
 
+        const mapboxTokenPreview = () => {
+            if (!bookingMapboxToken) return null;
+
+            return `${String(bookingMapboxToken).slice(0, 10)}...${String(bookingMapboxToken).slice(-6)}`;
+        };
+
+        const mapboxStatus = () => ({
+            token_found: Boolean(bookingMapboxToken),
+            token_preview: mapboxTokenPreview(),
+            mapboxgl_found: Boolean(window.mapboxgl),
+            mapboxgl_version: window.mapboxgl?.version || null,
+            script_tag_found: Boolean(document.querySelector('script[src*="mapbox-gl.js"]')),
+            css_tag_found: Boolean(document.querySelector('link[href*="mapbox-gl.css"]')),
+        });
+
+        const sanitizeMapboxUrl = (url) => {
+            const clone = new URL(url.toString());
+            if (clone.searchParams.has('access_token')) {
+                clone.searchParams.set('access_token', '[masked]');
+            }
+
+            return clone.toString();
+        };
+
+        const mapboxDebug = (message, context = {}) => {
+            console.debug('[Mapbox Debug][Planner Book]', message, {
+                ...mapboxStatus(),
+                ...context,
+            });
+        };
+
+        mapboxDebug('script bootstrap');
+        window.addEventListener('load', () => mapboxDebug('window loaded'));
+
         const analysisSection = document.getElementById('booking-analysis-section');
         const bookingFeedback = document.getElementById('booking-feedback');
         const techniciansList = document.getElementById('eligible-technicians-list');
@@ -311,6 +345,13 @@
             const latInput = document.getElementById('manual_latitude');
             const lngInput = document.getElementById('manual_longitude');
 
+            mapboxDebug('init manual address autocomplete', {
+                address_input_found: Boolean(addressInput),
+                department_input_found: Boolean(departmentCodeInput),
+                lat_input_found: Boolean(latInput),
+                lng_input_found: Boolean(lngInput),
+            });
+
             if (!addressInput || !departmentCodeInput || !latInput || !lngInput) return;
 
             let list = addressInput.parentElement.querySelector('.gc-mapbox-suggestions');
@@ -321,12 +362,17 @@
             }
 
             if (!bookingMapboxToken) {
+                mapboxDebug('manual autocomplete blocked: token missing');
                 addressInput.addEventListener('focus', () => setManualStatus('Token Mapbox absent: impossible de recuperer les coordonnees automatiquement.', 'error'));
                 return;
             }
 
-            if (addressInput.dataset.mapboxBound === '1') return;
+            if (addressInput.dataset.mapboxBound === '1') {
+                mapboxDebug('manual autocomplete already bound');
+                return;
+            }
             addressInput.dataset.mapboxBound = '1';
+            mapboxDebug('manual autocomplete bound');
 
             let debounceTimer;
             addressInput.addEventListener('input', () => {
@@ -351,9 +397,22 @@
                     url.searchParams.set('limit', '5');
 
                     try {
+                        mapboxDebug('geocoding request', {
+                            query,
+                            url: sanitizeMapboxUrl(url),
+                        });
                         const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
                         const data = await response.json();
                         const features = Array.isArray(data.features) ? data.features : [];
+
+                        mapboxDebug('geocoding response', {
+                            ok: response.ok,
+                            status: response.status,
+                            status_text: response.statusText,
+                            features_count: features.length,
+                            mapbox_code: data.code || null,
+                            mapbox_message: data.message || null,
+                        });
 
                         if (features.length === 0) {
                             list.innerHTML = '';
@@ -383,6 +442,7 @@
                             });
                         });
                     } catch (error) {
+                        console.error('[Mapbox Debug][Planner Book] geocoding error', error);
                         setManualStatus('Erreur Mapbox pendant la recherche adresse.', 'error');
                     }
                 }, 280);
@@ -390,12 +450,21 @@
         };
 
         const initBookingMap = () => {
-            if (!bookingMapboxToken || !window.mapboxgl) return null;
+            mapboxDebug('init booking map', {
+                container_found: Boolean(document.getElementById('booking-map')),
+                existing_map: Boolean(bookingMap),
+            });
+
+            if (!bookingMapboxToken || !window.mapboxgl) {
+                mapboxDebug('booking map blocked: missing token or mapboxgl');
+                return null;
+            }
 
             window.mapboxgl.accessToken = bookingMapboxToken;
 
             if (bookingMap) {
                 bookingMap.resize();
+                mapboxDebug('booking map reused and resized');
                 return bookingMap;
             }
 
@@ -405,6 +474,9 @@
                 center: [2.4, 46.7],
                 zoom: 5,
             });
+            bookingMap.on('load', () => mapboxDebug('booking map load event'));
+            bookingMap.on('error', (event) => console.error('[Mapbox Debug][Planner Book] booking map error', event?.error || event));
+            mapboxDebug('booking map instance created');
 
             return bookingMap;
         };
@@ -445,7 +517,12 @@
         });
 
         const fetchRoute = async (technician, crmAppointment) => {
-            if (!bookingMapboxToken) return straightRoute(technician, crmAppointment);
+            if (!bookingMapboxToken) {
+                mapboxDebug('route request skipped: token missing, using straight route', {
+                    technician_id: technician.id,
+                });
+                return straightRoute(technician, crmAppointment);
+            }
 
             const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${technician.longitude},${technician.latitude};${crmAppointment.longitude},${crmAppointment.latitude}`);
             url.searchParams.set('access_token', bookingMapboxToken);
@@ -453,12 +530,29 @@
             url.searchParams.set('overview', 'full');
 
             try {
+                mapboxDebug('directions request for technician route', {
+                    technician_id: technician.id,
+                    technician_name: technician.name,
+                    url: sanitizeMapboxUrl(url),
+                });
                 const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
                 const data = await response.json();
                 const route = data.routes?.[0]?.geometry;
 
+                mapboxDebug('directions response for technician route', {
+                    technician_id: technician.id,
+                    ok: response.ok,
+                    status: response.status,
+                    status_text: response.statusText,
+                    routes_count: Array.isArray(data.routes) ? data.routes.length : 0,
+                    has_geometry: Boolean(route),
+                    mapbox_code: data.code || null,
+                    mapbox_message: data.message || null,
+                });
+
                 return route ? { type: 'Feature', geometry: route } : straightRoute(technician, crmAppointment);
             } catch (error) {
+                console.error('[Mapbox Debug][Planner Book] directions technician route error', error);
                 return straightRoute(technician, crmAppointment);
             }
         };
@@ -482,6 +576,7 @@
             };
 
             if (!bookingMapboxToken) {
+                mapboxDebug('route between skipped: token missing, using fallback', { origin, destination });
                 return fallback();
             }
 
@@ -491,9 +586,26 @@
             url.searchParams.set('overview', 'full');
 
             try {
+                mapboxDebug('directions request between points', {
+                    origin,
+                    destination,
+                    url: sanitizeMapboxUrl(url),
+                });
                 const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
                 const data = await response.json();
                 const route = data.routes?.[0];
+
+                mapboxDebug('directions response between points', {
+                    ok: response.ok,
+                    status: response.status,
+                    status_text: response.statusText,
+                    routes_count: Array.isArray(data.routes) ? data.routes.length : 0,
+                    has_geometry: Boolean(route?.geometry),
+                    distance_m: route?.distance || null,
+                    duration_s: route?.duration || null,
+                    mapbox_code: data.code || null,
+                    mapbox_message: data.message || null,
+                });
 
                 return route?.geometry ? {
                     feature: { type: 'Feature', geometry: route.geometry },
@@ -502,6 +614,7 @@
                     source: 'Mapbox voiture',
                 } : fallback();
             } catch (error) {
+                console.error('[Mapbox Debug][Planner Book] directions between points error', error);
                 return fallback();
             }
         };
@@ -710,12 +823,21 @@
         };
 
         const initDetailMap = () => {
-            if (!bookingMapboxToken || !window.mapboxgl) return null;
+            mapboxDebug('init detail map', {
+                container_found: Boolean(document.getElementById('booking-detail-map')),
+                existing_map: Boolean(detailMap),
+            });
+
+            if (!bookingMapboxToken || !window.mapboxgl) {
+                mapboxDebug('detail map blocked: missing token or mapboxgl');
+                return null;
+            }
 
             window.mapboxgl.accessToken = bookingMapboxToken;
 
             if (detailMap) {
                 detailMap.resize();
+                mapboxDebug('detail map reused and resized');
                 return detailMap;
             }
 
@@ -732,6 +854,9 @@
                 doubleClickZoom: false,
                 touchZoomRotate: false,
             });
+            detailMap.on('load', () => mapboxDebug('detail map load event'));
+            detailMap.on('error', (event) => console.error('[Mapbox Debug][Planner Book] detail map error', event?.error || event));
+            mapboxDebug('detail map instance created');
 
             return detailMap;
         };
@@ -762,7 +887,15 @@
                 lng: Number(props.longitude),
             };
 
+            mapboxDebug('render detail map called', {
+                event_id: event.id,
+                technician_id: props.technician_id,
+                origin,
+                destination,
+            });
+
             if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng) || !Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) {
+                mapboxDebug('render detail map blocked: invalid coordinates', { origin, destination });
                 renderRouteSummary(props);
                 return;
             }
@@ -771,9 +904,13 @@
             renderRouteSummary(props, route);
 
             const map = initDetailMap();
-            if (!map) return;
+            if (!map) {
+                mapboxDebug('render detail map aborted: map unavailable');
+                return;
+            }
 
             const render = async () => {
+                mapboxDebug('render detail map drawing route');
                 clearDetailMap();
 
                 const color = currentTechnicianColors[String(props.technician_id)] || '#31424c';
@@ -806,6 +943,7 @@
             if (map.loaded()) {
                 await render();
             } else {
+                mapboxDebug('detail map waiting for load event');
                 map.once('load', render);
             }
         };
@@ -886,12 +1024,25 @@
         };
 
         const renderMap = async (crmAppointment, technicians) => {
+            mapboxDebug('render booking map called', {
+                crm_appointment_id: crmAppointment?.id,
+                technicians_count: technicians.length,
+                appointment_coordinates: {
+                    lat: crmAppointment?.latitude,
+                    lng: crmAppointment?.longitude,
+                },
+            });
             const map = initBookingMap();
             if (!map) {
+                mapboxDebug('render booking map aborted: map unavailable');
                 return;
             }
 
             const render = async () => {
+                mapboxDebug('render booking map drawing', {
+                    technicians_count: technicians.length,
+                    map_loaded: map.loaded(),
+                });
                 clearMap();
 
                 const bounds = new window.mapboxgl.LngLatBounds();
@@ -940,6 +1091,7 @@
             if (map.loaded()) {
                 await render();
             } else {
+                mapboxDebug('booking map waiting for load event');
                 map.once('load', render);
             }
         };
