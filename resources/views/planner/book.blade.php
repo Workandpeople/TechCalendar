@@ -66,21 +66,31 @@
         </section>
 
         <section id="crm-booking-section" class="gc-card p-5">
-            <div class="mb-4 flex items-center justify-between gap-3">
+            <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV a placer depuis les CRM</h2>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les departements couverts filtrent les techniciens.</p>
                 </div>
-                <span class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $crmAppointments->count() }} demande(s)</span>
+                <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm self-start md:self-auto" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $crmAppointments->count() }} demande(s)</span>
             </div>
 
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div class="mb-4">
+                <label class="gc-label" for="booking_crm_search">Recherche client</label>
+                <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prenom du client" autocomplete="off" />
+            </div>
+
+            <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                Aucun RDV CRM ne correspond a cette recherche.
+            </div>
+
+            <div id="booking-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                 @foreach ($crmAppointments as $appointment)
                     <button
                         type="button"
                         class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
                         style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
                         data-crm-id="{{ $appointment['id'] }}"
+                        data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
                     >
                         <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
                         <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
@@ -298,6 +308,7 @@
         const bookingTrackingUrl = @json(route('planner.tracking'));
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
+        const bookingInitialCrmAppointmentId = @json($initialCrmAppointmentId);
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
         let bookingMap = null;
         let bookingCalendar = null;
@@ -387,6 +398,10 @@
         const crmBookingSection = document.getElementById('crm-booking-section');
         const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
+        const bookingCrmSearch = document.getElementById('booking_crm_search');
+        const bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
+        const bookingCrmCount = document.getElementById('booking-crm-count');
+        const bookingCrmEmpty = document.getElementById('booking-crm-empty');
         const techniciansList = document.getElementById('eligible-technicians-list');
         const technicianSearchInput = document.getElementById('eligible-technician-search');
         const technicianSearchResults = document.getElementById('eligible-technician-search-results');
@@ -418,6 +433,20 @@
         const clearFeedback = () => {
             bookingFeedback.textContent = '';
             bookingFeedback.classList.add('hidden');
+        };
+
+        const filterBookingCrmCards = () => {
+            const query = bookingCrmSearch.value.trim().toLowerCase();
+            let visibleCount = 0;
+
+            bookingCrmCards.forEach((card) => {
+                const isVisible = query === '' || card.dataset.client.includes(query);
+                card.classList.toggle('hidden', !isVisible);
+                if (isVisible) visibleCount++;
+            });
+
+            bookingCrmCount.textContent = `${visibleCount} demande(s)`;
+            bookingCrmEmpty.classList.toggle('hidden', visibleCount > 0);
         };
 
         const showCalendarLoader = () => {
@@ -1726,6 +1755,20 @@
         document.querySelectorAll('.crm-appointment-card').forEach((card) => {
             card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
         });
+
+        bookingCrmSearch.addEventListener('input', filterBookingCrmCards);
+
+        if (bookingInitialCrmAppointmentId) {
+            const initialCard = Array.from(document.querySelectorAll('.crm-appointment-card'))
+                .find((card) => card.dataset.crmId === bookingInitialCrmAppointmentId);
+
+            if (initialCard) {
+                initialCard.style.boxShadow = '0 0 0 3px rgba(216,194,122,0.42), 0 18px 40px rgba(49,66,76,0.14)';
+                initialCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            window.setTimeout(() => analyzeCrmAppointment(bookingInitialCrmAppointmentId), 120);
+        }
 
         technicianSearchInput.addEventListener('input', () => {
             window.clearTimeout(technicianSearchTimer);

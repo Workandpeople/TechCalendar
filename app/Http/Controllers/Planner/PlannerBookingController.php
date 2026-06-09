@@ -23,7 +23,8 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         return view('planner.book', [
-            'crmAppointments' => $crmAppointments->pending(5),
+            'crmAppointments' => $crmAppointments->pending(15),
+            'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
             'services' => Service::query()
                 ->orderBy('type')

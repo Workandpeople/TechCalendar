@@ -7,6 +7,33 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+it('links dashboard crm appointments to an auto-start booking search', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.dashboard'))
+        ->assertOk()
+        ->assertSee('RDV a placer')
+        ->assertSee('15 demande(s)')
+        ->assertSee(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']), false);
+});
+
+it('exposes the initial crm appointment id on the booking page', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']))
+        ->assertOk()
+        ->assertSee('15 demande(s)')
+        ->assertSee('const bookingInitialCrmAppointmentId = "crm-audit-lyon-001";', false);
+});
+
 it('searches additional booking technicians compatible with the requested service', function () {
     config(['services.mapbox.token' => null]);
 

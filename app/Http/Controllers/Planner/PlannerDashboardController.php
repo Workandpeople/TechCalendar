@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Services\SimulatedCrmAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +12,7 @@ use Illuminate\View\View;
 
 class PlannerDashboardController extends Controller
 {
-    public function __invoke(Request $request): View
+    public function __invoke(Request $request, SimulatedCrmAppointmentService $crmAppointments): View
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -80,6 +81,7 @@ class PlannerDashboardController extends Controller
                 'serviceTypes' => $this->serviceTypeDistribution($weekStart, $weekEnd),
                 'plannerEfficiency' => $this->plannerEfficiency($weekStart, $weekEnd),
             ],
+            'crmAppointments' => $crmAppointments->pending(15),
         ]);
     }
 
