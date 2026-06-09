@@ -76,25 +76,39 @@ class PlannerBookingController extends Controller
                 'source' => $crmAppointment['source'],
                 'is_manual' => (bool) ($crmAppointment['is_manual'] ?? false),
             ],
-            'technicians' => $technicians->map(fn (User $technician): array => [
-                'id' => $technician->id,
-                'name' => $technician->full_name,
-                'phone' => $technician->phone,
-                'address' => $technician->address,
-                'department_code' => $technician->department_code,
-                'latitude' => $technician->latitude,
-                'longitude' => $technician->longitude,
-                'driving_distance_km' => round((float) $technician->getAttribute('driving_distance_km'), 1),
-                'driving_duration_minutes' => (int) $technician->getAttribute('driving_duration_minutes'),
-                'route_source' => $technician->getAttribute('route_source'),
-                'covers_requested_department' => (bool) $technician->getAttribute('covers_requested_department'),
-            ])->values(),
+            'technicians' => $this->serializeTechnicians($technicians),
             'events' => $this->calendarEvents($appointments),
             'suggestions' => $this->buildSlotSuggestions($technicians, $appointments, $crmAppointment, $drivingRoutes),
             'calendar_range' => [
                 'start' => $calendarStart->toDateString(),
                 'end' => $calendarEnd->toDateString(),
             ],
+        ]);
+    }
+
+    public function searchTechnicians(
+        Request $request,
+        SimulatedCrmAppointmentService $crmAppointments,
+        MapboxDrivingRouteService $drivingRoutes
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            ...$this->appointmentRequestRules(),
+            'query' => ['required', 'string', 'min:2', 'max:80'],
+        ]);
+
+        $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
+        abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
+
+        $technicians = $this->searchTechniciansForAppointment(
+            $crmAppointment,
+            trim($payload['query']),
+            $drivingRoutes,
+        );
+
+        return response()->json([
+            'technicians' => $this->serializeTechnicians($technicians),
         ]);
     }
 
@@ -109,6 +123,11 @@ class PlannerBookingController extends Controller
             ...$this->appointmentRequestRules(),
             'start' => ['required', 'date'],
             'end' => ['required', 'date', 'after:start'],
+            'technician_ids' => ['nullable', 'array', 'max:200'],
+            'technician_ids.*' => [
+                'integer',
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 2)->where('admin', false)),
+            ],
         ]);
 
         $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
@@ -116,7 +135,9 @@ class PlannerBookingController extends Controller
 
         $windowStart = Carbon::parse($payload['start']);
         $windowEnd = Carbon::parse($payload['end']);
-        $technicians = $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
+        $technicians = isset($payload['technician_ids'])
+            ? $this->techniciansByIdsForAppointment($payload['technician_ids'], $crmAppointment, $drivingRoutes)
+            : $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
         $appointments = $this->appointmentsForTechnicians($technicians->pluck('id'), $windowStart, $windowEnd);
 
         return response()->json([
@@ -258,6 +279,168 @@ class PlannerBookingController extends Controller
                     <=> (float) $rightTechnician->getAttribute('driving_distance_km');
             })
             ->values();
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function searchTechniciansForAppointment(
+        array $crmAppointment,
+        string $query,
+        MapboxDrivingRouteService $drivingRoutes
+    ): Collection {
+        $terms = collect(preg_split('/\s+/', trim($query)) ?: [])
+            ->filter()
+            ->values();
+
+        if ($terms->isEmpty()) {
+            return collect();
+        }
+
+        $serviceId = $crmAppointment['service']['id'] ?? null;
+
+        $technicians = User::query()
+            ->with(['departments:code,name'])
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereNull('deleted_at')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->when($serviceId, function ($query) use ($serviceId): void {
+                $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $serviceId));
+            })
+            ->where(function ($query) use ($terms): void {
+                foreach ($terms as $term) {
+                    $like = '%'.str_replace(['%', '_'], ['\%', '\_'], (string) $term).'%';
+
+                    $query->where(function ($termQuery) use ($like): void {
+                        $termQuery
+                            ->where('first_name', 'like', $like)
+                            ->orWhere('last_name', 'like', $like)
+                            ->orWhere('email', 'like', $like)
+                            ->orWhere('phone', 'like', $like)
+                            ->orWhere('address', 'like', $like)
+                            ->orWhere('department_code', 'like', $like);
+                    });
+                }
+            })
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->limit(12)
+            ->get();
+
+        return $this->withRouteAttributes($technicians, $crmAppointment, $drivingRoutes)
+            ->sort(function (User $leftTechnician, User $rightTechnician): int {
+                $coverageComparison = (int) $rightTechnician->getAttribute('covers_requested_department')
+                    <=> (int) $leftTechnician->getAttribute('covers_requested_department');
+
+                if ($coverageComparison !== 0) {
+                    return $coverageComparison;
+                }
+
+                $durationComparison = (int) $leftTechnician->getAttribute('driving_duration_minutes')
+                    <=> (int) $rightTechnician->getAttribute('driving_duration_minutes');
+
+                if ($durationComparison !== 0) {
+                    return $durationComparison;
+                }
+
+                return (float) $leftTechnician->getAttribute('driving_distance_km')
+                    <=> (float) $rightTechnician->getAttribute('driving_distance_km');
+            })
+            ->values();
+    }
+
+    /**
+     * @param array<int, mixed> $technicianIds
+     * @return Collection<int, User>
+     */
+    private function techniciansByIdsForAppointment(
+        array $technicianIds,
+        array $crmAppointment,
+        MapboxDrivingRouteService $drivingRoutes
+    ): Collection {
+        $orderedIds = collect($technicianIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($orderedIds->isEmpty()) {
+            return collect();
+        }
+
+        $positions = $orderedIds
+            ->flip()
+            ->map(fn ($position): int => (int) $position)
+            ->all();
+        $serviceId = $crmAppointment['service']['id'] ?? null;
+
+        $technicians = User::query()
+            ->with(['departments:code,name'])
+            ->whereIn('id', $orderedIds->all())
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereNull('deleted_at')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->when($serviceId, function ($query) use ($serviceId): void {
+                $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $serviceId));
+            })
+            ->get();
+
+        return $this->withRouteAttributes($technicians, $crmAppointment, $drivingRoutes)
+            ->sortBy(fn (User $technician): int => $positions[$technician->id] ?? PHP_INT_MAX)
+            ->values();
+    }
+
+    /**
+     * @param Collection<int, User> $technicians
+     * @return Collection<int, User>
+     */
+    private function withRouteAttributes(Collection $technicians, array $crmAppointment, MapboxDrivingRouteService $drivingRoutes): Collection
+    {
+        return $technicians
+            ->map(function (User $technician) use ($crmAppointment, $drivingRoutes): User {
+                $route = $drivingRoutes->estimate(
+                    (float) $technician->latitude,
+                    (float) $technician->longitude,
+                    (float) $crmAppointment['latitude'],
+                    (float) $crmAppointment['longitude'],
+                );
+
+                $technician->setAttribute(
+                    'covers_requested_department',
+                    $technician->departments->contains('code', $crmAppointment['department_code'])
+                );
+                $technician->setAttribute('driving_distance_km', $route['distance_km']);
+                $technician->setAttribute('driving_duration_minutes', $route['duration_minutes']);
+                $technician->setAttribute('route_source', $route['source']);
+
+                return $technician;
+            })
+            ->values();
+    }
+
+    /**
+     * @param Collection<int, User> $technicians
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function serializeTechnicians(Collection $technicians): Collection
+    {
+        return $technicians->map(fn (User $technician): array => [
+            'id' => $technician->id,
+            'name' => $technician->full_name,
+            'phone' => $technician->phone,
+            'address' => $technician->address,
+            'department_code' => $technician->department_code,
+            'latitude' => $technician->latitude,
+            'longitude' => $technician->longitude,
+            'driving_distance_km' => round((float) $technician->getAttribute('driving_distance_km'), 1),
+            'driving_duration_minutes' => (int) $technician->getAttribute('driving_duration_minutes'),
+            'route_source' => $technician->getAttribute('route_source'),
+            'covers_requested_department' => (bool) $technician->getAttribute('covers_requested_department'),
+        ])->values();
     }
 
     /**

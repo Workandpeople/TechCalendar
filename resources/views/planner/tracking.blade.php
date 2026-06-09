@@ -181,6 +181,14 @@
         const trackingCalendarProgressBar = document.getElementById('tracking-calendar-progress-bar');
         const trackingEventsBatchSize = 80;
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
+        const trackingQueryParams = new URLSearchParams(window.location.search);
+        const trackingInitialTechnicianIds = new Set([
+            ...trackingQueryParams.getAll('technician_id'),
+            ...trackingQueryParams.getAll('technician_ids').flatMap((value) => value.split(',')),
+        ]
+            .map((value) => String(value).trim())
+            .filter((value) => value !== ''));
+        const trackingInitialDate = trackingQueryParams.get('date');
         let trackingCalendar = null;
         let trackingInitialComment = '';
         let trackingDetailMap = null;
@@ -547,12 +555,21 @@
             });
         };
 
+        const applyInitialTechnicianSelection = () => {
+            if (trackingInitialTechnicianIds.size === 0) return;
+
+            technicianCheckboxes.forEach((checkbox) => {
+                checkbox.checked = trackingInitialTechnicianIds.has(String(checkbox.value));
+            });
+        };
+
         const initTrackingCalendar = () => {
             const calendarEl = document.getElementById('tracking-calendar');
             if (!calendarEl || !window.FullCalendar || trackingCalendar) return;
 
             trackingCalendar = new window.FullCalendar.Calendar(calendarEl, {
                 initialView: 'timeGridWeek',
+                initialDate: trackingInitialDate || undefined,
                 locale: 'fr',
                 firstDay: 1,
                 buttonText: {
@@ -851,6 +868,7 @@
             }
         });
 
+        applyInitialTechnicianSelection();
         initTrackingCalendar();
         updateLegend();
 

@@ -11,7 +11,61 @@
             </button>
         </div>
 
-        <section class="gc-card p-5">
+        <section id="booking-placement-confirmation" class="gc-card hidden overflow-hidden p-0">
+            <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div class="p-6">
+                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">
+                        Placement confirme
+                    </span>
+                    <h2 class="mt-4 text-2xl font-semibold" style="color:var(--gc-text);">Le rendez-vous a bien ete place</h2>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
+                        La prise de RDV est verrouillee sur cette page pour eviter un double placement accidentel.
+                    </p>
+
+                    <dl class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Reference</dt>
+                            <dd id="booking_confirmation_reference" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Date</dt>
+                            <dd id="booking_confirmation_date" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Client</dt>
+                            <dd id="booking_confirmation_customer" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Technicien</dt>
+                            <dd id="booking_confirmation_technician" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                        </div>
+                        <div class="rounded-xl border p-4 md:col-span-2" style="border-color:var(--gc-border);background:#ffffff;">
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Adresse</dt>
+                            <dd id="booking_confirmation_address" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <aside class="flex flex-col justify-between gap-6 p-6" style="background:linear-gradient(145deg,#31424c 0%,#1f2d35 100%);">
+                    <div>
+                        <p class="text-sm font-semibold" style="color:#f5df9a;">Prochaine action</p>
+                        <p class="mt-2 text-sm leading-6 text-white/80">
+                            Tu peux maintenant verifier le rendez-vous dans le suivi ou repartir sur une nouvelle prise de RDV propre.
+                        </p>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <a id="booking-confirmation-track-link" href="{{ route('planner.tracking') }}" class="gc-btn-primary justify-center text-center">
+                            Suivre le RDV
+                        </a>
+                        <button id="booking-confirmation-new" type="button" class="gc-btn-soft justify-center">
+                            Placer un autre RDV
+                        </button>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="crm-booking-section" class="gc-card p-5">
             <div class="mb-4 flex items-center justify-between gap-3">
                 <div>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV a placer depuis les CRM</h2>
@@ -100,10 +154,22 @@
 
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
                 <section class="gc-card flex h-[560px] flex-col p-5 xl:h-[640px]">
-                    <div class="mb-4 shrink-0">
+                    <div class="mb-4 shrink-0 space-y-4">
                         <p class="text-sm" style="color:var(--gc-text-soft);">Techniciens eligibles</p>
                         <h2 id="analysis-title" class="text-lg font-semibold" style="color:var(--gc-text);"></h2>
                         <p id="analysis-subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
+
+                        <div class="rounded-xl border p-3" style="border-color:var(--gc-border);background:#ffffff;">
+                            <label class="gc-label" for="eligible-technician-search">Ajouter un technicien manuellement</label>
+                            <input id="eligible-technician-search" type="search" class="gc-input" placeholder="Nom, prenom, telephone, departement..." autocomplete="off" />
+                            <p id="eligible-technician-search-status" class="mt-2 hidden text-xs"></p>
+                            <div id="eligible-technician-search-results" class="mt-3 hidden space-y-2"></div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-3 text-xs">
+                            <span id="eligible-technician-selection-count" style="color:var(--gc-text-soft);"></span>
+                            <button id="eligible-technician-select-all" type="button" class="gc-link">Tout cocher</button>
+                        </div>
                     </div>
                     <div id="eligible-technicians-list" class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"></div>
                 </section>
@@ -225,9 +291,11 @@
 
     <script>
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
+        const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const bookingTrackingUrl = @json(route('planner.tracking'));
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
@@ -239,8 +307,16 @@
         let currentAnalysisPayload = null;
         let currentAppointmentRequest = null;
         let currentTechnicians = [];
+        let selectedTechnicianIds = new Set();
+        let currentFilters = null;
+        let currentCalendarEvents = [];
+        let currentCalendarSuggestions = [];
+        let technicianSearchAbortController = null;
+        let technicianSearchTimer = null;
         let calendarWindowAbortController = null;
         let calendarWindowRequestId = 0;
+        let lastCalendarDateInfo = null;
+        let mapRenderRequestId = 0;
         let shouldFetchCalendarWindow = false;
         let detailMap = null;
         let detailMapMarkers = [];
@@ -308,12 +384,21 @@
         };
 
         const analysisSection = document.getElementById('booking-analysis-section');
+        const crmBookingSection = document.getElementById('crm-booking-section');
+        const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
         const techniciansList = document.getElementById('eligible-technicians-list');
+        const technicianSearchInput = document.getElementById('eligible-technician-search');
+        const technicianSearchResults = document.getElementById('eligible-technician-search-results');
+        const technicianSearchStatus = document.getElementById('eligible-technician-search-status');
+        const technicianSelectionCount = document.getElementById('eligible-technician-selection-count');
+        const technicianSelectAllButton = document.getElementById('eligible-technician-select-all');
         const bookingAppointmentModal = document.getElementById('booking-appointment-modal');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
+        const manualBookingToggle = document.getElementById('manual-booking-toggle');
+        const confirmationTrackLink = document.getElementById('booking-confirmation-track-link');
 
         const escapeHtml = (value) => String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -678,6 +763,66 @@
 
         const technicianById = (technicianId) => currentTechnicians.find((technician) => String(technician.id) === String(technicianId));
 
+        const selectedTechnicians = () => currentTechnicians
+            .filter((technician) => selectedTechnicianIds.has(String(technician.id)));
+
+        const selectedTechnicianIdsArray = () => selectedTechnicians()
+            .map((technician) => Number(technician.id))
+            .filter((id) => Number.isFinite(id));
+
+        const visibleCalendarItems = (items) => (items || [])
+            .filter((item) => selectedTechnicianIds.has(String(item.extendedProps?.technician_id || '')));
+
+        const refreshTechnicianColors = () => {
+            const existingColors = currentTechnicianColors;
+
+            currentTechnicianColors = Object.fromEntries(
+                currentTechnicians.map((technician, index) => {
+                    const technicianId = String(technician.id);
+
+                    return [technicianId, existingColors[technicianId] || routeColors[index % routeColors.length]];
+                })
+            );
+        };
+
+        const technicianColor = (technicianId) => {
+            const normalizedTechnicianId = String(technicianId);
+            const technicianIndex = currentTechnicians.findIndex((technician) => String(technician.id) === normalizedTechnicianId);
+
+            return currentTechnicianColors[normalizedTechnicianId]
+                || routeColors[Math.max(0, technicianIndex) % routeColors.length]
+                || '#31424c';
+        };
+
+        const technicianOrdinal = (technicianId) => {
+            const technicianIndex = currentTechnicians.findIndex((technician) => String(technician.id) === String(technicianId));
+
+            return technicianIndex >= 0 ? technicianIndex + 1 : null;
+        };
+
+        const updateTechnicianSelectionCount = () => {
+            if (!technicianSelectionCount) return;
+
+            technicianSelectionCount.textContent = `${selectedTechnicianIds.size}/${currentTechnicians.length} technicien(s) affiche(s)`;
+            technicianSelectAllButton?.classList.toggle('hidden', currentTechnicians.length === selectedTechnicianIds.size);
+        };
+
+        const upsertTechnician = (technician) => {
+            const technicianId = String(technician.id);
+            const existingIndex = currentTechnicians.findIndex((currentTechnician) => String(currentTechnician.id) === technicianId);
+
+            if (existingIndex >= 0) {
+                currentTechnicians[existingIndex] = {
+                    ...currentTechnicians[existingIndex],
+                    ...technician,
+                };
+            } else {
+                currentTechnicians.push(technician);
+            }
+
+            selectedTechnicianIds.add(technicianId);
+        };
+
         const sameLocalDay = (leftDate, rightDate) => leftDate?.toDateString?.() === rightDate?.toDateString?.();
 
         const previousAppointmentForTechnician = (technicianId, startsAt) => {
@@ -786,7 +931,9 @@
         };
 
         const openCalendarSlotModal = (info) => {
-            if (!currentAppointmentRequest || currentTechnicians.length === 0) {
+            const activeTechnicians = selectedTechnicians();
+
+            if (!currentAppointmentRequest || activeTechnicians.length === 0) {
                 showFeedback('Lance d abord une recherche CRM ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
                 return;
             }
@@ -798,7 +945,7 @@
             }
 
             const durationMinutes = requestDurationMinutes();
-            const technician = currentTechnicians[0];
+            const technician = activeTechnicians[0];
             const draftEvent = {
                 id: `calendar-draft-${Date.now()}`,
                 title: `Placement | ${technician.name}`,
@@ -988,6 +1135,55 @@
             return offsetDate.toISOString().slice(0, 16);
         };
 
+        const formatDateTimeForConfirmation = (value) => {
+            if (!value) return '-';
+
+            return new Intl.DateTimeFormat('fr-FR', {
+                dateStyle: 'full',
+                timeStyle: 'short',
+            }).format(new Date(value));
+        };
+
+        const showPlacementConfirmation = (data, payload, event) => {
+            const props = event?.extendedProps || {};
+            const technician = technicianById(payload.technician_id);
+            const startsAt = payload.starts_at || event?.start || null;
+
+            calendarWindowAbortController?.abort();
+            technicianSearchAbortController?.abort();
+            shouldFetchCalendarWindow = false;
+            selectedCalendarEvent = null;
+
+            crmBookingSection?.classList.add('hidden');
+            manualBookingSection?.classList.add('hidden');
+            analysisSection?.classList.add('hidden');
+            manualBookingToggle?.classList.add('hidden');
+            placementConfirmationSection?.classList.remove('hidden');
+
+            document.getElementById('booking_confirmation_reference').textContent = data.appointment_id
+                ? `RDV #${data.appointment_id}`
+                : 'RDV cree';
+            document.getElementById('booking_confirmation_date').textContent = formatDateTimeForConfirmation(startsAt);
+            document.getElementById('booking_confirmation_customer').textContent = props.customer_name || '-';
+            document.getElementById('booking_confirmation_technician').textContent = technician?.name || props.technician_name || '-';
+            document.getElementById('booking_confirmation_address').textContent = props.address || '-';
+
+            const trackingUrl = new URL(bookingTrackingUrl, window.location.origin);
+            trackingUrl.searchParams.set('technician_id', payload.technician_id);
+
+            if (data.appointment_id) {
+                trackingUrl.searchParams.set('appointment_id', data.appointment_id);
+            }
+
+            if (startsAt) {
+                trackingUrl.searchParams.set('date', String(startsAt).slice(0, 10));
+            }
+
+            confirmationTrackLink.href = trackingUrl.toString();
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
         const closeBookingAppointmentModal = () => {
             bookingAppointmentModal.classList.add('hidden');
             selectedCalendarEvent = null;
@@ -1034,7 +1230,7 @@
             renderRouteSummary(props, null, true);
 
             technicianSelectWrap.classList.toggle('hidden', !allowTechnicianChange);
-            technicianSelect.innerHTML = currentTechnicians.map((technician) => `
+            technicianSelect.innerHTML = selectedTechnicians().map((technician) => `
                 <option value="${escapeHtml(technician.id)}">${escapeHtml(technician.name)} · ${escapeHtml(technician.driving_duration_minutes)} min</option>
             `).join('');
             technicianSelect.value = props.technician_id || '';
@@ -1057,6 +1253,8 @@
         };
 
         const renderMap = async (crmAppointment, technicians) => {
+            const renderRequestId = ++mapRenderRequestId;
+
             mapboxDebug('render booking map called', {
                 crm_appointment_id: crmAppointment?.id,
                 technicians_count: technicians.length,
@@ -1072,6 +1270,8 @@
             }
 
             const render = async () => {
+                if (renderRequestId !== mapRenderRequestId) return;
+
                 mapboxDebug('render booking map drawing', {
                     technicians_count: technicians.length,
                     map_loaded: map.loaded(),
@@ -1088,16 +1288,19 @@
                     .addTo(map));
 
                 for (const [index, technician] of technicians.entries()) {
-                    const color = routeColors[index % routeColors.length];
+                    const color = technicianColor(technician.id);
+                    const markerLabel = String(technicianOrdinal(technician.id) || index + 1);
                     const techCoordinates = [Number(technician.longitude), Number(technician.latitude)];
                     bounds.extend(techCoordinates);
 
-                    bookingMapMarkers.push(new window.mapboxgl.Marker({ element: markerElement(color, String(index + 1)) })
+                    bookingMapMarkers.push(new window.mapboxgl.Marker({ element: markerElement(color, markerLabel) })
                         .setLngLat(techCoordinates)
                         .setPopup(new window.mapboxgl.Popup().setHTML(`<strong>${escapeHtml(technician.name)}</strong>`))
                         .addTo(map));
 
                     const route = await fetchRoute(technician, crmAppointment);
+                    if (renderRequestId !== mapRenderRequestId) return;
+
                     const sourceId = `tech-route-${technician.id}`;
                     map.addSource(sourceId, { type: 'geojson', data: route });
                     map.addLayer({
@@ -1130,7 +1333,11 @@
         };
 
         const renderTechnicians = (technicians, crmAppointment, filters) => {
-            document.getElementById('analysis-title').textContent = `${technicians.length} technicien(s) eligible(s)`;
+            refreshTechnicianColors();
+            updateTechnicianSelectionCount();
+
+            const activeTechnicians = selectedTechnicians();
+            document.getElementById('analysis-title').textContent = `${activeTechnicians.length}/${technicians.length} technicien(s) affiche(s)`;
             const serviceLabel = crmAppointment.service
                 ? `${crmAppointment.service.type} - ${crmAppointment.service.name}`
                 : null;
@@ -1146,20 +1353,26 @@
                 return;
             }
 
-            currentTechnicianColors = Object.fromEntries(
-                technicians.map((technician, index) => [String(technician.id), routeColors[index % routeColors.length]])
-            );
-
             techniciansList.innerHTML = technicians.map((technician, index) => {
                 const coverageBadge = technician.covers_requested_department
                     ? '<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">Departement couvert</span>'
                     : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Fallback proximite</span>';
-                const color = routeColors[index % routeColors.length];
+                const technicianId = String(technician.id);
+                const isSelected = selectedTechnicianIds.has(technicianId);
+                const color = technicianColor(technicianId);
+                const rankLabel = technicianOrdinal(technicianId) || index + 1;
 
                 return `
-                    <article class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <article class="rounded-xl border p-4 transition" style="border-color:${isSelected ? 'var(--gc-border)' : '#e2e8f0'};opacity:${isSelected ? '1' : '0.58'};">
                         <div class="flex items-start gap-3">
-                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" style="background:${color};">${index + 1}</span>
+                            <input
+                                type="checkbox"
+                                class="eligible-technician-checkbox mt-1 h-4 w-4 rounded"
+                                style="accent-color:${color};"
+                                data-technician-id="${escapeHtml(technician.id)}"
+                                ${isSelected ? 'checked' : ''}
+                            />
+                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" style="background:${color};">${rankLabel}</span>
                             <div class="min-w-0">
                                 <h3 class="font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</h3>
                                 <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(technician.phone || 'Telephone non renseigne')}</p>
@@ -1173,9 +1386,23 @@
                     </article>
                 `;
             }).join('');
+
+            techniciansList.querySelectorAll('.eligible-technician-checkbox').forEach((checkbox) => {
+                checkbox.addEventListener('change', async () => {
+                    const technicianId = String(checkbox.dataset.technicianId || '');
+
+                    if (checkbox.checked) {
+                        selectedTechnicianIds.add(technicianId);
+                    } else {
+                        selectedTechnicianIds.delete(technicianId);
+                    }
+
+                    await refreshBookingOutputs({ fetchCalendar: checkbox.checked });
+                });
+            });
         };
 
-        const colorizedEvents = (events, suggestions = []) => [...events, ...suggestions].map((event) => {
+        const colorizedEvents = (events, suggestions = []) => [...visibleCalendarItems(events), ...visibleCalendarItems(suggestions)].map((event) => {
             const technicianId = String(event.extendedProps?.technician_id || '');
             const color = currentTechnicianColors[technicianId] || '#31424c';
             const isDeleted = Boolean(event.extendedProps?.deleted_at);
@@ -1193,8 +1420,18 @@
             };
         });
 
-        const refreshCalendarWindow = async (dateInfo) => {
-            if (!shouldFetchCalendarWindow || !currentAnalysisPayload || !bookingCalendar) return;
+        const refreshCalendarWindow = async (dateInfo, options = {}) => {
+            lastCalendarDateInfo = dateInfo;
+
+            const force = Boolean(options.force);
+
+            if ((!force && !shouldFetchCalendarWindow) || !currentAnalysisPayload || !bookingCalendar) return;
+
+            if (selectedTechnicianIds.size === 0) {
+                bookingCalendar.removeAllEvents();
+                hideCalendarLoader();
+                return;
+            }
 
             calendarWindowAbortController?.abort();
             calendarWindowAbortController = new AbortController();
@@ -1215,6 +1452,7 @@
                         ...currentAnalysisPayload,
                         start: dateInfo.startStr,
                         end: dateInfo.endStr,
+                        technician_ids: selectedTechnicianIdsArray(),
                     }),
                 });
                 const payload = await response.json();
@@ -1225,8 +1463,10 @@
 
                 if (requestId !== calendarWindowRequestId) return;
 
+                currentCalendarEvents = payload.events || [];
+                currentCalendarSuggestions = payload.suggestions || [];
                 bookingCalendar.removeAllEvents();
-                bookingCalendar.addEventSource(colorizedEvents(payload.events || [], payload.suggestions || []));
+                bookingCalendar.addEventSource(colorizedEvents(currentCalendarEvents, currentCalendarSuggestions));
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     showFeedback(error.message || 'Erreur pendant le calcul des propositions.', 'error');
@@ -1238,10 +1478,12 @@
             }
         };
 
-        const renderCalendar = (events, suggestions = [], focusDate = null) => {
+        const renderCalendar = (events, suggestions = [], focusDate = null, shouldAutoFocus = true) => {
             const calendarElement = document.getElementById('booking-calendar');
             const preparedEvents = colorizedEvents(events, suggestions);
-            const firstSuggestionStart = suggestions.find((suggestion) => suggestion?.start)?.start || null;
+            const firstSuggestionStart = shouldAutoFocus
+                ? visibleCalendarItems(suggestions).find((suggestion) => suggestion?.start)?.start || null
+                : null;
             const calendarFocusDate = focusDate || firstSuggestionStart;
 
             if (bookingCalendar) {
@@ -1286,6 +1528,19 @@
             }
         };
 
+        const refreshBookingOutputs = async ({ fetchCalendar = false } = {}) => {
+            if (!currentAppointmentRequest || !currentFilters) return;
+
+            refreshTechnicianColors();
+            renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
+            await renderMap(currentAppointmentRequest, selectedTechnicians());
+            renderCalendar(currentCalendarEvents, currentCalendarSuggestions, null, false);
+
+            if (fetchCalendar && lastCalendarDateInfo) {
+                await refreshCalendarWindow(lastCalendarDateInfo, { force: true });
+            }
+        };
+
         const analyzeAppointment = async (payload, sourceLabel = 'RDV') => {
             currentAnalysisPayload = payload;
             currentCrmAppointmentId = payload.crm_appointment_id || null;
@@ -1313,13 +1568,20 @@
                 const suggestions = data.suggestions || [];
                 currentAppointmentRequest = data.crm_appointment;
                 currentTechnicians = data.technicians || [];
+                currentTechnicianColors = {};
+                selectedTechnicianIds = new Set(currentTechnicians.map((technician) => String(technician.id)));
+                currentFilters = data.filters || null;
+                currentCalendarEvents = data.events || [];
+                currentCalendarSuggestions = suggestions;
+                technicianSearchInput.value = '';
+                clearTechnicianSearch();
                 shouldFetchCalendarWindow = false;
                 calendarWindowAbortController?.abort();
                 hideCalendarLoader();
 
-                renderTechnicians(data.technicians, data.crm_appointment, data.filters);
-                await renderMap(data.crm_appointment, data.technicians);
-                renderCalendar(data.events, suggestions, data.filters?.preferred_starts_at || null);
+                renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
+                await renderMap(currentAppointmentRequest, selectedTechnicians());
+                renderCalendar(currentCalendarEvents, currentCalendarSuggestions, currentFilters?.preferred_starts_at || null);
                 window.setTimeout(() => {
                     shouldFetchCalendarWindow = true;
                 }, 250);
@@ -1352,8 +1614,131 @@
             longitude: document.getElementById('manual_longitude').value,
         });
 
+        const setTechnicianSearchStatus = (message, type = 'info') => {
+            technicianSearchStatus.textContent = message;
+            technicianSearchStatus.style.color = type === 'error' ? '#be123c' : 'var(--gc-text-soft)';
+            technicianSearchStatus.classList.remove('hidden');
+        };
+
+        const clearTechnicianSearch = () => {
+            technicianSearchStatus.textContent = '';
+            technicianSearchStatus.classList.add('hidden');
+            technicianSearchResults.innerHTML = '';
+            technicianSearchResults.classList.add('hidden');
+        };
+
+        const renderTechnicianSearchResults = (technicians) => {
+            if (technicians.length === 0) {
+                technicianSearchResults.innerHTML = '<div class="rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Aucun technicien trouve.</div>';
+                technicianSearchResults.classList.remove('hidden');
+                return;
+            }
+
+            technicianSearchResults.innerHTML = technicians.map((technician) => {
+                const technicianId = String(technician.id);
+                const isKnown = currentTechnicians.some((currentTechnician) => String(currentTechnician.id) === technicianId);
+                const isSelected = selectedTechnicianIds.has(technicianId);
+                const actionLabel = isSelected ? 'Deja affiche' : (isKnown ? 'Recocher' : 'Ajouter');
+                const coverageLabel = technician.covers_requested_department ? 'Dept. couvert' : 'Hors dept.';
+
+                return `
+                    <article class="flex items-center justify-between gap-3 rounded-xl border p-3" style="border-color:var(--gc-border);">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(technician.driving_distance_km)} km · ${escapeHtml(technician.driving_duration_minutes)} min · ${coverageLabel}</p>
+                        </div>
+                        <button
+                            type="button"
+                            class="${isSelected ? 'gc-btn-soft opacity-60' : 'gc-btn-primary'} shrink-0 px-3 py-2 text-xs"
+                            data-search-technician-id="${escapeHtml(technician.id)}"
+                            ${isSelected ? 'disabled' : ''}
+                        >
+                            ${actionLabel}
+                        </button>
+                    </article>
+                `;
+            }).join('');
+            technicianSearchResults.classList.remove('hidden');
+
+            technicianSearchResults.querySelectorAll('[data-search-technician-id]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    const technician = technicians.find((candidate) => String(candidate.id) === String(button.dataset.searchTechnicianId));
+
+                    if (!technician) return;
+
+                    button.disabled = true;
+                    button.textContent = 'Ajout...';
+                    upsertTechnician(technician);
+                    await refreshBookingOutputs({ fetchCalendar: true });
+                    technicianSearchInput.value = '';
+                    clearTechnicianSearch();
+                    setTechnicianSearchStatus(`${technician.name} ajoute a la selection.`);
+                });
+            });
+        };
+
+        const searchTechnicians = async (query) => {
+            const normalizedQuery = query.trim();
+
+            if (normalizedQuery.length < 2) {
+                clearTechnicianSearch();
+                return;
+            }
+
+            if (!currentAnalysisPayload) {
+                setTechnicianSearchStatus('Lance d abord une analyse CRM ou manuelle.', 'error');
+                return;
+            }
+
+            technicianSearchAbortController?.abort();
+            technicianSearchAbortController = new AbortController();
+            setTechnicianSearchStatus('Recherche en cours...');
+
+            try {
+                const response = await fetch(bookingTechnicianSearchUrl, {
+                    method: 'POST',
+                    signal: technicianSearchAbortController.signal,
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        ...currentAnalysisPayload,
+                        query: normalizedQuery,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Recherche technicien impossible.');
+                }
+
+                technicianSearchStatus.classList.add('hidden');
+                renderTechnicianSearchResults(payload.technicians || []);
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    setTechnicianSearchStatus(error.message || 'Recherche technicien impossible.', 'error');
+                }
+            }
+        };
+
         document.querySelectorAll('.crm-appointment-card').forEach((card) => {
             card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
+        });
+
+        technicianSearchInput.addEventListener('input', () => {
+            window.clearTimeout(technicianSearchTimer);
+            technicianSearchTimer = window.setTimeout(() => searchTechnicians(technicianSearchInput.value), 320);
+        });
+
+        technicianSelectAllButton.addEventListener('click', async () => {
+            currentTechnicians.forEach((technician) => selectedTechnicianIds.add(String(technician.id)));
+            await refreshBookingOutputs({ fetchCalendar: true });
+        });
+
+        document.getElementById('booking-confirmation-new').addEventListener('click', () => {
+            window.location.reload();
         });
 
         document.getElementById('manual-booking-toggle').addEventListener('click', () => {
@@ -1462,15 +1847,9 @@
                     throw new Error(firstError);
                 }
 
+                const confirmedEvent = selectedCalendarEvent;
                 closeBookingAppointmentModal();
-
-                if (currentAnalysisPayload?.manual_appointment) {
-                    await analyzeAppointment(currentAnalysisPayload, 'RDV manuel');
-                } else if (currentCrmAppointmentId) {
-                    await analyzeCrmAppointment(currentCrmAppointmentId);
-                }
-
-                showFeedback('Rendez-vous cree avec succes.');
+                showPlacementConfirmation(data, payload, confirmedEvent);
             } catch (error) {
                 showDetailStatus(error.message || 'Creation impossible.', 'error');
             } finally {

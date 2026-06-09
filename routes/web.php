@@ -92,6 +92,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
     Route::post('/planner/book/analyze', [PlannerBookingController::class, 'analyze'])->name('planner.book.analyze');
+    Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
