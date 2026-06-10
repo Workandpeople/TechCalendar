@@ -39,4 +39,12 @@ return [
         'token' => env('MAPBOX_TOKEN'),
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'timeout' => env('OPENAI_TIMEOUT', 75),
+        'connect_timeout' => env('OPENAI_CONNECT_TIMEOUT', 10),
+        'import_chunk_size' => env('OPENAI_IMPORT_CHUNK_SIZE', 10),
+    ],
+
 ];

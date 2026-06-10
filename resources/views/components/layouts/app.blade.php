@@ -1,10 +1,21 @@
 <!DOCTYPE html>
+@php
+    $reverbClientConfig = [
+        'key' => config('broadcasting.connections.reverb.key'),
+        'host' => config('broadcasting.connections.reverb.options.host'),
+        'port' => config('broadcasting.connections.reverb.options.port'),
+        'scheme' => config('broadcasting.connections.reverb.options.scheme'),
+    ];
+@endphp
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ config('app.name') }}</title>
+        <script>
+            window.TechCalendarReverbConfig = @json($reverbClientConfig);
+        </script>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="h-screen overflow-hidden antialiased">
@@ -37,6 +48,7 @@
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
+                        ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
                         ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
                     ],
                 ];
@@ -56,6 +68,7 @@
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
+                        ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
                         ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
                     ],
                 ];

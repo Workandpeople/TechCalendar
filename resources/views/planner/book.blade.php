@@ -68,13 +68,21 @@
         <section id="crm-booking-section" class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV a placer depuis les CRM</h2>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV a placer depuis les CRM</h2>
+                        <label class="inline-flex cursor-pointer items-center gap-3">
+                            <button id="booking-source-switch" type="button" class="relative h-4 w-8 rounded-full transition" style="background:var(--gc-primary);" role="switch" aria-checked="false" aria-label="Basculer vers les lots">
+                                <span id="booking-source-switch-knob" class="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition"></span>
+                            </button>
+                            <span class="text-lg font-semibold" style="color:var(--gc-text);">depuis des lots</span>
+                        </label>
+                    </div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les departements couverts filtrent les techniciens.</p>
                 </div>
-                <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm self-start md:self-auto" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $crmAppointments->count() }} demande(s)</span>
+                <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm self-start md:self-auto" style="background:var(--gc-accent-soft);color:var(--gc-text);" data-crm-count="{{ $crmAppointments->count() }}" data-lot-count="{{ $lotRequests->sum('appointments_count') }}">{{ $crmAppointments->count() }} demande(s)</span>
             </div>
 
-            <div class="mb-4">
+            <div id="booking-crm-search-wrap" class="mb-4">
                 <label class="gc-label" for="booking_crm_search">Recherche client</label>
                 <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prenom du client" autocomplete="off" />
             </div>
@@ -83,29 +91,121 @@
                 Aucun RDV CRM ne correspond a cette recherche.
             </div>
 
-            <div id="booking-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-                @foreach ($crmAppointments as $appointment)
-                    <button
-                        type="button"
-                        class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
-                        style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
-                        data-crm-id="{{ $appointment['id'] }}"
-                        data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
-                    >
-                        <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
-                        <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
-                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">{{ $appointment['address'] }}</p>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] }}</span>
-                            @if ($appointment['service'])
-                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
-                            @else
-                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigne</span>
-                            @endif
+            <div id="booking-crm-source">
+                <div id="booking-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    @foreach ($crmAppointments as $appointment)
+                        <button
+                            type="button"
+                            class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
+                            style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
+                            data-crm-id="{{ $appointment['id'] }}"
+                            data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
+                        >
+                            <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
+                            <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
+                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
+                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">{{ $appointment['address'] }}</p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] }}</span>
+                                @if ($appointment['service'])
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
+                                @else
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigne</span>
+                                @endif
+                            </div>
+                        </button>
+                    @endforeach
+                </div>
+                <div id="booking-crm-pagination" class="mt-4 flex flex-wrap items-center justify-center gap-2"></div>
+            </div>
+
+            <div id="booking-lot-source" class="hidden space-y-3">
+                @forelse ($lotRequests as $lot)
+                    <details class="booking-lot-details overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);">
+                        <summary class="flex cursor-pointer list-none flex-col gap-3 p-4 transition hover:bg-[color:var(--gc-accent-soft)] md:flex-row md:items-center md:justify-between">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
+                                    @if ($lot['type_label'])
+                                        <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $lot['type_label'] }}</span>
+                                    @endif
+                                    <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">{{ $lot['status_label'] }}</span>
+                                </div>
+                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">
+                                    {{ $lot['appointments_count'] }} RDV a placer
+                                    @if ($lot['departments']->isNotEmpty())
+                                        · Dept. {{ $lot['departments']->join(', ') }}
+                                    @endif
+                                </p>
+                            </div>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 shrink-0 transition-transform" style="color:var(--gc-text-soft);">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </summary>
+
+                        <div class="divide-y border-t" style="border-color:var(--gc-border);">
+                            @foreach ($lot['appointments'] as $appointment)
+                                <article class="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_280px_auto] xl:items-center">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
+                                            @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
+                                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#fef3c7;color:#b45309;">A verifier</span>
+                                            @endif
+                                        </div>
+                                        <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h4>
+                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Telephone non renseigne' }}</p>
+                                    </div>
+
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse a qualifier' }}</p>
+                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
+                                            @if ($appointment['external_reference'])
+                                                Ref. {{ $appointment['external_reference'] }}
+                                            @elseif ($appointment['row_number'])
+                                                Ligne fichier {{ $appointment['row_number'] }}
+                                            @else
+                                                RDV lot #{{ $appointment['id'] }}
+                                            @endif
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
+                                        <select
+                                            id="lot_appointment_service_{{ $appointment['id'] }}"
+                                            class="gc-input lot-appointment-service-select"
+                                            data-lot-appointment-id="{{ $appointment['id'] }}"
+                                            data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
+                                            @disabled(! $appointment['can_search'])
+                                        >
+                                            <option value="">Selectionner</option>
+                                            @foreach ($services as $service)
+                                                <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
+                                                    {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        class="lot-appointment-book-button gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50"
+                                        data-lot-appointment-id="{{ $appointment['id'] }}"
+                                        data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
+                                        disabled
+                                    >
+                                        Placer le RDV
+                                    </button>
+                                </article>
+                            @endforeach
                         </div>
-                    </button>
-                @endforeach
+                    </details>
+                @empty
+                    <div class="rounded-xl border border-dashed p-5 text-center text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                        Aucun RDV de lot a placer pour le moment.
+                    </div>
+                @endforelse
             </div>
         </section>
 
@@ -223,6 +323,7 @@
                 <section>
                     <div id="booking-detail-map" class="h-[420px] overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
                     <div id="booking_route_summary" class="mt-3 rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text);"></div>
+                    <div id="booking_day_route_summary" class="mt-3 rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);"></div>
                 </section>
 
                 <section class="space-y-4">
@@ -299,6 +400,16 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
+    <style>
+        .booking-lot-details > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .booking-lot-details[open] .booking-lot-chevron {
+            transform: rotate(180deg);
+        }
+    </style>
+
     <script>
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
@@ -331,6 +442,7 @@
         let shouldFetchCalendarWindow = false;
         let detailMap = null;
         let detailMapMarkers = [];
+        let detailMapRenderRequestId = 0;
         let selectedCalendarEvent = null;
 
         const mapboxTokenPreview = () => {
@@ -402,6 +514,12 @@
         const bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
         const bookingCrmCount = document.getElementById('booking-crm-count');
         const bookingCrmEmpty = document.getElementById('booking-crm-empty');
+        const bookingCrmSource = document.getElementById('booking-crm-source');
+        const bookingLotSource = document.getElementById('booking-lot-source');
+        const bookingCrmSearchWrap = document.getElementById('booking-crm-search-wrap');
+        const bookingCrmPagination = document.getElementById('booking-crm-pagination');
+        const bookingSourceSwitch = document.getElementById('booking-source-switch');
+        const bookingSourceSwitchKnob = document.getElementById('booking-source-switch-knob');
         const techniciansList = document.getElementById('eligible-technicians-list');
         const technicianSearchInput = document.getElementById('eligible-technician-search');
         const technicianSearchResults = document.getElementById('eligible-technician-search-results');
@@ -414,6 +532,9 @@
         const manualBookingStatus = document.getElementById('manual-booking-status');
         const manualBookingToggle = document.getElementById('manual-booking-toggle');
         const confirmationTrackLink = document.getElementById('booking-confirmation-track-link');
+        const bookingCrmPageSize = 5;
+        let bookingCrmPage = 1;
+        let bookingSourceMode = 'crm';
 
         const escapeHtml = (value) => String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -435,18 +556,75 @@
             bookingFeedback.classList.add('hidden');
         };
 
+        const renderBookingCrmPagination = (visibleCount) => {
+            if (!bookingCrmPagination) return;
+
+            const totalPages = Math.max(1, Math.ceil(visibleCount / bookingCrmPageSize));
+
+            if (bookingSourceMode !== 'crm' || totalPages <= 1) {
+                bookingCrmPagination.innerHTML = '';
+                bookingCrmPagination.classList.add('hidden');
+                return;
+            }
+
+            bookingCrmPagination.classList.remove('hidden');
+            bookingCrmPagination.innerHTML = `
+                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="prev" ${bookingCrmPage <= 1 ? 'disabled' : ''}>Precedent</button>
+                <span class="rounded-full px-3 py-2 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Page ${bookingCrmPage}/${totalPages}</span>
+                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="next" ${bookingCrmPage >= totalPages ? 'disabled' : ''}>Suivant</button>
+            `;
+
+            bookingCrmPagination.querySelectorAll('[data-crm-page-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const direction = button.dataset.crmPageAction === 'next' ? 1 : -1;
+                    bookingCrmPage = Math.min(totalPages, Math.max(1, bookingCrmPage + direction));
+                    filterBookingCrmCards();
+                });
+            });
+        };
+
         const filterBookingCrmCards = () => {
             const query = bookingCrmSearch.value.trim().toLowerCase();
-            let visibleCount = 0;
+            const matchingCards = bookingCrmCards.filter((card) => query === '' || card.dataset.client.includes(query));
+            const totalPages = Math.max(1, Math.ceil(matchingCards.length / bookingCrmPageSize));
+
+            bookingCrmPage = Math.min(bookingCrmPage, totalPages);
+            const pageStart = (bookingCrmPage - 1) * bookingCrmPageSize;
+            const pageCards = new Set(matchingCards.slice(pageStart, pageStart + bookingCrmPageSize));
 
             bookingCrmCards.forEach((card) => {
-                const isVisible = query === '' || card.dataset.client.includes(query);
+                const isVisible = bookingSourceMode === 'crm' && pageCards.has(card);
                 card.classList.toggle('hidden', !isVisible);
-                if (isVisible) visibleCount++;
             });
 
-            bookingCrmCount.textContent = `${visibleCount} demande(s)`;
-            bookingCrmEmpty.classList.toggle('hidden', visibleCount > 0);
+            bookingCrmCount.textContent = `${matchingCards.length} demande(s) CRM`;
+            bookingCrmEmpty.classList.toggle('hidden', bookingSourceMode !== 'crm' || matchingCards.length > 0);
+            renderBookingCrmPagination(matchingCards.length);
+        };
+
+        const setBookingSourceMode = (mode) => {
+            bookingSourceMode = mode === 'lot' ? 'lot' : 'crm';
+            const isLotMode = bookingSourceMode === 'lot';
+
+            bookingCrmSource?.classList.toggle('hidden', isLotMode);
+            bookingLotSource?.classList.toggle('hidden', !isLotMode);
+            bookingCrmSearchWrap?.classList.toggle('hidden', isLotMode);
+            bookingCrmEmpty?.classList.add('hidden');
+            bookingSourceSwitch?.setAttribute('aria-checked', String(isLotMode));
+            bookingSourceSwitch?.style.setProperty('background', isLotMode ? '#d8c27a' : 'var(--gc-primary)');
+            bookingSourceSwitchKnob?.style.setProperty('transform', isLotMode ? 'translateX(1.25rem)' : 'translateX(0)');
+            bookingCrmCount.textContent = isLotMode
+                ? `${bookingCrmCount.dataset.lotCount || 0} RDV de lot`
+                : `${bookingCrmCount.dataset.crmCount || bookingCrmCards.length} demande(s) CRM`;
+
+            if (isLotMode) {
+                bookingCrmPagination?.classList.add('hidden');
+                bookingCrmCards.forEach((card) => card.classList.add('hidden'));
+                return;
+            }
+
+            bookingCrmPage = 1;
+            filterBookingCrmCards();
         };
 
         const showCalendarLoader = () => {
@@ -904,6 +1082,9 @@
             return {
                 technician_id: technician.id,
                 technician_name: technician.name,
+                technician_address: technician.address,
+                technician_latitude: routeNumber(technician.latitude),
+                technician_longitude: routeNumber(technician.longitude),
                 is_suggestion: true,
                 is_calendar_click: true,
                 allow_technician_change: true,
@@ -918,6 +1099,7 @@
                 customer_phone: currentAppointmentRequest.phone,
                 service_label: serviceLabelForRequest(),
                 crm_appointment_id: currentAppointmentRequest.id,
+                lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
                 can_validate: Boolean(currentAppointmentRequest.service),
                 duration_minutes: requestDurationMinutes(),
                 comment: '',
@@ -1028,6 +1210,198 @@
             `;
         };
 
+        const setBookingDayRouteSummary = (content) => {
+            const summary = document.getElementById('booking_day_route_summary');
+            if (summary) summary.innerHTML = content;
+        };
+
+        const routeNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
+
+        const validRoutePoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
+
+        const sameEventIdentity = (left, right) => {
+            if (!left || !right) return false;
+            if (left === right) return true;
+
+            return String(left.id || '') !== '' && String(left.id) === String(right.id || '');
+        };
+
+        const technicianHomePoint = (props) => {
+            const technician = technicianById(props.technician_id);
+            const lat = routeNumber(props.technician_latitude ?? technician?.latitude);
+            const lng = routeNumber(props.technician_longitude ?? technician?.longitude);
+
+            return {
+                kind: 'home',
+                lat,
+                lng,
+                name: props.technician_address || technician?.address || 'Domicile',
+                label: 'Domicile',
+            };
+        };
+
+        const appointmentPointFromEvent = (event, currentEvent) => {
+            const props = event.extendedProps || {};
+
+            return {
+                kind: 'appointment',
+                lat: routeNumber(props.latitude),
+                lng: routeNumber(props.longitude),
+                name: props.customer_name || props.service_label || event.title || 'RDV',
+                label: props.is_suggestion ? 'Proposition' : 'RDV',
+                event,
+                isCurrent: sameEventIdentity(event, currentEvent),
+            };
+        };
+
+        const sameDayAppointmentsForEvent = (currentEvent) => {
+            const props = currentEvent.extendedProps || {};
+            const calendarEvents = bookingCalendar ? bookingCalendar.getEvents() : [];
+            const events = calendarEvents.filter((event) => {
+                const eventProps = event.extendedProps || {};
+
+                return String(eventProps.technician_id || '') === String(props.technician_id || '')
+                    && sameLocalDay(event.start, currentEvent.start)
+                    && !eventProps.is_suggestion
+                    && (!eventProps.deleted_at || sameEventIdentity(event, currentEvent))
+                    && Number.isFinite(routeNumber(eventProps.latitude))
+                    && Number.isFinite(routeNumber(eventProps.longitude));
+            });
+
+            if (!events.some((event) => sameEventIdentity(event, currentEvent))) {
+                events.push(currentEvent);
+            }
+
+            return Array.from(new Map(events.map((event) => [String(event.id), event])).values())
+                .filter((event) => event.start)
+                .sort((left, right) => left.start - right.start);
+        };
+
+        const buildBookingDayRouteSegments = (event) => {
+            const props = event.extendedProps || {};
+            const home = technicianHomePoint(props);
+
+            if (!validRoutePoint(home)) return [];
+
+            const appointmentPoints = sameDayAppointmentsForEvent(event)
+                .map((appointmentEvent) => appointmentPointFromEvent(appointmentEvent, event))
+                .filter(validRoutePoint);
+
+            if (appointmentPoints.length === 0) return [];
+
+            const points = [
+                home,
+                ...appointmentPoints,
+                { ...home, label: 'Retour domicile', isReturnHome: true },
+            ];
+
+            return points.slice(0, -1).map((from, index) => {
+                const to = points[index + 1];
+                const isCurrent = Boolean(to.isCurrent);
+
+                return {
+                    from,
+                    to,
+                    isCurrent,
+                    badge: isCurrent
+                        ? 'Trajet vers ce RDV'
+                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                };
+            });
+        };
+
+        const fallbackCurrentSegment = (event) => {
+            const props = event.extendedProps || {};
+            const origin = {
+                kind: 'origin',
+                lat: routeNumber(props.origin_latitude),
+                lng: routeNumber(props.origin_longitude),
+                name: props.origin_name || props.origin_label || 'Origine',
+                label: props.origin_label || 'Origine',
+            };
+            const destination = {
+                kind: 'appointment',
+                lat: routeNumber(props.latitude),
+                lng: routeNumber(props.longitude),
+                name: props.customer_name || event.title || 'RDV',
+                label: 'RDV',
+                isCurrent: true,
+            };
+
+            return validRoutePoint(origin) && validRoutePoint(destination)
+                ? [{ from: origin, to: destination, isCurrent: true, badge: 'Trajet vers ce RDV' }]
+                : [];
+        };
+
+        const enrichBookingDaySegments = async (segments, renderRequestId) => {
+            const enrichedSegments = [];
+
+            for (const segment of segments) {
+                const route = await fetchRouteBetween(segment.from, segment.to);
+                if (renderRequestId !== detailMapRenderRequestId) return null;
+                enrichedSegments.push({ ...segment, route });
+            }
+
+            return enrichedSegments;
+        };
+
+        const renderBookingDayRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
+            const summary = document.getElementById('booking_day_route_summary');
+
+            if (!summary) return;
+
+            if (isLoading) {
+                summary.innerHTML = `
+                    <div class="flex items-center justify-between gap-3">
+                        <span style="color:var(--gc-text-soft);">Calcul de la journee du technicien...</span>
+                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">En cours</span>
+                    </div>
+                `;
+                return;
+            }
+
+            if (!segments || segments.length === 0) {
+                summary.innerHTML = '<span style="color:var(--gc-text-soft);">Journee du technicien indisponible pour ce RDV.</span>';
+                return;
+            }
+
+            const defaultActiveIndex = segments.findIndex((segment) => segment.isCurrent);
+            const safeActiveIndex = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < segments.length
+                ? activeIndex
+                : Math.max(0, defaultActiveIndex);
+
+            summary.innerHTML = `
+                <div class="mb-3">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journee du technicien</p>
+                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointille.</p>
+                </div>
+                <div class="space-y-2">
+                    ${segments.map((segment, index) => {
+                        const isActive = index === safeActiveIndex;
+
+                        return `
+                        <button type="button" data-booking-day-segment-index="${index}" class="flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition hover:shadow-sm" style="border-color:${isActive ? 'var(--gc-accent)' : 'transparent'};background:${isActive ? 'var(--gc-accent-soft)' : '#f8fafc'};">
+                            <div class="min-w-0">
+                                <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:${isActive ? '#ffffff' : 'var(--gc-accent-soft)'};color:var(--gc-text);">${escapeHtml(segment.badge)}</span>
+                                <p class="mt-1 truncate font-medium">${escapeHtml(segment.from.name)} → ${escapeHtml(segment.to.name)}</p>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <p class="font-semibold">${Number(segment.route?.distance_km || 0).toFixed(1)} km</p>
+                                <p class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(formatRouteDuration(segment.route?.duration_minutes))}</p>
+                            </div>
+                        </button>
+                    `;
+                    }).join('')}
+                </div>
+            `;
+
+            summary.querySelectorAll('[data-booking-day-segment-index]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    onSelect?.(Number(button.dataset.bookingDaySegmentIndex));
+                });
+            });
+        };
+
         const initDetailMap = () => {
             mapboxDebug('init detail map', {
                 container_found: Boolean(document.getElementById('booking-detail-map')),
@@ -1074,7 +1448,7 @@
             detailMapMarkers.forEach((marker) => marker.remove());
             detailMapMarkers = [];
 
-            if (!detailMap) return;
+            if (!detailMap || !detailMap.loaded()) return;
 
             [...detailMap.getStyle().layers]
                 .filter((layer) => layer.id.startsWith('detail-route'))
@@ -1086,31 +1460,32 @@
         };
 
         const renderDetailMap = async (event) => {
+            const renderRequestId = ++detailMapRenderRequestId;
             const props = event.extendedProps;
-            const origin = {
-                lat: Number(props.origin_latitude),
-                lng: Number(props.origin_longitude),
-            };
-            const destination = {
-                lat: Number(props.latitude),
-                lng: Number(props.longitude),
-            };
+            let segments = buildBookingDayRouteSegments(event);
 
             mapboxDebug('render detail map called', {
                 event_id: event.id,
                 technician_id: props.technician_id,
-                origin,
-                destination,
+                segments_count: segments.length,
             });
 
-            if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng) || !Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) {
-                mapboxDebug('render detail map blocked: invalid coordinates', { origin, destination });
+            if (segments.length === 0) {
+                segments = fallbackCurrentSegment(event);
+            }
+
+            if (segments.length === 0) {
+                mapboxDebug('render detail map blocked: invalid coordinates');
                 renderRouteSummary(props);
+                renderBookingDayRouteSummary([]);
                 return;
             }
 
-            const route = await fetchRouteBetween(origin, destination);
-            renderRouteSummary(props, route);
+            renderRouteSummary(props, null, true);
+            renderBookingDayRouteSummary([], true);
+
+            const enrichedSegments = await enrichBookingDaySegments(segments, renderRequestId);
+            if (!enrichedSegments || renderRequestId !== detailMapRenderRequestId) return;
 
             const map = initDetailMap();
             if (!map) {
@@ -1118,42 +1493,89 @@
                 return;
             }
 
-            const render = async () => {
-                mapboxDebug('render detail map drawing route');
+            const defaultActiveIndex = Math.max(0, enrichedSegments.findIndex((segment) => segment.isCurrent));
+
+            const renderSelectedSegment = async (activeSegmentIndex = defaultActiveIndex) => {
+                if (renderRequestId !== detailMapRenderRequestId) return;
+                const safeActiveIndex = Number.isInteger(activeSegmentIndex) && activeSegmentIndex >= 0 && activeSegmentIndex < enrichedSegments.length
+                    ? activeSegmentIndex
+                    : defaultActiveIndex;
+                const activeSegment = enrichedSegments[safeActiveIndex] || enrichedSegments[0];
+
+                renderRouteSummary(props, activeSegment.route);
+                renderBookingDayRouteSummary(enrichedSegments, false, safeActiveIndex, (selectedIndex) => {
+                    void renderSelectedSegment(selectedIndex);
+                });
+
+                mapboxDebug('render detail map drawing route', { active_segment_index: safeActiveIndex });
                 clearDetailMap();
 
                 const color = currentTechnicianColors[String(props.technician_id)] || '#31424c';
                 const bounds = new window.mapboxgl.LngLatBounds();
-                bounds.extend([origin.lng, origin.lat]);
-                bounds.extend([destination.lng, destination.lat]);
+                const appointmentMarkerKeys = new Set();
+                const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
+                    ...segment,
+                    isHighlighted: index === safeActiveIndex,
+                }));
+                const orderedSegments = [
+                    ...segmentsForDisplay.filter((segment) => !segment.isHighlighted),
+                    ...segmentsForDisplay.filter((segment) => segment.isHighlighted),
+                ];
 
                 detailMapMarkers.push(new window.mapboxgl.Marker({ element: markerElement(color, 'D') })
-                    .setLngLat([origin.lng, origin.lat])
+                    .setLngLat([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat])
                     .addTo(map));
-                detailMapMarkers.push(new window.mapboxgl.Marker({ element: markerElement('#31424c', 'R') })
-                    .setLngLat([destination.lng, destination.lat])
-                    .addTo(map));
+                bounds.extend([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat]);
 
-                map.addSource('detail-route', { type: 'geojson', data: route.feature });
-                map.addLayer({
-                    id: 'detail-route',
-                    type: 'line',
-                    source: 'detail-route',
-                    layout: { 'line-cap': 'round', 'line-join': 'round' },
-                    paint: {
-                        'line-color': color,
-                        'line-width': 5,
-                        'line-opacity': 0.78,
-                    },
+                enrichedSegments.forEach((segment) => {
+                    [segment.from, segment.to].forEach((point) => bounds.extend([point.lng, point.lat]));
+
+                    const routeCoordinates = segment.route?.feature?.geometry?.coordinates || [];
+                    routeCoordinates.forEach((coordinate) => bounds.extend(coordinate));
+
+                    if (segment.to.kind === 'appointment') {
+                        const key = segment.to.event?.id ? String(segment.to.event.id) : `${segment.to.lng},${segment.to.lat}`;
+
+                        if (!appointmentMarkerKeys.has(key)) {
+                            appointmentMarkerKeys.add(key);
+                            detailMapMarkers.push(new window.mapboxgl.Marker({
+                                element: markerElement(segment.to.isCurrent ? '#31424c' : color, segment.to.isCurrent ? 'R' : String(appointmentMarkerKeys.size)),
+                            })
+                                .setLngLat([segment.to.lng, segment.to.lat])
+                                .addTo(map));
+                        }
+                    }
                 });
+
+                orderedSegments.forEach((segment, index) => {
+                    const sourceId = `detail-route-${index}`;
+                    const layerId = `detail-route-${index}`;
+
+                    if (!segment.route?.feature) return;
+
+                    map.addSource(sourceId, { type: 'geojson', data: segment.route.feature });
+                    map.addLayer({
+                        id: layerId,
+                        type: 'line',
+                        source: sourceId,
+                        layout: { 'line-cap': 'round', 'line-join': 'round' },
+                        paint: {
+                            'line-color': segment.isHighlighted ? color : '#64748b',
+                            'line-width': segment.isHighlighted ? 5 : 3,
+                            'line-opacity': segment.isHighlighted ? 0.9 : 0.5,
+                            ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
+                        },
+                    });
+                });
+
                 map.fitBounds(bounds, { padding: 70, maxZoom: 12 });
             };
 
             if (map.loaded()) {
-                await render();
+                await renderSelectedSegment();
             } else {
                 mapboxDebug('detail map waiting for load event');
-                map.once('load', render);
+                map.once('load', () => renderSelectedSegment());
             }
         };
 
@@ -1214,6 +1636,7 @@
         };
 
         const closeBookingAppointmentModal = () => {
+            detailMapRenderRequestId++;
             bookingAppointmentModal.classList.add('hidden');
             selectedCalendarEvent = null;
         };
@@ -1392,7 +1815,7 @@
                 const rankLabel = technicianOrdinal(technicianId) || index + 1;
 
                 return `
-                    <article class="rounded-xl border p-4 transition" style="border-color:${isSelected ? 'var(--gc-border)' : '#e2e8f0'};opacity:${isSelected ? '1' : '0.58'};">
+                    <label class="block cursor-pointer rounded-xl border p-4 transition hover:shadow-sm" style="border-color:${isSelected ? 'var(--gc-border)' : '#e2e8f0'};opacity:${isSelected ? '1' : '0.58'};">
                         <div class="flex items-start gap-3">
                             <input
                                 type="checkbox"
@@ -1412,7 +1835,7 @@
                                 </div>
                             </div>
                         </div>
-                    </article>
+                    </label>
                 `;
             }).join('');
 
@@ -1619,8 +2042,8 @@
                     showFeedback(`Aucun technicien eligible pour ce ${sourceLabel}.`, 'error');
                 } else if (suggestions.length === 0) {
                     showFeedback('Aucune proposition de placement calculee avec les contraintes actuelles.', 'error');
-                } else if (sourceLabel === 'RDV manuel') {
-                    showFeedback(`${suggestions.length} proposition(s) de placement calculee(s) pour ce RDV manuel.`);
+                } else if (sourceLabel === 'RDV manuel' || sourceLabel === 'RDV lot') {
+                    showFeedback(`${suggestions.length} proposition(s) de placement calculee(s) pour ce ${sourceLabel.toLowerCase()}.`);
                 }
 
                 return true;
@@ -1631,6 +2054,33 @@
         };
 
         const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, 'RDV CRM');
+        const lotServiceSelectFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-service-select[data-lot-appointment-id="${lotAppointmentId}"]`);
+        const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
+
+        const updateLotBookButtonState = (lotAppointmentId) => {
+            const select = lotServiceSelectFor(lotAppointmentId);
+            const button = lotBookButtonFor(lotAppointmentId);
+
+            if (!button) return;
+
+            const canSearch = button.dataset.canSearch === '1' && select?.dataset.canSearch === '1';
+            button.disabled = !canSearch || !select?.value;
+        };
+
+        const analyzeLotAppointment = async (lotAppointmentId) => {
+            const select = lotServiceSelectFor(lotAppointmentId);
+            const serviceId = select?.value;
+
+            if (!serviceId) {
+                select?.focus();
+                return false;
+            }
+
+            return analyzeAppointment({
+                lot_appointment_id: Number(lotAppointmentId),
+                lot_service_id: Number(serviceId),
+            }, 'RDV lot');
+        };
 
         const manualAppointmentPayload = () => ({
             first_name: document.getElementById('manual_first_name').value.trim(),
@@ -1756,7 +2206,25 @@
             card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
         });
 
-        bookingCrmSearch.addEventListener('input', filterBookingCrmCards);
+        document.querySelectorAll('.lot-appointment-book-button').forEach((button) => {
+            button.addEventListener('click', () => analyzeLotAppointment(button.dataset.lotAppointmentId));
+        });
+
+        document.querySelectorAll('.lot-appointment-service-select').forEach((select) => {
+            updateLotBookButtonState(select.dataset.lotAppointmentId);
+            select.addEventListener('change', () => updateLotBookButtonState(select.dataset.lotAppointmentId));
+        });
+
+        bookingCrmSearch.addEventListener('input', () => {
+            bookingCrmPage = 1;
+            filterBookingCrmCards();
+        });
+
+        bookingSourceSwitch?.addEventListener('click', () => {
+            setBookingSourceMode(bookingSourceMode === 'crm' ? 'lot' : 'crm');
+        });
+
+        setBookingSourceMode('crm');
 
         if (bookingInitialCrmAppointmentId) {
             const initialCard = Array.from(document.querySelectorAll('.crm-appointment-card'))

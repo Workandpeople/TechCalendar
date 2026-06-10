@@ -34,6 +34,15 @@
         </svg>
         @break
 
+    @case('lots')
+        <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" />
+            <path d="M4 12.5 12 17l8-4.5" />
+            <path d="M4 17.5 12 22l8-4.5" />
+            <path d="M12 12v5" />
+        </svg>
+        @break
+
     @case('appointments')
         <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
             <rect x="3" y="5" width="18" height="16" rx="2" />

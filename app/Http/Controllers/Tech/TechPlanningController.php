@@ -42,6 +42,7 @@ class TechPlanningController extends Controller
             'technician' => $user,
             'nextAppointment' => $nextAppointment,
             'upcomingAppointments' => $upcomingAppointments,
+            'mapboxToken' => config('services.mapbox.token'),
             'stats' => [
                 [
                     'label' => 'RDV aujourd hui',

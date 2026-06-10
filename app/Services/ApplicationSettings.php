@@ -88,18 +88,22 @@ class ApplicationSettings
             ->map(function (array $definition, string $key): array {
                 $setting = $this->setting($key);
                 $hasDatabaseValue = $setting && filled($setting->value);
+                $hasEnvValue = $this->hasEnvironmentValue($definition);
+                $effectiveSource = $hasDatabaseValue ? 'bdd' : ($hasEnvValue ? 'env' : 'fallback');
 
                 return [
                     'key' => $key,
                     'group' => $definition['group'],
                     'label' => $definition['label'],
                     'type' => $definition['type'] ?? 'string',
+                    'env_key' => $definition['env'] ?? null,
                     'description' => $definition['description'] ?? null,
                     'options' => $definition['options'] ?? [],
                     'is_secret' => (bool) ($definition['secret'] ?? false),
                     'value' => $hasDatabaseValue && ! ($definition['secret'] ?? false) ? $setting->value : $this->get($key),
                     'has_database_value' => $hasDatabaseValue,
-                    'source' => $hasDatabaseValue ? 'bdd' : 'env',
+                    'has_env_value' => $hasEnvValue,
+                    'source' => $effectiveSource,
                     'updated_at' => $setting?->updated_at,
                 ];
             })
@@ -238,5 +242,27 @@ class ApplicationSettings
         }
 
         return config($configKey);
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function hasEnvironmentValue(array $definition): bool
+    {
+        $envValue = isset($definition['env']) ? env($definition['env']) : null;
+
+        if ($envValue !== null && $envValue !== '') {
+            return true;
+        }
+
+        $configKey = $definition['config'] ?? null;
+
+        if (! $configKey) {
+            return false;
+        }
+
+        $configValue = $this->initialConfigValue($configKey);
+
+        return $configValue !== null && $configValue !== '';
     }
 }

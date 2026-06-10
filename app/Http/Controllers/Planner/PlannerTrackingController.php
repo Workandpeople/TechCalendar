@@ -103,6 +103,9 @@ class PlannerTrackingController extends Controller
                     'extendedProps' => [
                         'technician_id' => $appointment->technician_id,
                         'technician_name' => $technicianName,
+                        'technician_address' => $appointment->technician?->address,
+                        'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
+                        'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
                         'service_label' => $serviceLabel,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,

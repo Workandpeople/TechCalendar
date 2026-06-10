@@ -102,6 +102,7 @@
                     </div>
                     <div id="tracking-detail-map" class="h-[360px] overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
                     <div id="tracking_route_summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
+                    <div id="tracking_day_route_summary" class="mt-3 rounded-lg border px-3 py-3 text-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);"></div>
                 </section>
 
                 <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
@@ -193,6 +194,7 @@
         let trackingInitialComment = '';
         let trackingDetailMap = null;
         let trackingDetailMarkers = [];
+        let trackingDetailMapRenderRequestId = 0;
         let trackingEventsAbortController = null;
         let trackingEventsRequestId = 0;
 
@@ -213,6 +215,13 @@
             const element = document.getElementById(id);
             if (element) element.textContent = value || '-';
         };
+
+        const trackingEscapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
 
         const trackingMarkerElement = (color, label) => {
             const element = document.createElement('div');
@@ -260,30 +269,61 @@
             trackingDetailMarkers.forEach((marker) => marker.remove());
             trackingDetailMarkers = [];
 
-            if (!trackingDetailMap) return;
+            if (!trackingDetailMap || !trackingDetailMap.loaded()) return;
 
-            if (trackingDetailMap.getLayer('tracking-detail-route')) {
-                trackingDetailMap.removeLayer('tracking-detail-route');
-            }
+            [...trackingDetailMap.getStyle().layers]
+                .filter((layer) => layer.id.startsWith('tracking-detail-route'))
+                .forEach((layer) => trackingDetailMap.removeLayer(layer.id));
 
-            if (trackingDetailMap.getSource('tracking-detail-route')) {
-                trackingDetailMap.removeSource('tracking-detail-route');
-            }
+            Object.keys(trackingDetailMap.getStyle().sources)
+                .filter((source) => source.startsWith('tracking-detail-route'))
+                .forEach((source) => trackingDetailMap.removeSource(source));
         };
 
         const fetchTrackingRoute = async (origin, destination) => {
+            const fallbackDistanceKm = trackingHaversineDistanceKm(origin.lat, origin.lng, destination.lat, destination.lng);
+            const fallback = {
+                feature: {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[origin.lng, origin.lat], [destination.lng, destination.lat]],
+                    },
+                    properties: {},
+                },
+                distance_km: fallbackDistanceKm,
+                duration_minutes: Math.max(1, Math.round((fallbackDistanceKm / 65) * 60)),
+                source: 'estimation interne',
+            };
+
+            if (!trackingMapboxToken) return fallback;
+
             const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`);
             url.searchParams.set('geometries', 'geojson');
             url.searchParams.set('overview', 'full');
             url.searchParams.set('access_token', trackingMapboxToken);
 
-            const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+            try {
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
 
-            if (!response.ok) return null;
+                if (!response.ok) return fallback;
 
-            const payload = await response.json();
+                const payload = await response.json();
+                const route = payload.routes?.[0];
 
-            return payload.routes?.[0] || null;
+                return route?.geometry ? {
+                    feature: {
+                        type: 'Feature',
+                        geometry: route.geometry,
+                        properties: {},
+                    },
+                    distance_km: Number(route.distance || 0) / 1000,
+                    duration_minutes: Math.max(1, Math.round(Number(route.duration || 0) / 60)),
+                    source: 'Mapbox voiture',
+                } : fallback;
+            } catch (error) {
+                return fallback;
+            }
         };
 
         const setTrackingRouteSummary = (message) => {
@@ -291,28 +331,231 @@
             if (summary) summary.textContent = message;
         };
 
+        const formatTrackingRouteDuration = (minutes) => {
+            const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
+            const hours = Math.floor(safeMinutes / 60);
+            const remainingMinutes = safeMinutes % 60;
+
+            if (hours === 0) return `${remainingMinutes} min`;
+
+            return remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`;
+        };
+
+        const trackingHaversineDistanceKm = (fromLat, fromLng, toLat, toLng) => {
+            const earthRadiusKm = 6371;
+            const toRadians = (value) => value * Math.PI / 180;
+            const latDelta = toRadians(toLat - fromLat);
+            const lngDelta = toRadians(toLng - fromLng);
+            const a = Math.sin(latDelta / 2) ** 2
+                + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) * Math.sin(lngDelta / 2) ** 2;
+
+            return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        };
+
+        const setTrackingDayRouteSummary = (content) => {
+            const summary = document.getElementById('tracking_day_route_summary');
+            if (summary) summary.innerHTML = content;
+        };
+
+        const trackingRouteNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
+
+        const validTrackingPoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
+
+        const sameTrackingDay = (leftDate, rightDate) => leftDate?.toDateString?.() === rightDate?.toDateString?.();
+
+        const sameTrackingEvent = (left, right) => {
+            if (!left || !right) return false;
+            if (left === right) return true;
+
+            return String(left.id || '') !== '' && String(left.id) === String(right.id || '');
+        };
+
+        const trackingTechnicianHomePoint = (props) => ({
+            kind: 'home',
+            lat: trackingRouteNumber(props.technician_latitude),
+            lng: trackingRouteNumber(props.technician_longitude),
+            name: props.technician_address || 'Domicile',
+            label: 'Domicile',
+        });
+
+        const trackingAppointmentPointFromEvent = (event, currentEvent) => {
+            const props = event.extendedProps || {};
+
+            return {
+                kind: 'appointment',
+                lat: trackingRouteNumber(props.latitude),
+                lng: trackingRouteNumber(props.longitude),
+                name: props.customer_name || props.service_label || event.title || 'RDV',
+                label: 'RDV',
+                event,
+                isCurrent: sameTrackingEvent(event, currentEvent),
+            };
+        };
+
+        const sameDayTrackingAppointments = (currentEvent) => {
+            const props = currentEvent.extendedProps || {};
+            const events = (trackingCalendar ? trackingCalendar.getEvents() : []).filter((event) => {
+                const eventProps = event.extendedProps || {};
+
+                return String(eventProps.technician_id || '') === String(props.technician_id || '')
+                    && sameTrackingDay(event.start, currentEvent.start)
+                    && (!eventProps.deleted_at || sameTrackingEvent(event, currentEvent))
+                    && Number.isFinite(trackingRouteNumber(eventProps.latitude))
+                    && Number.isFinite(trackingRouteNumber(eventProps.longitude));
+            });
+
+            if (!events.some((event) => sameTrackingEvent(event, currentEvent))) {
+                events.push(currentEvent);
+            }
+
+            return Array.from(new Map(events.map((event) => [String(event.id), event])).values())
+                .filter((event) => event.start)
+                .sort((left, right) => left.start - right.start);
+        };
+
+        const buildTrackingDayRouteSegments = (event) => {
+            const props = event.extendedProps || {};
+            const home = trackingTechnicianHomePoint(props);
+
+            if (!validTrackingPoint(home)) return [];
+
+            const appointmentPoints = sameDayTrackingAppointments(event)
+                .map((appointmentEvent) => trackingAppointmentPointFromEvent(appointmentEvent, event))
+                .filter(validTrackingPoint);
+
+            if (appointmentPoints.length === 0) return [];
+
+            const points = [
+                home,
+                ...appointmentPoints,
+                { ...home, label: 'Retour domicile', isReturnHome: true },
+            ];
+
+            return points.slice(0, -1).map((from, index) => {
+                const to = points[index + 1];
+                const isCurrent = Boolean(to.isCurrent);
+
+                return {
+                    from,
+                    to,
+                    isCurrent,
+                    badge: isCurrent
+                        ? 'Trajet vers ce RDV'
+                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                };
+            });
+        };
+
+        const trackingFallbackCurrentSegment = (event) => {
+            const props = event.extendedProps || {};
+            const origin = {
+                kind: 'origin',
+                lat: trackingRouteNumber(props.origin_latitude),
+                lng: trackingRouteNumber(props.origin_longitude),
+                name: props.origin_name || props.origin_label || 'Origine',
+                label: props.origin_label || 'Origine',
+            };
+            const destination = {
+                kind: 'appointment',
+                lat: trackingRouteNumber(props.latitude),
+                lng: trackingRouteNumber(props.longitude),
+                name: props.customer_name || event.title || 'RDV',
+                label: 'RDV',
+                isCurrent: true,
+            };
+
+            return validTrackingPoint(origin) && validTrackingPoint(destination)
+                ? [{ from: origin, to: destination, isCurrent: true, badge: 'Trajet vers ce RDV' }]
+                : [];
+        };
+
+        const enrichTrackingDaySegments = async (segments, renderRequestId) => {
+            const enrichedSegments = [];
+
+            for (const segment of segments) {
+                const route = await fetchTrackingRoute(segment.from, segment.to);
+                if (renderRequestId !== trackingDetailMapRenderRequestId) return null;
+                enrichedSegments.push({ ...segment, route });
+            }
+
+            return enrichedSegments;
+        };
+
+        const renderTrackingDayRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
+            if (isLoading) {
+                setTrackingDayRouteSummary(`
+                    <div class="flex items-center justify-between gap-3">
+                        <span style="color:var(--gc-text-soft);">Calcul de la journee du technicien...</span>
+                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">En cours</span>
+                    </div>
+                `);
+                return;
+            }
+
+            if (!segments || segments.length === 0) {
+                setTrackingDayRouteSummary('<span style="color:var(--gc-text-soft);">Journee du technicien indisponible pour ce RDV.</span>');
+                return;
+            }
+
+            const defaultActiveIndex = segments.findIndex((segment) => segment.isCurrent);
+            const safeActiveIndex = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < segments.length
+                ? activeIndex
+                : Math.max(0, defaultActiveIndex);
+
+            setTrackingDayRouteSummary(`
+                <div class="mb-3">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journee du technicien</p>
+                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointille.</p>
+                </div>
+                <div class="space-y-2">
+                    ${segments.map((segment, index) => {
+                        const isActive = index === safeActiveIndex;
+
+                        return `
+                        <button type="button" data-tracking-day-segment-index="${index}" class="flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition hover:shadow-sm" style="border-color:${isActive ? 'var(--gc-accent)' : 'transparent'};background:${isActive ? 'var(--gc-accent-soft)' : '#f8fafc'};">
+                            <div class="min-w-0">
+                                <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:${isActive ? '#ffffff' : 'var(--gc-accent-soft)'};color:var(--gc-text);">${trackingEscapeHtml(segment.badge)}</span>
+                                <p class="mt-1 truncate font-medium">${trackingEscapeHtml(segment.from.name)} → ${trackingEscapeHtml(segment.to.name)}</p>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <p class="font-semibold">${Number(segment.route?.distance_km || 0).toFixed(1)} km</p>
+                                <p class="text-xs" style="color:var(--gc-text-soft);">${formatTrackingRouteDuration(segment.route?.duration_minutes)}</p>
+                            </div>
+                        </button>
+                    `;
+                    }).join('')}
+                </div>
+            `);
+
+            document.querySelectorAll('[data-tracking-day-segment-index]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    onSelect?.(Number(button.dataset.trackingDaySegmentIndex));
+                });
+            });
+        };
+
         const renderTrackingDetailMap = async (event) => {
+            const renderRequestId = ++trackingDetailMapRenderRequestId;
             const props = event.extendedProps;
             const map = ensureTrackingDetailMap();
-            const destination = {
-                lat: Number(props.latitude),
-                lng: Number(props.longitude),
-            };
-            const origin = {
-                lat: Number(props.origin_latitude),
-                lng: Number(props.origin_longitude),
-            };
+            let segments = buildTrackingDayRouteSegments(event);
 
             setText('tracking_route_origin', props.origin_label ? `Depart: ${props.origin_label} - ${props.origin_name || '-'}` : null);
 
             if (!map) {
                 setTrackingRouteSummary('Trajet non affiche.');
+                renderTrackingDayRouteSummary([]);
                 return;
             }
 
-            if (!Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) {
+            if (segments.length === 0) {
+                segments = trackingFallbackCurrentSegment(event);
+            }
+
+            if (segments.length === 0) {
                 clearTrackingDetailMap();
                 setTrackingRouteSummary('Coordonnees du RDV indisponibles.');
+                renderTrackingDayRouteSummary([]);
                 return;
             }
 
@@ -322,67 +565,101 @@
             }
 
             clearTrackingDetailMap();
+            setTrackingRouteSummary('Calcul du trajet...');
+            renderTrackingDayRouteSummary([], true);
 
-            const bounds = new window.mapboxgl.LngLatBounds();
+            const enrichedSegments = await enrichTrackingDaySegments(segments, renderRequestId);
+            if (!enrichedSegments || renderRequestId !== trackingDetailMapRenderRequestId) return;
 
-            trackingDetailMarkers.push(new window.mapboxgl.Marker({ element: trackingMarkerElement('#31424c', 'R') })
-                .setLngLat([destination.lng, destination.lat])
-                .addTo(map));
-            bounds.extend([destination.lng, destination.lat]);
+            const defaultActiveIndex = Math.max(0, enrichedSegments.findIndex((segment) => segment.isCurrent));
 
-            if (Number.isFinite(origin.lat) && Number.isFinite(origin.lng)) {
-                trackingDetailMarkers.push(new window.mapboxgl.Marker({ element: trackingMarkerElement('#d8c27a', 'D') })
-                    .setLngLat([origin.lng, origin.lat])
+            const renderSelectedSegment = (activeSegmentIndex = defaultActiveIndex) => {
+                if (renderRequestId !== trackingDetailMapRenderRequestId) return;
+
+                const safeActiveIndex = Number.isInteger(activeSegmentIndex) && activeSegmentIndex >= 0 && activeSegmentIndex < enrichedSegments.length
+                    ? activeSegmentIndex
+                    : defaultActiveIndex;
+                const activeSegment = enrichedSegments[safeActiveIndex] || enrichedSegments[0];
+
+                setTrackingRouteSummary(`${Number(activeSegment.route?.distance_km || 0).toFixed(1)} km en voiture - environ ${formatTrackingRouteDuration(activeSegment.route?.duration_minutes)}.`);
+                renderTrackingDayRouteSummary(enrichedSegments, false, safeActiveIndex, (selectedIndex) => {
+                    renderSelectedSegment(selectedIndex);
+                });
+
+                clearTrackingDetailMap();
+
+                const colors = selectedTechnicianColorMap();
+                const color = colors[Number(props.technician_id)] || '#31424c';
+                const bounds = new window.mapboxgl.LngLatBounds();
+                const appointmentMarkerKeys = new Set();
+                const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
+                    ...segment,
+                    isHighlighted: index === safeActiveIndex,
+                }));
+                const orderedSegments = [
+                    ...segmentsForDisplay.filter((segment) => !segment.isHighlighted),
+                    ...segmentsForDisplay.filter((segment) => segment.isHighlighted),
+                ];
+
+                trackingDetailMarkers.push(new window.mapboxgl.Marker({ element: trackingMarkerElement(color, 'D') })
+                    .setLngLat([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat])
                     .addTo(map));
-                bounds.extend([origin.lng, origin.lat]);
+                bounds.extend([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat]);
 
-                try {
-                    const route = await fetchTrackingRoute(origin, destination);
+                enrichedSegments.forEach((segment) => {
+                    [segment.from, segment.to].forEach((point) => bounds.extend([point.lng, point.lat]));
+                    (segment.route?.feature?.geometry?.coordinates || []).forEach((coordinate) => bounds.extend(coordinate));
 
-                    if (route?.geometry) {
-                        map.addSource('tracking-detail-route', {
-                            type: 'geojson',
-                            data: {
-                                type: 'Feature',
-                                geometry: route.geometry,
-                                properties: {},
-                            },
-                        });
-                        map.addLayer({
-                            id: 'tracking-detail-route',
-                            type: 'line',
-                            source: 'tracking-detail-route',
-                            layout: {
-                                'line-cap': 'round',
-                                'line-join': 'round',
-                            },
-                            paint: {
-                                'line-color': '#31424c',
-                                'line-width': 5,
-                                'line-opacity': 0.82,
-                            },
-                        });
+                    if (segment.to.kind === 'appointment') {
+                        const key = segment.to.event?.id ? String(segment.to.event.id) : `${segment.to.lng},${segment.to.lat}`;
 
-                        setTrackingRouteSummary(`${(route.distance / 1000).toFixed(1)} km en voiture - environ ${Math.round(route.duration / 60)} min.`);
-                    } else {
-                        setTrackingRouteSummary('Trace Mapbox indisponible, affichage des points uniquement.');
+                        if (!appointmentMarkerKeys.has(key)) {
+                            appointmentMarkerKeys.add(key);
+                            trackingDetailMarkers.push(new window.mapboxgl.Marker({
+                                element: trackingMarkerElement(segment.to.isCurrent ? '#31424c' : color, segment.to.isCurrent ? 'R' : String(appointmentMarkerKeys.size)),
+                            })
+                                .setLngLat([segment.to.lng, segment.to.lat])
+                                .addTo(map));
+                        }
                     }
-                } catch (error) {
-                    setTrackingRouteSummary('Trace Mapbox indisponible, affichage des points uniquement.');
-                }
-            } else {
-                setTrackingRouteSummary('Origine indisponible, affichage du RDV uniquement.');
-            }
+                });
 
-            map.fitBounds(bounds, {
-                padding: 64,
-                maxZoom: 13,
-                duration: 0,
-            });
-            map.resize();
+                orderedSegments.forEach((segment, index) => {
+                    const sourceId = `tracking-detail-route-${index}`;
+
+                    if (!segment.route?.feature) return;
+
+                    map.addSource(sourceId, { type: 'geojson', data: segment.route.feature });
+                    map.addLayer({
+                        id: sourceId,
+                        type: 'line',
+                        source: sourceId,
+                        layout: {
+                            'line-cap': 'round',
+                            'line-join': 'round',
+                        },
+                        paint: {
+                            'line-color': segment.isHighlighted ? color : '#64748b',
+                            'line-width': segment.isHighlighted ? 5 : 3,
+                            'line-opacity': segment.isHighlighted ? 0.9 : 0.5,
+                            ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
+                        },
+                    });
+                });
+
+                map.fitBounds(bounds, {
+                    padding: 64,
+                    maxZoom: 13,
+                    duration: 0,
+                });
+                map.resize();
+            };
+
+            renderSelectedSegment();
         };
 
         const closeTrackingAppointmentModal = () => {
+            trackingDetailMapRenderRequestId++;
             trackingAppointmentModal.classList.add('hidden');
         };
 

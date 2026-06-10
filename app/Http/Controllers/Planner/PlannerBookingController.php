@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Models\Lot;
+use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\MapboxDrivingRouteService;
@@ -24,6 +26,7 @@ class PlannerBookingController extends Controller
 
         return view('planner.book', [
             'crmAppointments' => $crmAppointments->pending(15),
+            'lotRequests' => $this->lotAppointmentRequests(),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
             'services' => Service::query()
@@ -76,6 +79,7 @@ class PlannerBookingController extends Controller
                 'preferred_starts_at' => $crmAppointment['preferred_starts_at'] ?? null,
                 'source' => $crmAppointment['source'],
                 'is_manual' => (bool) ($crmAppointment['is_manual'] ?? false),
+                'is_lot' => (bool) ($crmAppointment['is_lot'] ?? false),
             ],
             'technicians' => $this->serializeTechnicians($technicians),
             'events' => $this->calendarEvents($appointments),
@@ -180,8 +184,10 @@ class PlannerBookingController extends Controller
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
         if (! $crmAppointment['service']) {
+            $serviceErrorKey = ! empty($payload['lot_appointment_id']) ? 'lot_service_id' : 'crm_appointment_id';
+
             throw ValidationException::withMessages([
-                'crm_appointment_id' => 'Impossible de valider sans prestation renseignee.',
+                $serviceErrorKey => 'Impossible de valider sans prestation renseignee.',
             ]);
         }
 
@@ -203,6 +209,23 @@ class PlannerBookingController extends Controller
             'ends_at' => (clone $startsAt)->addMinutes($durationMinutes),
             'comment' => $payload['comment'] ?? null,
         ]);
+
+        if (! empty($payload['lot_appointment_id'])) {
+            $lotAppointment = LotAppointment::query()
+                ->with('lot')
+                ->whereKey((int) $payload['lot_appointment_id'])
+                ->first();
+
+            if ($lotAppointment) {
+                $lotAppointment->update([
+                    'appointment_id' => $appointment->id,
+                    'service_id' => $crmAppointment['service']['id'],
+                    'status' => LotAppointment::STATUS_PLACED,
+                ]);
+
+                $this->refreshLotStatus($lotAppointment->lot);
+            }
+        }
 
         return response()->json([
             'message' => 'Rendez-vous cree.',
@@ -469,8 +492,20 @@ class PlannerBookingController extends Controller
     private function appointmentRequestRules(): array
     {
         return [
-            'crm_appointment_id' => ['nullable', 'string', 'required_without:manual_appointment'],
-            'manual_appointment' => ['nullable', 'array', 'required_without:crm_appointment_id'],
+            'crm_appointment_id' => ['nullable', 'string', 'required_without_all:manual_appointment,lot_appointment_id'],
+            'lot_appointment_id' => [
+                'nullable',
+                'integer',
+                'required_without_all:crm_appointment_id,manual_appointment',
+                Rule::exists('lot_appointments', 'id'),
+            ],
+            'lot_service_id' => [
+                'nullable',
+                'integer',
+                'required_with:lot_appointment_id',
+                Rule::exists('services', 'id'),
+            ],
+            'manual_appointment' => ['nullable', 'array', 'required_without_all:crm_appointment_id,lot_appointment_id'],
             'manual_appointment.first_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.last_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:30'],
@@ -502,11 +537,159 @@ class PlannerBookingController extends Controller
             ] : null;
         }
 
+        if (! empty($payload['lot_appointment_id'])) {
+            return $this->lotAppointmentFromId(
+                (int) $payload['lot_appointment_id'],
+                isset($payload['lot_service_id']) ? (int) $payload['lot_service_id'] : null,
+            );
+        }
+
         if (! isset($payload['manual_appointment']) || ! is_array($payload['manual_appointment'])) {
             return null;
         }
 
         return $this->manualAppointmentFromPayload($payload['manual_appointment']);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function lotAppointmentRequests(): Collection
+    {
+        $placeableStatus = [
+            LotAppointment::STATUS_PENDING,
+            LotAppointment::STATUS_NEEDS_REVIEW,
+        ];
+
+        return Lot::query()
+            ->with([
+                'appointments' => fn ($query) => $query
+                    ->whereNull('appointment_id')
+                    ->whereIn('status', $placeableStatus)
+                    ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
+                    ->orderBy('row_number')
+                    ->orderBy('customer_name'),
+            ])
+            ->whereHas('appointments', fn ($query) => $query
+                ->whereNull('appointment_id')
+                ->whereIn('status', $placeableStatus))
+            ->where('status', '!=', Lot::STATUS_COMPLETED)
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->map(fn (Lot $lot): array => [
+                'id' => $lot->id,
+                'title' => $lot->name,
+                'type_label' => $lot->typeLabel(),
+                'status_label' => $lot->statusLabel(),
+                'appointments_count' => $lot->appointments->count(),
+                'departments' => $lot->appointments->pluck('department_code')->filter()->unique()->sort()->values(),
+                'appointments' => $lot->appointments->map(fn (LotAppointment $appointment): array => [
+                    'id' => $appointment->id,
+                    'customer_name' => $appointment->customer_name,
+                    'customer_phone' => $appointment->customer_phone,
+                    'address' => $appointment->address,
+                    'department_code' => $appointment->department_code,
+                    'row_number' => $appointment->row_number,
+                    'external_reference' => $appointment->external_reference,
+                    'service_id' => $appointment->service_id,
+                    'status' => $appointment->status,
+                    'can_search' => filled($appointment->address)
+                        && filled($appointment->department_code)
+                        && $appointment->latitude !== null
+                        && $appointment->longitude !== null,
+                ])->values(),
+            ])
+            ->values();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function lotAppointmentFromId(int $id, ?int $serviceId = null): ?array
+    {
+        $lotAppointment = LotAppointment::query()
+            ->with(['lot:id,name,type,status', 'service:id,type,name,average_duration_minutes'])
+            ->whereNull('appointment_id')
+            ->whereKey($id)
+            ->first();
+
+        if (! $lotAppointment || ! filled($lotAppointment->address) || ! filled($lotAppointment->department_code)) {
+            return null;
+        }
+
+        if ($lotAppointment->latitude === null || $lotAppointment->longitude === null) {
+            return null;
+        }
+
+        [$firstName, $lastName] = $this->splitCustomerName($lotAppointment);
+        $service = $serviceId
+            ? Service::query()->find($serviceId)
+            : $lotAppointment->service;
+
+        return [
+            'id' => 'lot-'.$lotAppointment->id,
+            'lot_appointment_id' => $lotAppointment->id,
+            'source' => $lotAppointment->lot ? 'Lot - '.$lotAppointment->lot->name : 'Lot',
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'phone' => $lotAppointment->customer_phone,
+            'address' => $lotAppointment->address,
+            'department_code' => strtoupper((string) $lotAppointment->department_code),
+            'latitude' => (float) $lotAppointment->latitude,
+            'longitude' => (float) $lotAppointment->longitude,
+            'preferred_starts_at' => null,
+            'is_manual' => false,
+            'is_lot' => true,
+            'service' => $service ? [
+                'id' => $service->id,
+                'type' => $service->type,
+                'name' => $service->name,
+                'average_duration_minutes' => $service->average_duration_minutes,
+            ] : null,
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function splitCustomerName(LotAppointment $lotAppointment): array
+    {
+        $firstName = trim((string) $lotAppointment->customer_first_name);
+        $lastName = trim((string) $lotAppointment->customer_last_name);
+
+        if ($firstName !== '' || $lastName !== '') {
+            return [$firstName, $lastName];
+        }
+
+        $parts = preg_split('/\s+/', trim($lotAppointment->customer_name), 2) ?: [];
+
+        return [
+            $parts[0] ?? 'Client',
+            $parts[1] ?? 'Lot',
+        ];
+    }
+
+    private function refreshLotStatus(?Lot $lot): void
+    {
+        if (! $lot) {
+            return;
+        }
+
+        $totalAppointments = $lot->appointments()->count();
+        $placedAppointments = $lot->appointments()
+            ->whereNotNull('appointment_id')
+            ->count();
+
+        $status = match (true) {
+            $totalAppointments > 0 && $placedAppointments >= $totalAppointments => Lot::STATUS_COMPLETED,
+            $placedAppointments > 0 => Lot::STATUS_IN_PROGRESS,
+            default => Lot::STATUS_NOT_STARTED,
+        };
+
+        if ($lot->status !== $status) {
+            $lot->update(['status' => $status]);
+        }
     }
 
     /**
@@ -589,6 +772,9 @@ class PlannerBookingController extends Controller
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $appointment->technician?->full_name,
+                    'technician_address' => $appointment->technician?->address,
+                    'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
+                    'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
                     'service_label' => $serviceLabel,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                     'customer_phone' => $appointment->customer_phone,
@@ -1040,6 +1226,9 @@ class PlannerBookingController extends Controller
             'extendedProps' => [
                 'technician_id' => $technician->id,
                 'technician_name' => $technician->full_name,
+                'technician_address' => $technician->address,
+                'technician_latitude' => $technician->latitude ? (float) $technician->latitude : null,
+                'technician_longitude' => $technician->longitude ? (float) $technician->longitude : null,
                 'is_suggestion' => true,
                 'origin_label' => $originLabel,
                 'origin_latitude' => $origin['lat'],
@@ -1054,6 +1243,7 @@ class PlannerBookingController extends Controller
                     ? $crmAppointment['service']['type'].' - '.$crmAppointment['service']['name']
                     : 'Prestation non renseignee',
                 'crm_appointment_id' => $crmAppointment['id'],
+                'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,
                 'travel_to_minutes' => (int) $travelTo['duration_minutes'],
                 'travel_after_minutes' => (int) $travelAfter['duration_minutes'],

@@ -1,5 +1,17 @@
 <?php
 
+$openAiModels = [
+    'gpt-5.5' => 'GPT-5.5 - plus capable',
+    'gpt-5.4' => 'GPT-5.4 - equilibre qualite/cout',
+    'gpt-5.4-mini' => 'GPT-5.4 mini - recommande cout/latence',
+    'gpt-5.4-nano' => 'GPT-5.4 nano - tres rapide/economique',
+    'gpt-4.1' => 'GPT-4.1 - robuste non-reasoning',
+    'gpt-4.1-mini' => 'GPT-4.1 mini - rapide',
+    'gpt-4.1-nano' => 'GPT-4.1 nano - economique',
+    'gpt-4o' => 'GPT-4o - legacy robuste',
+    'gpt-4o-mini' => 'GPT-4o mini - legacy economique',
+];
+
 return [
     'definitions' => [
         'mail.mailer' => [
@@ -74,6 +86,57 @@ return [
             'rules' => ['nullable', 'string', 'max:1000'],
             'secret' => true,
             'description' => 'Utilise pour les suggestions adresse et calculs de trajet.',
+        ],
+        'services.openai.api_key' => [
+            'group' => 'API',
+            'label' => 'OpenAI API key',
+            'type' => 'password',
+            'env' => 'OPENAI_API_KEY',
+            'config' => 'services.openai.api_key',
+            'rules' => ['nullable', 'string', 'max:1000'],
+            'secret' => true,
+            'description' => 'Utilisee pour normaliser les imports Excel des lots.',
+        ],
+        'services.openai.model' => [
+            'group' => 'API',
+            'label' => 'OpenAI model',
+            'type' => 'select',
+            'env' => 'OPENAI_MODEL',
+            'fallback' => 'gpt-4o-mini',
+            'config' => 'services.openai.model',
+            'rules' => ['nullable', 'string', 'in:'.implode(',', array_keys($openAiModels))],
+            'options' => $openAiModels,
+            'description' => 'Modele utilise pour la normalisation structuree des fichiers.',
+        ],
+        'services.openai.timeout' => [
+            'group' => 'API',
+            'label' => 'OpenAI timeout',
+            'type' => 'integer',
+            'env' => 'OPENAI_TIMEOUT',
+            'fallback' => 75,
+            'config' => 'services.openai.timeout',
+            'rules' => ['nullable', 'integer', 'min:10', 'max:300'],
+            'description' => 'Timeout HTTP par appel OpenAI, en secondes.',
+        ],
+        'services.openai.connect_timeout' => [
+            'group' => 'API',
+            'label' => 'OpenAI connect timeout',
+            'type' => 'integer',
+            'env' => 'OPENAI_CONNECT_TIMEOUT',
+            'fallback' => 10,
+            'config' => 'services.openai.connect_timeout',
+            'rules' => ['nullable', 'integer', 'min:3', 'max:60'],
+            'description' => 'Timeout de connexion a OpenAI, en secondes.',
+        ],
+        'services.openai.import_chunk_size' => [
+            'group' => 'API',
+            'label' => 'OpenAI lignes par paquet',
+            'type' => 'integer',
+            'env' => 'OPENAI_IMPORT_CHUNK_SIZE',
+            'fallback' => 10,
+            'config' => 'services.openai.import_chunk_size',
+            'rules' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'description' => 'Nombre de lignes Excel envoyees par appel OpenAI pendant un import.',
         ],
     ],
 ];

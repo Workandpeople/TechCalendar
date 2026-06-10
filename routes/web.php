@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Manager\ManagerDashboardController;
+use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
 use App\Http\Controllers\Planner\PlannerBookingController;
@@ -87,6 +88,14 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/services', [ManagerServiceController::class, 'store'])->name('manager.services.store');
     Route::put('/manager/services/{service}', [ManagerServiceController::class, 'update'])->name('manager.services.update');
     Route::delete('/manager/services/{service}', [ManagerServiceController::class, 'destroy'])->name('manager.services.destroy');
+    Route::get('/manager/lots', [ManagerLotController::class, 'index'])->name('manager.lots');
+    Route::post('/manager/lots', [ManagerLotController::class, 'store'])->name('manager.lots.store');
+    Route::post('/manager/lots/imports', [ManagerLotController::class, 'startImport'])->name('manager.lots.imports.store');
+    Route::get('/manager/lots/imports/{preview}', [ManagerLotController::class, 'importStatus'])->name('manager.lots.imports.show');
+    Route::post('/manager/lots/imports/{preview}/retry', [ManagerLotController::class, 'retryImport'])->name('manager.lots.imports.retry');
+    Route::patch('/manager/lots/imports/{preview}/rows/{rowNumber}', [ManagerLotController::class, 'updateImportRow'])->name('manager.lots.imports.rows.update');
+    Route::post('/manager/lots/imports/{preview}/confirm', [ManagerLotController::class, 'confirmImport'])->name('manager.lots.imports.confirm');
+    Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');

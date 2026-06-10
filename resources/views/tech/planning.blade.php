@@ -170,7 +170,7 @@
     </div>
 
     <div id="tech-appointment-sheet" class="fixed inset-0 z-50 hidden items-end bg-black/40 p-0 sm:items-center sm:p-4">
-        <div class="w-full rounded-t-3xl border bg-white p-5 shadow-2xl sm:mx-auto sm:max-w-lg sm:rounded-3xl" style="border-color:var(--gc-border);">
+        <div class="max-h-[calc(100vh-1rem)] w-full overflow-y-auto overscroll-contain rounded-t-3xl border bg-white p-5 shadow-2xl sm:mx-auto sm:max-w-lg sm:rounded-3xl" style="border-color:var(--gc-border);">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p id="tech-sheet-service" class="text-sm" style="color:var(--gc-text-soft);"></p>
@@ -194,6 +194,15 @@
                 </div>
             </dl>
 
+            <div class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
+                <div>
+                    <p class="text-sm font-medium" style="color:var(--gc-text);">Journee du technicien</p>
+                    <p class="text-xs" style="color:var(--gc-text-soft);">Clique un trajet pour le mettre en couleur. Les autres restent en pointille.</p>
+                </div>
+                <div id="tech-sheet-map" class="mt-3 h-64 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
+                <div id="tech-sheet-route-summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
+            </div>
+
             <div class="mt-5 grid grid-cols-2 gap-3">
                 <a id="tech-sheet-phone" href="#" class="gc-btn-primary text-center">Appeler</a>
                 <a id="tech-sheet-maps" href="#" target="_blank" rel="noopener" class="rounded-lg border px-4 py-2.5 text-center text-sm font-medium" style="border-color:var(--gc-border);color:var(--gc-text);">
@@ -204,6 +213,7 @@
     </div>
 
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
 
     <style>
         @media (max-width: 767px) {
@@ -240,10 +250,21 @@
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
     <script>
         const calendarEl = document.getElementById('tech-calendar');
         const mobileCalendarQuery = window.matchMedia('(max-width: 767px)');
+        const techMapboxToken = @json($mapboxToken ?? null);
+        const techRouteNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
+        const techHome = {
+            lat: techRouteNumber(@json($technician->latitude)),
+            lng: techRouteNumber(@json($technician->longitude)),
+            name: @json($technician->address ?: 'Domicile'),
+        };
         let techCalendar = null;
+        let techSheetMap = null;
+        let techSheetMapMarkers = [];
+        let techSheetMapRenderRequestId = 0;
 
         const techCalendarToolbar = () => mobileCalendarQuery.matches
             ? { left: 'prev,next', center: 'title', right: 'today' }
@@ -266,6 +287,345 @@
                 : props.address;
 
             return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination || '')}`;
+        };
+
+        const techEscapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
+        const techRouteDuration = (minutes) => {
+            const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
+            const hours = Math.floor(safeMinutes / 60);
+            const remainingMinutes = safeMinutes % 60;
+
+            if (hours === 0) return `${remainingMinutes} min`;
+
+            return remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`;
+        };
+
+        const techHaversineDistanceKm = (fromLat, fromLng, toLat, toLng) => {
+            const earthRadiusKm = 6371;
+            const toRadians = (value) => value * Math.PI / 180;
+            const latDelta = toRadians(toLat - fromLat);
+            const lngDelta = toRadians(toLng - fromLng);
+            const a = Math.sin(latDelta / 2) ** 2
+                + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) * Math.sin(lngDelta / 2) ** 2;
+
+            return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        };
+
+        const techValidPoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
+
+        const sameTechPlanningDay = (leftDate, rightDate) => leftDate?.toDateString?.() === rightDate?.toDateString?.();
+
+        const sameTechPlanningEvent = (left, right) => {
+            if (!left || !right) return false;
+            if (left === right) return true;
+
+            return String(left.id || '') !== '' && String(left.id) === String(right.id || '');
+        };
+
+        const techMarkerElement = (color, label) => {
+            const element = document.createElement('div');
+            element.className = 'flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold shadow-lg';
+            element.style.background = color;
+            element.style.color = '#fff';
+            element.textContent = label;
+
+            return element;
+        };
+
+        const ensureTechSheetMap = () => {
+            const container = document.getElementById('tech-sheet-map');
+
+            if (!techMapboxToken || !window.mapboxgl) {
+                container.innerHTML = '<div class="flex h-full items-center justify-center px-4 text-center text-sm" style="color:var(--gc-text-soft);">Carte indisponible: token Mapbox ou librairie manquante.</div>';
+                return null;
+            }
+
+            window.mapboxgl.accessToken = techMapboxToken;
+
+            if (!techSheetMap) {
+                techSheetMap = new window.mapboxgl.Map({
+                    container: 'tech-sheet-map',
+                    style: 'mapbox://styles/mapbox/light-v11',
+                    center: [2.2137, 46.2276],
+                    zoom: 5,
+                    interactive: false,
+                });
+            }
+
+            return techSheetMap;
+        };
+
+        const clearTechSheetMap = () => {
+            techSheetMapMarkers.forEach((marker) => marker.remove());
+            techSheetMapMarkers = [];
+
+            if (!techSheetMap || !techSheetMap.loaded()) return;
+
+            [...techSheetMap.getStyle().layers]
+                .filter((layer) => layer.id.startsWith('tech-sheet-route'))
+                .forEach((layer) => techSheetMap.removeLayer(layer.id));
+
+            Object.keys(techSheetMap.getStyle().sources)
+                .filter((source) => source.startsWith('tech-sheet-route'))
+                .forEach((source) => techSheetMap.removeSource(source));
+        };
+
+        const fetchTechSheetRoute = async (origin, destination) => {
+            const fallbackDistanceKm = techHaversineDistanceKm(origin.lat, origin.lng, destination.lat, destination.lng);
+            const fallback = {
+                feature: {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[origin.lng, origin.lat], [destination.lng, destination.lat]],
+                    },
+                    properties: {},
+                },
+                distance_km: fallbackDistanceKm,
+                duration_minutes: Math.max(1, Math.round((fallbackDistanceKm / 65) * 60)),
+            };
+
+            if (!techMapboxToken) return fallback;
+
+            const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`);
+            url.searchParams.set('geometries', 'geojson');
+            url.searchParams.set('overview', 'full');
+            url.searchParams.set('access_token', techMapboxToken);
+
+            try {
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                if (!response.ok) return fallback;
+
+                const payload = await response.json();
+                const route = payload.routes?.[0];
+
+                return route?.geometry ? {
+                    feature: {
+                        type: 'Feature',
+                        geometry: route.geometry,
+                        properties: {},
+                    },
+                    distance_km: Number(route.distance || 0) / 1000,
+                    duration_minutes: Math.max(1, Math.round(Number(route.duration || 0) / 60)),
+                } : fallback;
+            } catch (error) {
+                return fallback;
+            }
+        };
+
+        const techAppointmentPointFromEvent = (event, currentEvent) => {
+            const props = event.extendedProps || {};
+
+            return {
+                kind: 'appointment',
+                lat: techRouteNumber(props.latitude),
+                lng: techRouteNumber(props.longitude),
+                name: props.customer_name || props.service_label || event.title || 'RDV',
+                event,
+                isCurrent: sameTechPlanningEvent(event, currentEvent),
+            };
+        };
+
+        const buildTechSheetDaySegments = (event) => {
+            if (!techValidPoint(techHome)) return [];
+
+            const appointments = (techCalendar ? techCalendar.getEvents() : [])
+                .filter((candidate) => sameTechPlanningDay(candidate.start, event.start))
+                .map((candidate) => techAppointmentPointFromEvent(candidate, event))
+                .filter(techValidPoint)
+                .sort((left, right) => left.event.start - right.event.start);
+
+            if (!appointments.some((appointment) => appointment.isCurrent)) {
+                const currentPoint = techAppointmentPointFromEvent(event, event);
+                if (techValidPoint(currentPoint)) appointments.push(currentPoint);
+                appointments.sort((left, right) => left.event.start - right.event.start);
+            }
+
+            if (appointments.length === 0) return [];
+
+            const points = [
+                { ...techHome, kind: 'home', name: techHome.name || 'Domicile' },
+                ...appointments,
+                { ...techHome, kind: 'home', name: techHome.name || 'Domicile', isReturnHome: true },
+            ];
+
+            return points.slice(0, -1).map((from, index) => {
+                const to = points[index + 1];
+                const isCurrent = Boolean(to.isCurrent);
+
+                return {
+                    from,
+                    to,
+                    isCurrent,
+                    badge: isCurrent
+                        ? 'Trajet vers ce RDV'
+                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                };
+            });
+        };
+
+        const renderTechSheetRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
+            const summary = document.getElementById('tech-sheet-route-summary');
+
+            if (isLoading) {
+                summary.textContent = 'Calcul de la journee...';
+                return;
+            }
+
+            if (!segments || segments.length === 0) {
+                summary.textContent = 'Journee indisponible pour ce RDV.';
+                return;
+            }
+
+            const defaultActiveIndex = segments.findIndex((segment) => segment.isCurrent);
+            const safeActiveIndex = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < segments.length
+                ? activeIndex
+                : Math.max(0, defaultActiveIndex);
+
+            summary.innerHTML = `
+                <div class="space-y-2">
+                    ${segments.map((segment, index) => {
+                        const isActive = index === safeActiveIndex;
+
+                        return `
+                        <button type="button" data-tech-sheet-segment-index="${index}" class="flex w-full items-center justify-between gap-3 rounded-lg border px-2 py-2 text-left transition hover:shadow-sm" style="border-color:${isActive ? 'var(--gc-accent)' : 'transparent'};background:${isActive ? '#ffffff' : 'transparent'};">
+                            <div class="min-w-0">
+                                <span class="text-xs font-semibold">${techEscapeHtml(segment.badge)}</span>
+                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">${techEscapeHtml(segment.from.name)} → ${techEscapeHtml(segment.to.name)}</p>
+                            </div>
+                            <strong class="shrink-0 text-xs">${Number(segment.route?.distance_km || 0).toFixed(1)} km · ${techRouteDuration(segment.route?.duration_minutes)}</strong>
+                        </button>
+                    `;
+                    }).join('')}
+                </div>
+            `;
+
+            summary.querySelectorAll('[data-tech-sheet-segment-index]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    onSelect?.(Number(button.dataset.techSheetSegmentIndex));
+                });
+            });
+        };
+
+        const renderTechSheetMap = async (event) => {
+            if (document.getElementById('tech-appointment-sheet')?.classList.contains('hidden')) return;
+
+            const renderRequestId = ++techSheetMapRenderRequestId;
+            const map = ensureTechSheetMap();
+            let segments = buildTechSheetDaySegments(event);
+
+            if (!map) {
+                renderTechSheetRouteSummary([]);
+                return;
+            }
+
+            if (segments.length === 0) {
+                renderTechSheetRouteSummary([]);
+                clearTechSheetMap();
+                return;
+            }
+
+            if (!map.loaded()) {
+                map.once('load', () => renderTechSheetMap(event));
+                return;
+            }
+
+            clearTechSheetMap();
+            renderTechSheetRouteSummary([], true);
+
+            const enrichedSegments = [];
+
+            for (const segment of segments) {
+                const route = await fetchTechSheetRoute(segment.from, segment.to);
+                if (renderRequestId !== techSheetMapRenderRequestId) return;
+                enrichedSegments.push({ ...segment, route });
+            }
+
+            const defaultActiveIndex = Math.max(0, enrichedSegments.findIndex((segment) => segment.isCurrent));
+
+            const renderSelectedSegment = (activeSegmentIndex = defaultActiveIndex) => {
+                if (renderRequestId !== techSheetMapRenderRequestId) return;
+
+                const safeActiveIndex = Number.isInteger(activeSegmentIndex) && activeSegmentIndex >= 0 && activeSegmentIndex < enrichedSegments.length
+                    ? activeSegmentIndex
+                    : defaultActiveIndex;
+
+                renderTechSheetRouteSummary(enrichedSegments, false, safeActiveIndex, (selectedIndex) => {
+                    renderSelectedSegment(selectedIndex);
+                });
+                clearTechSheetMap();
+
+                const bounds = new window.mapboxgl.LngLatBounds();
+                const appointmentMarkerKeys = new Set();
+                const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
+                    ...segment,
+                    isHighlighted: index === safeActiveIndex,
+                }));
+                const orderedSegments = [
+                    ...segmentsForDisplay.filter((segment) => !segment.isHighlighted),
+                    ...segmentsForDisplay.filter((segment) => segment.isHighlighted),
+                ];
+
+                techSheetMapMarkers.push(new window.mapboxgl.Marker({ element: techMarkerElement('#31424c', 'D') })
+                    .setLngLat([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat])
+                    .addTo(map));
+
+                enrichedSegments.forEach((segment) => {
+                    [segment.from, segment.to].forEach((point) => bounds.extend([point.lng, point.lat]));
+                    (segment.route?.feature?.geometry?.coordinates || []).forEach((coordinate) => bounds.extend(coordinate));
+
+                    if (segment.to.kind === 'appointment') {
+                        const key = segment.to.event?.id ? String(segment.to.event.id) : `${segment.to.lng},${segment.to.lat}`;
+
+                        if (!appointmentMarkerKeys.has(key)) {
+                            appointmentMarkerKeys.add(key);
+                            techSheetMapMarkers.push(new window.mapboxgl.Marker({
+                                element: techMarkerElement(segment.to.isCurrent ? '#d8c27a' : '#64748b', segment.to.isCurrent ? 'R' : String(appointmentMarkerKeys.size)),
+                            })
+                                .setLngLat([segment.to.lng, segment.to.lat])
+                                .addTo(map));
+                        }
+                    }
+                });
+
+                orderedSegments.forEach((segment, index) => {
+                    const sourceId = `tech-sheet-route-${index}`;
+
+                    if (!segment.route?.feature) return;
+
+                    map.addSource(sourceId, { type: 'geojson', data: segment.route.feature });
+                    map.addLayer({
+                        id: sourceId,
+                        type: 'line',
+                        source: sourceId,
+                        layout: {
+                            'line-cap': 'round',
+                            'line-join': 'round',
+                        },
+                        paint: {
+                            'line-color': segment.isHighlighted ? '#31424c' : '#64748b',
+                            'line-width': segment.isHighlighted ? 5 : 3,
+                            'line-opacity': segment.isHighlighted ? 0.9 : 0.5,
+                            ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
+                        },
+                    });
+                });
+
+                map.fitBounds(bounds, {
+                    padding: 48,
+                    maxZoom: 13,
+                    duration: 0,
+                });
+                map.resize();
+            };
+
+            renderSelectedSegment();
         };
 
         const openTechAppointmentSheet = (event) => {
@@ -298,10 +658,12 @@
 
             sheet.classList.remove('hidden');
             sheet.classList.add('flex');
+            window.setTimeout(() => renderTechSheetMap(event), 80);
         };
 
         const closeTechAppointmentSheet = () => {
             const sheet = document.getElementById('tech-appointment-sheet');
+            techSheetMapRenderRequestId++;
             sheet.classList.add('hidden');
             sheet.classList.remove('flex');
         };
