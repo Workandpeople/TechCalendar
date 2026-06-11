@@ -6,6 +6,9 @@ use Illuminate\Support\Facades\Http;
 
 class MapboxDrivingRouteService
 {
+    private const SAFETY_MARGIN_PERCENT = 15;
+    private const MINIMUM_SAFETY_MARGIN_MINUTES = 10;
+
     /**
      * @var array<string, array{distance_km: float, duration_minutes: int, source: string}>
      */
@@ -26,7 +29,7 @@ class MapboxDrivingRouteService
         if ($token === '') {
             return $this->routeCache[$cacheKey] = [
                 'distance_km' => round($fallbackDistanceKm, 1),
-                'duration_minutes' => $fallbackDurationMinutes,
+                'duration_minutes' => $this->withSafetyMargin($fallbackDurationMinutes),
                 'source' => 'fallback',
             ];
         }
@@ -49,7 +52,7 @@ class MapboxDrivingRouteService
             if (! $response->ok()) {
                 return $this->routeCache[$cacheKey] = [
                     'distance_km' => round($fallbackDistanceKm, 1),
-                    'duration_minutes' => $fallbackDurationMinutes,
+                    'duration_minutes' => $this->withSafetyMargin($fallbackDurationMinutes),
                     'source' => 'fallback',
                 ];
             }
@@ -59,20 +62,20 @@ class MapboxDrivingRouteService
             if (! is_array($route) || ! isset($route['distance'], $route['duration'])) {
                 return $this->routeCache[$cacheKey] = [
                     'distance_km' => round($fallbackDistanceKm, 1),
-                    'duration_minutes' => $fallbackDurationMinutes,
+                    'duration_minutes' => $this->withSafetyMargin($fallbackDurationMinutes),
                     'source' => 'fallback',
                 ];
             }
 
             return $this->routeCache[$cacheKey] = [
                 'distance_km' => round(((float) $route['distance']) / 1000, 1),
-                'duration_minutes' => max(1, (int) ceil(((float) $route['duration']) / 60)),
+                'duration_minutes' => $this->withSafetyMargin(max(1, (int) ceil(((float) $route['duration']) / 60))),
                 'source' => 'mapbox',
             ];
         } catch (\Throwable) {
             return $this->routeCache[$cacheKey] = [
                 'distance_km' => round($fallbackDistanceKm, 1),
-                'duration_minutes' => $fallbackDurationMinutes,
+                'duration_minutes' => $this->withSafetyMargin($fallbackDurationMinutes),
                 'source' => 'fallback',
             ];
         }
@@ -91,6 +94,14 @@ class MapboxDrivingRouteService
     private function fallbackDurationMinutes(float $distanceKm): int
     {
         return max(1, (int) ceil(($distanceKm / 65) * 60));
+    }
+
+    private function withSafetyMargin(int $durationMinutes): int
+    {
+        $percentMargin = (int) ceil($durationMinutes * (self::SAFETY_MARGIN_PERCENT / 100));
+        $marginMinutes = max(self::MINIMUM_SAFETY_MARGIN_MINUTES, $percentMargin);
+
+        return $durationMinutes + $marginMinutes;
     }
 
     private function haversine(float $fromLat, float $fromLng, float $toLat, float $toLng): float
