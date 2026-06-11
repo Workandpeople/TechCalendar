@@ -97,7 +97,7 @@
     <div id="create-service-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
             <h2 class="text-lg font-semibold">Creer une prestation</h2>
-            <form method="POST" action="{{ route('manager.services.store') }}" class="mt-4 space-y-4">
+            <form method="POST" action="{{ route('manager.services.store') }}" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @include('manager.services.partials.form-fields', ['prefix' => 'create', 'types' => $types])
                 <div class="flex justify-end gap-2">
@@ -111,7 +111,7 @@
     <div id="edit-service-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
             <h2 class="text-lg font-semibold">Modifier une prestation</h2>
-            <form id="edit-service-form" method="POST" action="#" class="mt-4 space-y-4">
+            <form id="edit-service-form" method="POST" action="#" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @method('PUT')
                 @include('manager.services.partials.form-fields', ['prefix' => 'edit', 'types' => $types])
@@ -161,6 +161,11 @@
                     document.getElementById('edit_type').value = button.dataset.serviceType || '';
                     document.getElementById('edit_name').value = button.dataset.serviceName || '';
                     document.getElementById('edit_average_duration_minutes').value = button.dataset.serviceDuration || '';
+                    window.TechCalendarForms?.refresh(form);
+                }
+
+                if (modalId === 'create-service-modal') {
+                    window.TechCalendarForms?.refresh(document.querySelector('#create-service-modal form'));
                 }
 
                 if (modalId === 'delete-service-modal') {

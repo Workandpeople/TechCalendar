@@ -1,5 +1,5 @@
 <x-layouts.auth>
-    <form method="POST" action="{{ route('password.store') }}" class="space-y-5">
+    <form method="POST" action="{{ route('password.store') }}" class="space-y-5" data-validate-form>
         @csrf
 
         <input type="hidden" name="token" value="{{ $request->route('token') }}">
@@ -14,7 +14,7 @@
 
         <div>
             <label for="password" class="gc-label">Nouveau mot de passe</label>
-            <input id="password" name="password" type="password" required autocomplete="new-password" class="gc-input" />
+            <input id="password" name="password" type="password" required autocomplete="new-password" class="gc-input" data-password-rules />
             @error('password')
                 <p class="gc-error">{{ $message }}</p>
             @enderror

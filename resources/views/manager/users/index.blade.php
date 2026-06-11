@@ -150,7 +150,7 @@
     <div id="create-user-modal" class="gc-modal hidden">
         <div class="gc-modal-panel gc-modal-panel-xl">
             <h2 class="text-lg font-semibold">Creer un utilisateur</h2>
-            <form method="POST" action="{{ route('manager.users.store') }}" class="mt-4 space-y-4">
+            <form method="POST" action="{{ route('manager.users.store') }}" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @include('manager.users.partials.form-fields', ['prefix' => 'create', 'user' => null])
                 <div class="gc-modal-actions">
@@ -164,7 +164,7 @@
     <div id="edit-user-modal" class="gc-modal hidden">
         <div class="gc-modal-panel gc-modal-panel-xl">
             <h2 class="text-lg font-semibold">Modifier un utilisateur</h2>
-            <form id="edit-user-form" method="POST" action="#" class="mt-4 space-y-4">
+            <form id="edit-user-form" method="POST" action="#" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @method('PUT')
                 @include('manager.users.partials.form-fields', ['prefix' => 'edit', 'user' => null])
@@ -188,7 +188,7 @@
 
             <div id="absence-user-list" class="mt-5 space-y-3"></div>
 
-            <form id="absence-user-form" method="POST" action="#" class="mt-5 rounded-xl border p-4" style="border-color:var(--gc-border);">
+            <form id="absence-user-form" method="POST" action="#" class="mt-5 rounded-xl border p-4" style="border-color:var(--gc-border);" data-validate-form>
                 @csrf
                 <h3 class="font-semibold" style="color:var(--gc-text);">Ajouter une absence</h3>
                 <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -315,10 +315,24 @@
             const techFields = document.getElementById(`${prefix}_tech_fields`);
             if (!roleInput || !techFields) return;
 
-            techFields.classList.toggle('hidden', roleInput.value !== '2');
-            if (roleInput.value === '2') {
+            const isTech = roleInput.value === '2';
+            techFields.classList.toggle('hidden', !isTech);
+
+            ['phone', 'address', 'break_duration_minutes', 'day_start_time', 'day_end_time']
+                .map((field) => document.getElementById(`${prefix}_${field}`))
+                .filter(Boolean)
+                .forEach((field) => {
+                    field.required = isTech;
+                    if (!isTech) {
+                        field.classList.remove('is-valid', 'is-invalid');
+                    }
+                });
+
+            if (isTech) {
                 requestAnimationFrame(() => updateDepartmentMapVisibility(prefix));
             }
+
+            window.TechCalendarForms?.refresh(roleInput.form);
         };
 
         const parseJsonDataset = (value) => {
@@ -391,6 +405,7 @@
             const selected = selectedDepartmentCodes(prefix);
             const count = document.getElementById(`${prefix}_department_count`);
             if (count) count.textContent = `${selected.length} selection${selected.length > 1 ? 's' : ''}`;
+            window.TechCalendarForms?.refresh(document.getElementById(`${prefix}_role`)?.form);
 
             document.querySelectorAll(`[data-department-chip="${prefix}"]`).forEach((chip) => {
                 const checked = selected.includes(chip.dataset.departmentCode);
@@ -486,6 +501,7 @@
                         if (!checkbox) return;
                         checkbox.checked = !checkbox.checked;
                         refreshDepartmentUi(prefix);
+                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                     });
                     refreshDepartmentUi(prefix);
                     setAddressMarker(prefix);
@@ -563,6 +579,7 @@
                                 if (departmentCheckbox) {
                                     departmentCheckbox.checked = true;
                                     refreshDepartmentUi(prefix);
+                                    departmentCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
                                 }
                                 const mapState = departmentMaps[prefix];
                                 if (mapState?.map && item.dataset.lng && item.dataset.lat) {
@@ -612,6 +629,7 @@
                     initMapboxAutocomplete('edit');
                     bindDepartmentCheckboxes('edit');
                     updateDepartmentMapVisibility('edit');
+                    window.TechCalendarForms?.refresh(form);
                 }
 
                 if (modalId === 'create-user-modal') {
@@ -620,6 +638,7 @@
                     refreshDepartmentUi('create');
                     initMapboxAutocomplete('create');
                     updateDepartmentMapVisibility('create');
+                    window.TechCalendarForms?.refresh(document.getElementById('create_role')?.form);
                 }
 
                 if (modalId === 'delete-user-modal') {
@@ -641,6 +660,7 @@
                     document.getElementById('absence_ends_on').value = '';
                     document.getElementById('absence_reason').value = '';
                     renderAbsenceList(userId, absences);
+                    window.TechCalendarForms?.refresh(document.getElementById('absence-user-form'));
                 }
 
                 openModal(modalId);

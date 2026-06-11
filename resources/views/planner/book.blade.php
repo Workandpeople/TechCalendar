@@ -271,7 +271,7 @@
                 <p class="text-sm" style="color:var(--gc-text-soft);">Saisie rapide d'un client hors CRM. L'adresse doit etre selectionnee via Mapbox pour recuperer le departement et les coordonnees.</p>
             </div>
 
-            <form id="manual-booking-form" class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+            <form id="manual-booking-form" class="grid grid-cols-1 gap-4 xl:grid-cols-12" data-validate-form>
                 <div class="xl:col-span-3">
                     <label class="gc-label" for="manual_last_name">Nom client</label>
                     <input id="manual_last_name" type="text" class="gc-input" maxlength="120" required />

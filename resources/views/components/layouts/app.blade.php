@@ -159,11 +159,11 @@
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                         Pour votre premiere connexion, vous devez definir un nouveau mot de passe.
                     </p>
-                    <form method="POST" action="{{ route('account.first-password.update') }}" class="mt-4 space-y-4">
+                    <form method="POST" action="{{ route('account.first-password.update') }}" class="mt-4 space-y-4" data-validate-form>
                         @csrf
                         <div>
                             <label class="gc-label" for="first_login_password">Nouveau mot de passe</label>
-                            <input id="first_login_password" name="password" type="password" class="gc-input" required autocomplete="new-password" />
+                            <input id="first_login_password" name="password" type="password" class="gc-input" required autocomplete="new-password" data-password-rules />
                         </div>
                         <div>
                             <label class="gc-label" for="first_login_password_confirmation">Confirmation</label>

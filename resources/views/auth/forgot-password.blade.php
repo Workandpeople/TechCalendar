@@ -1,7 +1,7 @@
 <x-layouts.auth>
     <p class="mb-5 text-sm" style="color: var(--gc-text-soft);">Saisis ton email pour recevoir un lien de réinitialisation.</p>
 
-    <form method="POST" action="{{ route('password.email') }}" class="space-y-5">
+    <form method="POST" action="{{ route('password.email') }}" class="space-y-5" data-validate-form>
         @csrf
 
         <div>

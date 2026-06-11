@@ -53,7 +53,7 @@
 
     <div>
         <label class="gc-label">Prestations habilitees</label>
-        <div class="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 md:grid-cols-2" style="border-color:var(--gc-border);">
+        <div class="gc-validation-group grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 md:grid-cols-2" style="border-color:var(--gc-border);" data-required-checkbox-group data-validation-label="Selectionne au moins une prestation">
             @foreach ($services as $service)
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="gc-check service-checkbox" name="service_ids[]" value="{{ $service->id }}" data-service-checkbox="{{ $prefix }}" />
@@ -73,7 +73,7 @@
             <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Clique sur la carte pour selectionner les departements couverts. Le point marque l'adresse du tech.</p>
         </div>
         <p id="{{ $prefix }}_department_map_hint" class="rounded-lg border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:#f8f8f8;">Renseigne une adresse via Mapbox pour afficher la carte des departements.</p>
-        <div class="hidden">
+        <div class="gc-validation-group hidden" data-required-checkbox-group data-validate-hidden-group="true" data-validation-label="Selectionne au moins un departement">
             @foreach ($departments as $department)
                 <label data-department-chip="{{ $prefix }}" data-department-code="{{ $department->code }}">
                     <input type="checkbox" class="gc-check department-checkbox" name="department_codes[]" value="{{ $department->code }}" data-department-checkbox="{{ $prefix }}" />

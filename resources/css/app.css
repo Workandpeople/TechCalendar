@@ -52,6 +52,45 @@
         --tw-ring-color: var(--gc-accent);
     }
 
+    .gc-input.is-valid {
+        border-color: #16a34a;
+        background-color: #f0fdf4;
+    }
+
+    .gc-input.is-invalid {
+        border-color: #e11d48;
+        background-color: #fff1f2;
+    }
+
+    .gc-field-message {
+        @apply mt-2 text-xs;
+        color: var(--gc-danger);
+    }
+
+    .gc-field-message.is-valid {
+        color: #15803d;
+    }
+
+    .gc-validation-group.is-invalid {
+        border-color: #e11d48 !important;
+        background-color: #fff1f2;
+    }
+
+    .gc-password-rules {
+        @apply mt-2 space-y-1 rounded-lg border p-3 text-xs;
+        border-color: var(--gc-border);
+        background: #f8fafc;
+        color: var(--gc-text-soft);
+    }
+
+    .gc-password-rule.is-valid {
+        color: #15803d;
+    }
+
+    .gc-password-rule.is-invalid {
+        color: var(--gc-danger);
+    }
+
     .gc-check {
         @apply rounded border focus:ring-2;
         border-color: #c7cdd1;
@@ -64,8 +103,18 @@
         background-color: var(--gc-primary);
     }
 
+    .gc-btn-primary:disabled,
+    .gc-btn-soft:disabled,
+    .gc-btn-danger:disabled {
+        @apply cursor-not-allowed opacity-50;
+    }
+
     .gc-btn-primary:hover {
         background-color: var(--gc-primary-hover);
+    }
+
+    .gc-btn-primary:disabled:hover {
+        background-color: var(--gc-primary);
     }
 
     .gc-btn-soft {
