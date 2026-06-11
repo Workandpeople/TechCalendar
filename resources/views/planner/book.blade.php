@@ -79,7 +79,13 @@
                     </div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les departements couverts filtrent les techniciens.</p>
                 </div>
-                <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm self-start md:self-auto" style="background:var(--gc-accent-soft);color:var(--gc-text);" data-crm-count="{{ $crmAppointments->count() }}" data-lot-count="{{ $lotRequests->sum('appointments_count') }}">{{ $crmAppointments->count() }} demande(s)</span>
+                <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                    <button id="booking-crm-refresh" type="button" class="gc-btn-soft px-3 py-2 text-sm">
+                        Refresh CRM
+                    </button>
+                    <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);" data-crm-count="{{ $crmAppointments->count() }}" data-lot-count="{{ $lotRequests->sum('appointments_count') }}">{{ $crmAppointments->count() }} demande(s)</span>
+                    <span id="booking-crm-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
+                </div>
             </div>
 
             <div id="booking-crm-search-wrap" class="mb-4">
@@ -481,6 +487,7 @@
 
     <script>
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
+        const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
@@ -561,13 +568,16 @@
         const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
         const bookingCrmSearch = document.getElementById('booking_crm_search');
-        const bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
+        const bookingCrmGrid = document.getElementById('booking-crm-grid');
+        let bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
         const bookingCrmCount = document.getElementById('booking-crm-count');
         const bookingCrmEmpty = document.getElementById('booking-crm-empty');
         const bookingCrmSource = document.getElementById('booking-crm-source');
         const bookingLotSource = document.getElementById('booking-lot-source');
         const bookingCrmSearchWrap = document.getElementById('booking-crm-search-wrap');
         const bookingCrmPagination = document.getElementById('booking-crm-pagination');
+        const bookingCrmRefreshButton = document.getElementById('booking-crm-refresh');
+        const bookingCrmRefreshStatus = document.getElementById('booking-crm-refresh-status');
         const bookingSourceSwitch = document.getElementById('booking-source-switch');
         const bookingSourceSwitchKnob = document.getElementById('booking-source-switch-knob');
         const techniciansList = document.getElementById('eligible-technicians-list');
@@ -625,6 +635,85 @@
             bookingFeedback.classList.add('hidden');
         };
 
+        const setBookingCrmRefreshStatus = (message = '', type = 'info') => {
+            if (!bookingCrmRefreshStatus) return;
+
+            bookingCrmRefreshStatus.textContent = message;
+            bookingCrmRefreshStatus.classList.toggle('hidden', message === '');
+            bookingCrmRefreshStatus.style.color = type === 'error' ? '#be123c' : 'var(--gc-text-soft)';
+        };
+
+        const renderBookingCrmCard = (appointment) => {
+            const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
+            const serviceBadge = appointment.service
+                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(appointment.service.type)}</span>`
+                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigne</span>';
+
+            return `
+                <button
+                    type="button"
+                    class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
+                    style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
+                    data-crm-id="${escapeHtml(appointment.id)}"
+                    data-client="${escapeHtml(customerName.toLowerCase())}"
+                >
+                    <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">${escapeHtml(appointment.source)}</span>
+                    <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</h3>
+                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
+                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(appointment.address)}</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. ${escapeHtml(appointment.department_code)}</span>
+                        ${serviceBadge}
+                    </div>
+                </button>
+            `;
+        };
+
+        const renderBookingCrmAppointments = (appointments) => {
+            if (!bookingCrmGrid) return;
+
+            bookingCrmGrid.innerHTML = appointments.map(renderBookingCrmCard).join('');
+            bookingCrmCards = Array.from(bookingCrmGrid.querySelectorAll('.crm-appointment-card'));
+            bookingCrmCount.dataset.crmCount = String(appointments.length);
+            bookingCrmSearch.value = '';
+            bookingCrmPage = 1;
+            bindBookingCrmCards();
+            filterBookingCrmCards();
+        };
+
+        const refreshBookingCrmAppointments = async () => {
+            if (!bookingCrmRefreshButton || bookingCrmRefreshButton.disabled) return;
+
+            const initialLabel = bookingCrmRefreshButton.textContent;
+            bookingCrmRefreshButton.disabled = true;
+            bookingCrmRefreshButton.textContent = 'Refresh...';
+            setBookingCrmRefreshStatus('Regeneration des RDV simules...');
+
+            try {
+                const response = await fetch(bookingCrmRefreshUrl, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Refresh CRM impossible.');
+                }
+
+                renderBookingCrmAppointments(payload.appointments || []);
+                setBookingCrmRefreshStatus(`${(payload.appointments || []).length} RDV CRM regeneres.`);
+            } catch (error) {
+                setBookingCrmRefreshStatus(error.message || 'Refresh CRM impossible.', 'error');
+            } finally {
+                bookingCrmRefreshButton.disabled = false;
+                bookingCrmRefreshButton.textContent = initialLabel;
+            }
+        };
+
         const renderBookingCrmPagination = (visibleCount) => {
             if (!bookingCrmPagination) return;
 
@@ -678,6 +767,8 @@
             bookingCrmSource?.classList.toggle('hidden', isLotMode);
             bookingLotSource?.classList.toggle('hidden', !isLotMode);
             bookingCrmSearchWrap?.classList.toggle('hidden', isLotMode);
+            bookingCrmRefreshButton?.classList.toggle('hidden', isLotMode);
+            bookingCrmRefreshStatus?.classList.toggle('hidden', isLotMode || bookingCrmRefreshStatus.textContent === '');
             bookingCrmEmpty?.classList.add('hidden');
             bookingSourceSwitch?.setAttribute('aria-checked', String(isLotMode));
             bookingSourceSwitch?.style.setProperty('background', isLotMode ? '#d8c27a' : 'var(--gc-primary)');
@@ -2548,9 +2639,16 @@
             }
         };
 
-        document.querySelectorAll('.crm-appointment-card').forEach((card) => {
-            card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
-        });
+        const bindBookingCrmCards = () => {
+            bookingCrmCards.forEach((card) => {
+                if (card.dataset.bound === '1') return;
+
+                card.dataset.bound = '1';
+                card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
+            });
+        };
+
+        bindBookingCrmCards();
 
         document.querySelectorAll('.lot-appointment-book-button').forEach((button) => {
             button.addEventListener('click', () => analyzeLotAppointment(button.dataset.lotAppointmentId));
@@ -2569,6 +2667,8 @@
         bookingSourceSwitch?.addEventListener('click', () => {
             setBookingSourceMode(bookingSourceMode === 'crm' ? 'lot' : 'crm');
         });
+
+        bookingCrmRefreshButton?.addEventListener('click', refreshBookingCrmAppointments);
 
         setBookingSourceMode('crm');
 

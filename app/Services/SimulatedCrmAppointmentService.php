@@ -10,13 +10,19 @@ class SimulatedCrmAppointmentService
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    public function pending(int $limit = 15): Collection
+    public function pending(int $limit = 15, bool $shuffle = false): Collection
     {
         $services = Service::query()
             ->get(['id', 'type', 'name', 'average_duration_minutes'])
             ->keyBy(fn (Service $service): string => $service->type.'|'.$service->name);
 
-        return collect($this->appointments())
+        $appointments = collect($this->appointments());
+
+        if ($shuffle) {
+            $appointments = $appointments->shuffle();
+        }
+
+        return $appointments
             ->take($limit)
             ->map(function (array $appointment) use ($services): array {
                 $service = $appointment['service_key']

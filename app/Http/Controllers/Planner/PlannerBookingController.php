@@ -98,6 +98,17 @@ class PlannerBookingController extends Controller
         ]);
     }
 
+    public function refreshCrmAppointments(
+        Request $request,
+        SimulatedCrmAppointmentService $crmAppointments
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        return response()->json([
+            'appointments' => $crmAppointments->pending(15, shuffle: true),
+        ]);
+    }
+
     public function searchTechnicians(
         Request $request,
         SimulatedCrmAppointmentService $crmAppointments,

@@ -35,7 +35,34 @@ it('exposes the initial crm appointment id on the booking page', function () {
         ->get(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']))
         ->assertOk()
         ->assertSee('15 demande(s)')
+        ->assertSee('booking-crm-refresh')
         ->assertSee('const bookingInitialCrmAppointmentId = "crm-audit-lyon-001";', false);
+});
+
+it('refreshes simulated crm appointment requests on the booking page', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.refresh'))
+        ->assertOk()
+        ->assertJsonCount(15, 'appointments')
+        ->assertJsonStructure([
+            'appointments' => [[
+                'id',
+                'source',
+                'first_name',
+                'last_name',
+                'phone',
+                'address',
+                'department_code',
+                'latitude',
+                'longitude',
+                'service',
+            ]],
+        ]);
 });
 
 it('renders lot appointment requests on the booking page', function () {
