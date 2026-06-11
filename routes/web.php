@@ -84,6 +84,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/users/{user}/restore', [ManagerUserController::class, 'restore'])->name('manager.users.restore');
     Route::delete('/manager/users/{user}/force', [ManagerUserController::class, 'forceDelete'])->name('manager.users.force-delete');
     Route::post('/manager/users/{user}/send-reset-link', [ManagerUserController::class, 'sendResetLink'])->name('manager.users.send-reset-link');
+    Route::post('/manager/users/{user}/absences', [ManagerUserController::class, 'storeAbsence'])->name('manager.users.absences.store');
+    Route::delete('/manager/users/{user}/absences/{absence}', [ManagerUserController::class, 'destroyAbsence'])->name('manager.users.absences.destroy');
     Route::get('/manager/services', [ManagerServiceController::class, 'index'])->name('manager.services');
     Route::post('/manager/services', [ManagerServiceController::class, 'store'])->name('manager.services.store');
     Route::put('/manager/services/{service}', [ManagerServiceController::class, 'update'])->name('manager.services.update');
@@ -108,6 +110,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
     Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])
         ->name('planner.tracking.appointments.comment');
+    Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])
+        ->name('planner.tracking.appointments.technician');
     Route::delete('/planner/tracking/appointments/{appointment}', [PlannerTrackingController::class, 'destroy'])
         ->name('planner.tracking.appointments.destroy');
     Route::post('/planner/tracking/appointments/{appointment}/restore', [PlannerTrackingController::class, 'restore'])

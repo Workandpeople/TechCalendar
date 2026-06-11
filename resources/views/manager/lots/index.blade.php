@@ -62,15 +62,15 @@
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV a placer</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placeable_count'] }}</p>
+            </article>
+            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV places</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placed_count'] }}</p>
+            </article>
+            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV total</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['appointments_count'] }}</p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">A definir</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">--</p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">A definir</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">--</p>
             </article>
         </section>
 
@@ -125,14 +125,24 @@
                                 </span>
                             </div>
                             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                {{ $lot['appointments_count'] }} RDV
+                                {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} a placer · {{ $lot['placed_count'] }} places
                                 @if ($lot['imported_at'])
                                     · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                 @endif
                             </p>
                         </div>
 
-                        <div class="flex shrink-0 items-center gap-3">
+                        <div class="flex w-full shrink-0 items-center gap-3 lg:w-auto">
+                            <div class="min-w-[220px] flex-1 lg:w-64 lg:flex-none">
+                                <div class="mb-1 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Auto-completion</span>
+                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $lot['auto_completion']['percentage'] }}%</span>
+                                </div>
+                                <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+                                    <div class="h-full rounded-full transition-all" style="width:{{ $lot['auto_completion']['percentage'] }}%;background:var(--gc-primary);"></div>
+                                </div>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lot['auto_completion']['detail'] }}</p>
+                            </div>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
                                 <path d="m6 9 6 6 6-6" />
                             </svg>
@@ -168,10 +178,14 @@
 
                         <div class="grid grid-cols-1">
                             @foreach ($lot['appointments'] as $appointment)
-                                <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)] xl:items-center" style="border-color:var(--gc-border);">
+                                @php $isPlaced = (bool) $appointment['is_placed']; @endphp
+                                <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_auto] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
+                                            @if ($isPlaced)
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV place</span>
+                                            @endif
                                             @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A verifier</span>
                                             @endif
@@ -193,6 +207,29 @@
                                         </p>
                                         @if (! empty($appointment['ai_warnings']))
                                             <p class="mt-1 text-xs" style="color:#b45309;">{{ implode(' · ', $appointment['ai_warnings']) }}</p>
+                                        @endif
+                                        @if ($isPlaced)
+                                            <p class="mt-2 text-xs" style="color:#15803d;">
+                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignee' }}
+                                                @if ($appointment['placed_technician_name'])
+                                                    · {{ $appointment['placed_technician_name'] }}
+                                                @endif
+                                                @if ($appointment['placed_service_label'])
+                                                    · {{ $appointment['placed_service_label'] }}
+                                                @endif
+                                            </p>
+                                        @endif
+                                    </div>
+
+                                    <div class="flex justify-start xl:justify-end">
+                                        @if ($isPlaced && $appointment['tracking_url'])
+                                            <a href="{{ $appointment['tracking_url'] }}" class="gc-btn-soft whitespace-nowrap">
+                                                Voir le RDV
+                                            </a>
+                                        @elseif ($isPlaced)
+                                            <span class="rounded-lg border px-3 py-2 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                                                RDV indisponible
+                                            </span>
                                         @endif
                                     </div>
                                 </article>
@@ -326,6 +363,9 @@
         let currentLotImportSubscription = null;
         let currentLotImportCompleted = false;
         let selectedLotImportRows = null;
+        let lotImportActualProgress = 0;
+        let lotImportVisualProgress = 0;
+        let lotImportProgressTimer = null;
 
         if (lotFiltersForm) {
             lotFiltersForm.querySelectorAll('select').forEach((select) => {
@@ -404,10 +444,61 @@
                 : (type === 'success' ? '#15803d' : 'var(--gc-text-soft)');
         }
 
-        function updateLotImportProgress(progress, statusText, stageText = null) {
-            const safeProgress = Math.max(0, Math.min(100, Number(progress || 0)));
+        function setLotImportProgressVisual(progress) {
+            const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress || 0))));
+            lotImportVisualProgress = safeProgress;
             lotImportProgressBar.style.width = `${safeProgress}%`;
             lotImportProgressLabel.textContent = `${safeProgress}%`;
+        }
+
+        function stopLotImportProgressAnimation() {
+            if (lotImportProgressTimer) {
+                window.clearInterval(lotImportProgressTimer);
+                lotImportProgressTimer = null;
+            }
+        }
+
+        function resetLotImportProgressAnimation(progress = 0) {
+            stopLotImportProgressAnimation();
+            lotImportActualProgress = Math.max(0, Math.min(100, Number(progress || 0)));
+            setLotImportProgressVisual(lotImportActualProgress);
+        }
+
+        function startLotImportProgressAnimation() {
+            if (lotImportProgressTimer) return;
+
+            lotImportProgressTimer = window.setInterval(() => {
+                const isTerminal = lotImportActualProgress >= 100 || ['completed', 'failed', 'confirmed'].includes(currentLotImport?.status);
+                const cap = isTerminal ? 100 : 94;
+                const softTarget = isTerminal
+                    ? 100
+                    : Math.min(cap, lotImportVisualProgress + (lotImportVisualProgress < 55 ? 2.8 : (lotImportVisualProgress < 82 ? 1.2 : 0.35)));
+                const target = Math.max(lotImportActualProgress, softTarget);
+                const step = isTerminal
+                    ? (lotImportVisualProgress < 86 ? 8 : 14)
+                    : (target - lotImportVisualProgress > 8 ? 3.5 : 1);
+
+                setLotImportProgressVisual(Math.min(target, lotImportVisualProgress + step));
+
+                if (isTerminal && lotImportVisualProgress >= 100) {
+                    stopLotImportProgressAnimation();
+                }
+            }, 220);
+        }
+
+        function updateLotImportProgress(progress, statusText, stageText = null) {
+            const safeProgress = Math.max(0, Math.min(100, Number(progress || 0)));
+            lotImportActualProgress = Math.max(lotImportActualProgress, safeProgress);
+
+            if (safeProgress >= 100 || ['completed', 'failed', 'confirmed'].includes(currentLotImport?.status)) {
+                lotImportActualProgress = 100;
+            }
+
+            if (lotImportVisualProgress === 0 || safeProgress <= 5) {
+                setLotImportProgressVisual(safeProgress);
+            }
+
+            startLotImportProgressAnimation();
             lotImportStatus.textContent = statusText;
 
             if (stageText !== null && lotImportStage) {
@@ -835,6 +926,7 @@
                 progress: 0,
                 stage: 'Relance de l import.',
             };
+            resetLotImportProgressAnimation(0);
             updateLotImportModalCloseState();
             hideLotImportError();
             lotImportPreview.classList.add('hidden');
@@ -897,6 +989,7 @@
                 progress: 5,
                 stage: 'Envoi du fichier au serveur.',
             };
+            resetLotImportProgressAnimation(5);
             currentLotImportCompleted = false;
             selectedLotImportRows = null;
             openLotImportModal();
@@ -1000,6 +1093,7 @@
             currentLotImport = resumedLotImport;
             currentLotImportCompleted = false;
             selectedLotImportRows = null;
+            resetLotImportProgressAnimation(resumedLotImport.progress || 0);
             hideLotImportError();
             lotImportPreview.classList.add('hidden');
             lotImportPreviewRows.innerHTML = '';

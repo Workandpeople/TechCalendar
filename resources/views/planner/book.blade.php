@@ -121,36 +121,58 @@
 
             <div id="booking-lot-source" class="hidden space-y-3">
                 @forelse ($lotRequests as $lot)
-                    <details class="booking-lot-details overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);">
-                        <summary class="flex cursor-pointer list-none flex-col gap-3 p-4 transition hover:bg-[color:var(--gc-accent-soft)] md:flex-row md:items-center md:justify-between">
+                    <details class="booking-lot-details overflow-hidden rounded-2xl border bg-white shadow-sm" style="border-color:var(--gc-border);">
+                        <summary class="flex cursor-pointer list-none flex-col gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
+                                    <h3 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
                                     @if ($lot['type_label'])
-                                        <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $lot['type_label'] }}</span>
+                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">
+                                            {{ $lot['type_label'] }}
+                                        </span>
                                     @endif
-                                    <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">{{ $lot['status_label'] }}</span>
+                                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
+                                        {{ $lot['status_label'] }}
+                                    </span>
                                 </div>
-                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">
-                                    {{ $lot['appointments_count'] }} RDV a placer
-                                    @if ($lot['departments']->isNotEmpty())
-                                        · Dept. {{ $lot['departments']->join(', ') }}
+                                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
+                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} a placer · {{ $lot['placed_count'] }} places
+                                    @if ($lot['imported_at'])
+                                        · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                     @endif
                                 </p>
                             </div>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 shrink-0 transition-transform" style="color:var(--gc-text-soft);">
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
+
+                            <div class="flex w-full shrink-0 items-center gap-3 lg:w-auto">
+                                <div class="min-w-[220px] flex-1 lg:w-64 lg:flex-none">
+                                    <div class="mb-1 flex items-center justify-between gap-3">
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Auto-completion</span>
+                                        <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $lot['auto_completion']['percentage'] }}%</span>
+                                    </div>
+                                    <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div class="h-full rounded-full transition-all" style="width:{{ $lot['auto_completion']['percentage'] }}%;background:var(--gc-primary);"></div>
+                                    </div>
+                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lot['auto_completion']['detail'] }}</p>
+                                </div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
+                                    <path d="m6 9 6 6 6-6" />
+                                </svg>
+                            </div>
                         </summary>
 
-                        <div class="divide-y border-t" style="border-color:var(--gc-border);">
+                        <div class="border-t" style="border-color:var(--gc-border);">
+                            <div class="grid grid-cols-1">
                             @foreach ($lot['appointments'] as $appointment)
-                                <article class="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_280px_auto] xl:items-center">
+                                @php $isPlaced = (bool) $appointment['is_placed']; @endphp
+                                <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(280px,auto)] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
+                                            <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
+                                            @if ($isPlaced)
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV place</span>
+                                            @endif
                                             @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
-                                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#fef3c7;color:#b45309;">A verifier</span>
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A verifier</span>
                                             @endif
                                         </div>
                                         <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h4>
@@ -168,41 +190,69 @@
                                                 RDV lot #{{ $appointment['id'] }}
                                             @endif
                                         </p>
+                                        @if ($isPlaced)
+                                            <p class="mt-2 text-xs" style="color:#15803d;">
+                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignee' }}
+                                                @if ($appointment['placed_technician_name'])
+                                                    · {{ $appointment['placed_technician_name'] }}
+                                                @endif
+                                                @if ($appointment['placed_service_label'])
+                                                    · {{ $appointment['placed_service_label'] }}
+                                                @endif
+                                            </p>
+                                        @endif
                                     </div>
 
-                                    <div>
-                                        <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
-                                        <select
-                                            id="lot_appointment_service_{{ $appointment['id'] }}"
-                                            class="gc-input lot-appointment-service-select"
-                                            data-lot-appointment-id="{{ $appointment['id'] }}"
-                                            data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
-                                            @disabled(! $appointment['can_search'])
-                                        >
-                                            <option value="">Selectionner</option>
-                                            @foreach ($services as $service)
-                                                <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
-                                                    {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
+                                    @if ($isPlaced)
+                                        <div class="flex justify-start xl:justify-end">
+                                            @if ($appointment['tracking_url'])
+                                                <a href="{{ $appointment['tracking_url'] }}" class="gc-btn-soft whitespace-nowrap">
+                                                    Voir le RDV
+                                                </a>
+                                            @else
+                                                <span class="rounded-lg border px-3 py-2 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                                                    RDV indisponible
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @else
+                                        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                            <div>
+                                                <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
+                                                <select
+                                                    id="lot_appointment_service_{{ $appointment['id'] }}"
+                                                    class="gc-input lot-appointment-service-select"
+                                                    data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                    data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
+                                                    @disabled(! $appointment['can_search'])
+                                                >
+                                                    <option value="">Selectionner</option>
+                                                    @foreach ($services as $service)
+                                                        <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
+                                                            {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
 
-                                    <button
-                                        type="button"
-                                        class="lot-appointment-book-button gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50"
-                                        data-lot-appointment-id="{{ $appointment['id'] }}"
-                                        data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
-                                        disabled
-                                    >
-                                        Placer le RDV
-                                    </button>
+                                            <button
+                                                type="button"
+                                                class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+                                                data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
+                                                disabled
+                                            >
+                                                Placer le RDV
+                                            </button>
+                                        </div>
+                                    @endif
                                 </article>
                             @endforeach
+                            </div>
                         </div>
                     </details>
                 @empty
-                    <div class="rounded-xl border border-dashed p-5 text-center text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                    <div class="rounded-2xl border border-dashed p-8 text-center" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
                         Aucun RDV de lot a placer pour le moment.
                     </div>
                 @endforelse
@@ -262,6 +312,19 @@
         <section id="booking-analysis-section" class="hidden space-y-6">
             <div id="booking-feedback" class="hidden rounded-xl border px-4 py-3 text-sm"></div>
 
+            <div id="booking-analysis-loader" class="hidden rounded-2xl border bg-white p-4 shadow-sm" style="border-color:var(--gc-border);">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <p id="booking-analysis-loader-title" class="text-sm font-semibold" style="color:var(--gc-text);">Analyse en cours</p>
+                        <p id="booking-analysis-loader-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Preparation de la recherche...</p>
+                    </div>
+                    <span id="booking-analysis-loader-label" class="shrink-0 text-sm font-semibold" style="color:var(--gc-text);">0%</span>
+                </div>
+                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div id="booking-analysis-loader-bar" class="h-full rounded-full transition-all duration-200" style="width:0%;background:var(--gc-primary);"></div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
                 <section class="gc-card flex h-[560px] flex-col p-5 xl:h-[640px]">
                     <div class="mb-4 shrink-0 space-y-4">
@@ -301,7 +364,13 @@
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV existants des techniciens retournes</h2>
                 </div>
                 <div id="booking-calendar-loader" class="mb-4 hidden rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text);">
-                    Calcul des propositions pour la semaine affichee...
+                    <div class="flex items-center justify-between gap-3">
+                        <span id="booking-calendar-loader-detail">Calcul des propositions pour la semaine affichee...</span>
+                        <span id="booking-calendar-loader-label" class="font-semibold">0%</span>
+                    </div>
+                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+                        <div id="booking-calendar-loader-bar" class="h-full rounded-full transition-all duration-200" style="width:0%;background:var(--gc-primary);"></div>
+                    </div>
                 </div>
                 <div id="booking-calendar"></div>
             </section>
@@ -424,6 +493,7 @@
         let bookingMap = null;
         let bookingCalendar = null;
         let bookingMapMarkers = [];
+        let bookingSuggestionTooltip = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
         let currentAnalysisPayload = null;
@@ -469,27 +539,7 @@
             return clone.toString();
         };
 
-        const mapboxDebug = (message, context = {}) => {
-            console.log('[Mapbox Debug][Planner Book]', message, {
-                ...mapboxStatus(),
-                ...context,
-            });
-        };
-
-        mapboxDebug('script bootstrap');
-        window.addEventListener('load', () => mapboxDebug('window loaded'));
-        window.addEventListener('error', (event) => {
-            console.error('[Mapbox Debug][Planner Book] window error', {
-                message: event.message,
-                source: event.filename,
-                line: event.lineno,
-                column: event.colno,
-                error: event.error,
-            });
-        });
-        window.addEventListener('unhandledrejection', (event) => {
-            console.error('[Mapbox Debug][Planner Book] unhandled promise rejection', event.reason);
-        });
+        const mapboxDebug = () => {};
 
         const showMapboxUnavailable = (containerId, reason) => {
             const container = document.getElementById(containerId);
@@ -531,10 +581,23 @@
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
         const manualBookingToggle = document.getElementById('manual-booking-toggle');
+        const bookingAnalysisLoader = document.getElementById('booking-analysis-loader');
+        const bookingAnalysisLoaderTitle = document.getElementById('booking-analysis-loader-title');
+        const bookingAnalysisLoaderDetail = document.getElementById('booking-analysis-loader-detail');
+        const bookingAnalysisLoaderLabel = document.getElementById('booking-analysis-loader-label');
+        const bookingAnalysisLoaderBar = document.getElementById('booking-analysis-loader-bar');
+        const bookingCalendarLoader = document.getElementById('booking-calendar-loader');
+        const bookingCalendarLoaderDetail = document.getElementById('booking-calendar-loader-detail');
+        const bookingCalendarLoaderLabel = document.getElementById('booking-calendar-loader-label');
+        const bookingCalendarLoaderBar = document.getElementById('booking-calendar-loader-bar');
         const confirmationTrackLink = document.getElementById('booking-confirmation-track-link');
         const bookingCrmPageSize = 5;
         let bookingCrmPage = 1;
         let bookingSourceMode = 'crm';
+        let bookingAnalysisProgress = 0;
+        let bookingAnalysisProgressTimer = null;
+        let bookingCalendarProgress = 0;
+        let bookingCalendarProgressTimer = null;
 
         const escapeHtml = (value) => String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -542,6 +605,12 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+
+        const formatShortDate = (value) => {
+            if (!value) return '-';
+
+            return new Date(value).toLocaleDateString('fr-FR');
+        };
 
         const showFeedback = (message, type = 'info') => {
             bookingFeedback.textContent = message;
@@ -612,7 +681,7 @@
             bookingCrmEmpty?.classList.add('hidden');
             bookingSourceSwitch?.setAttribute('aria-checked', String(isLotMode));
             bookingSourceSwitch?.style.setProperty('background', isLotMode ? '#d8c27a' : 'var(--gc-primary)');
-            bookingSourceSwitchKnob?.style.setProperty('transform', isLotMode ? 'translateX(1.25rem)' : 'translateX(0)');
+            bookingSourceSwitchKnob?.style.setProperty('transform', isLotMode ? 'translateX(1rem)' : 'translateX(0)');
             bookingCrmCount.textContent = isLotMode
                 ? `${bookingCrmCount.dataset.lotCount || 0} RDV de lot`
                 : `${bookingCrmCount.dataset.crmCount || bookingCrmCards.length} demande(s) CRM`;
@@ -627,12 +696,134 @@
             filterBookingCrmCards();
         };
 
-        const showCalendarLoader = () => {
-            document.getElementById('booking-calendar-loader')?.classList.remove('hidden');
+        const clampProgress = (value) => Math.max(0, Math.min(100, Math.round(Number(value || 0))));
+
+        const setProgressBar = (bar, label, progress) => {
+            const safeProgress = clampProgress(progress);
+
+            if (bar) bar.style.width = `${safeProgress}%`;
+            if (label) label.textContent = `${safeProgress}%`;
+
+            return safeProgress;
         };
 
-        const hideCalendarLoader = () => {
-            document.getElementById('booking-calendar-loader')?.classList.add('hidden');
+        const nextSoftProgress = (progress, cap = 92) => {
+            if (progress >= cap) return progress;
+
+            const step = progress < 45 ? 4 : (progress < 75 ? 2 : 0.7);
+
+            return Math.min(cap, progress + step);
+        };
+
+        const finishProgress = (setProgress, stopTimer, hide, message = null) => new Promise((resolve) => {
+            stopTimer();
+            let current = setProgress(null, message);
+            const timer = window.setInterval(() => {
+                current = setProgress(Math.min(100, current + (current < 85 ? 8 : 16)), message);
+
+                if (current >= 100) {
+                    window.clearInterval(timer);
+                    window.setTimeout(() => {
+                        hide();
+                        resolve();
+                    }, 160);
+                }
+            }, 70);
+        });
+
+        const stopBookingAnalysisLoader = () => {
+            if (bookingAnalysisProgressTimer) {
+                window.clearInterval(bookingAnalysisProgressTimer);
+                bookingAnalysisProgressTimer = null;
+            }
+        };
+
+        const setBookingAnalysisProgress = (progress = null, detail = null) => {
+            if (progress !== null) {
+                bookingAnalysisProgress = setProgressBar(bookingAnalysisLoaderBar, bookingAnalysisLoaderLabel, progress);
+            }
+
+            if (detail) {
+                bookingAnalysisLoaderDetail.textContent = detail;
+            }
+
+            return bookingAnalysisProgress;
+        };
+
+        const startBookingAnalysisLoader = (sourceLabel) => {
+            stopBookingAnalysisLoader();
+            bookingAnalysisProgress = 8;
+            bookingAnalysisLoaderTitle.textContent = `Analyse ${sourceLabel.toLowerCase()}`;
+            bookingAnalysisLoaderDetail.textContent = 'Lecture des donnees du rendez-vous...';
+            setProgressBar(bookingAnalysisLoaderBar, bookingAnalysisLoaderLabel, bookingAnalysisProgress);
+            bookingAnalysisLoader.classList.remove('hidden');
+
+            const stages = [
+                'Verification du departement et de la prestation...',
+                'Recherche des techniciens eligibles...',
+                'Calcul des trajets et contraintes horaires...',
+                'Preparation de la carte et du calendrier...',
+            ];
+
+            bookingAnalysisProgressTimer = window.setInterval(() => {
+                bookingAnalysisProgress = nextSoftProgress(bookingAnalysisProgress, 91);
+                setProgressBar(bookingAnalysisLoaderBar, bookingAnalysisLoaderLabel, bookingAnalysisProgress);
+                bookingAnalysisLoaderDetail.textContent = stages[Math.min(stages.length - 1, Math.floor(bookingAnalysisProgress / 25))];
+            }, 360);
+        };
+
+        const finishBookingAnalysisLoader = (message = 'Analyse terminee.') => finishProgress(
+            setBookingAnalysisProgress,
+            stopBookingAnalysisLoader,
+            () => bookingAnalysisLoader.classList.add('hidden'),
+            message,
+        );
+
+        const stopBookingCalendarLoader = () => {
+            if (bookingCalendarProgressTimer) {
+                window.clearInterval(bookingCalendarProgressTimer);
+                bookingCalendarProgressTimer = null;
+            }
+        };
+
+        const setBookingCalendarProgress = (progress = null, detail = null) => {
+            if (progress !== null) {
+                bookingCalendarProgress = setProgressBar(bookingCalendarLoaderBar, bookingCalendarLoaderLabel, progress);
+            }
+
+            if (detail) {
+                bookingCalendarLoaderDetail.textContent = detail;
+            }
+
+            return bookingCalendarProgress;
+        };
+
+        const showCalendarLoader = () => {
+            stopBookingCalendarLoader();
+            bookingCalendarProgress = 12;
+            bookingCalendarLoader?.classList.remove('hidden');
+            setBookingCalendarProgress(bookingCalendarProgress, 'Calcul des propositions pour la semaine affichee...');
+            bookingCalendarProgressTimer = window.setInterval(() => {
+                bookingCalendarProgress = nextSoftProgress(bookingCalendarProgress, 90);
+                setBookingCalendarProgress(bookingCalendarProgress, bookingCalendarProgress < 70
+                    ? 'Verification des disponibilites techniciens...'
+                    : 'Assemblage des propositions dans le calendrier...');
+            }, 300);
+        };
+
+        const hideCalendarLoader = (immediate = false) => {
+            if (immediate) {
+                stopBookingCalendarLoader();
+                bookingCalendarLoader?.classList.add('hidden');
+                return;
+            }
+
+            void finishProgress(
+                setBookingCalendarProgress,
+                stopBookingCalendarLoader,
+                () => bookingCalendarLoader?.classList.add('hidden'),
+                'Calendrier pret.',
+            );
         };
 
         const setManualStatus = (message, type = 'info') => {
@@ -761,7 +952,6 @@
                             });
                         });
                     } catch (error) {
-                        console.error('[Mapbox Debug][Planner Book] geocoding error', error);
                         setManualStatus('Erreur Mapbox pendant la recherche adresse.', 'error');
                     }
                 }, 280);
@@ -797,7 +987,6 @@
                 zoom: 5,
             });
             bookingMap.on('load', () => mapboxDebug('booking map load event'));
-            bookingMap.on('error', (event) => console.error('[Mapbox Debug][Planner Book] booking map error', event?.error || event));
             mapboxDebug('booking map instance created');
 
             return bookingMap;
@@ -874,7 +1063,6 @@
 
                 return route ? { type: 'Feature', geometry: route } : straightRoute(technician, crmAppointment);
             } catch (error) {
-                console.error('[Mapbox Debug][Planner Book] directions technician route error', error);
                 return straightRoute(technician, crmAppointment);
             }
         };
@@ -936,7 +1124,6 @@
                     source: 'Mapbox voiture',
                 } : fallback();
             } catch (error) {
-                console.error('[Mapbox Debug][Planner Book] directions between points error', error);
                 return fallback();
             }
         };
@@ -964,6 +1151,86 @@
             return remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`;
         };
 
+        const formatRouteDistance = (distanceKm) => `${Number(distanceKm || 0).toFixed(1)} km`;
+
+        const suggestionOriginLabel = (props) => {
+            const label = String(props.origin_label || '').toLowerCase();
+
+            if (label.includes('rdv')) {
+                return 'Depuis le RDV precedent';
+            }
+
+            return 'Depuis le domicile';
+        };
+
+        const ensureSuggestionTooltip = () => {
+            if (bookingSuggestionTooltip) {
+                return bookingSuggestionTooltip;
+            }
+
+            bookingSuggestionTooltip = document.createElement('div');
+            bookingSuggestionTooltip.style.cssText = [
+                'position:fixed',
+                'z-index:90',
+                'display:none',
+                'pointer-events:none',
+                'max-width:320px',
+                'border-radius:16px',
+                'padding:12px 14px',
+                'background:#31424c',
+                'color:#ffffff',
+                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
+                'font-size:12px',
+                'line-height:1.45',
+                'transform:translate(-50%, calc(-100% - 14px))',
+            ].join(';');
+            document.body.appendChild(bookingSuggestionTooltip);
+
+            return bookingSuggestionTooltip;
+        };
+
+        const moveSuggestionTooltip = (event) => {
+            const tooltip = ensureSuggestionTooltip();
+            const safeLeft = Math.min(Math.max(event.clientX, 170), window.innerWidth - 170);
+            const safeTop = Math.max(event.clientY, 120);
+
+            tooltip.style.left = `${safeLeft}px`;
+            tooltip.style.top = `${safeTop}px`;
+        };
+
+        const showSuggestionTooltip = (event, props) => {
+            if (!props?.is_suggestion) return;
+
+            const tooltip = ensureSuggestionTooltip();
+            const originName = props.origin_name ? ` · ${props.origin_name}` : '';
+            const nextRoute = props.next_appointment_id ? `
+                <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
+                    <p style="font-weight:700;">Vers le prochain RDV</p>
+                    <p style="margin-top:3px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(props.travel_after_distance_km))} · ${escapeHtml(formatRouteDuration(props.travel_after_minutes))}</p>
+                </div>
+            ` : '';
+
+            tooltip.innerHTML = `
+                <div>
+                    <p style="font-weight:800;letter-spacing:.02em;">Trajet de la proposition</p>
+                    <div style="margin-top:10px;">
+                        <p style="font-weight:700;">${escapeHtml(suggestionOriginLabel(props))}</p>
+                        ${originName ? `<p style="margin-top:3px;color:rgba(255,255,255,.78);">${escapeHtml(originName.replace(/^ · /, ''))}</p>` : ''}
+                        <p style="margin-top:5px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(props.travel_to_distance_km))} · ${escapeHtml(formatRouteDuration(props.travel_to_minutes))}</p>
+                    </div>
+                    ${nextRoute}
+                </div>
+            `;
+            tooltip.style.display = 'block';
+            moveSuggestionTooltip(event);
+        };
+
+        const hideSuggestionTooltip = () => {
+            if (bookingSuggestionTooltip) {
+                bookingSuggestionTooltip.style.display = 'none';
+            }
+        };
+
         const addMinutes = (date, minutes) => new Date(date.getTime() + (Number(minutes || 0) * 60000));
 
         const requestDurationMinutes = () => Math.max(30, Number(currentAppointmentRequest?.service?.average_duration_minutes || 60));
@@ -972,6 +1239,47 @@
 
         const selectedTechnicians = () => currentTechnicians
             .filter((technician) => selectedTechnicianIds.has(String(technician.id)));
+
+        const technicianAbsences = (technician) => Array.isArray(technician?.absences) ? technician.absences : [];
+
+        const technicianIsAbsentAt = (technician, date) => {
+            if (!date) return false;
+
+            const checkedAt = new Date(date).getTime();
+
+            return technicianAbsences(technician).some((absence) => {
+                const startsAt = absence.starts_at ? new Date(absence.starts_at).getTime() : NaN;
+                const endsAt = absence.ends_at ? new Date(absence.ends_at).getTime() : NaN;
+
+                return Number.isFinite(startsAt) && Number.isFinite(endsAt) && startsAt <= checkedAt && endsAt >= checkedAt;
+            });
+        };
+
+        const selectedAvailableTechnicians = (date) => selectedTechnicians()
+            .filter((technician) => !technicianIsAbsentAt(technician, date));
+
+        const absenceBadgesForTechnician = (technician) => technicianAbsences(technician)
+            .map((absence) => {
+                const label = absence.label || `Abs du ${formatShortDate(absence.starts_at)} au ${formatShortDate(absence.ends_at)}`;
+                const reason = absence.reason ? ` · ${absence.reason}` : '';
+
+                return `<span class="rounded-lg px-2 py-1 text-xs font-semibold" style="background:#fee2e2;color:#be123c;">${escapeHtml(label)}${escapeHtml(reason)}</span>`;
+            })
+            .join('');
+
+        const mergeTechnicianUpdates = (technicians) => {
+            (technicians || []).forEach((technician) => {
+                const technicianId = String(technician.id);
+                const existingIndex = currentTechnicians.findIndex((currentTechnician) => String(currentTechnician.id) === technicianId);
+
+                if (existingIndex >= 0) {
+                    currentTechnicians[existingIndex] = {
+                        ...currentTechnicians[existingIndex],
+                        ...technician,
+                    };
+                }
+            });
+        };
 
         const selectedTechnicianIdsArray = () => selectedTechnicians()
             .map((technician) => Number(technician.id))
@@ -1142,9 +1450,7 @@
         };
 
         const openCalendarSlotModal = (info) => {
-            const activeTechnicians = selectedTechnicians();
-
-            if (!currentAppointmentRequest || activeTechnicians.length === 0) {
+            if (!currentAppointmentRequest) {
                 showFeedback('Lance d abord une recherche CRM ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
                 return;
             }
@@ -1153,6 +1459,13 @@
 
             if (info.allDay) {
                 startsAt.setHours(8, 0, 0, 0);
+            }
+
+            const activeTechnicians = selectedAvailableTechnicians(startsAt);
+
+            if (activeTechnicians.length === 0) {
+                showFeedback('Aucun technicien selectionne n est disponible sur ce creneau: ils sont absents ou non selectionnes.', 'error');
+                return;
             }
 
             const durationMinutes = requestDurationMinutes();
@@ -1438,7 +1751,6 @@
                 touchZoomRotate: false,
             });
             detailMap.on('load', () => mapboxDebug('detail map load event'));
-            detailMap.on('error', (event) => console.error('[Mapbox Debug][Planner Book] detail map error', event?.error || event));
             mapboxDebug('detail map instance created');
 
             return detailMap;
@@ -1682,9 +1994,11 @@
             renderRouteSummary(props, null, true);
 
             technicianSelectWrap.classList.toggle('hidden', !allowTechnicianChange);
-            technicianSelect.innerHTML = selectedTechnicians().map((technician) => `
-                <option value="${escapeHtml(technician.id)}">${escapeHtml(technician.name)} · ${escapeHtml(technician.driving_duration_minutes)} min</option>
-            `).join('');
+            technicianSelect.innerHTML = selectedTechnicians()
+                .filter((technician) => !technicianIsAbsentAt(technician, event.start) || String(technician.id) === String(props.technician_id))
+                .map((technician) => `
+                    <option value="${escapeHtml(technician.id)}">${escapeHtml(technician.name)} · ${escapeHtml(technician.driving_duration_minutes)} min</option>
+                `).join('');
             technicianSelect.value = props.technician_id || '';
             technicianSelect.onchange = allowTechnicianChange ? syncDraftEventFromInputs : null;
             startsAtInput.onchange = allowTechnicianChange ? syncDraftEventFromInputs : null;
@@ -1813,6 +2127,7 @@
                 const isSelected = selectedTechnicianIds.has(technicianId);
                 const color = technicianColor(technicianId);
                 const rankLabel = technicianOrdinal(technicianId) || index + 1;
+                const absenceBadges = absenceBadgesForTechnician(technician);
 
                 return `
                     <label class="block cursor-pointer rounded-xl border p-4 transition hover:shadow-sm" style="border-color:${isSelected ? 'var(--gc-border)' : '#e2e8f0'};opacity:${isSelected ? '1' : '0.58'};">
@@ -1832,6 +2147,7 @@
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_distance_km)} km voiture</span>
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_duration_minutes)} min</span>
                                     ${coverageBadge}
+                                    ${absenceBadges}
                                 </div>
                             </div>
                         </div>
@@ -1881,7 +2197,7 @@
 
             if (selectedTechnicianIds.size === 0) {
                 bookingCalendar.removeAllEvents();
-                hideCalendarLoader();
+                hideCalendarLoader(true);
                 return;
             }
 
@@ -1917,6 +2233,10 @@
 
                 currentCalendarEvents = payload.events || [];
                 currentCalendarSuggestions = payload.suggestions || [];
+                if (Array.isArray(payload.technicians)) {
+                    mergeTechnicianUpdates(payload.technicians);
+                    renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
+                }
                 bookingCalendar.removeAllEvents();
                 bookingCalendar.addEventSource(colorizedEvents(currentCalendarEvents, currentCalendarSuggestions));
             } catch (error) {
@@ -1939,6 +2259,7 @@
             const calendarFocusDate = focusDate || firstSuggestionStart;
 
             if (bookingCalendar) {
+                hideSuggestionTooltip();
                 bookingCalendar.removeAllEvents();
                 bookingCalendar.addEventSource(preparedEvents);
                 if (calendarFocusDate) {
@@ -1951,11 +2272,11 @@
                 locale: 'fr',
                 initialView: 'timeGridWeek',
                 firstDay: 1,
-                hiddenDays: [0, 6],
+                hiddenDays: [0],
                 allDaySlot: false,
                 height: 'auto',
                 nowIndicator: true,
-                slotMinTime: '08:00:00',
+                slotMinTime: '07:00:00',
                 slotMaxTime: '21:00:00',
                 headerToolbar: {
                     left: 'prev,next today',
@@ -1967,7 +2288,28 @@
                     month: 'Mois',
                     week: 'Semaine',
                 },
-                eventClick: (info) => openBookingAppointmentModal(info.event),
+                eventClick: (info) => {
+                    hideSuggestionTooltip();
+                    openBookingAppointmentModal(info.event);
+                },
+                eventMouseEnter: (info) => {
+                    if (!info.event.extendedProps?.is_suggestion) return;
+
+                    const moveHandler = (event) => moveSuggestionTooltip(event);
+                    info.el._bookingSuggestionTooltipMoveHandler = moveHandler;
+                    info.el.addEventListener('mousemove', moveHandler);
+                    showSuggestionTooltip(info.jsEvent, info.event.extendedProps);
+                },
+                eventMouseLeave: (info) => {
+                    const moveHandler = info.el._bookingSuggestionTooltipMoveHandler;
+
+                    if (moveHandler) {
+                        info.el.removeEventListener('mousemove', moveHandler);
+                        delete info.el._bookingSuggestionTooltipMoveHandler;
+                    }
+
+                    hideSuggestionTooltip();
+                },
                 dateClick: openCalendarSlotModal,
                 datesSet: refreshCalendarWindow,
                 events: preparedEvents,
@@ -1997,6 +2339,7 @@
             currentAnalysisPayload = payload;
             currentCrmAppointmentId = payload.crm_appointment_id || null;
             analysisSection.classList.remove('hidden');
+            startBookingAnalysisLoader(sourceLabel);
             clearFeedback();
             techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Analyse en cours...</div>';
 
@@ -2034,6 +2377,7 @@
                 renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
                 await renderMap(currentAppointmentRequest, selectedTechnicians());
                 renderCalendar(currentCalendarEvents, currentCalendarSuggestions, currentFilters?.preferred_starts_at || null);
+                await finishBookingAnalysisLoader('Analyse terminee, affichage des resultats.');
                 window.setTimeout(() => {
                     shouldFetchCalendarWindow = true;
                 }, 250);
@@ -2048,6 +2392,7 @@
 
                 return true;
             } catch (error) {
+                await finishBookingAnalysisLoader('Analyse interrompue.');
                 showFeedback(error.message || 'Erreur pendant l analyse du RDV.', 'error');
                 return false;
             }
@@ -2119,12 +2464,13 @@
                 const isSelected = selectedTechnicianIds.has(technicianId);
                 const actionLabel = isSelected ? 'Deja affiche' : (isKnown ? 'Recocher' : 'Ajouter');
                 const coverageLabel = technician.covers_requested_department ? 'Dept. couvert' : 'Hors dept.';
+                const absenceLabel = technician.absence_label ? ` · ${technician.absence_label}` : '';
 
                 return `
                     <article class="flex items-center justify-between gap-3 rounded-xl border p-3" style="border-color:var(--gc-border);">
                         <div class="min-w-0">
                             <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</p>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(technician.driving_distance_km)} km · ${escapeHtml(technician.driving_duration_minutes)} min · ${coverageLabel}</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(technician.driving_distance_km)} km · ${escapeHtml(technician.driving_duration_minutes)} min · ${coverageLabel}${escapeHtml(absenceLabel)}</p>
                         </div>
                         <button
                             type="button"

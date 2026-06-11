@@ -68,6 +68,12 @@ class TechPlanningController extends Controller
                     'detail' => $metrics->where('calculation_source', 'mapbox')->count().' jour(s) Mapbox',
                     'tone' => 'pink',
                 ],
+                [
+                    'label' => 'Heures supp',
+                    'value' => round(((int) $metrics->sum('overtime_minutes')) / 60, 1).'h',
+                    'detail' => 'Temps hors horaires, trajets inclus',
+                    'tone' => 'orange',
+                ],
             ],
         ]);
     }

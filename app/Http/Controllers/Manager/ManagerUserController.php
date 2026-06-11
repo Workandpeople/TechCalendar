@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Mail\UserCreatedCredentialsMail;
 use App\Models\Department;
 use App\Models\Service;
+use App\Models\TechnicianAbsence;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +30,16 @@ class ManagerUserController extends Controller
             'status' => ['nullable', Rule::in(['active', 'trashed', 'all'])],
         ]);
 
-        $query = User::query()->with(['services:id', 'departments:code'])->where('admin', false);
+        $query = User::query()
+            ->with([
+                'services:id',
+                'departments:code',
+                'absences' => fn ($query) => $query
+                    ->where('ends_at', '>=', now()->startOfDay())
+                    ->orderBy('starts_at')
+                    ->orderBy('id'),
+            ])
+            ->where('admin', false);
         $status = $validated['status'] ?? 'active';
 
         if ($status === 'all' || $status === 'trashed') {
@@ -208,6 +219,65 @@ class ManagerUserController extends Controller
         }
 
         return redirect()->route('manager.users')->with('status', 'Lien de reinitialisation envoye.');
+    }
+
+    public function storeAbsence(Request $request, int $user): RedirectResponse
+    {
+        abort_unless($this->canManageUsers($request), 403);
+
+        $technician = User::query()
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereNull('deleted_at')
+            ->findOrFail($user);
+
+        $payload = $request->validate([
+            'starts_on' => ['required', 'date'],
+            'ends_on' => ['required', 'date', 'after_or_equal:starts_on'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $startsAt = Carbon::parse($payload['starts_on'])->startOfDay();
+        $endsAt = Carbon::parse($payload['ends_on'])->endOfDay();
+
+        $overlapExists = TechnicianAbsence::query()
+            ->where('technician_id', $technician->id)
+            ->where('starts_at', '<=', $endsAt)
+            ->where('ends_at', '>=', $startsAt)
+            ->exists();
+
+        if ($overlapExists) {
+            return back()->withErrors([
+                'absence' => 'Une absence existe deja sur cette periode pour ce technicien.',
+            ])->withInput();
+        }
+
+        TechnicianAbsence::query()->create([
+            'technician_id' => $technician->id,
+            'created_by' => $request->user()->id,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+            'reason' => filled($payload['reason'] ?? null) ? trim((string) $payload['reason']) : null,
+        ]);
+
+        return redirect()->route('manager.users', $request->query())->with('status', 'Absence ajoutee.');
+    }
+
+    public function destroyAbsence(Request $request, int $user, TechnicianAbsence $absence): RedirectResponse
+    {
+        abort_unless($this->canManageUsers($request), 403);
+
+        User::query()
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereNull('deleted_at')
+            ->findOrFail($user);
+
+        abort_unless((int) $absence->technician_id === $user, 404);
+
+        $absence->delete();
+
+        return redirect()->route('manager.users', $request->query())->with('status', 'Absence supprimee.');
     }
 
     private function canManageUsers(Request $request): bool

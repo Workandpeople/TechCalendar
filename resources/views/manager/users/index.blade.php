@@ -102,6 +102,25 @@
                                                 <button type="submit" class="gc-btn-soft">Envoyer reset</button>
                                             </form>
 
+                                            @if ($user->role === 2)
+                                                @php
+                                                    $absencePayload = $user->absences->map(fn ($absence) => [
+                                                        'id' => $absence->id,
+                                                        'starts_on' => $absence->starts_at?->toDateString(),
+                                                        'ends_on' => $absence->ends_at?->toDateString(),
+                                                        'reason' => $absence->reason,
+                                                    ])->values();
+                                                @endphp
+                                                <button
+                                                    type="button"
+                                                    class="gc-btn-soft"
+                                                    data-modal-open="absence-user-modal"
+                                                    data-user-id="{{ $user->id }}"
+                                                    data-user-name="{{ $user->full_name }}"
+                                                    data-user-absences='@json($absencePayload)'
+                                                >Absence</button>
+                                            @endif
+
                                             <button type="button" class="gc-btn-danger" data-modal-open="delete-user-modal" data-delete-url="{{ route('manager.users.destroy', $user->id) }}" data-user-name="{{ $user->full_name }}">Soft delete</button>
                                         @else
                                             <form method="POST" action="{{ route('manager.users.restore', $user->id) }}" class="inline">
@@ -157,6 +176,42 @@
         </div>
     </div>
 
+    <div id="absence-user-modal" class="gc-modal hidden">
+        <div class="gc-modal-panel gc-modal-panel-xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Technicien</p>
+                    <h2 class="text-lg font-semibold">Absences de <span id="absence-user-name"></span></h2>
+                </div>
+                <button type="button" class="gc-link" data-modal-close="absence-user-modal">Fermer</button>
+            </div>
+
+            <div id="absence-user-list" class="mt-5 space-y-3"></div>
+
+            <form id="absence-user-form" method="POST" action="#" class="mt-5 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                @csrf
+                <h3 class="font-semibold" style="color:var(--gc-text);">Ajouter une absence</h3>
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div>
+                        <label class="gc-label" for="absence_starts_on">Debut</label>
+                        <input id="absence_starts_on" name="starts_on" type="date" class="gc-input" required />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="absence_ends_on">Fin</label>
+                        <input id="absence_ends_on" name="ends_on" type="date" class="gc-input" required />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="absence_reason">Motif optionnel</label>
+                        <input id="absence_reason" name="reason" type="text" class="gc-input" maxlength="255" placeholder="Conges, maladie..." />
+                    </div>
+                </div>
+                <div class="gc-modal-actions mt-4">
+                    <button type="submit" class="gc-btn-primary">Ajouter l'absence</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="delete-user-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
             <h2 class="text-lg font-semibold">Soft delete utilisateur</h2>
@@ -193,8 +248,55 @@
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('manager-user-filters-form');
         const roleInputs = document.querySelectorAll('[data-role-input]');
+        const absenceStoreUrlTemplate = @json(route('manager.users.absences.store', ['user' => '__USER__']));
+        const absenceDestroyUrlTemplate = @json(route('manager.users.absences.destroy', ['user' => '__USER__', 'absence' => '__ABSENCE__']));
+        const csrfToken = @json(csrf_token());
         const departmentMaps = {};
         const departmentGeoJson = { loaded: false, data: null };
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
+        const formatAbsenceDate = (value) => {
+            if (!value) return '-';
+
+            return new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR');
+        };
+
+        const renderAbsenceList = (userId, absences) => {
+            const list = document.getElementById('absence-user-list');
+
+            if (!list) return;
+
+            if (!Array.isArray(absences) || absences.length === 0) {
+                list.innerHTML = '<div class="rounded-xl border border-dashed p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Aucune absence a venir pour ce technicien.</div>';
+                return;
+            }
+
+            list.innerHTML = absences.map((absence) => {
+                const destroyUrl = absenceDestroyUrlTemplate
+                    .replace('__USER__', encodeURIComponent(userId))
+                    .replace('__ABSENCE__', encodeURIComponent(absence.id));
+
+                return `
+                    <article class="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between" style="border-color:var(--gc-border);">
+                        <div>
+                            <p class="font-semibold" style="color:var(--gc-text);">Abs du ${escapeHtml(formatAbsenceDate(absence.starts_on))} au ${escapeHtml(formatAbsenceDate(absence.ends_on))}</p>
+                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(absence.reason || 'Motif non renseigne')}</p>
+                        </div>
+                        <form method="POST" action="${destroyUrl}" class="shrink-0">
+                            <input type="hidden" name="_token" value="${escapeHtml(csrfToken)}">
+                            <input type="hidden" name="_method" value="DELETE">
+                            <button type="submit" class="gc-btn-danger">Supprimer</button>
+                        </form>
+                    </article>
+                `;
+            }).join('');
+        };
 
         const extractDepartmentCode = (feature) => {
             const contexts = Array.isArray(feature?.context) ? feature.context : [];
@@ -387,9 +489,7 @@
                     });
                     refreshDepartmentUi(prefix);
                     setAddressMarker(prefix);
-                } catch (error) {
-                    console.warn('Contours departements indisponibles, fallback cases actif.', error);
-                }
+                } catch (error) {}
             });
         };
 
@@ -474,7 +574,8 @@
                             });
                         });
                     } catch (error) {
-                        console.error('[Mapbox Debug][Manager Users] fetch error', error);
+                        list.innerHTML = '';
+                        list.classList.add('hidden');
                     }
                 }, 250);
             });
@@ -529,6 +630,17 @@
                 if (modalId === 'force-delete-user-modal') {
                     document.getElementById('force-delete-user-form').action = button.dataset.forceDeleteUrl;
                     document.getElementById('force-delete-user-name').textContent = button.dataset.userName || '';
+                }
+
+                if (modalId === 'absence-user-modal') {
+                    const userId = button.dataset.userId || '';
+                    const absences = parseJsonDataset(button.dataset.userAbsences);
+                    document.getElementById('absence-user-name').textContent = button.dataset.userName || '';
+                    document.getElementById('absence-user-form').action = absenceStoreUrlTemplate.replace('__USER__', encodeURIComponent(userId));
+                    document.getElementById('absence_starts_on').value = '';
+                    document.getElementById('absence_ends_on').value = '';
+                    document.getElementById('absence_reason').value = '';
+                    renderAbsenceList(userId, absences);
                 }
 
                 openModal(modalId);

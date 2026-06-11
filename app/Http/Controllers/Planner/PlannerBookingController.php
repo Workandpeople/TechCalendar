@@ -7,7 +7,9 @@ use App\Models\Appointment;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
+use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Services\LotAutoCompletionCalculator;
 use App\Services\MapboxDrivingRouteService;
 use App\Services\SimulatedCrmAppointmentService;
 use Carbon\Carbon;
@@ -20,13 +22,17 @@ use Illuminate\View\View;
 
 class PlannerBookingController extends Controller
 {
-    public function index(Request $request, SimulatedCrmAppointmentService $crmAppointments): View
+    public function index(
+        Request $request,
+        SimulatedCrmAppointmentService $crmAppointments,
+        LotAutoCompletionCalculator $autoCompletion
+    ): View
     {
         abort_unless($this->canAccess($request), 403);
 
         return view('planner.book', [
             'crmAppointments' => $crmAppointments->pending(15),
-            'lotRequests' => $this->lotAppointmentRequests(),
+            'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
             'services' => Service::query()
@@ -69,6 +75,7 @@ class PlannerBookingController extends Controller
             }
         }
 
+        $this->loadAbsencesForTechnicians($technicians, $calendarStart, $calendarEnd);
         $appointments = $this->appointmentsForTechnicians($technicianIds, $calendarStart, $calendarEnd);
 
         return response()->json([
@@ -111,6 +118,7 @@ class PlannerBookingController extends Controller
             trim($payload['query']),
             $drivingRoutes,
         );
+        $this->loadAbsencesForTechnicians($technicians, now()->copy()->startOfDay(), now()->copy()->addWeeks(8)->endOfWeek());
 
         return response()->json([
             'technicians' => $this->serializeTechnicians($technicians),
@@ -143,9 +151,11 @@ class PlannerBookingController extends Controller
         $technicians = isset($payload['technician_ids'])
             ? $this->techniciansByIdsForAppointment($payload['technician_ids'], $crmAppointment, $drivingRoutes)
             : $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
+        $this->loadAbsencesForTechnicians($technicians, $windowStart, $windowEnd);
         $appointments = $this->appointmentsForTechnicians($technicians->pluck('id'), $windowStart, $windowEnd);
 
         return response()->json([
+            'technicians' => $this->serializeTechnicians($technicians),
             'events' => $this->calendarEvents($appointments),
             'suggestions' => $this->buildSlotSuggestions(
                 $technicians,
@@ -193,6 +203,14 @@ class PlannerBookingController extends Controller
 
         $startsAt = Carbon::parse($payload['starts_at']);
         $durationMinutes = (int) $payload['duration_minutes'];
+        $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
+        $absence = $this->absenceOverlapForTechnician((int) $payload['technician_id'], $startsAt, $endsAt);
+
+        if ($absence) {
+            throw ValidationException::withMessages([
+                'technician_id' => 'Ce technicien est absent '.$this->absenceLabel($absence).'.',
+            ]);
+        }
 
         $appointment = Appointment::query()->create([
             'service_id' => $crmAppointment['service']['id'],
@@ -206,7 +224,7 @@ class PlannerBookingController extends Controller
             'longitude' => $crmAppointment['longitude'],
             'starts_at' => $startsAt,
             'duration_minutes' => $durationMinutes,
-            'ends_at' => (clone $startsAt)->addMinutes($durationMinutes),
+            'ends_at' => $endsAt,
             'comment' => $payload['comment'] ?? null,
         ]);
 
@@ -452,19 +470,70 @@ class PlannerBookingController extends Controller
      */
     private function serializeTechnicians(Collection $technicians): Collection
     {
-        return $technicians->map(fn (User $technician): array => [
-            'id' => $technician->id,
-            'name' => $technician->full_name,
-            'phone' => $technician->phone,
-            'address' => $technician->address,
-            'department_code' => $technician->department_code,
-            'latitude' => $technician->latitude,
-            'longitude' => $technician->longitude,
-            'driving_distance_km' => round((float) $technician->getAttribute('driving_distance_km'), 1),
-            'driving_duration_minutes' => (int) $technician->getAttribute('driving_duration_minutes'),
-            'route_source' => $technician->getAttribute('route_source'),
-            'covers_requested_department' => (bool) $technician->getAttribute('covers_requested_department'),
-        ])->values();
+        return $technicians->map(function (User $technician): array {
+            $absences = $technician->relationLoaded('absences')
+                ? $technician->absences
+                : collect();
+
+            return [
+                'id' => $technician->id,
+                'name' => $technician->full_name,
+                'phone' => $technician->phone,
+                'address' => $technician->address,
+                'department_code' => $technician->department_code,
+                'latitude' => $technician->latitude,
+                'longitude' => $technician->longitude,
+                'driving_distance_km' => round((float) $technician->getAttribute('driving_distance_km'), 1),
+                'driving_duration_minutes' => (int) $technician->getAttribute('driving_duration_minutes'),
+                'route_source' => $technician->getAttribute('route_source'),
+                'covers_requested_department' => (bool) $technician->getAttribute('covers_requested_department'),
+                'absence_label' => $absences
+                    ->map(fn (TechnicianAbsence $absence): string => 'Abs '.$this->absenceLabel($absence))
+                    ->implode(' · '),
+                'absences' => $absences
+                    ->map(fn (TechnicianAbsence $absence): array => [
+                        'id' => $absence->id,
+                        'starts_at' => $absence->starts_at?->toIso8601String(),
+                        'ends_at' => $absence->ends_at?->toIso8601String(),
+                        'label' => 'Abs '.$this->absenceLabel($absence),
+                        'reason' => $absence->reason,
+                    ])
+                    ->values(),
+            ];
+        })->values();
+    }
+
+    /**
+     * @param Collection<int, User> $technicians
+     */
+    private function loadAbsencesForTechnicians(Collection $technicians, Carbon $start, Carbon $end): void
+    {
+        $technicianIds = $technicians
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($technicianIds->isEmpty()) {
+            return;
+        }
+
+        $absences = TechnicianAbsence::query()
+            ->whereIn('technician_id', $technicianIds->all())
+            ->where('starts_at', '<=', $end)
+            ->where('ends_at', '>=', $start)
+            ->orderBy('starts_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('technician_id');
+
+        $technicians->each(function (User $technician) use ($absences): void {
+            $technician->setRelation(
+                'absences',
+                $absences->get($technician->id, (new TechnicianAbsence())->newCollection())
+            );
+        });
     }
 
     /**
@@ -554,7 +623,7 @@ class PlannerBookingController extends Controller
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function lotAppointmentRequests(): Collection
+    private function lotAppointmentRequests(LotAutoCompletionCalculator $autoCompletion): Collection
     {
         $placeableStatus = [
             LotAppointment::STATUS_PENDING,
@@ -564,8 +633,21 @@ class PlannerBookingController extends Controller
         return Lot::query()
             ->with([
                 'appointments' => fn ($query) => $query
-                    ->whereNull('appointment_id')
-                    ->whereIn('status', $placeableStatus)
+                    ->with([
+                        'appointment:id,technician_id,service_id,starts_at,ends_at',
+                        'appointment.service:id,type,name',
+                        'appointment.technician:id,first_name,last_name',
+                    ])
+                    ->where(function ($query) use ($placeableStatus): void {
+                        $query
+                            ->where(function ($query) use ($placeableStatus): void {
+                                $query
+                                    ->whereNull('appointment_id')
+                                    ->whereIn('status', $placeableStatus);
+                            })
+                            ->orWhereNotNull('appointment_id')
+                            ->orWhere('status', LotAppointment::STATUS_PLACED);
+                    })
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                     ->orderBy('row_number')
                     ->orderBy('customer_name'),
@@ -577,30 +659,65 @@ class PlannerBookingController extends Controller
             ->latest()
             ->limit(50)
             ->get()
-            ->map(fn (Lot $lot): array => [
-                'id' => $lot->id,
-                'title' => $lot->name,
-                'type_label' => $lot->typeLabel(),
-                'status_label' => $lot->statusLabel(),
-                'appointments_count' => $lot->appointments->count(),
-                'departments' => $lot->appointments->pluck('department_code')->filter()->unique()->sort()->values(),
-                'appointments' => $lot->appointments->map(fn (LotAppointment $appointment): array => [
-                    'id' => $appointment->id,
-                    'customer_name' => $appointment->customer_name,
-                    'customer_phone' => $appointment->customer_phone,
-                    'address' => $appointment->address,
-                    'department_code' => $appointment->department_code,
-                    'row_number' => $appointment->row_number,
-                    'external_reference' => $appointment->external_reference,
-                    'service_id' => $appointment->service_id,
-                    'status' => $appointment->status,
-                    'can_search' => filled($appointment->address)
-                        && filled($appointment->department_code)
-                        && $appointment->latitude !== null
-                        && $appointment->longitude !== null,
-                ])->values(),
-            ])
+            ->map(function (Lot $lot) use ($autoCompletion): array {
+                $placedAppointments = $lot->appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+                $placeableAppointments = $lot->appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
+                $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
+                $statusMeta = $this->lotStatusMeta($status);
+
+                return [
+                    'id' => $lot->id,
+                    'title' => $lot->name,
+                    'type_label' => $lot->typeLabel(),
+                    'status_label' => Lot::statuses()[$status] ?? Lot::statuses()[Lot::STATUS_NOT_STARTED],
+                    'status_color' => $statusMeta['color'],
+                    'status_background' => $statusMeta['background'],
+                    'imported_at' => $lot->imported_at,
+                    'auto_completion' => $autoCompletion->calculate($lot, $lot->appointments),
+                    'appointments_count' => $lot->appointments->count(),
+                    'placeable_count' => $placeableAppointments->count(),
+                    'placed_count' => $placedAppointments->count(),
+                    'departments' => $lot->appointments->pluck('department_code')->filter()->unique()->sort()->values(),
+                    'appointments' => $lot->appointments->map(fn (LotAppointment $appointment): array => [
+                        'id' => $appointment->id,
+                        'customer_name' => $appointment->customer_name,
+                        'customer_phone' => $appointment->customer_phone,
+                        'address' => $appointment->address,
+                        'department_code' => $appointment->department_code,
+                        'row_number' => $appointment->row_number,
+                        'external_reference' => $appointment->external_reference,
+                        'service_id' => $appointment->service_id,
+                        'status' => $appointment->status,
+                        'status_label' => $appointment->statusLabel(),
+                        'appointment_id' => $appointment->appointment_id,
+                        'is_placed' => $this->isPlacedLotAppointment($appointment),
+                        'placed_at' => $appointment->appointment?->starts_at,
+                        'placed_technician_name' => $appointment->appointment?->technician?->full_name,
+                        'placed_service_label' => $appointment->appointment?->service
+                            ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                            : null,
+                        'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'planner.tracking'),
+                        'can_search' => $this->isPlaceableLotAppointment($appointment)
+                            && filled($appointment->address)
+                            && filled($appointment->department_code)
+                            && $appointment->latitude !== null
+                            && $appointment->longitude !== null,
+                    ])->values(),
+                ];
+            })
             ->values();
+    }
+
+    /**
+     * @return array{color:string,background:string}
+     */
+    private function lotStatusMeta(string $status): array
+    {
+        return match ($status) {
+            Lot::STATUS_IN_PROGRESS => ['color' => '#1d4ed8', 'background' => '#dbeafe'],
+            Lot::STATUS_COMPLETED => ['color' => '#15803d', 'background' => '#dcfce7'],
+            default => ['color' => '#b45309', 'background' => '#fef3c7'],
+        };
     }
 
     /**
@@ -839,7 +956,7 @@ class PlannerBookingController extends Controller
         $days = collect();
 
         for ($date = $startDate->copy(); $date->lt($endDate); $date->addDay()) {
-            if (! $date->isWeekend()) {
+            if ($this->isBookableDay($date)) {
                 $days->push($date->copy());
             }
         }
@@ -905,7 +1022,7 @@ class PlannerBookingController extends Controller
         Carbon $preferredStartsAt,
         MapboxDrivingRouteService $drivingRoutes
     ): array {
-        if ($preferredStartsAt->isWeekend() || $preferredStartsAt->lt(now())) {
+        if (! $this->isBookableDay($preferredStartsAt) || $preferredStartsAt->lt(now())) {
             return [];
         }
 
@@ -946,6 +1063,10 @@ class PlannerBookingController extends Controller
     ): ?array {
         $dayStart = Carbon::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
         $dayEnd = Carbon::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
+
+        if ($this->technicianHasLoadedAbsenceOverlap($technician, $dayStart, $dayEnd)) {
+            return null;
+        }
 
         if ($date->isSameDay(now()) && $dayStart->lt(now())) {
             $dayStart = now()->copy()->addMinutes(15);
@@ -1043,6 +1164,10 @@ class PlannerBookingController extends Controller
         $dayEnd = Carbon::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
         $startsAt = $this->roundUpToNextHalfHour($preferredStartsAt);
         $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
+
+        if ($this->technicianHasLoadedAbsenceOverlap($technician, $startsAt, $endsAt)) {
+            return null;
+        }
 
         if ($startsAt->lt($dayStart) || $endsAt->gt($dayEnd)) {
             return null;
@@ -1150,6 +1275,10 @@ class PlannerBookingController extends Controller
         );
         $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
 
+        if ($this->technicianHasLoadedAbsenceOverlap($technician, $startsAt, $endsAt)) {
+            return null;
+        }
+
         if ($nextAppointment) {
             $travelAfter = $drivingRoutes->estimate(
                 $destination['lat'],
@@ -1193,6 +1322,67 @@ class PlannerBookingController extends Controller
         $roundedTimestamp = intdiv($timestamp + $intervalSeconds - 1, $intervalSeconds) * $intervalSeconds;
 
         return Carbon::createFromTimestamp($roundedTimestamp, $date->getTimezone());
+    }
+
+    private function isBookableDay(Carbon $date): bool
+    {
+        return ! $date->isSunday();
+    }
+
+    private function absenceOverlapForTechnician(int $technicianId, Carbon $startsAt, Carbon $endsAt): ?TechnicianAbsence
+    {
+        return TechnicianAbsence::query()
+            ->where('technician_id', $technicianId)
+            ->where('starts_at', '<=', $endsAt)
+            ->where('ends_at', '>=', $startsAt)
+            ->orderBy('starts_at')
+            ->first();
+    }
+
+    private function technicianHasLoadedAbsenceOverlap(User $technician, Carbon $startsAt, Carbon $endsAt): bool
+    {
+        if (! $technician->relationLoaded('absences')) {
+            return $this->absenceOverlapForTechnician((int) $technician->id, $startsAt, $endsAt) !== null;
+        }
+
+        return $technician->absences->contains(
+            fn (TechnicianAbsence $absence): bool => $absence->starts_at?->lte($endsAt)
+                && $absence->ends_at?->gte($startsAt)
+        );
+    }
+
+    private function absenceLabel(TechnicianAbsence $absence): string
+    {
+        $startsOn = $absence->starts_at?->format('d/m/Y') ?? '-';
+        $endsOn = $absence->ends_at?->format('d/m/Y') ?? '-';
+
+        return "du {$startsOn} au {$endsOn}";
+    }
+
+    private function isPlacedLotAppointment(LotAppointment $appointment): bool
+    {
+        return $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED;
+    }
+
+    private function isPlaceableLotAppointment(LotAppointment $appointment): bool
+    {
+        return ! $this->isPlacedLotAppointment($appointment)
+            && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
+    }
+
+    private function trackingUrlForLotAppointment(LotAppointment $lotAppointment, string $routeName): ?string
+    {
+        $appointment = $lotAppointment->appointment;
+
+        if (! $appointment) {
+            return null;
+        }
+
+        return route($routeName, array_filter([
+            'technician_id' => $appointment->technician_id,
+            'appointment_id' => $appointment->id,
+            'date' => $appointment->starts_at?->toDateString(),
+        ], fn ($value): bool => $value !== null && $value !== ''));
     }
 
     /**
@@ -1245,7 +1435,9 @@ class PlannerBookingController extends Controller
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,
+                'travel_to_distance_km' => round((float) $travelTo['distance_km'], 1),
                 'travel_to_minutes' => (int) $travelTo['duration_minutes'],
+                'travel_after_distance_km' => round((float) $travelAfter['distance_km'], 1),
                 'travel_after_minutes' => (int) $travelAfter['duration_minutes'],
                 'duration_minutes' => $durationMinutes,
                 'next_appointment_id' => $nextAppointment?->id,

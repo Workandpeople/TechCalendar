@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'appointment_count',
     'drive_distance_km',
     'drive_duration_minutes',
+    'overtime_minutes',
     'calculation_source',
     'route_hash',
     'route_points',
@@ -31,6 +32,7 @@ class TechnicianDailyRouteMetric extends Model
             'appointment_count' => 'integer',
             'drive_distance_km' => 'float',
             'drive_duration_minutes' => 'integer',
+            'overtime_minutes' => 'integer',
             'route_points' => 'array',
             'calculated_at' => 'datetime',
         ];

@@ -37,6 +37,7 @@ class ManagerDashboardDataService
             ->count();
         $totalKm = round((float) $metrics->sum('drive_distance_km'), 1);
         $totalDriveHours = round(((int) $metrics->sum('drive_duration_minutes')) / 60, 1);
+        $totalOvertimeHours = round(((int) $metrics->sum('overtime_minutes')) / 60, 1);
         $averageKmPerAppointment = $scheduledThisWeek > 0 ? round($totalKm / $scheduledThisWeek, 1) : 0;
 
         return [
@@ -69,6 +70,12 @@ class ManagerDashboardDataService
                     'value' => "{$totalDriveHours}h",
                     'detail' => $metrics->where('calculation_source', 'mapbox')->count().' jour(s) calcules Mapbox',
                     'tone' => 'pink',
+                ],
+                [
+                    'label' => 'Heures supp terrain',
+                    'value' => "{$totalOvertimeHours}h",
+                    'detail' => 'Temps hors horaires, trajets inclus',
+                    'tone' => 'orange',
                 ],
             ],
             'plannerEfficiency' => $plannerEfficiency->values()->all(),
@@ -131,6 +138,7 @@ class ManagerDashboardDataService
                     'appointment_count' => $appointmentCount,
                     'drive_distance_km' => $distanceKm,
                     'drive_duration_hours' => round(((int) $technicianMetrics->sum('drive_duration_minutes')) / 60, 1),
+                    'overtime_hours' => round(((int) $technicianMetrics->sum('overtime_minutes')) / 60, 1),
                     'km_per_appointment' => $appointmentCount > 0 ? round($distanceKm / $appointmentCount, 1) : 0,
                     'mapbox_days' => $technicianMetrics->where('calculation_source', 'mapbox')->count(),
                 ];
@@ -145,7 +153,7 @@ class ManagerDashboardDataService
      */
     private function dailyKilometers(Collection $metrics, Carbon $weekStart): Collection
     {
-        return collect(range(0, 4))
+        return collect(range(0, 5))
             ->map(function (int $dayOffset) use ($metrics, $weekStart): array {
                 $date = $weekStart->copy()->addDays($dayOffset);
 

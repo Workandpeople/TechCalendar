@@ -38,6 +38,23 @@ class LotAppointment extends Model
 
     public const STATUS_PLACED = 'placed';
 
+    /**
+     * @return array<string, string>
+     */
+    public static function statuses(): array
+    {
+        return [
+            self::STATUS_PENDING => 'A placer',
+            self::STATUS_NEEDS_REVIEW => 'A verifier',
+            self::STATUS_PLACED => 'Place',
+        ];
+    }
+
+    public function statusLabel(): string
+    {
+        return self::statuses()[$this->status] ?? self::statuses()[self::STATUS_PENDING];
+    }
+
     public function lot(): BelongsTo
     {
         return $this->belongsTo(Lot::class);

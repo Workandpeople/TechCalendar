@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\Appointment;
 use App\Models\Department;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
+use App\Models\TechnicianAbsence;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -46,6 +48,11 @@ it('renders lot appointment requests on the booking page', function () {
         'name' => 'Audit interne',
         'average_duration_minutes' => 120,
     ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $placedStartsAt = now()->copy()->addDay()->setTime(11, 0);
     $lot = Lot::query()->create([
         'name' => 'Lot Rhone',
         'type' => Lot::TYPE_FULL_CONTROL,
@@ -63,6 +70,32 @@ it('renders lot appointment requests on the booking page', function () {
         'longitude' => 4.832,
         'status' => LotAppointment::STATUS_PENDING,
     ]);
+    $placedAppointment = Appointment::query()->create([
+        'service_id' => Service::query()->first()->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Place',
+        'customer_phone' => '0600000004',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $placedStartsAt,
+        'duration_minutes' => 120,
+        'ends_at' => $placedStartsAt->copy()->addMinutes(120),
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $placedAppointment->service_id,
+        'appointment_id' => $placedAppointment->id,
+        'customer_name' => 'Client Place',
+        'customer_phone' => '0600000004',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'status' => LotAppointment::STATUS_PLACED,
+    ]);
 
     $this->actingAs($planner)
         ->get(route('planner.book'))
@@ -71,8 +104,12 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertSee('booking-crm-pagination')
         ->assertSee('Lot Rhone')
         ->assertSee('Client Lot')
+        ->assertSee('Client Place')
+        ->assertSee('RDV place')
         ->assertSee('Audit interne')
-        ->assertSee('Placer le RDV');
+        ->assertSee('Placer le RDV')
+        ->assertSee('Voir le RDV')
+        ->assertSee('appointment_id='.$placedAppointment->id, false);
 });
 
 it('searches additional booking technicians compatible with the requested service', function () {
@@ -217,6 +254,182 @@ it('analyzes a lot appointment request with a selected service', function () {
         ->assertJsonPath('filters.is_lot', true)
         ->assertJsonCount(1, 'technicians')
         ->assertJsonPath('technicians.0.id', $technician->id);
+});
+
+it('includes saturday in booking slot suggestions', function () {
+    config(['services.mapbox.token' => null]);
+    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+
+    try {
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_AUDIT,
+            'name' => 'Audit samedi',
+            'average_duration_minutes' => 90,
+        ]);
+
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+
+        $technician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'address' => '1 Rue de la Republique, Lyon',
+            'department_code' => '69',
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+            'day_start_time' => '07:00',
+            'day_end_time' => '21:00',
+        ]);
+        $technician->services()->attach($service);
+        $technician->departments()->attach('69');
+
+        $response = $this->actingAs($planner)
+            ->postJson(route('planner.book.analyze'), [
+                'manual_appointment' => [
+                    'first_name' => 'Claire',
+                    'last_name' => 'Samedi',
+                    'phone' => '0700000000',
+                    'address' => '20 Place Bellecour, 69002 Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'service_id' => $service->id,
+                ],
+            ])
+            ->assertOk();
+
+        expect($response->json('suggestions'))->not->toBeEmpty()
+            ->and(collect($response->json('suggestions'))
+                ->contains(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSaturday()))
+            ->toBeTrue();
+
+        $firstSuggestionProps = $response->json('suggestions.0.extendedProps');
+
+        expect(array_key_exists('travel_to_distance_km', $firstSuggestionProps))->toBeTrue()
+            ->and(array_key_exists('travel_after_distance_km', $firstSuggestionProps))->toBeTrue()
+            ->and($firstSuggestionProps['travel_to_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($firstSuggestionProps['travel_after_distance_km'])->toBeGreaterThanOrEqual(0);
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
+});
+
+it('keeps absent technicians visible but suppresses booking suggestions during absence', function () {
+    config(['services.mapbox.token' => null]);
+    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+
+    try {
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_AUDIT,
+            'name' => 'Audit absence',
+            'average_duration_minutes' => 90,
+        ]);
+
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+
+        $technician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'address' => '1 Rue de la Republique, Lyon',
+            'department_code' => '69',
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+            'day_start_time' => '07:00',
+            'day_end_time' => '21:00',
+        ]);
+        $technician->services()->attach($service);
+        $technician->departments()->attach('69');
+
+        TechnicianAbsence::query()->create([
+            'technician_id' => $technician->id,
+            'created_by' => $planner->id,
+            'starts_at' => '2026-06-11 00:00:00',
+            'ends_at' => '2026-06-25 23:59:59',
+            'reason' => 'Conges',
+        ]);
+
+        $this->actingAs($planner)
+            ->postJson(route('planner.book.analyze'), [
+                'manual_appointment' => [
+                    'first_name' => 'Claire',
+                    'last_name' => 'Absence',
+                    'phone' => '0700000000',
+                    'address' => '20 Place Bellecour, 69002 Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'service_id' => $service->id,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonCount(1, 'technicians')
+            ->assertJsonPath('technicians.0.id', $technician->id)
+            ->assertJsonPath('technicians.0.absence_label', 'Abs du 11/06/2026 au 25/06/2026')
+            ->assertJsonCount(0, 'suggestions');
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
+});
+
+it('rejects booking creation during technician absence', function () {
+    config(['services.mapbox.token' => null]);
+    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+
+    try {
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_AUDIT,
+            'name' => 'Audit absence',
+            'average_duration_minutes' => 90,
+        ]);
+        $technician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+        ]);
+        $technician->services()->attach($service);
+
+        TechnicianAbsence::query()->create([
+            'technician_id' => $technician->id,
+            'created_by' => $planner->id,
+            'starts_at' => '2026-06-12 00:00:00',
+            'ends_at' => '2026-06-12 23:59:59',
+        ]);
+
+        $this->actingAs($planner)
+            ->postJson(route('planner.book.appointments.store'), [
+                'manual_appointment' => [
+                    'first_name' => 'Claire',
+                    'last_name' => 'Absence',
+                    'phone' => '0700000000',
+                    'address' => '20 Place Bellecour, 69002 Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'service_id' => $service->id,
+                ],
+                'technician_id' => $technician->id,
+                'starts_at' => '2026-06-12 10:00:00',
+                'duration_minutes' => 90,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('technician_id');
+
+        expect(\App\Models\Appointment::query()->exists())->toBeFalse();
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
 });
 
 it('links a placed appointment back to its lot appointment', function () {

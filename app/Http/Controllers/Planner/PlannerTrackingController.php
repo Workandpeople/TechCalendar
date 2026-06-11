@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Models\Service;
+use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +21,7 @@ class PlannerTrackingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $technicians = User::query()
+            ->with('services:id')
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
@@ -28,6 +31,10 @@ class PlannerTrackingController extends Controller
 
         return view('planner.tracking', [
             'technicians' => $technicians,
+            'services' => Service::query()
+                ->orderBy('type')
+                ->orderBy('name')
+                ->get(['id', 'type', 'name']),
             'section' => $request->routeIs('manager.appointments') ? 'Gerant' : 'Planning',
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
             'mapboxToken' => config('services.mapbox.token'),
@@ -47,6 +54,8 @@ class PlannerTrackingController extends Controller
             ],
             'start' => ['required', 'date'],
             'end' => ['required', 'date', 'after:start'],
+            'service_id' => ['nullable', 'integer', Rule::exists('services', 'id')],
+            'appointment_status' => ['nullable', Rule::in(['all', 'active', 'deleted'])],
         ]);
 
         $technicianIds = collect($payload['technician_ids'] ?? [])
@@ -58,7 +67,7 @@ class PlannerTrackingController extends Controller
             return response()->json(['events' => []]);
         }
 
-        $appointments = Appointment::withTrashed()
+        $appointmentsQuery = Appointment::withTrashed()
             ->with([
                 'service:id,type,name',
                 'technician:id,first_name,last_name,address,latitude,longitude',
@@ -67,6 +76,15 @@ class PlannerTrackingController extends Controller
             ->whereIn('technician_id', $technicianIds)
             ->where('starts_at', '<', Carbon::parse($payload['end']))
             ->where('ends_at', '>', Carbon::parse($payload['start']))
+            ->when(! empty($payload['service_id']), fn ($query) => $query->where('service_id', (int) $payload['service_id']));
+
+        match ($payload['appointment_status'] ?? 'all') {
+            'active' => $appointmentsQuery->whereNull('deleted_at'),
+            'deleted' => $appointmentsQuery->onlyTrashed(),
+            default => null,
+        };
+
+        $appointments = $appointmentsQuery
             ->orderBy('starts_at')
             ->get();
 
@@ -106,6 +124,7 @@ class PlannerTrackingController extends Controller
                         'technician_address' => $appointment->technician?->address,
                         'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                         'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
+                        'service_id' => $appointment->service_id,
                         'service_label' => $serviceLabel,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
@@ -123,6 +142,87 @@ class PlannerTrackingController extends Controller
                     ],
                 ];
             })->values(),
+        ]);
+    }
+
+    public function reassignTechnician(Request $request, int $appointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $appointment = Appointment::withTrashed()
+            ->with('service:id,type,name')
+            ->findOrFail($appointment);
+
+        $payload = $request->validate([
+            'technician_id' => [
+                'required',
+                'integer',
+                Rule::exists('users', 'id')->where(fn ($query) => $query
+                    ->where('role', 2)
+                    ->where('admin', false)
+                    ->whereNull('deleted_at')),
+            ],
+        ]);
+
+        $targetTechnicianId = (int) $payload['technician_id'];
+
+        if ((int) $appointment->technician_id === $targetTechnicianId) {
+            throw ValidationException::withMessages([
+                'technician_id' => 'Choisis un autre technicien pour reaffecter ce RDV.',
+            ]);
+        }
+
+        $technician = User::query()
+            ->with('services:id')
+            ->whereKey($targetTechnicianId)
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        if ($appointment->service_id && ! $technician->services->contains('id', $appointment->service_id)) {
+            throw ValidationException::withMessages([
+                'technician_id' => 'Ce technicien ne couvre pas la prestation du RDV.',
+            ]);
+        }
+
+        $hasOverlappingAppointment = Appointment::query()
+            ->where('technician_id', $technician->id)
+            ->whereKeyNot($appointment->id)
+            ->whereNull('deleted_at')
+            ->where('starts_at', '<', $appointment->ends_at)
+            ->where('ends_at', '>', $appointment->starts_at)
+            ->exists();
+
+        if ($hasOverlappingAppointment) {
+            throw ValidationException::withMessages([
+                'technician_id' => 'Ce technicien a deja un RDV sur ce creneau.',
+            ]);
+        }
+
+        $previousTechnicianId = (int) $appointment->technician_id;
+        $serviceDate = $appointment->starts_at?->toDateString();
+
+        $appointment->update([
+            'technician_id' => $technician->id,
+        ]);
+
+        if ($serviceDate) {
+            TechnicianDailyRouteMetric::query()
+                ->whereIn('technician_id', [$previousTechnicianId, $technician->id])
+                ->whereDate('service_date', $serviceDate)
+                ->delete();
+        }
+
+        return response()->json([
+            'message' => 'Rendez-vous reaffecte.',
+            'technician' => [
+                'id' => $technician->id,
+                'name' => $technician->full_name,
+                'address' => $technician->address,
+                'latitude' => $technician->latitude,
+                'longitude' => $technician->longitude,
+            ],
         ]);
     }
 

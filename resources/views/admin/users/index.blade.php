@@ -399,9 +399,7 @@
                     });
                     refreshDepartmentUi(prefix);
                     setAddressMarker(prefix);
-                } catch (error) {
-                    console.warn('Contours departements indisponibles, fallback cases actif.', error);
-                }
+                } catch (error) {}
             });
         };
 
@@ -497,7 +495,8 @@
                             });
                         });
                     } catch (error) {
-                        console.error('[Mapbox Debug][Admin Users] fetch error', error);
+                        list.innerHTML = '';
+                        list.classList.add('hidden');
                     }
                 }, 250);
             });

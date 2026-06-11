@@ -29,7 +29,7 @@ Artisan::command('route-metrics:compute {--from=} {--to=}', function (Technician
     ));
 
     return 0;
-})->purpose('Calcule et met en cache les kilometres journaliers des techniciens.');
+})->purpose('Calcule et met en cache les kilometres et heures supp journalieres des techniciens.');
 
 Artisan::command('health:check', function (SystemHealthMonitor $healthMonitor): int {
     $snapshot = $healthMonitor->run();

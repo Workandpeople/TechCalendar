@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\ProcessLotImportPreviewJob;
+use App\Models\Appointment;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
@@ -31,6 +32,11 @@ it('renders manager lots from database', function () {
         'name' => 'Audit qualite site client',
         'average_duration_minutes' => 120,
     ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $placedStartsAt = now()->copy()->addDay()->setTime(9, 0);
     $lot = Lot::query()->create([
         'name' => 'Lot Audit Juin',
         'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
@@ -53,6 +59,31 @@ it('renders manager lots from database', function () {
         'service_name' => 'Audit qualite site client',
         'status' => LotAppointment::STATUS_PENDING,
     ]);
+    $placedAppointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Lucie',
+        'customer_last_name' => 'Placee',
+        'customer_phone' => '06 12 34 80 70',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $placedStartsAt,
+        'duration_minutes' => 120,
+        'ends_at' => $placedStartsAt->copy()->addMinutes(120),
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $placedAppointment->id,
+        'source' => 'Export AuditPro',
+        'customer_name' => 'Lucie Placee',
+        'customer_phone' => '06 12 34 80 70',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_PLACED,
+    ]);
 
     $this->actingAs($manager)
         ->get(route('manager.lots'))
@@ -62,6 +93,10 @@ it('renders manager lots from database', function () {
         ->assertSee('100% controle contact')
         ->assertSee('audit-juin.xlsx')
         ->assertSee('Camille Martin')
+        ->assertSee('Lucie Placee')
+        ->assertSee('RDV place')
+        ->assertSee('Voir le RDV')
+        ->assertSee('appointment_id='.$placedAppointment->id, false)
         ->assertSee('RDV a placer');
 });
 
@@ -118,6 +153,37 @@ it('filters manager lots by lot type', function () {
         ->assertDontSee('Lot echantillon');
 });
 
+it('renders lot auto completion based on sampling target', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot echantillonne',
+        'type' => Lot::TYPE_SAMPLE_CONTROL,
+        'sampling_percentage' => 50,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 4) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client '.$index,
+            'address' => 'Adresse '.$index,
+            'status' => $index === 1 ? LotAppointment::STATUS_PLACED : LotAppointment::STATUS_PENDING,
+        ]);
+    }
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots'))
+        ->assertOk()
+        ->assertSee('Auto-completion')
+        ->assertSee('50%')
+        ->assertSee('1/2 RDV objectif (50% du lot)');
+});
+
 it('renders lot type select in the import form', function () {
     $manager = User::factory()->create([
         'role' => 0,
@@ -132,7 +198,8 @@ it('renders lot type select in the import form', function () {
         ->assertSee("% d'echantillonage", false)
         ->assertSee('Echantillonage controle contact')
         ->assertSee('100% controle')
-        ->assertSee('A definir')
+        ->assertSee('RDV places')
+        ->assertSee('RDV total')
         ->assertDontSee('Statut service');
 });
 

@@ -7,6 +7,7 @@ use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
 use App\Services\LotExcelImportService;
+use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotImportConfirmationService;
 use App\Services\LotImportPreviewService;
 use App\Services\LotImportPreviewRowUpdateService;
@@ -21,7 +22,7 @@ use Throwable;
 
 class ManagerLotController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, LotAutoCompletionCalculator $autoCompletion): View
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -29,7 +30,7 @@ class ManagerLotController extends Controller
         $lots = $this->lotQuery($filters)
             ->latest()
             ->get()
-            ->map(fn (Lot $lot): array => $this->serializeLot($lot));
+            ->map(fn (Lot $lot): array => $this->serializeLot($lot, $autoCompletion));
 
         return view('manager.lots.index', [
             'lots' => $lots,
@@ -43,6 +44,8 @@ class ManagerLotController extends Controller
             'stats' => [
                 'lots_count' => $lots->count(),
                 'appointments_count' => $lots->sum('appointments_count'),
+                'placeable_count' => $lots->sum('placeable_count'),
+                'placed_count' => $lots->sum('placed_count'),
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
         ]);
@@ -228,6 +231,11 @@ class ManagerLotController extends Controller
             ->with([
                 'creator:id,first_name,last_name',
                 'appointments' => fn ($query) => $query
+                    ->with([
+                        'appointment:id,technician_id,service_id,starts_at,ends_at',
+                        'appointment.service:id,type,name',
+                        'appointment.technician:id,first_name,last_name',
+                    ])
                     ->when(! empty($filters['q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['q'])))
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                     ->orderBy('row_number')
@@ -267,11 +275,14 @@ class ManagerLotController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function serializeLot(Lot $lot): array
+    private function serializeLot(Lot $lot, LotAutoCompletionCalculator $autoCompletion): array
     {
         $appointments = $lot->appointments;
+        $placedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+        $placeableAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
         $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
         $statusMeta = $this->statusMeta($status);
+        $autoCompletionData = $autoCompletion->calculate($lot, $appointments);
 
         return [
             'id' => $lot->id,
@@ -290,6 +301,7 @@ class ManagerLotController extends Controller
             'download_url' => route('manager.lots.download', $lot),
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
+            'auto_completion' => $autoCompletionData,
             'appointments' => $appointments->map(fn (LotAppointment $appointment): array => [
                 'id' => $appointment->id,
                 'external_reference' => $appointment->external_reference,
@@ -300,10 +312,21 @@ class ManagerLotController extends Controller
                 'address' => $appointment->address,
                 'department_code' => $appointment->department_code,
                 'status' => $appointment->status,
+                'status_label' => $appointment->statusLabel(),
+                'appointment_id' => $appointment->appointment_id,
+                'is_placed' => $this->isPlacedLotAppointment($appointment),
+                'placed_at' => $appointment->appointment?->starts_at,
+                'placed_technician_name' => $appointment->appointment?->technician?->full_name,
+                'placed_service_label' => $appointment->appointment?->service
+                    ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                    : null,
+                'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
                 'ai_confidence' => $appointment->ai_confidence,
                 'ai_warnings' => $appointment->ai_warnings ?? [],
             ])->values(),
             'appointments_count' => $appointments->count(),
+            'placed_count' => $placedAppointments->count(),
+            'placeable_count' => $placeableAppointments->count(),
             'departments' => $appointments->pluck('department_code')->filter()->unique()->sort()->values(),
         ];
     }
@@ -325,6 +348,32 @@ class ManagerLotController extends Controller
         $user = $request->user();
 
         return (bool) $user && ($user->admin || $user->role === 0);
+    }
+
+    private function isPlacedLotAppointment(LotAppointment $appointment): bool
+    {
+        return $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED;
+    }
+
+    private function isPlaceableLotAppointment(LotAppointment $appointment): bool
+    {
+        return ! $this->isPlacedLotAppointment($appointment)
+            && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
+    }
+
+    private function trackingUrlForLotAppointment(LotAppointment $lotAppointment, string $routeName): ?string
+    {
+        $appointment = $lotAppointment->appointment;
+
+        if (! $appointment) {
+            return null;
+        }
+
+        return route($routeName, array_filter([
+            'technician_id' => $appointment->technician_id,
+            'appointment_id' => $appointment->id,
+            'date' => $appointment->starts_at?->toDateString(),
+        ], fn ($value): bool => $value !== null && $value !== ''));
     }
 
     /**

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -80,5 +81,10 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Department::class, 'department_user', 'user_id', 'department_code')
             ->withTimestamps();
+    }
+
+    public function absences(): HasMany
+    {
+        return $this->hasMany(TechnicianAbsence::class, 'technician_id');
     }
 }

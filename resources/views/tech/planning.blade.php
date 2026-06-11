@@ -28,7 +28,7 @@
                 </div>
             </div>
 
-            <div class="flex gap-3 overflow-x-auto px-4 py-4 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-5 xl:grid-cols-4">
+            <div class="flex gap-3 overflow-x-auto px-4 py-4 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-5 xl:grid-cols-5">
                 @foreach ($stats as $stat)
                     @php
                         $tones = [
@@ -36,6 +36,7 @@
                             'green' => ['#dcfce7', '#15803d'],
                             'gold' => ['#fef3c7', '#b45309'],
                             'pink' => ['#ffe4e6', '#be123c'],
+                            'orange' => ['#ffedd5', '#c2410c'],
                         ];
                         [$toneBg, $toneText] = $tones[$stat['tone']] ?? ['var(--gc-accent-soft)', 'var(--gc-text)'];
                     @endphp
@@ -673,7 +674,7 @@
                 initialView: mobileCalendarQuery.matches ? 'timeGridDay' : 'timeGridWeek',
                 locale: 'fr',
                 firstDay: 1,
-                weekends: false,
+                hiddenDays: [0],
                 allDaySlot: false,
                 height: techCalendarHeight(),
                 expandRows: true,
@@ -686,7 +687,7 @@
                     day: 'Jour',
                     list: 'Liste',
                 },
-                slotMinTime: '08:00:00',
+                slotMinTime: '07:00:00',
                 slotMaxTime: '21:00:00',
                 slotLabelFormat: {
                     hour: '2-digit',

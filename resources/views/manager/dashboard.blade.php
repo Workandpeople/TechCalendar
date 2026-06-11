@@ -40,7 +40,7 @@
             <p id="manager-dashboard-error-message" class="mt-1 text-sm"></p>
         </section>
 
-        <section id="manager-dashboard-stats" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"></section>
+        <section id="manager-dashboard-stats" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"></section>
 
         <section class="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <article class="gc-card p-5">
@@ -106,6 +106,7 @@
                                 <th class="py-2 text-right">Km</th>
                                 <th class="py-2 text-right">Km/RDV</th>
                                 <th class="py-2 text-right">Route</th>
+                                <th class="py-2 text-right">Supp.</th>
                             </tr>
                         </thead>
                         <tbody id="technician-efficiency-table"></tbody>
@@ -133,6 +134,7 @@
                 green: ['#dcfce7', '#15803d'],
                 gold: ['#fef3c7', '#b45309'],
                 pink: ['#ffe4e6', '#be123c'],
+                orange: ['#ffedd5', '#c2410c'],
             };
             const charts = {};
 
@@ -243,9 +245,10 @@
                             <td class="py-3 text-right">${escapeHtml(technician.drive_distance_km)} km</td>
                             <td class="py-3 text-right">${escapeHtml(technician.km_per_appointment)}</td>
                             <td class="py-3 text-right">${escapeHtml(technician.drive_duration_hours)}h</td>
+                            <td class="py-3 text-right">${escapeHtml(technician.overtime_hours)}h</td>
                         </tr>
                     `).join('')
-                    : '<tr><td colspan="5" class="py-4 text-sm" style="color:var(--gc-text-soft);">Aucune metrique terrain disponible cette semaine.</td></tr>';
+                    : '<tr><td colspan="6" class="py-4 text-sm" style="color:var(--gc-text-soft);">Aucune metrique terrain disponible cette semaine.</td></tr>';
             };
 
             const renderCharts = (payload) => {

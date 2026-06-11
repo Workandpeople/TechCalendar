@@ -62,6 +62,29 @@
                 <div id="calendar-legend" class="flex flex-wrap gap-2"></div>
             </div>
 
+            <div class="mb-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_auto] lg:items-end">
+                    <div>
+                        <label class="gc-label" for="tracking_service_filter">Prestation</label>
+                        <select id="tracking_service_filter" class="gc-input">
+                            <option value="">Toutes les prestations</option>
+                            @foreach ($services as $service)
+                                <option value="{{ $service->id }}">{{ $service->type }} - {{ $service->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="gc-label" for="tracking_status_filter">Etat du RDV</label>
+                        <select id="tracking_status_filter" class="gc-input">
+                            <option value="all">Tous les RDV</option>
+                            <option value="active">Actifs uniquement</option>
+                            <option value="deleted">Soft-deleted uniquement</option>
+                        </select>
+                    </div>
+                    <button id="tracking-reset-filters" type="button" class="gc-btn-soft">Reinitialiser</button>
+                </div>
+            </div>
+
             <div class="relative min-h-[780px]">
                 <div id="tracking-calendar"></div>
                 <div id="tracking-calendar-loading" class="absolute inset-0 z-10 hidden items-start justify-center rounded-xl bg-white/85 px-4 pt-24 backdrop-blur-sm">
@@ -140,6 +163,30 @@
                             <dd id="tracking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                     </dl>
+
+                    <form id="tracking-reassign-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
+                        <label class="gc-label" for="tracking_reassign_technician_id">Reaffecter le RDV</label>
+                        <select id="tracking_reassign_technician_id" class="gc-input">
+                            @foreach ($technicians as $technician)
+                                @php
+                                    $departmentCode = $technician->department_code ?: '--';
+                                    $technicianLabel = trim($technician->last_name.' '.$technician->first_name).' ('.$departmentCode.')';
+                                @endphp
+                                <option
+                                    value="{{ $technician->id }}"
+                                    data-label="{{ $technicianLabel }}"
+                                    data-service-ids="{{ $technician->services->pluck('id')->implode(',') }}"
+                                >
+                                    {{ $technicianLabel }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Les techniciens incompatibles avec la prestation sont desactives.</p>
+                        <div id="tracking_reassign_status" class="mt-2 hidden text-sm"></div>
+                        <div class="mt-3 flex justify-end">
+                            <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Reaffecter</button>
+                        </div>
+                    </form>
                 </section>
             </div>
 
@@ -169,9 +216,18 @@
         const selectedTechCount = document.getElementById('selected-tech-count');
         const calendarHelper = document.getElementById('calendar-helper');
         const calendarLegend = document.getElementById('calendar-legend');
+        const trackingServiceFilter = document.getElementById('tracking_service_filter');
+        const trackingStatusFilter = document.getElementById('tracking_status_filter');
+        const trackingResetFilters = document.getElementById('tracking-reset-filters');
         const trackingAppointmentModal = document.getElementById('tracking-appointment-modal');
         const trackingCommentForm = document.getElementById('tracking-comment-form');
+        const trackingReassignForm = document.getElementById('tracking-reassign-form');
+        const trackingReassignSelect = document.getElementById('tracking_reassign_technician_id');
+        const trackingReassignStatus = document.getElementById('tracking_reassign_status');
+        const trackingReassignButton = document.getElementById('tracking-reassign-btn');
+        const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
         const trackingRestoreUrlTemplate = @json(route('planner.tracking.appointments.restore', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
@@ -214,6 +270,14 @@
         const setText = (id, value) => {
             const element = document.getElementById(id);
             if (element) element.textContent = value || '-';
+        };
+
+        const setTrackingReassignStatus = (message, color = '#0f766e') => {
+            if (!trackingReassignStatus) return;
+
+            trackingReassignStatus.style.color = color;
+            trackingReassignStatus.textContent = message;
+            trackingReassignStatus.classList.toggle('hidden', !message);
         };
 
         const trackingEscapeHtml = (value) => String(value ?? '')
@@ -368,6 +432,44 @@
             if (left === right) return true;
 
             return String(left.id || '') !== '' && String(left.id) === String(right.id || '');
+        };
+
+        const updateTrackingReassignButtonState = () => {
+            if (!trackingReassignButton || !trackingReassignSelect) return;
+
+            const selectedOption = trackingReassignSelect.selectedOptions[0];
+            const currentTechnicianId = trackingReassignSelect.dataset.currentTechnicianId || '';
+            const selectedTechnicianId = trackingReassignSelect.value || '';
+
+            trackingReassignButton.disabled = !selectedTechnicianId
+                || selectedTechnicianId === currentTechnicianId
+                || Boolean(selectedOption?.disabled);
+        };
+
+        const updateTrackingReassignOptions = (serviceId, currentTechnicianId) => {
+            if (!trackingReassignSelect) return;
+
+            const normalizedServiceId = String(serviceId || '');
+            const normalizedCurrentTechnicianId = String(currentTechnicianId || '');
+
+            trackingReassignSelect.dataset.currentTechnicianId = normalizedCurrentTechnicianId;
+            trackingReassignSelect.dataset.serviceId = normalizedServiceId;
+
+            trackingReassignOptions.forEach((option) => {
+                const baseLabel = option.dataset.label || option.textContent;
+                const optionServiceIds = String(option.dataset.serviceIds || '')
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean);
+                const isCurrentTechnician = option.value === normalizedCurrentTechnicianId;
+                const coversService = !normalizedServiceId || optionServiceIds.includes(normalizedServiceId);
+
+                option.disabled = !isCurrentTechnician && !coversService;
+                option.textContent = `${baseLabel}${isCurrentTechnician ? ' (actuel)' : (!coversService ? ' (prestation non couverte)' : '')}`;
+            });
+
+            trackingReassignSelect.value = normalizedCurrentTechnicianId;
+            updateTrackingReassignButtonState();
         };
 
         const trackingTechnicianHomePoint = (props) => ({
@@ -676,6 +778,8 @@
             setText('tracking_detail_end', formatDateTime(event.end));
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
+            updateTrackingReassignOptions(props.service_id, props.technician_id);
+            setTrackingReassignStatus('');
             trackingInitialComment = props.comment || '';
             document.getElementById('tracking_detail_comment').value = trackingInitialComment;
             document.getElementById('tracking_comment_status').classList.add('hidden');
@@ -717,6 +821,11 @@
             trackingCalendarLoading.classList.remove('flex');
         };
 
+        const trackingCalendarFilters = () => ({
+            service_id: trackingServiceFilter?.value || null,
+            appointment_status: trackingStatusFilter?.value || 'all',
+        });
+
         const fetchTrackingEventsChunk = async (technicianIds, fetchInfo, signal) => {
             const response = await fetch(trackingEventsUrl, {
                 method: 'POST',
@@ -730,6 +839,7 @@
                     technician_ids: technicianIds,
                     start: fetchInfo.startStr,
                     end: fetchInfo.endStr,
+                    ...trackingCalendarFilters(),
                 }),
             });
             const payload = await response.json();
@@ -881,11 +991,11 @@
                     minute: '2-digit',
                     hour12: false,
                 },
-                slotMinTime: '08:00:00',
+                slotMinTime: '07:00:00',
                 slotMaxTime: '21:00:00',
                 height: 780,
                 nowIndicator: true,
-                weekends: false,
+                hiddenDays: [0],
                 allDaySlot: false,
 	                events: async (fetchInfo, successCallback, failureCallback) => {
 	                    const technicianIds = selectedTechnicianIds();
@@ -945,6 +1055,14 @@
 
         technicianFilterInput.addEventListener('input', applyTechnicianFilter);
         technicianCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', refetchCalendar));
+        trackingServiceFilter?.addEventListener('change', refetchCalendar);
+        trackingStatusFilter?.addEventListener('change', refetchCalendar);
+        trackingResetFilters?.addEventListener('click', () => {
+            if (trackingServiceFilter) trackingServiceFilter.value = '';
+            if (trackingStatusFilter) trackingStatusFilter.value = 'all';
+            refetchCalendar();
+        });
+        trackingReassignSelect?.addEventListener('change', updateTrackingReassignButtonState);
 
         document.getElementById('select-visible-techs').addEventListener('click', () => {
             technicianCards
@@ -1010,6 +1128,74 @@
             } finally {
                 button.disabled = false;
                 button.textContent = 'Enregistrer le commentaire';
+            }
+        });
+
+        trackingReassignForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
+            const technicianId = trackingReassignSelect?.value;
+
+            if (!appointmentId || !technicianId || !trackingReassignButton) return;
+
+            trackingReassignButton.disabled = true;
+            trackingReassignButton.textContent = 'Reaffectation...';
+            setTrackingReassignStatus('');
+
+            try {
+                const response = await fetch(trackingReassignUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ technician_id: Number(technicianId) }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
+                    throw new Error(firstError || 'Impossible de reaffecter le RDV.');
+                }
+
+                const technician = payload.technician || {};
+                const targetCheckbox = technicianCheckboxes.find((checkbox) => String(checkbox.value) === String(technician.id));
+
+                if (targetCheckbox && !targetCheckbox.checked) {
+                    targetCheckbox.checked = true;
+                }
+
+                setText('tracking_detail_technician', technician.name);
+                updateTrackingReassignOptions(trackingReassignSelect.dataset.serviceId, technician.id);
+
+                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+                if (calendarEvent) {
+                    calendarEvent.setProp('title', `${technician.name || 'Technicien'} | ${calendarEvent.extendedProps.customer_name || ''}`);
+                    calendarEvent.setExtendedProp('technician_id', technician.id);
+                    calendarEvent.setExtendedProp('technician_name', technician.name);
+                    calendarEvent.setExtendedProp('technician_address', technician.address);
+                    calendarEvent.setExtendedProp('technician_latitude', technician.latitude);
+                    calendarEvent.setExtendedProp('technician_longitude', technician.longitude);
+                    calendarEvent.setExtendedProp('origin_latitude', technician.latitude);
+                    calendarEvent.setExtendedProp('origin_longitude', technician.longitude);
+                    calendarEvent.setExtendedProp('origin_name', technician.address || 'Domicile technicien');
+                    calendarEvent.setExtendedProp('origin_label', 'Domicile');
+                    applyTrackingEventStyle(calendarEvent);
+                }
+
+                setTrackingReassignStatus('Rendez-vous reaffecte.');
+                refetchCalendar();
+
+                if (calendarEvent) {
+                    window.setTimeout(() => renderTrackingDetailMap(calendarEvent), 180);
+                }
+            } catch (error) {
+                setTrackingReassignStatus(error.message || 'Impossible de reaffecter le RDV.', '#9f1239');
+            } finally {
+                trackingReassignButton.textContent = 'Reaffecter';
+                updateTrackingReassignButtonState();
             }
         });
 

@@ -13,3 +13,30 @@ nouvelle page de prise de rdv -> rdv lots
 saisir un nom de lot au moment du televersement
 
 sur les rdv et dans les lots il faut une gestion de probleme rdv
+
+pour les lots contact -> pas d'api de crea dans le crm
+
+-------------
+
+ajouter un systeme d'heure supp (temps de trajet compte)
+
+ajouter les % de completion des lots
+
+afficher les rdv placés dans les lots
+
+afficher tooltip dans calendrier sur les proposition
+
+mettre jusqua 21h et ajouter le samedi
+
+pouvoir reaffecter un tech
+
+ajouter une gestion d'absence dans la gestions user
+
+ajouter des filtres dans la gestion de rdv, sur crm ...
+
+vider la bdd
+
+-------------- pour plus tard pour l'appli
+
+coupler avec ical, enlever le widget km semaine et temps de route
+
