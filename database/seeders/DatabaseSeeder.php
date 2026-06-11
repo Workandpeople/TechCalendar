@@ -14,6 +14,14 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if ($this->command?->getLaravel()->environment('production')) {
+            $this->call([
+                AdminUserSeeder::class,
+            ]);
+
+            return;
+        }
+
         $this->call([
             AdminUserSeeder::class,
             ServiceSeeder::class,
