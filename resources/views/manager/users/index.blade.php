@@ -243,7 +243,7 @@
 
     <script>
         const MAPBOX_TOKEN = @json(config('services.mapbox.token'));
-        const DEPARTMENT_GEOJSON_URL = @json(asset('geo/départements.geojson'));
+        const DEPARTMENT_GEOJSON_URL = @json(asset('geo/departements.geojson'));
         const openButtons = document.querySelectorAll('[data-modal-open]');
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('manager-user-filters-form');
@@ -364,9 +364,10 @@
         document.querySelectorAll('[data-service-select-all]').forEach((selectAll) => {
             selectAll.addEventListener('change', () => {
                 const prefix = selectAll.dataset.serviceSelectAll;
+                const shouldCheck = selectAll.checked;
 
                 document.querySelectorAll(`[data-service-checkbox="${prefix}"]`).forEach((checkbox) => {
-                    checkbox.checked = selectAll.checked;
+                    checkbox.checked = shouldCheck;
                     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                 });
 

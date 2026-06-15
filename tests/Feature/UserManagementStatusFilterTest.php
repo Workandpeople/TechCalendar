@@ -88,3 +88,26 @@ it('does not apply empty role filters when filtering manager users by status', f
         ->assertDontSee($activePlanning->email)
         ->assertSee($deletedTech->email);
 });
+
+it('renders the existing department geojson asset in user management pages', function () {
+    $admin = User::factory()->create([
+        'admin' => true,
+        'role' => 0,
+    ]);
+    $manager = User::factory()->create([
+        'admin' => false,
+        'role' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.users'))
+        ->assertOk()
+        ->assertSee('geo\/departements.geojson', false)
+        ->assertDontSee('geo\/départements.geojson', false);
+
+    $this->actingAs($manager)
+        ->get(route('manager.users'))
+        ->assertOk()
+        ->assertSee('geo\/departements.geojson', false)
+        ->assertDontSee('geo\/départements.geojson', false);
+});
