@@ -45,19 +45,17 @@ class MobileAuthController extends Controller
         }
 
         $plainToken = 'tc_mobile_'.Str::random(64);
-        $expiresAt = now()->addDays(60);
-
         MobileAccessToken::query()->create([
             'user_id' => $user->id,
             'name' => $payload['device_name'] ?? 'mobile',
             'token_hash' => hash('sha256', $plainToken),
-            'expires_at' => $expiresAt,
+            'expires_at' => null,
         ]);
 
         return response()->json([
             'token' => $plainToken,
             'token_type' => 'Bearer',
-            'expires_at' => $expiresAt->toIso8601String(),
+            'expires_at' => null,
             'user' => $this->serializeUser($user),
         ]);
     }

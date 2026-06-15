@@ -16,7 +16,7 @@ uses(RefreshDatabase::class);
 
 afterEach(fn () => Carbon::setTestNow());
 
-it('authenticates technicians and returns a revocable mobile token', function () {
+it('authenticates technicians and returns a persistent but revocable mobile token', function () {
     $technician = User::factory()->create([
         'role' => 2,
         'admin' => false,
@@ -34,12 +34,14 @@ it('authenticates technicians and returns a revocable mobile token', function ()
         ->assertOk()
         ->assertJsonPath('user.id', $technician->id)
         ->assertJsonPath('user.full_name', $technician->full_name)
+        ->assertJsonPath('expires_at', null)
         ->assertJsonStructure(['token', 'token_type', 'expires_at', 'user']);
 
     $token = $response->json('token');
 
     expect(MobileAccessToken::query()->where('user_id', $technician->id)->count())->toBe(1)
-        ->and(MobileAccessToken::query()->first()->token_hash)->toBe(hash('sha256', $token));
+        ->and(MobileAccessToken::query()->first()->token_hash)->toBe(hash('sha256', $token))
+        ->and(MobileAccessToken::query()->first()->expires_at)->toBeNull();
 
     $this
         ->withHeader('Authorization', 'Bearer '.$token)
@@ -53,6 +55,40 @@ it('authenticates technicians and returns a revocable mobile token', function ()
         ->assertOk();
 
     expect(MobileAccessToken::query()->count())->toBe(0);
+});
+
+it('keeps mobile push tokens after a manual logout', function () {
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+        'password' => Hash::make('secret-password'),
+    ]);
+
+    $token = $this->postJson(route('api.mobile.login'), [
+        'email' => 'tech@example.test',
+        'password' => 'secret-password',
+        'device_name' => 'iPhone test',
+    ])
+        ->assertOk()
+        ->json('token');
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.push-tokens.store'), [
+            'token' => 'fcm-token-test',
+            'platform' => 'ios',
+            'device_name' => 'iPhone de test',
+        ])
+        ->assertOk();
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.logout'))
+        ->assertOk();
+
+    expect(MobileAccessToken::query()->count())->toBe(0)
+        ->and(MobilePushToken::query()->where('user_id', $technician->id)->where('token', 'fcm-token-test')->exists())->toBeTrue();
 });
 
 it('rejects non technician accounts on mobile login', function () {

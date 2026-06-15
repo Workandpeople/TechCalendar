@@ -103,7 +103,13 @@ function App(): React.JSX.Element {
             return;
           }
 
-          await apiLogout();
+          const cachedUser = await getCachedUser();
+
+          if (cachedUser && mounted) {
+            setUser(cachedUser);
+            setSessionMode('offline');
+            setBootNotice('Session locale conservée: resynchronisation nécessaire dès que le serveur répond.');
+          }
         }
       } finally {
         if (mounted) {
@@ -755,7 +761,17 @@ function PlanningScreen({
       setError(null);
 
       try {
-        const restoredUser = await restoreOnlineSessionFromOfflineCredentials();
+        let restoredUser: MobileUser;
+
+        try {
+          restoredUser = await apiMe();
+        } catch (exception) {
+          if (isNetworkError(exception)) {
+            throw exception;
+          }
+
+          restoredUser = await restoreOnlineSessionFromOfflineCredentials();
+        }
 
         if (cancelled) {
           return;

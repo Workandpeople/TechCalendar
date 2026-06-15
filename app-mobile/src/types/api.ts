@@ -61,7 +61,7 @@ export type PlanningCacheInfo = {
 export type LoginPayload = {
   token: string;
   token_type: 'Bearer';
-  expires_at: string;
+  expires_at: string | null;
   user: MobileUser;
 };
 
