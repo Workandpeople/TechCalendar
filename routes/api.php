@@ -8,6 +8,9 @@ Route::prefix('mobile')->group(function (): void {
     Route::post('/login', [MobileAuthController::class, 'login'])
         ->middleware('throttle:10,1')
         ->name('api.mobile.login');
+    Route::post('/forgot-password', [MobileAuthController::class, 'sendPasswordResetLink'])
+        ->middleware('throttle:5,1')
+        ->name('api.mobile.password.email');
 
     Route::middleware('mobile.token')->group(function (): void {
         Route::get('/me', [MobileAuthController::class, 'me'])

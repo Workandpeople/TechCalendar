@@ -27,6 +27,7 @@ import {
   logout as apiLogout,
   me as apiMe,
   offlineLogin,
+  requestPasswordReset,
   restoreOnlineSessionFromOfflineCredentials,
 } from './src/api/auth';
 import { ApiError, isNetworkError } from './src/api/client';
@@ -206,15 +207,82 @@ function formatBiometryLabel(type: string): string {
   }
 }
 
+async function askForBiometricEnrollment(): Promise<void> {
+  const [biometryType, alreadyConfigured] = await Promise.all([
+    getBiometryType(),
+    hasBiometricCredentials(),
+  ]);
+
+  if (!biometryType || alreadyConfigured) {
+    return;
+  }
+
+  const label = formatBiometryLabel(biometryType);
+
+  await new Promise<void>(resolve => {
+    Alert.alert(
+      `Activer ${label} ?`,
+      'Tu pourras rouvrir ton planning plus vite, même hors ligne, après une première synchronisation sur ce téléphone.',
+      [
+        {
+          text: 'Plus tard',
+          style: 'cancel',
+          onPress: () => resolve(),
+        },
+        {
+          text: 'Activer',
+          onPress: () => {
+            setBiometricCredentialsFromOfflineCredentials()
+              .then(enabled => {
+                if (!enabled) {
+                  Alert.alert('Activation impossible', `${label} n’a pas pu être activé sur cet appareil.`);
+                }
+              })
+              .finally(() => resolve());
+          },
+        },
+      ],
+    );
+  });
+}
+
+async function askForPushEnrollment(): Promise<boolean> {
+  return new Promise<boolean>(resolve => {
+    Alert.alert(
+      'Activer les notifications ?',
+      'Les techniciens reçoivent une alerte quand un rendez-vous est ajouté, modifié ou annulé.',
+      [
+        {
+          text: 'Plus tard',
+          style: 'cancel',
+          onPress: () => resolve(false),
+        },
+        {
+          text: 'Autoriser',
+          onPress: () => {
+            registerForPushNotifications()
+              .then(resolve)
+              .catch(() => resolve(false));
+          },
+        },
+      ],
+    );
+  });
+}
+
 function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }): React.JSX.Element {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSentMessage, setResetSentMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
   const [biometricSubmitting, setBiometricSubmitting] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canSubmit = email.includes('@') && password.length >= 1 && !submitting && !biometricSubmitting;
+  const canSubmit = email.includes('@') && password.length >= 1 && !submitting && !biometricSubmitting && !resetSubmitting;
+  const canRequestReset = email.includes('@') && !submitting && !resetSubmitting && !biometricSubmitting;
 
   useEffect(() => {
     let mounted = true;
@@ -224,9 +292,8 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
         getBiometryType(),
         hasBiometricCredentials(),
       ]);
-      const configured = alreadyConfigured || await setBiometricCredentialsFromOfflineCredentials();
 
-      if (mounted && biometryType && configured) {
+      if (mounted && biometryType && alreadyConfigured) {
         setBiometricLabel(formatBiometryLabel(biometryType));
       }
     }
@@ -254,6 +321,29 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
       setSubmitting(false);
     }
   }, [canSubmit, email, onLogin, password]);
+
+  const submitPasswordReset = useCallback(async () => {
+    if (!canRequestReset) {
+      return;
+    }
+
+    setResetSubmitting(true);
+    setResetSentMessage(null);
+    setError(null);
+
+    try {
+      const message = await requestPasswordReset(email.trim());
+      setResetSentMessage(message);
+    } catch (exception) {
+      if (isNetworkError(exception)) {
+        setError('Connexion requise pour demander un lien de réinitialisation.');
+      } else {
+        setError(errorMessage(exception));
+      }
+    } finally {
+      setResetSubmitting(false);
+    }
+  }, [canRequestReset, email]);
 
   const submitWithBiometrics = useCallback(async () => {
     if (!biometricLabel || biometricSubmitting || submitting) {
@@ -291,10 +381,12 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
             <View style={styles.logoMark}>
               <Text style={styles.logoMarkText}>GC</Text>
             </View>
-            <Text style={styles.loginEyebrow}>Espace technicien</Text>
-            <Text style={styles.loginTitle}>Connecte-toi à ton planning terrain.</Text>
+            <Text style={styles.loginEyebrow}>{resetMode ? 'Mot de passe oublié' : 'Espace technicien'}</Text>
+            <Text style={styles.loginTitle}>{resetMode ? 'Réinitialise ton accès.' : 'Connecte-toi à ton planning terrain.'}</Text>
             <Text style={styles.loginSubtitle}>
-              Cette application fonctionne aussi hors ligne après une première synchronisation réussie.
+              {resetMode
+                ? 'Saisis ton adresse e-mail. Si elle correspond à un compte technicien actif, tu recevras un lien de réinitialisation.'
+                : 'Cette application fonctionne aussi hors ligne après une première synchronisation réussie.'}
             </Text>
           </View>
 
@@ -302,7 +394,10 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
             <InputLabel label="Adresse e-mail" />
             <TextInput
               value={email}
-              onChangeText={setEmail}
+              onChangeText={value => {
+                setEmail(value);
+                setResetSentMessage(null);
+              }}
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
@@ -311,47 +406,93 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
               style={styles.input}
             />
 
-            <InputLabel label="Mot de passe" />
-            <PasswordInput
-              value={password}
-              onChangeText={setPassword}
-              showPassword={showPassword}
-              onToggleVisibility={() => setShowPassword(current => !current)}
-              placeholder="Mot de passe"
-            />
+            {resetMode ? (
+              <>
+                {resetSentMessage ? <Text style={styles.formSuccess}>{resetSentMessage}</Text> : null}
+                {error ? <Text style={styles.formError}>{error}</Text> : null}
 
-            {error ? <Text style={styles.formError}>{error}</Text> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canRequestReset}
+                  onPress={submitPasswordReset}
+                  style={[styles.primaryButton, !canRequestReset && styles.primaryButtonDisabled]}
+                >
+                  {resetSubmitting ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Envoyer le lien</Text>
+                  )}
+                </Pressable>
 
-            {biometricLabel ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={submitting || biometricSubmitting}
-                onPress={submitWithBiometrics}
-                style={[styles.biometricButton, (submitting || biometricSubmitting) && styles.primaryButtonDisabled]}
-              >
-                {biometricSubmitting ? (
-                  <ActivityIndicator color={colors.ink} />
-                ) : (
-                  <>
-                    <Text style={styles.biometricButtonIcon}>◇</Text>
-                    <Text style={styles.biometricButtonText}>Se connecter avec {biometricLabel}</Text>
-                  </>
-                )}
-              </Pressable>
-            ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setResetMode(false);
+                    setResetSentMessage(null);
+                    setError(null);
+                  }}
+                  style={styles.centerLinkButton}
+                >
+                  <Text style={styles.centerLinkText}>Retour à la connexion</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <InputLabel label="Mot de passe" />
+                <PasswordInput
+                  value={password}
+                  onChangeText={setPassword}
+                  showPassword={showPassword}
+                  onToggleVisibility={() => setShowPassword(current => !current)}
+                  placeholder="Mot de passe"
+                />
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={!canSubmit}
-              onPress={submit}
-              style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
-            >
-              {submitting ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.primaryButtonText}>Se connecter</Text>
-              )}
-            </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setResetMode(true);
+                    setResetSentMessage(null);
+                    setError(null);
+                  }}
+                  style={styles.forgotPasswordButton}
+                >
+                  <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                </Pressable>
+
+                {error ? <Text style={styles.formError}>{error}</Text> : null}
+
+                {biometricLabel ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={submitting || biometricSubmitting}
+                    onPress={submitWithBiometrics}
+                    style={[styles.biometricButton, (submitting || biometricSubmitting) && styles.primaryButtonDisabled]}
+                  >
+                    {biometricSubmitting ? (
+                      <ActivityIndicator color={colors.ink} />
+                    ) : (
+                      <>
+                        <Text style={styles.biometricButtonIcon}>◇</Text>
+                        <Text style={styles.biometricButtonText}>Se connecter avec {biometricLabel}</Text>
+                      </>
+                    )}
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canSubmit}
+                  onPress={submit}
+                  style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Se connecter</Text>
+                  )}
+                </Pressable>
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -477,6 +618,7 @@ function PlanningScreen({
 }): React.JSX.Element {
   const netInfo = useNetInfo();
   const reconnectingRef = useRef(false);
+  const onboardingPromptsStartedRef = useRef(false);
   const [planning, setPlanning] = useState<PlanningPayload | null>(null);
   const [cacheInfo, setCacheInfo] = useState<PlanningCacheInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -614,11 +756,32 @@ function PlanningScreen({
   }, [loadPlanning, netInfo.isConnected, onOnlineSessionRestored, restoreBlocked, sessionMode]);
 
   useEffect(() => {
+    if (sessionMode !== 'online' || onboardingPromptsStartedRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    onboardingPromptsStartedRef.current = true;
+
+    async function runOnboardingPrompts() {
+      await askForBiometricEnrollment();
+
+      if (!cancelled && user.notification_push_enabled) {
+        await askForPushEnrollment();
+      }
+    }
+
+    runOnboardingPrompts().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionMode, user.notification_push_enabled]);
+
+  useEffect(() => {
     if (!user.notification_push_enabled) {
       return undefined;
     }
-
-    registerForPushNotifications().catch(() => undefined);
 
     const unsubscribeTokenRefresh = subscribeToPushTokenRefresh();
     const unsubscribeForeground = subscribeToForegroundMessages(message => {
@@ -1634,6 +1797,27 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     lineHeight: 20,
+  },
+  formSuccess: {
+    marginTop: 14,
+    padding: 12,
+    overflow: 'hidden',
+    borderRadius: 16,
+    color: colors.ink,
+    backgroundColor: colors.greenSoft,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  forgotPasswordButton: {
+    marginTop: 12,
+    alignSelf: 'flex-end',
+  },
+  forgotPasswordText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    textDecorationLine: 'underline',
   },
   biometricButton: {
     marginTop: 18,

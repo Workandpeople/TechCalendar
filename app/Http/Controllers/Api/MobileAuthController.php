@@ -9,8 +9,9 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password as PasswordBroker;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
@@ -61,6 +62,31 @@ class MobileAuthController extends Controller
         ]);
     }
 
+    public function sendPasswordResetLink(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'email' => ['required', 'email'],
+        ], [
+            'email.required' => 'Renseigne ton adresse e-mail.',
+            'email.email' => 'Renseigne une adresse e-mail valide.',
+        ]);
+
+        $email = mb_strtolower($payload['email']);
+        $technician = User::query()
+            ->where('email', $email)
+            ->where('role', 2)
+            ->where('admin', false)
+            ->first();
+
+        if ($technician) {
+            PasswordBroker::sendResetLink(['email' => $technician->email]);
+        }
+
+        return response()->json([
+            'message' => 'Si un compte technicien actif correspond à cette adresse, un lien de réinitialisation vient d’être envoyé.',
+        ]);
+    }
+
     public function me(Request $request): JsonResponse
     {
         return response()->json([
@@ -88,7 +114,7 @@ class MobileAuthController extends Controller
         abort_unless((bool) $user, 403);
 
         $payload = $request->validate([
-            'password' => ['required', 'confirmed', Password::defaults()],
+            'password' => ['required', 'confirmed', PasswordRule::defaults()],
         ], [
             'password.required' => 'Renseigne ton nouveau mot de passe.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',

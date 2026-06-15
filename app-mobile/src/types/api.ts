@@ -69,3 +69,7 @@ export type ChangePasswordPayload = {
   message: string;
   user: MobileUser;
 };
+
+export type ForgotPasswordPayload = {
+  message: string;
+};

@@ -7,8 +7,10 @@ use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 
 uses(RefreshDatabase::class);
 
@@ -68,6 +70,46 @@ it('rejects non technician accounts on mobile login', function () {
         ->assertUnprocessable()
         ->assertJsonValidationErrors('email')
         ->assertJsonPath('errors.email.0', 'Cette application est réservée aux techniciens.');
+});
+
+it('sends mobile password reset links to active technicians', function () {
+    Notification::fake();
+
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+    ]);
+
+    $this->postJson(route('api.mobile.password.email'), [
+        'email' => 'TECH@example.test',
+    ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Si un compte technicien actif correspond à cette adresse, un lien de réinitialisation vient d’être envoyé.');
+
+    Notification::assertSentTo($technician, ResetPassword::class);
+});
+
+it('does not reveal whether a mobile password reset email belongs to a technician', function () {
+    Notification::fake();
+
+    User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+        'email' => 'planning@example.test',
+    ]);
+
+    $this->postJson(route('api.mobile.password.email'), [
+        'email' => 'planning@example.test',
+    ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Si un compte technicien actif correspond à cette adresse, un lien de réinitialisation vient d’être envoyé.');
+
+    $this->postJson(route('api.mobile.password.email'), [
+        'email' => 'unknown@example.test',
+    ])->assertOk();
+
+    Notification::assertNothingSent();
 });
 
 it('requires mobile technicians to replace their initial password', function () {

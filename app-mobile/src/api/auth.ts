@@ -1,10 +1,9 @@
 import { ApiError, apiFetch, isNetworkError } from './client';
-import { ChangePasswordPayload, LoginPayload, MobileUser } from '../types/api';
+import { ChangePasswordPayload, ForgotPasswordPayload, LoginPayload, MobileUser } from '../types/api';
 import { getCachedUser, setCachedUser } from '../storage/cache';
 import {
   clearToken,
   getOfflineCredentials,
-  setBiometricCredentials,
   setOfflineCredentials,
   setToken,
 } from '../storage/secure';
@@ -21,10 +20,20 @@ export async function login(email: string, password: string): Promise<MobileUser
 
   await setToken(payload.token);
   await setOfflineCredentials(email, password);
-  await setBiometricCredentials(email, password);
   await setCachedUser(payload.user);
 
   return payload.user;
+}
+
+export async function requestPasswordReset(email: string): Promise<string> {
+  const payload = await apiFetch<ForgotPasswordPayload>('/mobile/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+    }),
+  });
+
+  return payload.message;
 }
 
 export async function offlineLogin(email: string, password: string): Promise<MobileUser | null> {
@@ -76,7 +85,6 @@ export async function changeFirstPassword(password: string, passwordConfirmation
 
   await setCachedUser(payload.user);
   await setOfflineCredentials(payload.user.email, password);
-  await setBiometricCredentials(payload.user.email, password);
 
   return payload.user;
 }
