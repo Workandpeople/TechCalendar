@@ -253,7 +253,7 @@ function FirstPasswordScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canSubmit = password.length >= 8 && confirmation.length >= 8 && !submitting;
+  const canSubmit = password.length >= 8 && confirmation.length >= 8 && password === confirmation && !submitting;
 
   const submit = useCallback(async () => {
     if (!canSubmit) {
