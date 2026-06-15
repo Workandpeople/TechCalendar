@@ -52,25 +52,25 @@ class PlannerDashboardController extends Controller
         return view('planner.dashboard', [
             'stats' => [
                 [
-                    'label' => 'RDV places cette semaine',
+                    'label' => 'RDV placés cette semaine',
                     'value' => $placedThisWeek,
-                    'detail' => $this->formatDelta($placedThisWeek, $placedLastWeek).' vs semaine derniere',
+                    'detail' => $this->formatDelta($placedThisWeek, $placedLastWeek).' vs semaine dernière',
                     'tone' => 'blue',
                 ],
                 [
                     'label' => 'Places aujourd hui',
                     'value' => $placedToday,
-                    'detail' => "{$placedByMeThisWeek} crees par toi cette semaine",
+                    'detail' => "{$placedByMeThisWeek} créés par toi cette semaine",
                     'tone' => 'green',
                 ],
                 [
-                    'label' => 'Charge planifiee',
+                    'label' => 'Charge planifiée',
                     'value' => "{$scheduledHoursThisWeek}h",
                     'detail' => "{$activeTechniciansThisWeek} techniciens actifs cette semaine",
                     'tone' => 'gold',
                 ],
                 [
-                    'label' => 'RDV a venir J+7',
+                    'label' => 'RDV à venir J+7',
                     'value' => $upcomingNext7Days,
                     'detail' => "{$softDeletedThisWeek} annulation(s) cette semaine",
                     'tone' => 'pink',

@@ -2,8 +2,8 @@
     <div class="space-y-6">
         <div>
             <p class="text-sm" style="color:var(--gc-text-soft);">Admin</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Parametres</h1>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Overrides applicatifs stockes de facon chiffree en BDD. Priorite: BDD si renseignee, sinon .env/config, sinon fallback applicatif.</p>
+            <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Paramètres</h1>
+            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Overrides applicatifs stockes de facon chiffree en BDD. Priorite: BDD si renseignée, sinon .env/config, sinon fallback applicatif.</p>
         </div>
 
         @if (session('status'))
@@ -87,7 +87,7 @@
                                         type="{{ $setting['type'] === 'password' ? 'password' : ($setting['type'] === 'email' ? 'email' : 'text') }}"
                                         class="gc-input"
                                         value="{{ $setting['is_secret'] ? '' : old("settings.{$setting['key']}", $setting['value']) }}"
-                                        placeholder="{{ $setting['is_secret'] && $setting['has_database_value'] ? 'Valeur BDD definie - laisser vide pour conserver' : 'Laisser vide pour utiliser .env / fallback' }}"
+                                        placeholder="{{ $setting['is_secret'] && $setting['has_database_value'] ? 'Valeur BDD définie - laisser vide pour conserver' : 'Laisser vide pour utiliser .env / fallback' }}"
                                         autocomplete="off"
                                     />
                                 @endif
@@ -123,7 +123,7 @@
             @endforeach
 
             <div class="flex justify-end">
-                <button type="submit" class="gc-btn-primary">Enregistrer les parametres</button>
+                <button type="submit" class="gc-btn-primary">Enregistrer les paramètres</button>
             </div>
         </form>
 

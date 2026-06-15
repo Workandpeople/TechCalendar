@@ -17,7 +17,7 @@ class LotImportConfirmationService
         }
 
         if ($preview->status !== LotImportPreview::STATUS_COMPLETED) {
-            throw new \RuntimeException('L import doit etre termine avant validation.');
+            throw new \RuntimeException('L import doit être terminé avant validation.');
         }
 
         $selectedRowNumbers = collect($selectedRowNumbers)
@@ -27,7 +27,7 @@ class LotImportConfirmationService
             ->values();
 
         if ($selectedRowNumbers->isEmpty()) {
-            throw new \RuntimeException('Selectionne au moins une ligne a importer.');
+            throw new \RuntimeException('Sélectionne au moins une ligne à importer.');
         }
 
         $payload = $preview->payload ?? [];
@@ -36,7 +36,7 @@ class LotImportConfirmationService
             ->values();
 
         if ($appointments->isEmpty()) {
-            throw new \RuntimeException('Aucune ligne selectionnee ne correspond a la preview.');
+            throw new \RuntimeException('Aucune ligne sélectionnée ne correspond à la preview.');
         }
 
         return DB::transaction(function () use ($preview, $payload, $appointments): Lot {
@@ -139,7 +139,7 @@ class LotImportConfirmationService
         return trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client a qualifier';
+        ]))) ?: 'Client à qualifier';
     }
 
     private function nullableString(mixed $value): ?string

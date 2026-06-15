@@ -55,7 +55,7 @@ class ManagerServiceController extends Controller
 
         Service::query()->create($payload);
 
-        return redirect()->route('manager.services')->with('status', 'Prestation creee avec succes.');
+        return redirect()->route('manager.services')->with('status', 'Prestation créée avec succès.');
     }
 
     public function update(Request $request, Service $service): RedirectResponse
@@ -66,7 +66,7 @@ class ManagerServiceController extends Controller
 
         $service->update($payload);
 
-        return redirect()->route('manager.services')->with('status', 'Prestation mise a jour.');
+        return redirect()->route('manager.services')->with('status', 'Prestation mise à jour.');
     }
 
     public function destroy(Request $request, Service $service): RedirectResponse
@@ -75,7 +75,7 @@ class ManagerServiceController extends Controller
 
         $service->delete();
 
-        return redirect()->route('manager.services')->with('status', 'Prestation supprimee.');
+        return redirect()->route('manager.services')->with('status', 'Prestation supprimée.');
     }
 
     /**

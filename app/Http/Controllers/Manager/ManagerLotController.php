@@ -85,7 +85,7 @@ class ManagerLotController extends Controller
 
         return redirect()
             ->route('manager.lots')
-            ->with('status', sprintf('Lot "%s" importe: %d RDV cree(s), %d ligne(s) rejetee(s).', $lot->name, $lot->imported_rows, $lot->rejected_rows));
+            ->with('status', sprintf('Lot "%s" importé : %d RDV créé(s), %d ligne(s) rejetée(s).', $lot->name, $lot->imported_rows, $lot->rejected_rows));
     }
 
     public function startImport(Request $request, LotImportPreviewService $imports): JsonResponse
@@ -158,7 +158,7 @@ class ManagerLotController extends Controller
         $lot = $confirmation->confirm($preview, $payload['selected_rows']);
 
         return response()->json([
-            'message' => sprintf('Lot "%s" cree avec %d RDV.', $lot->name, $lot->appointments()->count()),
+            'message' => sprintf('Lot "%s" créé avec %d RDV.', $lot->name, $lot->appointments()->count()),
             'redirect_url' => route('manager.lots'),
             'lot_id' => $lot->id,
         ]);

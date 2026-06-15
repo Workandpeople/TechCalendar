@@ -4,7 +4,7 @@
 
 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
     <div>
-        <label class="gc-label" for="{{ $prefix }}_first_name">Prenom</label>
+        <label class="gc-label" for="{{ $prefix }}_first_name">Prénom</label>
         <input id="{{ $prefix }}_first_name" name="first_name" type="text" class="gc-input" value="{{ old('first_name', $target?->first_name) }}" required />
     </div>
 
@@ -21,9 +21,9 @@
 
 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
     <div>
-        <label class="gc-label" for="{{ $prefix }}_role">Role</label>
+        <label class="gc-label" for="{{ $prefix }}_role">Rôle</label>
         <select id="{{ $prefix }}_role" name="role" class="gc-input" data-role-input="{{ $prefix }}" required>
-            <option value="0">Gerant</option>
+            <option value="0">Gérant</option>
             <option value="1">Planning</option>
             <option value="2">Tech</option>
         </select>
@@ -43,12 +43,12 @@
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-            <label class="gc-label" for="{{ $prefix }}_phone">Telephone</label>
+            <label class="gc-label" for="{{ $prefix }}_phone">Téléphone</label>
             <input id="{{ $prefix }}_phone" name="phone" type="text" class="gc-input" value="{{ old('phone', $target?->phone) }}" />
         </div>
 
         <div>
-            <label class="gc-label" for="{{ $prefix }}_break_duration_minutes">Duree de la pause (minutes)</label>
+            <label class="gc-label" for="{{ $prefix }}_break_duration_minutes">Durée de la pause (minutes)</label>
             <input id="{{ $prefix }}_break_duration_minutes" name="break_duration_minutes" type="number" min="0" max="240" class="gc-input" value="{{ old('break_duration_minutes', $target?->break_duration_minutes) }}" />
         </div>
     </div>
@@ -62,8 +62,14 @@
     </div>
 
     <div>
-        <label class="gc-label">Prestations habilitees</label>
-        <div class="gc-validation-group grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 md:grid-cols-2" style="border-color:var(--gc-border);" data-required-checkbox-group data-validation-label="Selectionne au moins une prestation">
+        <div class="mb-2 flex items-center justify-between gap-3">
+            <label class="gc-label mb-0">Prestations habilitées</label>
+            <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-medium" style="color:var(--gc-text-soft);">
+                <input type="checkbox" class="gc-check" data-service-select-all="{{ $prefix }}" />
+                Sélectionner tout
+            </label>
+        </div>
+        <div class="gc-validation-group grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 md:grid-cols-2" style="border-color:var(--gc-border);" data-required-checkbox-group data-validation-label="Sélectionne au moins une prestation">
             @foreach ($services as $service)
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="gc-check service-checkbox" name="service_ids[]" value="{{ $service->id }}" data-service-checkbox="{{ $prefix }}" />
@@ -75,15 +81,15 @@
 
     <div>
         <div class="mb-2 flex items-center justify-between gap-3">
-            <label class="gc-label mb-0">Departements couverts</label>
-            <span id="{{ $prefix }}_department_count" class="text-xs" style="color:var(--gc-text-soft);">0 selection</span>
+            <label class="gc-label mb-0">Départements couverts</label>
+            <span id="{{ $prefix }}_department_count" class="text-xs" style="color:var(--gc-text-soft);">0 sélection</span>
         </div>
         <div id="{{ $prefix }}_department_map_wrapper" class="hidden">
             <div id="{{ $prefix }}_department_map" class="mb-3 overflow-hidden rounded-xl border" style="height:420px;border-color:var(--gc-border);"></div>
-            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Clique sur la carte pour selectionner les departements couverts. Le point marque l'adresse du tech.</p>
+            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Clique sur la carte pour sélectionner les départements couverts. Le point marque l'adresse du tech.</p>
         </div>
-        <p id="{{ $prefix }}_department_map_hint" class="rounded-lg border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:#f8f8f8;">Renseigne une adresse via Mapbox pour afficher la carte des departements.</p>
-        <div class="gc-validation-group hidden" data-required-checkbox-group data-validate-hidden-group="true" data-validation-label="Selectionne au moins un departement">
+        <p id="{{ $prefix }}_department_map_hint" class="rounded-lg border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:#f8f8f8;">Renseigne une adresse via Mapbox pour afficher la carte des départements.</p>
+        <div class="gc-validation-group hidden" data-required-checkbox-group data-validate-hidden-group="true" data-validation-label="Sélectionne au moins un département">
             @foreach ($departments as $department)
                 <label data-department-chip="{{ $prefix }}" data-department-code="{{ $department->code }}">
                     <input type="checkbox" class="gc-check department-checkbox" name="department_codes[]" value="{{ $department->code }}" data-department-checkbox="{{ $prefix }}" />
@@ -94,12 +100,12 @@
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-            <label class="gc-label" for="{{ $prefix }}_day_start_time">Debut de journee</label>
+            <label class="gc-label" for="{{ $prefix }}_day_start_time">Début de journée</label>
             <input id="{{ $prefix }}_day_start_time" name="day_start_time" type="time" class="gc-input" value="{{ old('day_start_time', $target?->day_start_time) }}" />
         </div>
 
         <div>
-            <label class="gc-label" for="{{ $prefix }}_day_end_time">Fin de journee</label>
+            <label class="gc-label" for="{{ $prefix }}_day_end_time">Fin de journée</label>
             <input id="{{ $prefix }}_day_end_time" name="day_end_time" type="time" class="gc-input" value="{{ old('day_end_time', $target?->day_end_time) }}" />
         </div>
     </div>

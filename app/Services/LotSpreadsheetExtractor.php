@@ -10,7 +10,7 @@ use ZipArchive;
 
 class LotSpreadsheetExtractor
 {
-    public const MAX_ROWS = 200;
+    public const MAX_ROWS = 350;
 
     /**
      * @return Collection<int, array{row_number:int,data:array<string, string|null>}>

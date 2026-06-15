@@ -19,7 +19,7 @@ class LotImportPreviewRowUpdateService
     public function update(LotImportPreview $preview, int $rowNumber, array $attributes): LotImportPreview
     {
         if ($preview->status !== LotImportPreview::STATUS_COMPLETED) {
-            throw new RuntimeException('La preview doit etre terminee avant modification.');
+            throw new RuntimeException('La preview doit être terminée avant modification.');
         }
 
         $payload = $preview->payload ?? [];
@@ -66,7 +66,7 @@ class LotImportPreviewRowUpdateService
             'payload' => $payload,
             'normalized_rows' => $appointments->count(),
             'rejected_rows' => count($payload['rejected_rows'] ?? []),
-            'stage' => sprintf('Ligne %d modifiee et geocodee.', $rowNumber),
+            'stage' => sprintf('Ligne %d modifiée et géocodée.', $rowNumber),
             'error_message' => null,
         ]);
 
@@ -87,7 +87,7 @@ class LotImportPreviewRowUpdateService
         return trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client a qualifier';
+        ]))) ?: 'Client à qualifier';
     }
 
     private function fullAddress(?string $address, ?string $postalCode, ?string $city): ?string

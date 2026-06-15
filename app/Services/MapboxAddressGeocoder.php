@@ -29,19 +29,19 @@ class MapboxAddressGeocoder
                 ]);
 
             if (! $response->ok()) {
-                return $this->emptyResult('Mapbox n a pas pu geocoder l adresse.');
+                return $this->emptyResult('Mapbox n’a pas pu géocoder l’adresse.');
             }
 
             $feature = $response->json('features.0');
 
             if (! is_array($feature)) {
-                return $this->emptyResult('Aucun resultat Mapbox pour cette adresse.');
+                return $this->emptyResult('Aucun résultat Mapbox pour cette adresse.');
             }
 
             $center = $feature['center'] ?? null;
 
             if (! is_array($center) || count($center) < 2) {
-                return $this->emptyResult('Coordonnees Mapbox absentes.');
+                return $this->emptyResult('Coordonnées Mapbox absentes.');
             }
 
             return [
@@ -53,7 +53,7 @@ class MapboxAddressGeocoder
                 'warnings' => [],
             ];
         } catch (\Throwable) {
-            return $this->emptyResult('Erreur pendant le geocodage Mapbox.');
+            return $this->emptyResult('Erreur pendant le géocodage Mapbox.');
         }
     }
 

@@ -1,7 +1,7 @@
 <x-layouts.app>
     <div class="space-y-6">
         <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gerant</p>
+            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
             <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des prestations</h1>
         </div>
 
@@ -35,7 +35,7 @@
                 <div class="md:col-span-2 flex items-center justify-between">
                     <button type="button" class="gc-btn-primary" data-modal-open="create-service-modal">Creer une prestation</button>
                     <div class="flex items-center gap-2">
-                        <a href="{{ route('manager.services') }}" class="gc-link">Reset filtres</a>
+                        <a href="{{ route('manager.services') }}" class="gc-link">Réinitialiser les filtres</a>
                     </div>
                 </div>
             </form>
@@ -76,7 +76,7 @@
                                             data-modal-open="delete-service-modal"
                                             data-delete-url="{{ route('manager.services.destroy', $service->id) }}"
                                             data-service-name="{{ $service->name }}"
-                                        >Supprimer</button>
+                                        >Supprimér</button>
                                     </div>
                                 </td>
                             </tr>
@@ -125,13 +125,13 @@
 
     <div id="delete-service-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
-            <h2 class="text-lg font-semibold">Supprimer la prestation</h2>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">La prestation <span id="delete-service-name" class="font-medium" style="color:var(--gc-text);"></span> sera supprimee.</p>
+            <h2 class="text-lg font-semibold">Supprimér la prestation</h2>
+            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">La prestation <span id="delete-service-name" class="font-medium" style="color:var(--gc-text);"></span> sera supprimée.</p>
             <form id="delete-service-form" method="POST" action="#" class="mt-4 flex justify-end gap-2">
                 @csrf
                 @method('DELETE')
                 <button type="button" class="gc-link" data-modal-close="delete-service-modal">Annuler</button>
-                <button type="submit" class="gc-btn-danger">Supprimer</button>
+                <button type="submit" class="gc-btn-danger">Supprimér</button>
             </form>
         </div>
     </div>

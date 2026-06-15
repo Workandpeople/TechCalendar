@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
+use App\Services\AppointmentTechnicianMailService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,7 +36,7 @@ class PlannerTrackingController extends Controller
                 ->orderBy('type')
                 ->orderBy('name')
                 ->get(['id', 'type', 'name']),
-            'section' => $request->routeIs('manager.appointments') ? 'Gerant' : 'Planning',
+            'section' => $request->routeIs('manager.appointments') ? 'Gérant' : 'Planning',
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
             'mapboxToken' => config('services.mapbox.token'),
         ]);
@@ -99,6 +100,7 @@ class PlannerTrackingController extends Controller
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
+                $location = $this->extractLocationFromAddress($appointment->address);
                 $previousAppointment = $activeAppointmentsByTechnician
                     ->get($appointment->technician_id, collect())
                     ->filter(fn (Appointment $candidate): bool => $candidate->id !== $appointment->id)
@@ -125,16 +127,20 @@ class PlannerTrackingController extends Controller
                         'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                         'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
                         'service_id' => $appointment->service_id,
+                        'service_type' => $appointment->service?->type,
                         'service_label' => $serviceLabel,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
+                        'postal_code' => $location['postal_code'],
+                        'city' => $location['city'],
+                        'location_label' => $location['label'],
                         'latitude' => $appointment->latitude,
                         'longitude' => $appointment->longitude,
                         'origin_latitude' => $originLatitude,
                         'origin_longitude' => $originLongitude,
                         'origin_name' => $originName,
-                        'origin_label' => $previousAppointment ? 'RDV precedent' : 'Domicile',
+                        'origin_label' => $previousAppointment ? 'RDV précédent' : 'Domicile',
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
                         'deleted_at' => $appointment->deleted_at?->toIso8601String(),
@@ -145,7 +151,85 @@ class PlannerTrackingController extends Controller
         ]);
     }
 
-    public function reassignTechnician(Request $request, int $appointment): JsonResponse
+    public function updateDetails(
+        Request $request,
+        int $appointment,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $appointment = Appointment::withTrashed()
+            ->with('service:id,type,name')
+            ->findOrFail($appointment);
+
+        $payload = $request->validate([
+            'starts_at' => ['required', 'date'],
+            'duration_minutes' => ['required', 'integer', 'min:15', 'max:600'],
+            'address' => ['required', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $startsAt = Carbon::parse($payload['starts_at']);
+        $endsAt = $startsAt->copy()->addMinutes((int) $payload['duration_minutes']);
+
+        $hasOverlappingAppointment = Appointment::query()
+            ->where('technician_id', $appointment->technician_id)
+            ->whereKeyNot($appointment->id)
+            ->whereNull('deleted_at')
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->exists();
+
+        if ($hasOverlappingAppointment) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'Ce technicien a déjà un RDV sur ce créneau.',
+            ]);
+        }
+
+        $previousDate = $appointment->starts_at?->toDateString();
+
+        $appointment->update([
+            'starts_at' => $startsAt,
+            'duration_minutes' => (int) $payload['duration_minutes'],
+            'ends_at' => $endsAt,
+            'address' => $payload['address'],
+            'latitude' => $payload['latitude'] ?? null,
+            'longitude' => $payload['longitude'] ?? null,
+        ]);
+
+        $this->forgetRouteMetricsForAppointmentDates(
+            (int) $appointment->technician_id,
+            array_filter([$previousDate, $startsAt->toDateString()]),
+        );
+
+        $appointmentMails->detailsUpdated($appointment);
+
+        $location = $this->extractLocationFromAddress($appointment->address);
+
+        return response()->json([
+            'message' => 'Rendez-vous mis à jour.',
+            'appointment' => [
+                'id' => $appointment->id,
+                'start' => $appointment->starts_at?->toIso8601String(),
+                'end' => $appointment->ends_at?->toIso8601String(),
+                'duration_minutes' => $appointment->duration_minutes,
+                'address' => $appointment->address,
+                'latitude' => $appointment->latitude,
+                'longitude' => $appointment->longitude,
+                'postal_code' => $location['postal_code'],
+                'city' => $location['city'],
+                'location_label' => $location['label'],
+            ],
+        ]);
+    }
+
+    public function reassignTechnician(
+        Request $request,
+        int $appointment,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -168,7 +252,7 @@ class PlannerTrackingController extends Controller
 
         if ((int) $appointment->technician_id === $targetTechnicianId) {
             throw ValidationException::withMessages([
-                'technician_id' => 'Choisis un autre technicien pour reaffecter ce RDV.',
+                'technician_id' => 'Choisis un autre technicien pour réaffecter ce RDV.',
             ]);
         }
 
@@ -196,7 +280,7 @@ class PlannerTrackingController extends Controller
 
         if ($hasOverlappingAppointment) {
             throw ValidationException::withMessages([
-                'technician_id' => 'Ce technicien a deja un RDV sur ce creneau.',
+                'technician_id' => 'Ce technicien a déjà un RDV sur ce créneau.',
             ]);
         }
 
@@ -214,8 +298,10 @@ class PlannerTrackingController extends Controller
                 ->delete();
         }
 
+        $appointmentMails->reassigned($appointment, $previousTechnicianId);
+
         return response()->json([
-            'message' => 'Rendez-vous reaffecte.',
+            'message' => 'Rendez-vous réaffecté.',
             'technician' => [
                 'id' => $technician->id,
                 'name' => $technician->full_name,
@@ -226,7 +312,11 @@ class PlannerTrackingController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, Appointment $appointment): JsonResponse
+    public function destroy(
+        Request $request,
+        Appointment $appointment,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -236,7 +326,7 @@ class PlannerTrackingController extends Controller
 
         if (trim($payload['comment']) === trim((string) $appointment->comment)) {
             throw ValidationException::withMessages([
-                'comment' => 'Le commentaire doit etre modifie avant de soft delete le RDV.',
+                'comment' => 'Le commentaire doit être modifié avant de soft delete le RDV.',
             ]);
         }
 
@@ -244,15 +334,20 @@ class PlannerTrackingController extends Controller
             'comment' => $payload['comment'],
         ]);
         $appointment->delete();
+        $appointmentMails->cancelled($appointment);
 
         return response()->json([
-            'message' => 'Rendez-vous desactive.',
+            'message' => 'Rendez-vous désactivé.',
             'deleted_at' => $appointment->deleted_at?->toIso8601String(),
             'comment' => $appointment->comment,
         ]);
     }
 
-    public function restore(Request $request, int $appointment): JsonResponse
+    public function restore(
+        Request $request,
+        int $appointment,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -264,7 +359,7 @@ class PlannerTrackingController extends Controller
 
         if (trim($payload['comment']) === trim((string) $appointment->comment)) {
             throw ValidationException::withMessages([
-                'comment' => 'Le commentaire doit etre modifie avant de reactiver le RDV.',
+                'comment' => 'Le commentaire doit être modifié avant de réactiver le RDV.',
             ]);
         }
 
@@ -276,14 +371,20 @@ class PlannerTrackingController extends Controller
             $appointment->restore();
         }
 
+        $appointmentMails->restored($appointment);
+
         return response()->json([
-            'message' => 'Rendez-vous reactive.',
+            'message' => 'Rendez-vous réactivé.',
             'comment' => $appointment->comment,
             'deleted_at' => null,
         ]);
     }
 
-    public function updateComment(Request $request, int $appointment): JsonResponse
+    public function updateComment(
+        Request $request,
+        int $appointment,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -297,10 +398,78 @@ class PlannerTrackingController extends Controller
             'comment' => $payload['comment'] ?? null,
         ]);
 
+        $appointmentMails->commentUpdated($appointment);
+
         return response()->json([
-            'message' => 'Commentaire mis a jour.',
+            'message' => 'Commentaire mis à jour.',
             'comment' => $appointment->comment,
         ]);
+    }
+
+    /**
+     * @param  array<int, string>  $dates
+     */
+    private function forgetRouteMetricsForAppointmentDates(int $technicianId, array $dates): void
+    {
+        $uniqueDates = collect($dates)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($uniqueDates->isEmpty()) {
+            return;
+        }
+
+        TechnicianDailyRouteMetric::query()
+            ->where('technician_id', $technicianId)
+            ->where(function ($query) use ($uniqueDates): void {
+                foreach ($uniqueDates as $date) {
+                    $query->orWhereDate('service_date', $date);
+                }
+            })
+            ->delete();
+    }
+
+    /**
+     * @return array{postal_code:?string, city:?string, label:string}
+     */
+    private function extractLocationFromAddress(?string $address): array
+    {
+        $address = trim((string) $address);
+
+        if ($address === '') {
+            return ['postal_code' => null, 'city' => null, 'label' => 'Adresse non renseignée'];
+        }
+
+        preg_match('/\b(\d{5})\b/u', $address, $matches);
+        $postalCode = $matches[1] ?? null;
+        $city = null;
+
+        if ($postalCode) {
+            $parts = preg_split('/,\s*/u', $address) ?: [];
+
+            foreach ($parts as $part) {
+                if (str_contains($part, $postalCode)) {
+                    $city = trim((string) preg_replace('/\b'.preg_quote($postalCode, '/').'\b/u', '', $part));
+                    break;
+                }
+            }
+        }
+
+        if (! $city) {
+            $parts = array_values(array_filter(array_map('trim', preg_split('/,\s*/u', $address) ?: [])));
+            $lastPart = end($parts) ?: null;
+            $city = $lastPart ? trim((string) preg_replace('/\b\d{5}\b/u', '', $lastPart)) : null;
+        }
+
+        $city = $city ? trim(str_replace('France', '', $city), " \t\n\r\0\x0B-") : null;
+        $label = trim(implode(' ', array_filter([$postalCode, $city])));
+
+        return [
+            'postal_code' => $postalCode,
+            'city' => $city ?: null,
+            'label' => $label !== '' ? $label : $address,
+        ];
     }
 
     private function canAccess(Request $request): bool

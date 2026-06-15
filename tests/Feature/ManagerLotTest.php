@@ -29,7 +29,7 @@ it('renders manager lots from database', function () {
     ]);
     $service = Service::query()->create([
         'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualite site client',
+        'name' => 'Audit qualité site client',
         'average_duration_minutes' => 120,
     ]);
     $technician = User::factory()->create([
@@ -56,7 +56,7 @@ it('renders manager lots from database', function () {
         'address' => '20 Rue Bellecordiere, 69002 Lyon',
         'department_code' => '69',
         'service_type' => Service::TYPE_AUDIT,
-        'service_name' => 'Audit qualite site client',
+        'service_name' => 'Audit qualité site client',
         'status' => LotAppointment::STATUS_PENDING,
     ]);
     $placedAppointment = Appointment::query()->create([
@@ -90,14 +90,14 @@ it('renders manager lots from database', function () {
         ->assertOk()
         ->assertSee('Gestion des lots')
         ->assertSee('Lot Audit Juin')
-        ->assertSee('100% controle contact')
+        ->assertSee('100% contrôle contact')
         ->assertSee('audit-juin.xlsx')
         ->assertSee('Camille Martin')
         ->assertSee('Lucie Placee')
-        ->assertSee('RDV place')
+        ->assertSee('RDV placé')
         ->assertSee('Voir le RDV')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
-        ->assertSee('RDV a placer');
+        ->assertSee('RDV à placer');
 });
 
 it('filters manager lots by lot status', function () {
@@ -140,7 +140,7 @@ it('filters manager lots by lot type', function () {
         'imported_at' => now(),
     ]);
     Lot::query()->create([
-        'name' => 'Lot echantillon',
+        'name' => 'Lot échantillon',
         'type' => Lot::TYPE_SAMPLE_CONTROL,
         'created_by' => $manager->id,
         'imported_at' => now(),
@@ -150,7 +150,7 @@ it('filters manager lots by lot type', function () {
         ->get(route('manager.lots', ['type' => Lot::TYPE_FULL_CONTACT_CONTROL]))
         ->assertOk()
         ->assertSee('Lot contact')
-        ->assertDontSee('Lot echantillon');
+        ->assertDontSee('Lot échantillon');
 });
 
 it('renders lot auto completion based on sampling target', function () {
@@ -159,7 +159,7 @@ it('renders lot auto completion based on sampling target', function () {
         'admin' => false,
     ]);
     $lot = Lot::query()->create([
-        'name' => 'Lot echantillonne',
+        'name' => 'Lot échantillonné',
         'type' => Lot::TYPE_SAMPLE_CONTROL,
         'sampling_percentage' => 50,
         'created_by' => $manager->id,
@@ -195,10 +195,10 @@ it('renders lot type select in the import form', function () {
         ->assertOk()
         ->assertSee('Type de lot')
         ->assertSee('Statut du lot')
-        ->assertSee("% d'echantillonage", false)
-        ->assertSee('Echantillonage controle contact')
-        ->assertSee('100% controle')
-        ->assertSee('RDV places')
+        ->assertSee("% d'échantillonnage", false)
+        ->assertSee('Échantillonnage contrôle contact')
+        ->assertSee('100% contrôle')
+        ->assertSee('RDV placés')
         ->assertSee('RDV total')
         ->assertDontSee('Statut service');
 });
@@ -247,7 +247,7 @@ it('retries a failed manager lot import preview from the stored original file', 
         'status' => LotImportPreview::STATUS_FAILED,
         'progress' => 100,
         'stage' => 'Erreur pendant: Normalisation OpenAI en cours.',
-        'name' => 'Lot a relancer',
+        'name' => 'Lot à relancer',
         'type' => Lot::TYPE_FULL_CONTROL,
         'original_filename' => 'retry.xlsx',
         'original_file_disk' => 'local',
@@ -263,7 +263,7 @@ it('retries a failed manager lot import preview from the stored original file', 
         ->assertAccepted()
         ->assertJsonPath('status', LotImportPreview::STATUS_PENDING)
         ->assertJsonPath('progress', 0)
-        ->assertJsonPath('stage', 'Import relance et en attente dans la file.')
+        ->assertJsonPath('stage', 'Import relancé et en attente dans la file.')
         ->assertJsonPath('error_message', null)
         ->assertJsonStructure(['retry_url', 'status_url', 'confirm_url']);
 
@@ -312,7 +312,7 @@ it('serializes completed import preview appointments as a list', function () {
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
-        'stage' => 'Preview pret: verifie les lignes avant creation du lot.',
+        'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
         'original_filename' => 'preview.xlsx',
@@ -351,7 +351,7 @@ it('serializes completed import preview appointments as a list', function () {
         ->assertJsonPath('appointments.1.customer_name', 'Julien Bernard');
 });
 
-it('cleans cadastral references from imported addresses', function () {
+it('cleans cadastral références from imported addresses', function () {
     expect(app(ImportedAddressCleaner::class)->clean('1 LES PETITES GRANGES - 000 0E 0369 - 000 0E 0370 - 000 0Z 0172'))
         ->toBe('1 LES PETITES GRANGES');
 });
@@ -365,7 +365,7 @@ it('updates one import preview row and geocodes only that row', function () {
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
-        'stage' => 'Preview pret: verifie les lignes avant creation du lot.',
+        'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
         'original_filename' => 'preview.xlsx',
@@ -381,7 +381,7 @@ it('updates one import preview row and geocodes only that row', function () {
             'appointments' => [
                 [
                     'row_number' => 2,
-                    'customer_name' => 'Client a corriger',
+                    'customer_name' => 'Client à corriger',
                     'customer_phone' => null,
                     'address' => 'Ancienne adresse',
                     'postal_code' => null,
@@ -496,7 +496,7 @@ it('returns a user friendly error when OpenAI times out', function () {
             'row_number' => 2,
             'data' => ['client' => 'Camille Martin'],
         ],
-    ])))->toThrow(\RuntimeException::class, 'OpenAI ne repond pas dans le delai imparti (12 s).');
+    ])))->toThrow(\RuntimeException::class, 'OpenAI ne répond pas dans le délai imparti (12 s).');
 });
 
 it('normalizes lot imports with multiple OpenAI chunks', function () {
@@ -509,7 +509,7 @@ it('normalizes lot imports with multiple OpenAI chunks', function () {
     $responses = [
         [
             'lot_name' => 'Chunk 1',
-            'summary' => 'Deux lignes normalisees.',
+            'summary' => 'Deux lignes normalisées.',
             'rejected_rows' => [],
             'appointments' => [
                 [
@@ -614,7 +614,7 @@ it('requires sampling percentage for sampling lot types', function () {
 
     $this->actingAs($manager)
         ->post(route('manager.lots.imports.store'), [
-            'name' => 'Lot echantillon',
+            'name' => 'Lot échantillon',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
         ], ['Accept' => 'application/json'])
@@ -631,7 +631,7 @@ it('stores the original spreadsheet when importing a lot', function () {
     ]);
     Service::query()->create([
         'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualite site client',
+        'name' => 'Audit qualité site client',
         'average_duration_minutes' => 120,
     ]);
 
@@ -673,7 +673,7 @@ it('stores the original spreadsheet when importing a lot', function () {
                     'latitude' => 45.7578,
                     'longitude' => 4.832,
                     'service_type' => Service::TYPE_AUDIT,
-                    'service_name' => 'Audit qualite site client',
+                    'service_name' => 'Audit qualité site client',
                     'duration_minutes' => 120,
                     'comment' => null,
                     'confidence' => 0.95,
@@ -735,7 +735,7 @@ it('confirms selected preview rows and creates a lot', function () {
                     'latitude' => 45.7578,
                     'longitude' => 4.832,
                     'service_type' => Service::TYPE_AUDIT,
-                    'service_name' => 'Audit qualite site client',
+                    'service_name' => 'Audit qualité site client',
                     'duration_minutes' => 120,
                     'ai_confidence' => 0.95,
                     'warnings' => [],
@@ -759,7 +759,7 @@ it('confirms selected preview rows and creates a lot', function () {
             'selected_rows' => [2],
         ])
         ->assertOk()
-        ->assertJsonPath('message', 'Lot "Lot preview" cree avec 1 RDV.');
+        ->assertJsonPath('message', 'Lot "Lot preview" créé avec 1 RDV.');
 
     $this->assertDatabaseHas('lots', [
         'name' => 'Lot preview',

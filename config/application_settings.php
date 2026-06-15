@@ -2,14 +2,14 @@
 
 $openAiModels = [
     'gpt-5.5' => 'GPT-5.5 - plus capable',
-    'gpt-5.4' => 'GPT-5.4 - equilibre qualite/cout',
-    'gpt-5.4-mini' => 'GPT-5.4 mini - recommande cout/latence',
-    'gpt-5.4-nano' => 'GPT-5.4 nano - tres rapide/economique',
+    'gpt-5.4' => 'GPT-5.4 - équilibré qualité/coût',
+    'gpt-5.4-mini' => 'GPT-5.4 mini - recommandé coût/latence',
+    'gpt-5.4-nano' => 'GPT-5.4 nano - très rapide/économique',
     'gpt-4.1' => 'GPT-4.1 - robuste non-reasoning',
     'gpt-4.1-mini' => 'GPT-4.1 mini - rapide',
-    'gpt-4.1-nano' => 'GPT-4.1 nano - economique',
+    'gpt-4.1-nano' => 'GPT-4.1 nano - économique',
     'gpt-4o' => 'GPT-4o - legacy robuste',
-    'gpt-4o-mini' => 'GPT-4o mini - legacy economique',
+    'gpt-4o-mini' => 'GPT-4o mini - legacy économique',
 ];
 
 return [
@@ -23,7 +23,7 @@ return [
             'config' => 'mail.default',
             'rules' => ['nullable', 'string', 'in:log,smtp,array'],
             'options' => ['log' => 'Log', 'smtp' => 'SMTP', 'array' => 'Array'],
-            'description' => 'Transport utilise pour envoyer les emails.',
+            'description' => 'Transport utilise pour envoyér les emails.',
         ],
         'mail.host' => [
             'group' => 'Mail',
@@ -85,7 +85,7 @@ return [
             'config' => 'services.mapbox.token',
             'rules' => ['nullable', 'string', 'max:1000'],
             'secret' => true,
-            'description' => 'Utilise pour les suggestions adresse et calculs de trajet.',
+            'description' => 'Utilisé pour les suggestions adresse et calculs de trajet.',
         ],
         'services.openai.api_key' => [
             'group' => 'API',
@@ -126,7 +126,7 @@ return [
             'fallback' => 10,
             'config' => 'services.openai.connect_timeout',
             'rules' => ['nullable', 'integer', 'min:3', 'max:60'],
-            'description' => 'Timeout de connexion a OpenAI, en secondes.',
+            'description' => 'Timeout de connexion à OpenAI, en secondes.',
         ],
         'services.openai.import_chunk_size' => [
             'group' => 'API',
@@ -136,7 +136,7 @@ return [
             'fallback' => 10,
             'config' => 'services.openai.import_chunk_size',
             'rules' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'description' => 'Nombre de lignes Excel envoyees par appel OpenAI pendant un import.',
+            'description' => 'Nombre de lignes Excel envoyées par appel OpenAI pendant un import.',
         ],
     ],
 ];

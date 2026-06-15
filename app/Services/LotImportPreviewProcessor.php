@@ -30,7 +30,7 @@ class LotImportPreviewProcessor
         $rawRowsByNumber = $rows->keyBy('row_number');
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 25, sprintf(
-            'Extraction terminee: %d ligne(s) detectee(s).',
+            'Extraction terminée: %d ligne(s) détectée(s).',
             $rows->count(),
         ), [
             'total_rows' => $rows->count(),
@@ -43,7 +43,7 @@ class LotImportPreviewProcessor
         $totalAppointments = max(1, $appointments->count());
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 35, sprintf(
-            'Normalisation OpenAI terminee: %d RDV normalise(s), %d rejet(s).',
+            'Normalisation OpenAI terminée: %d RDV normalise(s), %d rejet(s).',
             $appointments->count(),
             count($normalized['rejected_rows'] ?? []),
         ));
@@ -100,7 +100,7 @@ class LotImportPreviewProcessor
         $preview->update([
             'status' => LotImportPreview::STATUS_COMPLETED,
             'progress' => 100,
-            'stage' => 'Preview pret: verifie les lignes avant creation du lot.',
+            'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
             'normalized_rows' => count($enrichedAppointments),
             'rejected_rows' => count($normalized['rejected_rows'] ?? []),
             'payload' => [
@@ -187,7 +187,7 @@ class LotImportPreviewProcessor
         return trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client a qualifier';
+        ]))) ?: 'Client à qualifier';
     }
 
     private function departmentFromPostalCode(mixed $postalCode): ?string

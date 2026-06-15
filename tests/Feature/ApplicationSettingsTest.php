@@ -181,7 +181,7 @@ it('renders settings page only for admins', function () {
     $this->actingAs($admin)
         ->get(route('admin.settings'))
         ->assertOk()
-        ->assertSee('Parametres');
+        ->assertSee('Paramètres');
 
     $this->actingAs($planner)
         ->get(route('admin.settings'))

@@ -154,7 +154,7 @@ class LotExcelImportService
         return trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client a qualifier';
+        ]))) ?: 'Client à qualifier';
     }
 
     private function nullableString(mixed $value): ?string

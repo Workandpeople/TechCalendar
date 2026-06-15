@@ -97,7 +97,7 @@
                         </div>
                     @else
                         <div class="mt-4 rounded-2xl border border-dashed p-5 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                            Aucun rendez-vous a venir.
+                            Aucun rendez-vous à venir.
                         </div>
                     @endif
                 </article>
@@ -153,7 +153,7 @@
                                 </div>
                             </article>
                         @empty
-                            <p class="text-sm" style="color:var(--gc-text-soft);">Aucun rendez-vous a venir.</p>
+                            <p class="text-sm" style="color:var(--gc-text-soft);">Aucun rendez-vous à venir.</p>
                         @endforelse
                     </div>
                 </article>
@@ -162,7 +162,7 @@
             <section class="tech-calendar-card rounded-3xl border bg-white p-4 shadow-sm sm:p-5" style="border-color:var(--gc-border);">
                 <div class="mb-4">
                     <p class="text-sm" style="color:var(--gc-text-soft);">Calendrier</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Interventions planifiees</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Interventions planifiées</h2>
                     <p class="mt-1 text-xs sm:text-sm" style="color:var(--gc-text-soft);">Sur mobile, touche un RDV pour afficher les details et les actions.</p>
                 </div>
                 <div id="tech-calendar"></div>
@@ -197,8 +197,8 @@
 
             <div class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
                 <div>
-                    <p class="text-sm font-medium" style="color:var(--gc-text);">Journee du technicien</p>
-                    <p class="text-xs" style="color:var(--gc-text-soft);">Clique un trajet pour le mettre en couleur. Les autres restent en pointille.</p>
+                    <p class="text-sm font-medium" style="color:var(--gc-text);">Journée du technicien</p>
+                    <p class="text-xs" style="color:var(--gc-text-soft);">Clique un trajet pour le mettre en couleur. Les autres restent en pointillé.</p>
                 </div>
                 <div id="tech-sheet-map" class="mt-3 h-64 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
                 <div id="tech-sheet-route-summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
@@ -466,7 +466,7 @@
                     isCurrent,
                     badge: isCurrent
                         ? 'Trajet vers ce RDV'
-                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                        : (from.isCurrent ? 'Suite de journée' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
                 };
             });
         };
@@ -475,12 +475,12 @@
             const summary = document.getElementById('tech-sheet-route-summary');
 
             if (isLoading) {
-                summary.textContent = 'Calcul de la journee...';
+                summary.textContent = 'Calcul de la journée...';
                 return;
             }
 
             if (!segments || segments.length === 0) {
-                summary.textContent = 'Journee indisponible pour ce RDV.';
+                summary.textContent = 'Journée indisponible pour ce RDV.';
                 return;
             }
 
@@ -639,7 +639,7 @@
             document.getElementById('tech-sheet-service').textContent = props.service_label || 'Prestation';
             document.getElementById('tech-sheet-customer').textContent = props.customer_name || event.title;
             document.getElementById('tech-sheet-time').textContent = `${formatEventDate(event.start)} - ${event.end ? event.end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}`;
-            document.getElementById('tech-sheet-address').textContent = props.address || 'Adresse non renseignee';
+            document.getElementById('tech-sheet-address').textContent = props.address || 'Adresse non renseignée';
             document.getElementById('tech-sheet-maps').href = mapsUrlForEvent(event);
 
             if (phoneHref) {
@@ -699,7 +699,7 @@
                     minute: '2-digit',
                     hour12: false,
                 },
-                events: async (fetchInfo, successCallback, failureCallback) => {
+                events: async (fetchInfo, succèssCallback, failureCallback) => {
                     try {
                         const response = await fetch('{{ route('tech.planning.events') }}', {
                             method: 'POST',
@@ -719,7 +719,7 @@
                             throw new Error(payload?.message || 'Erreur calendrier.');
                         }
 
-                        successCallback((payload.events || []).map((event) => ({
+                        succèssCallback((payload.events || []).map((event) => ({
                             ...event,
                             backgroundColor: '#31424c',
                             borderColor: '#d8c27a',

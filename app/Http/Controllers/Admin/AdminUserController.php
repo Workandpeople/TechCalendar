@@ -111,7 +111,7 @@ class AdminUserController extends Controller
 
         Mail::to($user->email)->send(new UserCreatedCredentialsMail($user, $plainPassword));
 
-        return redirect()->route('admin.users')->with('status', 'Utilisateur cree et email envoye.');
+        return redirect()->route('admin.users')->with('status', 'Utilisateur créé et email envoyé.');
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -154,7 +154,7 @@ class AdminUserController extends Controller
         $user->save();
         $this->syncTechRelations($user, $payload);
 
-        return redirect()->route('admin.users')->with('status', 'Utilisateur mis a jour.');
+        return redirect()->route('admin.users')->with('status', 'Utilisateur mis à jour.');
     }
 
     public function destroy(Request $request, User $user): RedirectResponse
@@ -162,12 +162,12 @@ class AdminUserController extends Controller
         abort_unless((bool) $request->user()?->admin, 403);
 
         if ($request->user()->is($user)) {
-            return back()->withErrors(['user' => 'Impossible de desactiver votre propre compte.']);
+            return back()->withErrors(['user' => 'Impossible de désactiver votre propre compte.']);
         }
 
         $user->delete();
 
-        return redirect()->route('admin.users')->with('status', 'Utilisateur desactive (soft delete).');
+        return redirect()->route('admin.users')->with('status', 'Utilisateur désactivé.');
     }
 
     public function restore(Request $request, int $user): RedirectResponse
@@ -187,16 +187,16 @@ class AdminUserController extends Controller
         $target = User::withTrashed()->findOrFail($user);
 
         if (! $target->trashed()) {
-            return back()->withErrors(['user' => 'Suppression definitive autorisee uniquement apres soft delete.']);
+            return back()->withErrors(['user' => 'Suppression définitive autorisée uniquement après soft delete.']);
         }
 
         if ($request->user()->is($target)) {
-            return back()->withErrors(['user' => 'Impossible de supprimer definitivement votre propre compte.']);
+            return back()->withErrors(['user' => 'Impossible de supprimer définitivement votre propre compte.']);
         }
 
         $target->forceDelete();
 
-        return redirect()->route('admin.users', ['status' => 'trashed'])->with('status', 'Utilisateur supprime definitivement.');
+        return redirect()->route('admin.users', ['status' => 'trashed'])->with('status', 'Utilisateur supprimé définitivement.');
     }
 
     public function sendResetLink(Request $request, int $user): RedirectResponse
@@ -206,7 +206,7 @@ class AdminUserController extends Controller
         $target = User::withTrashed()->findOrFail($user);
 
         if ($target->trashed()) {
-            return back()->withErrors(['user' => 'Impossible d envoyer un lien de reset a un compte supprime.']);
+            return back()->withErrors(['user' => 'Impossible d envoyér un lien de reset à un compte supprimé.']);
         }
 
         $status = Password::sendResetLink(['email' => $target->email]);
@@ -215,7 +215,7 @@ class AdminUserController extends Controller
             return back()->withErrors(['user' => __($status)]);
         }
 
-        return redirect()->route('admin.users')->with('status', 'Lien de reinitialisation envoye.');
+        return redirect()->route('admin.users')->with('status', 'Lien de reinitialisation envoyé.');
     }
 
     private function resolveTechFields(array $payload): array

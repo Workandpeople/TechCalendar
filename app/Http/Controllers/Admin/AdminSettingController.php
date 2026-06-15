@@ -40,7 +40,7 @@ class AdminSettingController extends Controller
         $values = Validator::make($payload, $rules)->validate();
         $settings->update($values, $request->user()->id);
 
-        return redirect()->route('admin.settings')->with('status', 'Parametres mis a jour.');
+        return redirect()->route('admin.settings')->with('status', 'Paramètres mis à jour.');
     }
 
     public function destroy(Request $request, ApplicationSettings $settings): RedirectResponse
@@ -51,6 +51,6 @@ class AdminSettingController extends Controller
 
         $settings->forget($key, $request->user()->id);
 
-        return redirect()->route('admin.settings')->with('status', 'Parametre repasse sur la valeur .env.');
+        return redirect()->route('admin.settings')->with('status', 'Paramètre repassé sur la valeur .env.');
     }
 }

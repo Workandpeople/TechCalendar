@@ -17,11 +17,11 @@ class SystemHealthMonitor
     public function collectChecks(): array
     {
         return [
-            $this->measure('database', 'Base de donnees', fn (): array => $this->checkDatabase()),
+            $this->measure('database', 'Base de données', fn (): array => $this->checkDatabase()),
             $this->measure('storage', 'Storage writable', fn (): array => $this->checkStorage()),
             $this->measure('disk', 'Espace disque', fn (): array => $this->checkDisk()),
             $this->measure('logs', 'Erreurs applicatives', fn (): array => $this->checkLogs()),
-            $this->measure('failed_jobs', 'Jobs echoues', fn (): array => $this->checkFailedJobs()),
+            $this->measure('failed_jobs', 'Jobs échoués', fn (): array => $this->checkFailedJobs()),
             $this->measure('queue_backlog', 'Backlog queue', fn (): array => $this->checkQueueBacklog()),
             $this->measure('runtime_config', 'Configuration runtime', fn (): array => $this->checkRuntimeConfig()),
         ];
@@ -119,8 +119,8 @@ class SystemHealthMonitor
             'status' => $blocked->isEmpty() ? 'ok' : 'fail',
             'value' => $blocked->isEmpty() ? 'OK' : $blocked->count().' chemin(s)',
             'message' => $blocked->isEmpty()
-                ? 'Les repertoires critiques sont accessibles en ecriture.'
-                : 'Certains repertoires storage ne sont pas writable.',
+                ? 'Les répertoires critiques sont accessibles en écriture.'
+                : 'Certains répertoires storage ne sont pas writable.',
             'meta' => ['blocked_paths' => $blocked->all()],
         ];
     }
@@ -161,8 +161,8 @@ class SystemHealthMonitor
             'status' => $errors->isNotEmpty() ? 'fail' : ($warnings->isNotEmpty() ? 'warn' : 'ok'),
             'value' => $errors->count().' erreur(s)',
             'message' => $events->isEmpty()
-                ? 'Aucune erreur recente dans laravel.log.'
-                : $events->count().' evenement(s) detecte(s) dans les logs recents.',
+                ? 'Aucune erreur récente dans laravel.log.'
+                : $events->count().' événement(s) détecté(s) dans les logs récents.',
             'meta' => [
                 'errors' => $errors->count(),
                 'warnings' => $warnings->count(),
@@ -186,7 +186,7 @@ class SystemHealthMonitor
         return [
             'status' => $count > 0 ? 'fail' : 'ok',
             'value' => (string) $count,
-            'message' => $count > 0 ? 'Des jobs ont echoue sur les dernieres 24h.' : 'Aucun job echoue recent.',
+            'message' => $count > 0 ? 'Des jobs ont échoué sur les dernières 24h.' : 'Aucun job échoué récent.',
         ];
     }
 

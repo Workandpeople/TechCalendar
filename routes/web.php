@@ -61,6 +61,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('account.first-password.update');
 
     Route::get('/admin/dashboard', AdminDashboardController::class)->name('admin.dashboard');
+    Route::post('/admin/dashboard/logs/clear', [AdminDashboardController::class, 'clearLogs'])->name('admin.dashboard.logs.clear');
+    Route::post('/admin/dashboard/tests/run', [AdminDashboardController::class, 'runTests'])->name('admin.dashboard.tests.run');
 
     Route::get('/admin/users', [AdminUserController::class, 'index'])->name('admin.users');
     Route::post('/admin/users', [AdminUserController::class, 'store'])->name('admin.users.store');
@@ -111,6 +113,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
     Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])
         ->name('planner.tracking.appointments.comment');
+    Route::patch('/planner/tracking/appointments/{appointment}/details', [PlannerTrackingController::class, 'updateDetails'])
+        ->name('planner.tracking.appointments.details');
     Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])
         ->name('planner.tracking.appointments.technician');
     Route::delete('/planner/tracking/appointments/{appointment}', [PlannerTrackingController::class, 'destroy'])

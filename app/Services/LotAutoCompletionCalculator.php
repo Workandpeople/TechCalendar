@@ -69,13 +69,13 @@ class LotAutoCompletionCalculator
         }
 
         if ($isSampling) {
-            return sprintf('%d/%d RDV objectif (echantillonnage non defini)', $completedCount, $targetCount);
+            return sprintf('%d/%d RDV objectif (échantillonnage non défini)', $completedCount, $targetCount);
         }
 
         if ($placedCount > $targetCount) {
             return sprintf('%d/%d RDV objectif (%d places)', $completedCount, $targetCount, $placedCount);
         }
 
-        return sprintf('%d/%d RDV places', $completedCount, $targetCount);
+        return sprintf('%d/%d RDV placés', $completedCount, $targetCount);
     }
 }

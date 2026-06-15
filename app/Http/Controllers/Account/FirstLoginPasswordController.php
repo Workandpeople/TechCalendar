@@ -29,6 +29,6 @@ class FirstLoginPasswordController extends Controller
             'must_change_password' => false,
         ])->save();
 
-        return back()->with('status', 'Mot de passe mis a jour.');
+        return back()->with('status', 'Mot de passe mis à jour.');
     }
 }

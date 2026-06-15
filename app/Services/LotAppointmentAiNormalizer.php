@@ -102,13 +102,13 @@ class LotAppointmentAiNormalizer
                 ]);
         } catch (ConnectionException $exception) {
             throw new RuntimeException(sprintf(
-                'OpenAI ne repond pas dans le delai imparti (%d s). Relance l import ou reduis la taille du fichier.',
+                'OpenAI ne répond pas dans le délai imparti (%d s). Relance l’import ou réduis la taille du fichier.',
                 $timeout,
             ), previous: $exception);
         }
 
         if ($response->failed()) {
-            $message = $response->json('error.message') ?: 'OpenAI a refuse ou echoue pendant la normalisation.';
+            $message = $response->json('error.message') ?: 'OpenAI a refusé ou échoué pendant la normalisation.';
             throw new RuntimeException((string) $message);
         }
 
@@ -116,7 +116,7 @@ class LotAppointmentAiNormalizer
         $payload = json_decode($json, true);
 
         if (! is_array($payload)) {
-            throw new RuntimeException('OpenAI n a pas retourne un JSON lisible.');
+            throw new RuntimeException('OpenAI n’a pas retourné un JSON lisible.');
         }
 
         return $payload;
@@ -126,14 +126,14 @@ class LotAppointmentAiNormalizer
     {
         return <<<'PROMPT'
 Tu nettoies des lignes Excel/CSV issues d'un fichier d'import pour créer un lot de RDV à placer.
-Tu dois retourner uniquement un JSON respectant le schema.
-Ne devine pas les informations absentes: utilise null ou une chaine vide selon le schema.
+Tu dois retourner uniquement un JSON respectant le schéma.
+Ne devine pas les informations absentes: utilise null ou une chaîne vide selon le schéma.
 Normalise les téléphones français au mieux, conserve les adresses complètes.
-Si l'adresse est separee en plusieurs colonnes, conserve aussi adresse, code postal et ville dans address_line, postal_code et city.
-Nettoie les adresses avant de les retourner: retire les references cadastrales, codes parcelle, suffixes techniques et morceaux non postaux.
+Si l'adresse est séparée en plusieurs colonnes, conserve aussi adresse, code postal et ville dans address_line, postal_code et city.
+Nettoie les adresses avant de les retourner: retire les références cadastrales, codes parcelle, suffixes techniques et morceaux non postaux.
 Exemple: "1 LES PETITES GRANGES - 000 0E 0369 - 000 0E 0370 - 000 0Z 0172" doit devenir "1 LES PETITES GRANGES".
-Ne garde dans address/address_line que l adresse postale utile au geocodage; mets les morceaux retires dans raw_address_parts ou warnings si utile.
-Inferer le code département depuis le code postal français si l'adresse le contient.
+Ne garde dans address/address_line que l'adresse postale utile au géocodage; mets les morceaux retirés dans raw_address_parts ou warnings si utile.
+Infère le code département depuis le code postal français si l'adresse le contient.
 Si une ligne est inutilisable, mets-la dans rejected_rows avec une raison courte.
 confidence doit représenter la confiance globale de normalisation de la ligne entre 0 et 1.
 PROMPT;
@@ -161,7 +161,7 @@ PROMPT;
         $text = trim(implode('', $chunks));
 
         if ($text === '') {
-            throw new RuntimeException('OpenAI n a retourne aucun contenu exploitable.');
+            throw new RuntimeException('OpenAI n’a retourné aucun contenu exploitable.');
         }
 
         return $text;

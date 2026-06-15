@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\LotAutoCompletionCalculator;
+use App\Services\AppointmentTechnicianMailService;
 use App\Services\MapboxDrivingRouteService;
 use App\Services\SimulatedCrmAppointmentService;
 use Carbon\Carbon;
@@ -185,7 +186,8 @@ class PlannerBookingController extends Controller
 
     public function store(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments
+        SimulatedCrmAppointmentService $crmAppointments,
+        AppointmentTechnicianMailService $appointmentMails,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
@@ -208,7 +210,7 @@ class PlannerBookingController extends Controller
             $serviceErrorKey = ! empty($payload['lot_appointment_id']) ? 'lot_service_id' : 'crm_appointment_id';
 
             throw ValidationException::withMessages([
-                $serviceErrorKey => 'Impossible de valider sans prestation renseignee.',
+                $serviceErrorKey => 'Impossible de valider sans prestation renseignée.',
             ]);
         }
 
@@ -256,8 +258,10 @@ class PlannerBookingController extends Controller
             }
         }
 
+        $appointmentMails->created($appointment);
+
         return response()->json([
-            'message' => 'Rendez-vous cree.',
+            'message' => 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
         ], 201);
     }
@@ -912,7 +916,7 @@ class PlannerBookingController extends Controller
                     'duration_minutes' => (int) $appointment->duration_minutes,
                     'comment' => $appointment->comment,
                     'deleted_at' => $appointment->deleted_at?->toIso8601String(),
-                    'origin_label' => $previousAppointment ? 'rdv precedent' : 'domicile',
+                    'origin_label' => $previousAppointment ? 'rdv précédent' : 'domicile',
                     'origin_latitude' => $originLat,
                     'origin_longitude' => $originLng,
                     'origin_name' => $previousAppointment
@@ -1147,7 +1151,7 @@ class PlannerBookingController extends Controller
                 dayEnd: $dayEnd,
                 durationMinutes: $durationMinutes,
                 drivingRoutes: $drivingRoutes,
-                originLabel: 'rdv precedent',
+                originLabel: 'rdv précédent',
             );
 
             if ($suggestion !== null) {
@@ -1209,7 +1213,7 @@ class PlannerBookingController extends Controller
             'label' => 'Domicile',
         ];
         $originAvailableAt = $previousAppointment?->ends_at ?: $dayStart;
-        $originLabel = $previousAppointment ? 'rdv precedent' : 'domicile';
+        $originLabel = $previousAppointment ? 'rdv précédent' : 'domicile';
         $destination = [
             'lat' => (float) $crmAppointment['latitude'],
             'lng' => (float) $crmAppointment['longitude'],
@@ -1442,7 +1446,7 @@ class PlannerBookingController extends Controller
                 'customer_phone' => $crmAppointment['phone'],
                 'service_label' => $crmAppointment['service']
                     ? $crmAppointment['service']['type'].' - '.$crmAppointment['service']['name']
-                    : 'Prestation non renseignee',
+                    : 'Prestation non renseignée',
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,

@@ -1,10 +1,10 @@
 <x-layouts.app>
     <div class="space-y-6">
         <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gerant</p>
+            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
             <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des lots</h1>
             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                Un lot regroupe des RDV a placer depuis un fichier d import. Les colonnes sont normalisees par OpenAI pour absorber les variations de format.
+                Un lot regroupe des RDV à placer depuis un fichier d’import. Les colonnes sont normalisées par OpenAI pour absorber les variations de format.
             </p>
         </div>
 
@@ -23,16 +23,17 @@
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Import</p>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Ajouter un lot par fichier</h2>
-                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportes: .xlsx, .csv et .txt. Le fichier original est conserve en stockage prive apres import.</p>
+                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportés: .xlsx, .csv et .txt. Le fichier original est conservé en stockage privé après import.</p>
                 </div>
                 <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Max {{ \App\Services\LotSpreadsheetExtractor::MAX_ROWS }} lignes</span>
             </div>
 
             <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px_300px_180px_auto] lg:items-end">
                 @csrf
-                <div>
+                <div id="lot-file-field" class="rounded-2xl border border-transparent p-2 transition">
                     <label class="gc-label" for="lot_file">Fichier du lot</label>
                     <input id="lot_file" name="file" type="file" class="gc-input" accept=".xlsx,.csv,.txt" required />
+                    <p id="lot-file-selected" class="mt-2 hidden rounded-xl px-3 py-2 text-sm font-medium" style="background:#ecfdf5;color:#047857;"></p>
                 </div>
                 <div>
                     <label class="gc-label" for="lot_name">Nom du lot</label>
@@ -41,14 +42,14 @@
                 <div>
                     <label class="gc-label" for="lot_type">Type de lot</label>
                     <select id="lot_type" name="type" class="gc-input" required>
-                        <option value="">Selectionner</option>
+                        <option value="">Sélectionner</option>
                         @foreach ($lotTypes as $typeValue => $typeLabel)
                             <option value="{{ $typeValue }}" @selected(old('type') === $typeValue)>{{ $typeLabel }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div>
-                    <label class="gc-label" for="lot_sampling_percentage">% d'echantillonage</label>
+                    <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
                     <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
                 </div>
                 <button id="lot-import-submit" type="submit" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled>Importer</button>
@@ -61,11 +62,11 @@
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['lots_count'] }}</p>
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV a placer</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV à placer</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placeable_count'] }}</p>
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV places</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV placés</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placed_count'] }}</p>
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
@@ -78,7 +79,7 @@
             <form id="manager-lot-filters-form" method="GET" action="{{ route('manager.lots') }}" class="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                     <label class="gc-label" for="q">Recherche</label>
-                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Client, adresse, telephone, reference" autocomplete="off" />
+                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Client, adresse, téléphone, référence" autocomplete="off" />
                 </div>
 
                 <div>
@@ -102,8 +103,8 @@
                 </div>
 
                 <div class="md:col-span-3 flex items-center justify-between">
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Les filtres se mettent a jour automatiquement.</p>
-                    <a href="{{ route('manager.lots') }}" class="gc-link">Reset filtres</a>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Les filtres se mettent à jour automatiquement.</p>
+                    <a href="{{ route('manager.lots') }}" class="gc-link">Réinitialiser les filtres</a>
                 </div>
             </form>
         </section>
@@ -125,9 +126,9 @@
                                 </span>
                             </div>
                             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} a placer · {{ $lot['placed_count'] }} places
+                                {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à placer · {{ $lot['placed_count'] }} placés
                                 @if ($lot['imported_at'])
-                                    · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
+                                    · Importé {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                 @endif
                             </p>
                         </div>
@@ -170,7 +171,7 @@
 
                                 @if ($lot['can_download_original_file'])
                                     <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex justify-center">
-                                        Telecharger le fichier original
+                                        Télécharger le fichier original
                                     </a>
                                 @endif
                             </div>
@@ -184,21 +185,21 @@
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
                                             @if ($isPlaced)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV place</span>
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
                                             @endif
                                             @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A verifier</span>
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">À vérifier</span>
                                             @endif
                                         </div>
                                         <h3 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h3>
-                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Telephone non renseigne' }}</p>
+                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
                                     </div>
 
                                     <div class="min-w-0">
-                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse a qualifier' }}</p>
+                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
                                             @if ($appointment['external_reference'])
-                                                Ref. {{ $appointment['external_reference'] }}
+                                                Réf. {{ $appointment['external_reference'] }}
                                             @elseif ($appointment['row_number'])
                                                 Ligne fichier {{ $appointment['row_number'] }}
                                             @else
@@ -210,7 +211,7 @@
                                         @endif
                                         @if ($isPlaced)
                                             <p class="mt-2 text-xs" style="color:#15803d;">
-                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignee' }}
+                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignée' }}
                                                 @if ($appointment['placed_technician_name'])
                                                     · {{ $appointment['placed_technician_name'] }}
                                                 @endif
@@ -249,8 +250,8 @@
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Import du lot</p>
-                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Nettoyage IA et geocodage Mapbox</h2>
-                        <p id="lot-import-modal-status" class="mt-1 text-sm" style="color:var(--gc-text-soft);">Preparation de l'import...</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Nettoyage IA et géocodage Mapbox</h2>
+                        <p id="lot-import-modal-status" class="mt-1 text-sm" style="color:var(--gc-text-soft);">Préparation de l'import...</p>
                     </div>
                     <button id="lot-import-modal-close" type="button" class="gc-link disabled:cursor-not-allowed disabled:opacity-50">Fermer</button>
                 </div>
@@ -265,28 +266,28 @@
                             <div id="lot-import-progress-bar" class="h-full rounded-full transition-all" style="width:0%;background:var(--gc-primary);"></div>
                         </div>
                         <div class="mt-3 rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;">
-                            <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Etape en cours</p>
+                            <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Étape en cours</p>
                             <p id="lot-import-stage" class="mt-1 font-medium" style="color:var(--gc-text);">En attente du lancement.</p>
-                            <p id="lot-import-realtime-state" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Suivi temps reel en attente.</p>
+                            <p id="lot-import-realtime-state" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Suivi temps réel en attente.</p>
                         </div>
                     </div>
 
                     <div id="lot-import-error" class="hidden rounded-xl border p-4 text-sm" style="border-color:#fecaca;background:#fff1f2;color:#9f1239;">
                         <p id="lot-import-error-message"></p>
                         <button id="lot-import-retry" type="button" class="mt-3 hidden rounded-xl border px-4 py-2 text-sm font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50" style="border-color:#fecaca;background:#fff7f8;color:#9f1239;">
-                            Relancer l'import
+                            Relancér l'import
                         </button>
                     </div>
 
                     <div id="lot-import-preview" class="hidden space-y-3">
                         <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
-                                <h3 class="font-semibold" style="color:var(--gc-text);">Donnees nettoyees</h3>
+                                <h3 class="font-semibold" style="color:var(--gc-text);">Données nettoyees</h3>
                                 <p id="lot-import-preview-summary" class="text-sm" style="color:var(--gc-text-soft);"></p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <button id="lot-import-select-all" type="button" class="gc-link">Tout cocher</button>
-                                <button id="lot-import-unselect-all" type="button" class="gc-link">Tout decocher</button>
+                                <button id="lot-import-unselect-all" type="button" class="gc-link">Tout décocher</button>
                             </div>
                         </div>
 
@@ -296,7 +297,7 @@
                                     <tr>
                                         <th class="px-3 py-2 text-left">Inclure</th>
                                         <th class="px-3 py-2 text-left">Client</th>
-                                        <th class="px-3 py-2 text-left">Telephone</th>
+                                        <th class="px-3 py-2 text-left">Téléphone</th>
                                         <th class="px-3 py-2 text-left">Adresse</th>
                                         <th class="px-3 py-2 text-left">CP / ville</th>
                                         <th class="px-3 py-2 text-left">GPS</th>
@@ -311,8 +312,8 @@
                 </div>
 
                 <div class="flex items-center justify-between gap-3 border-t p-5" style="border-color:var(--gc-border);">
-                    <p id="lot-import-selection-count" class="text-sm" style="color:var(--gc-text-soft);">0 ligne selectionnee</p>
-                    <button id="lot-import-confirm" type="button" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled>Valider et creer le lot</button>
+                    <p id="lot-import-selection-count" class="text-sm" style="color:var(--gc-text-soft);">0 ligne sélectionnée</p>
+                    <button id="lot-import-confirm" type="button" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled>Valider et créer le lot</button>
                 </div>
             </div>
         </div>
@@ -337,7 +338,9 @@
         const lockedLotImportStatuses = ['pending', 'processing'];
 
         const lotImportForm = document.getElementById('lot-import-form');
+        const lotFileField = document.getElementById('lot-file-field');
         const lotImportFile = document.getElementById('lot_file');
+        const lotFileSelected = document.getElementById('lot-file-selected');
         const lotImportType = document.getElementById('lot_type');
         const lotSamplingPercentage = document.getElementById('lot_sampling_percentage');
         const lotImportSubmit = document.getElementById('lot-import-submit');
@@ -398,12 +401,34 @@
             }
 
             const hasFile = lotImportFile?.files?.length > 0;
+            const selectedFile = hasFile ? lotImportFile.files[0] : null;
             const hasType = Boolean(lotImportType?.value);
             const hasSampling = !needsSampling || Number(lotSamplingPercentage?.value || 0) > 0;
+
+            if (lotFileField && lotFileSelected) {
+                lotFileField.style.borderColor = hasFile ? '#86efac' : 'transparent';
+                lotFileField.style.background = hasFile ? '#f0fdf4' : 'transparent';
+                lotFileSelected.classList.toggle('hidden', !hasFile);
+                lotFileSelected.textContent = selectedFile
+                    ? `Fichier sélectionné : ${selectedFile.name} (${formatFileSize(selectedFile.size)})`
+                    : '';
+            }
 
             if (lotImportSubmit) {
                 lotImportSubmit.disabled = !(hasFile && hasType && hasSampling);
             }
+        }
+
+        function formatFileSize(bytes) {
+            if (!Number.isFinite(bytes) || bytes <= 0) {
+                return '0 Ko';
+            }
+
+            if (bytes < 1024 * 1024) {
+                return `${(bytes / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`;
+            }
+
+            return `${(bytes / (1024 * 1024)).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} Mo`;
         }
 
         function openLotImportModal() {
@@ -441,7 +466,7 @@
             lotImportRealtimeState.textContent = message;
             lotImportRealtimeState.style.color = type === 'error'
                 ? '#be123c'
-                : (type === 'success' ? '#15803d' : 'var(--gc-text-soft)');
+                : (type === 'succèss' ? '#15803d' : 'var(--gc-text-soft)');
         }
 
         function setLotImportProgressVisual(progress) {
@@ -502,7 +527,7 @@
             lotImportStatus.textContent = statusText;
 
             if (stageText !== null && lotImportStage) {
-                lotImportStage.textContent = stageText || 'Etape non renseignee.';
+                lotImportStage.textContent = stageText || 'Etape non renseignée.';
             }
         }
 
@@ -524,7 +549,7 @@
             lotImportRetry?.classList.add('hidden');
             if (lotImportRetry) {
                 lotImportRetry.disabled = false;
-                lotImportRetry.textContent = 'Relancer l\'import';
+                lotImportRetry.textContent = 'Relancér l\'import';
             }
         }
 
@@ -558,7 +583,7 @@
             selectedLotImportRows = new Set(Array.from(lotImportPreviewRows.querySelectorAll('input[type="checkbox"]:checked'))
                 .map((checkbox) => checkbox.value));
 
-            lotImportSelectionCount.textContent = `${selectedLotImportRows.size} ligne(s) selectionnee(s)`;
+            lotImportSelectionCount.textContent = `${selectedLotImportRows.size} ligne(s) sélectionnée(s)`;
             lotImportConfirm.disabled = selectedLotImportRows.size === 0 || !currentLotImport?.confirm_url;
         }
 
@@ -592,7 +617,7 @@
                         <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowNumber)}" ${rowChecked}>
                     </td>
                     <td class="px-3 py-3 align-top">
-                        <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(appointment.customer_name || 'Client a qualifier')}</div>
+                        <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(appointment.customer_name || 'Client à qualifier')}</div>
                         <div class="text-xs" style="color:var(--gc-text-soft);">Ligne ${escapeHtml(appointment.row_number || '--')}</div>
                     </td>
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.customer_phone || '--')}</td>
@@ -619,7 +644,7 @@
                                     <input class="gc-input" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
                                 </div>
                                 <div>
-                                    <label class="gc-label">Prenom</label>
+                                    <label class="gc-label">Prénom</label>
                                     <input class="gc-input" data-field="customer_first_name" value="${escapeHtml(appointment.customer_first_name || '')}">
                                 </div>
                                 <div>
@@ -627,7 +652,7 @@
                                     <input class="gc-input" data-field="customer_last_name" value="${escapeHtml(appointment.customer_last_name || '')}">
                                 </div>
                                 <div>
-                                    <label class="gc-label">Telephone</label>
+                                    <label class="gc-label">Téléphone</label>
                                     <input class="gc-input" data-field="customer_phone" value="${escapeHtml(appointment.customer_phone || '')}">
                                 </div>
                                 <div class="md:col-span-2">
@@ -643,7 +668,7 @@
                                     <input class="gc-input" data-field="city" value="${escapeHtml(appointment.city || '')}">
                                 </div>
                                 <div>
-                                    <label class="gc-label">Departement</label>
+                                    <label class="gc-label">Département</label>
                                     <input class="gc-input" data-field="department_code" value="${escapeHtml(appointment.department_code || '')}" maxlength="3">
                                 </div>
                                 <div class="md:col-span-2 xl:col-span-3">
@@ -654,7 +679,7 @@
                             <p class="lot-import-row-error mt-3 hidden text-sm" style="color:#be123c;"></p>
                             <div class="mt-4 flex flex-wrap justify-end gap-2">
                                 <button type="button" class="gc-btn-soft lot-import-cancel-edit" data-row-number="${escapeHtml(rowNumber)}">Annuler</button>
-                                <button type="button" class="gc-btn-primary lot-import-save-row" data-row-number="${escapeHtml(rowNumber)}">Enregistrer et geocoder</button>
+                                <button type="button" class="gc-btn-primary lot-import-save-row" data-row-number="${escapeHtml(rowNumber)}">Enregistrer et géocoder</button>
                             </div>
                         </td>
                     `;
@@ -680,14 +705,14 @@
             updateLotImportSelectionCount();
 
             if (Number(data.normalized_rows || 0) > 0 && appointments.length === 0) {
-                showLotImportError('La preview indique des lignes nettoyees, mais le payload complet est absent. Relance l import.');
+                showLotImportError('La preview indique des lignes nettoyees, mais le payload complet est absent. Relancé l’import.');
             }
         }
 
         function lotImportStatusText(data) {
-            if (data.status === 'completed') return 'Nettoyage termine.';
+            if (data.status === 'completed') return 'Nettoyage terminé.';
             if (data.status === 'failed') return 'Import en erreur.';
-            if (data.status === 'confirmed') return 'Lot cree.';
+            if (data.status === 'confirmed') return 'Lot créé.';
 
             return 'Traitement en cours...';
         }
@@ -710,7 +735,7 @@
 
             if (currentLotImport.status === 'completed') {
                 if (!hasCompleteLotImportPreview(currentLotImport)) {
-                    setLotImportRealtimeState('Import termine, recuperation de la preview complete...');
+                    setLotImportRealtimeState('Import terminé, recuperation de la preview complete...');
                     const fullPreview = await fetchLotImportStatus(currentLotImport.status_url);
 
                     if (fullPreview) {
@@ -726,7 +751,7 @@
                     if (!hasCompleteLotImportPreview(currentLotImport)) {
                         stopLotImportWatchers();
                         setLotImportRealtimeState('Preview complete indisponible.', 'error');
-                        showLotImportError('Le traitement est termine mais les lignes nettoyees ne sont pas disponibles. Relance l import.');
+                        showLotImportError('Le traitement est terminé mais les lignes nettoyees ne sont pas disponibles. Relancé l’import.');
                         return;
                     }
                 }
@@ -734,7 +759,7 @@
                 if (!currentLotImportCompleted) {
                     currentLotImportCompleted = true;
                     stopLotImportWatchers();
-                    setLotImportRealtimeState('Import termine, preview prete.', 'success');
+                    setLotImportRealtimeState('Import terminé, preview prête.', 'succèss');
                     renderLotImportPreview(currentLotImport);
                 }
 
@@ -770,12 +795,12 @@
                         const labels = {
                             connecting: 'Connexion Reverb en cours...',
                             connected: 'Connexion Reverb ouverte, authentification du channel...',
-                            subscribed: 'Suivi temps reel actif via Reverb.',
+                            subscribed: 'Suivi temps réel actif via Reverb.',
                             disconnected: 'Reverb deconnecte, polling de secours actif.',
-                            closed: 'Suivi temps reel ferme.',
+                            closed: 'Suivi temps réel ferme.',
                         };
 
-                        setLotImportRealtimeState(labels[state] || 'Etat Reverb inconnu.', state === 'subscribed' ? 'success' : 'muted');
+                        setLotImportRealtimeState(labels[state] || 'Etat Reverb inconnu.', state === 'subscribed' ? 'succèss' : 'muted');
                     },
                     onError: () => {
                         setLotImportRealtimeState('Reverb indisponible, polling de secours actif.', 'error');
@@ -817,7 +842,7 @@
             });
 
             button.disabled = true;
-            button.textContent = 'Geocodage...';
+            button.textContent = 'Géocodage...';
             error?.classList.add('hidden');
 
             try {
@@ -842,16 +867,16 @@
                 }
 
                 currentLotImportCompleted = false;
-                setLotImportRealtimeState(`Ligne ${rowNumber} mise a jour et geocodee.`, 'success');
+                setLotImportRealtimeState(`Ligne ${rowNumber} mise à jour et géocodée.`, 'succèss');
                 await handleLotImportStatus(data);
             } catch (exception) {
                 if (error) {
-                    error.textContent = 'Erreur reseau pendant la modification.';
+                    error.textContent = 'Erreur réseau pendant la modification.';
                     error.classList.remove('hidden');
                 }
             } finally {
                 button.disabled = false;
-                button.textContent = 'Enregistrer et geocoder';
+                button.textContent = 'Enregistrer et géocoder';
             }
         }
 
@@ -900,7 +925,7 @@
 
         async function watchLotImport(data) {
             currentLotImport = data;
-            updateLotImportProgress(data.progress || 10, 'Import lance, nettoyage IA en cours...', data.stage || 'Import ajoute a la file de traitement.');
+            updateLotImportProgress(data.progress || 10, 'Import lancé, nettoyage IA en cours...', data.stage || 'Import ajouté à la file de traitement.');
             updateLotImportModalCloseState();
             subscribeToLotImport(data);
             currentLotImportPoll = window.setInterval(() => pollLotImport(data.status_url), 5000);
@@ -924,7 +949,7 @@
                 ...currentLotImport,
                 status: 'processing',
                 progress: 0,
-                stage: 'Relance de l import.',
+                stage: 'Relance de l’import.',
             };
             resetLotImportProgressAnimation(0);
             updateLotImportModalCloseState();
@@ -932,8 +957,8 @@
             lotImportPreview.classList.add('hidden');
             lotImportPreviewRows.innerHTML = '';
             lotImportConfirm.disabled = true;
-            setLotImportRealtimeState('Relance demandee, attente de la queue...');
-            updateLotImportProgress(0, 'Relance de l import...', 'Relance de l import.');
+            setLotImportRealtimeState('Relance demandée, attente de la queue...');
+            updateLotImportProgress(0, 'Relance de l’import...', 'Relance de l’import.');
 
             try {
                 const response = await fetch(currentLotImport.retry_url, {
@@ -953,7 +978,7 @@
                         progress: 100,
                     };
                     updateLotImportModalCloseState();
-                    updateLotImportProgress(100, 'Relance refusee.', currentLotImport.stage || 'Relance refusee.');
+                    updateLotImportProgress(100, 'Relance refusée.', currentLotImport.stage || 'Relance refusée.');
                     showLotImportError(data.message || 'Relance impossible.', Boolean(currentLotImport.retry_url));
                     return;
                 }
@@ -964,11 +989,11 @@
                     ...currentLotImport,
                     status: 'failed',
                     progress: 100,
-                    stage: 'Erreur reseau pendant la relance.',
+                    stage: 'Erreur réseau pendant la relance.',
                 };
                 updateLotImportModalCloseState();
-                updateLotImportProgress(100, 'Relance non lancee.', currentLotImport.stage);
-                showLotImportError('Erreur reseau pendant la relance de l import.', Boolean(currentLotImport.retry_url));
+                updateLotImportProgress(100, 'Relance non lancée.', currentLotImport.stage);
+                showLotImportError('Erreur réseau pendant la relance de l’import.', Boolean(currentLotImport.retry_url));
             }
         }
 
@@ -998,7 +1023,7 @@
             lotImportPreview.classList.add('hidden');
             lotImportPreviewRows.innerHTML = '';
             lotImportConfirm.disabled = true;
-            setLotImportRealtimeState('Suivi temps reel en attente.');
+            setLotImportRealtimeState('Suivi temps réel en attente.');
             updateLotImportProgress(5, 'Upload du fichier...', 'Envoi du fichier au serveur.');
 
             try {
@@ -1016,11 +1041,11 @@
                     currentLotImport = {
                         status: 'failed',
                         progress: 100,
-                        stage: 'Import refuse avant lancement du job.',
+                        stage: 'Import refusé avant lancement du job.',
                     };
                     updateLotImportModalCloseState();
-                    updateLotImportProgress(100, 'Import refuse.', currentLotImport.stage);
-                    showLotImportError(data.message || Object.values(data.errors || {})?.[0]?.[0] || 'Import refuse.');
+                    updateLotImportProgress(100, 'Import refusé.', currentLotImport.stage);
+                    showLotImportError(data.message || Object.values(data.errors || {})?.[0]?.[0] || 'Import refusé.');
                     return;
                 }
 
@@ -1029,11 +1054,11 @@
                 currentLotImport = {
                     status: 'failed',
                     progress: 100,
-                    stage: 'Erreur reseau pendant le lancement.',
+                    stage: 'Erreur réseau pendant le lancement.',
                 };
                 updateLotImportModalCloseState();
-                updateLotImportProgress(100, 'Import non lance.', currentLotImport.stage);
-                showLotImportError('Erreur reseau pendant le lancement de l import.');
+                updateLotImportProgress(100, 'Import non lancé.', currentLotImport.stage);
+                showLotImportError('Erreur réseau pendant le lancement de l’import.');
             }
         });
 
@@ -1047,7 +1072,7 @@
             }
 
             lotImportConfirm.disabled = true;
-            lotImportConfirm.textContent = 'Creation du lot...';
+            lotImportConfirm.textContent = 'Création du lot...';
 
             try {
                 const response = await fetch(currentLotImport.confirm_url, {
@@ -1062,8 +1087,8 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    showLotImportError(data.message || 'Creation du lot impossible.');
-                    lotImportConfirm.textContent = 'Valider et creer le lot';
+                    showLotImportError(data.message || 'Création du lot impossible.');
+                    lotImportConfirm.textContent = 'Valider et créer le lot';
                     updateLotImportSelectionCount();
                     return;
                 }
@@ -1074,13 +1099,13 @@
                     status: 'confirmed',
                 };
                 updateLotImportModalCloseState();
-                lotImportStatus.textContent = data.message || 'Lot cree.';
+                lotImportStatus.textContent = data.message || 'Lot créé.';
                 window.setTimeout(() => {
                     window.location.href = data.redirect_url || '{{ route('manager.lots') }}';
                 }, 800);
             } catch (error) {
-                showLotImportError('Erreur reseau pendant la creation du lot.');
-                lotImportConfirm.textContent = 'Valider et creer le lot';
+                showLotImportError('Erreur réseau pendant la création du lot.');
+                lotImportConfirm.textContent = 'Valider et créer le lot';
                 updateLotImportSelectionCount();
             }
         });
@@ -1106,7 +1131,7 @@
                 resumedLotImport.stage || 'Import en cours...',
             );
             updateLotImportModalCloseState();
-            setLotImportRealtimeState('Import en cours detecte, reprise du suivi temps reel...');
+            setLotImportRealtimeState('Import en cours détecté, reprise du suivi temps réel...');
             subscribeToLotImport(resumedLotImport);
             currentLotImportPoll = window.setInterval(() => pollLotImport(resumedLotImport.status_url), 5000);
             await pollLotImport(resumedLotImport.status_url);

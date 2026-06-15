@@ -21,12 +21,12 @@ class UserCreatedCredentialsMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Vos acces '.config('app.name'));
+        return new Envelope(subject: 'Vos accès '.config('app.name'));
     }
 
     public function content(): Content
     {
-        return new Content(view: 'emails.users.created');
+        return new Content(markdown: 'emails.users.created');
     }
 
     public function attachments(): array

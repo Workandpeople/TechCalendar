@@ -44,10 +44,10 @@ class Lot extends Model
     public static function types(): array
     {
         return [
-            self::TYPE_FULL_CONTACT_CONTROL => '100% controle contact',
-            self::TYPE_SAMPLE_CONTACT_CONTROL => 'Echantillonage controle contact',
-            self::TYPE_FULL_CONTROL => '100% controle',
-            self::TYPE_SAMPLE_CONTROL => 'Echantillonage controle',
+            self::TYPE_FULL_CONTACT_CONTROL => '100% contrôle contact',
+            self::TYPE_SAMPLE_CONTACT_CONTROL => 'Échantillonnage contrôle contact',
+            self::TYPE_FULL_CONTROL => '100% contrôle',
+            self::TYPE_SAMPLE_CONTROL => 'Échantillonnage contrôle',
         ];
     }
 

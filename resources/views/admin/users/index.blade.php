@@ -21,14 +21,14 @@
             <form id="user-filters-form" method="GET" action="{{ route('admin.users') }}" class="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <div class="md:col-span-2">
                     <label class="gc-label" for="q">Recherche</label>
-                    <input id="q" name="q" type="text" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom, prenom, email" />
+                    <input id="q" name="q" type="text" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom, prénom, email" />
                 </div>
 
                 <div>
                     <label class="gc-label" for="role">Role</label>
                     <select id="role" name="role" class="gc-input">
                         <option value="">Tous</option>
-                        <option value="0" @selected($filters['role'] === '0')>Gerant</option>
+                        <option value="0" @selected($filters['role'] === '0')>Gérant</option>
                         <option value="1" @selected($filters['role'] === '1')>Planning</option>
                         <option value="2" @selected($filters['role'] === '2')>Tech</option>
                     </select>
@@ -47,7 +47,7 @@
                     <label class="gc-label" for="status">Statut</label>
                     <select id="status" name="status" class="gc-input">
                         <option value="active" @selected($filters['status'] === 'active')>Actifs</option>
-                        <option value="trashed" @selected($filters['status'] === 'trashed')>Supprimes</option>
+                        <option value="trashed" @selected($filters['status'] === 'trashed')>Supprimés</option>
                         <option value="all" @selected($filters['status'] === 'all')>Tous</option>
                     </select>
                 </div>
@@ -55,7 +55,7 @@
                 <div class="md:col-span-5 flex items-center justify-between">
                     <button type="button" class="gc-btn-primary" data-modal-open="create-user-modal">Creer un utilisateur</button>
                     <div class="flex items-center gap-2">
-                        <a href="{{ route('admin.users') }}" class="gc-link">Reset filtres</a>
+                        <a href="{{ route('admin.users') }}" class="gc-link">Réinitialiser les filtres</a>
                     </div>
                 </div>
             </form>
@@ -80,10 +80,10 @@
                                 <td class="px-4 py-3">{{ $user->full_name }}</td>
                                 <td class="px-4 py-3">{{ $user->email }}</td>
                                 <td class="px-4 py-3">
-                                    @if ($user->role === 0) Gerant @elseif ($user->role === 1) Planning @else Tech @endif
+                                    @if ($user->role === 0) Gérant @elseif ($user->role === 1) Planning @else Tech @endif
                                 </td>
                                 <td class="px-4 py-3">{{ $user->admin ? 'Oui' : 'Non' }}</td>
-                                <td class="px-4 py-3">{{ $user->trashed() ? 'Supprime' : 'Actif' }}</td>
+                                <td class="px-4 py-3">{{ $user->trashed() ? 'Supprimé' : 'Actif' }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
                                         @if (! $user->trashed())
@@ -121,7 +121,7 @@
                                                 <button type="submit" class="gc-btn-soft">Restaurer</button>
                                             </form>
 
-                                            <button type="button" class="gc-btn-danger" data-modal-open="force-delete-user-modal" data-force-delete-url="{{ route('admin.users.force-delete', $user->id) }}" data-user-name="{{ $user->full_name }}">Suppression definitive</button>
+                                            <button type="button" class="gc-btn-danger" data-modal-open="force-delete-user-modal" data-force-delete-url="{{ route('admin.users.force-delete', $user->id) }}" data-user-name="{{ $user->full_name }}">Suppression définitive</button>
                                         @endif
                                     </div>
                                 </td>
@@ -172,7 +172,7 @@
     <div id="delete-user-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
             <h2 class="text-lg font-semibold">Soft delete utilisateur</h2>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le compte <span id="delete-user-name" class="font-medium" style="color:var(--gc-text);"></span> sera desactive.</p>
+            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le compte <span id="delete-user-name" class="font-medium" style="color:var(--gc-text);"></span> sera désactivé.</p>
             <form id="delete-user-form" method="POST" action="#" class="mt-4 flex justify-end gap-2">
                 @csrf
                 @method('DELETE')
@@ -184,13 +184,13 @@
 
     <div id="force-delete-user-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
-            <h2 class="text-lg font-semibold">Suppression definitive</h2>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le compte <span id="force-delete-user-name" class="font-medium" style="color:var(--gc-text);"></span> sera supprime definitivement.</p>
+            <h2 class="text-lg font-semibold">Suppression définitive</h2>
+            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le compte <span id="force-delete-user-name" class="font-medium" style="color:var(--gc-text);"></span> sera supprimé définitivement.</p>
             <form id="force-delete-user-form" method="POST" action="#" class="mt-4 flex justify-end gap-2">
                 @csrf
                 @method('DELETE')
                 <button type="button" class="gc-link" data-modal-close="force-delete-user-modal">Annuler</button>
-                <button type="submit" class="gc-btn-primary" style="background:#9f1239;">Supprimer</button>
+                <button type="submit" class="gc-btn-primary" style="background:#9f1239;">Supprimér</button>
             </form>
         </div>
     </div>
@@ -200,7 +200,7 @@
 
     <script>
         const MAPBOX_TOKEN = @json(config('services.mapbox.token'));
-        const DEPARTMENT_GEOJSON_URL = @json(asset('geo/departements.geojson'));
+        const DEPARTMENT_GEOJSON_URL = @json(asset('geo/départements.geojson'));
         const openButtons = document.querySelectorAll('[data-modal-open]');
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('user-filters-form');
@@ -260,6 +260,35 @@
             });
         };
 
+        const syncServiceSelectAll = (prefix) => {
+            const checkboxes = Array.from(document.querySelectorAll(`[data-service-checkbox="${prefix}"]`));
+            const selectAll = document.querySelector(`[data-service-select-all="${prefix}"]`);
+
+            if (!selectAll || checkboxes.length === 0) return;
+
+            const checkedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+            selectAll.checked = checkedCount === checkboxes.length;
+            selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+        };
+
+        document.querySelectorAll('[data-service-select-all]').forEach((selectAll) => {
+            selectAll.addEventListener('change', () => {
+                const prefix = selectAll.dataset.serviceSelectAll;
+
+                document.querySelectorAll(`[data-service-checkbox="${prefix}"]`).forEach((checkbox) => {
+                    checkbox.checked = selectAll.checked;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+
+                syncServiceSelectAll(prefix);
+                window.TechCalendarForms?.refresh(selectAll.form);
+            });
+        });
+
+        document.querySelectorAll('[data-service-checkbox]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => syncServiceSelectAll(checkbox.dataset.serviceCheckbox));
+        });
+
         const selectedDepartmentCodes = (prefix) => Array.from(document.querySelectorAll(`[data-department-checkbox="${prefix}"]:checked`)).map((checkbox) => checkbox.value);
 
         const addressCoordinates = (prefix) => {
@@ -314,7 +343,7 @@
         const refreshDepartmentUi = (prefix) => {
             const selected = selectedDepartmentCodes(prefix);
             const count = document.getElementById(`${prefix}_department_count`);
-            if (count) count.textContent = `${selected.length} selection${selected.length > 1 ? 's' : ''}`;
+            if (count) count.textContent = `${selected.length} Sélection${selected.length > 1 ? 's' : ''}`;
             window.TechCalendarForms?.refresh(document.getElementById(`${prefix}_role`)?.form);
 
             document.querySelectorAll(`[data-department-chip="${prefix}"]`).forEach((chip) => {
@@ -546,6 +575,7 @@
                     document.getElementById('edit_day_end_time').value = button.dataset.userDayEndTime || '';
                     document.getElementById('edit_break_duration_minutes').value = button.dataset.userBreakDurationMinutes || '';
                     setCheckboxValues('[data-service-checkbox="edit"]', parseJsonDataset(button.dataset.userServiceIds));
+                    syncServiceSelectAll('edit');
                     setCheckboxValues('[data-department-checkbox="edit"]', parseJsonDataset(button.dataset.userDepartmentCodes));
                     toggleTechFields('edit');
                     initMapboxAutocomplete('edit');
@@ -556,6 +586,7 @@
 
                 if (modalId === 'create-user-modal') {
                     setCheckboxValues('[data-service-checkbox="create"]', []);
+                    syncServiceSelectAll('create');
                     setCheckboxValues('[data-department-checkbox="create"]', []);
                     refreshDepartmentUi('create');
                     initMapboxAutocomplete('create');
@@ -614,6 +645,7 @@
             const prefix = input.dataset.roleInput;
             toggleTechFields(prefix);
             bindDepartmentCheckboxes(prefix);
+            syncServiceSelectAll(prefix);
             input.addEventListener('change', () => toggleTechFields(prefix));
         });
     </script>

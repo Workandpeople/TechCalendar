@@ -2,10 +2,10 @@
     <div class="space-y-6" data-manager-dashboard data-data-url="{{ $dataUrl }}" data-refresh-url="{{ $refreshUrl }}">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Gerant</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Dashboard gerant</h1>
+                <p class="text-sm" style="color:var(--gc-text-soft);">Gérant</p>
+                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Dashboard gérant</h1>
                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                    Efficacite planning, charge terrain et kilometres calcules en tache de fond puis caches en base.
+                    Efficacité planning, chargé terrain et kilomètres calculés en tâche de fond puis cachés en base.
                 </p>
             </div>
 
@@ -22,7 +22,7 @@
                 <div>
                     <p class="text-sm font-semibold" style="color:var(--gc-text);">Calcul des widgets</p>
                     <p id="manager-dashboard-loader-message" class="mt-1 text-sm" style="color:var(--gc-text-soft);">
-                        Preparation du job de calcul...
+                        Préparation du job de calcul...
                     </p>
                 </div>
                 <span id="manager-dashboard-progress-label" class="rounded-full px-3 py-1 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
@@ -36,7 +36,7 @@
         </section>
 
         <section id="manager-dashboard-error" class="hidden rounded-2xl border p-5" style="border-color:#fecaca;background:#fff1f2;color:#991b1b;">
-            <p class="font-semibold">Le calcul du dashboard a echoue.</p>
+            <p class="font-semibold">Le calcul du dashboard a échoué.</p>
             <p id="manager-dashboard-error-message" class="mt-1 text-sm"></p>
         </section>
 
@@ -46,7 +46,7 @@
             <article class="gc-card p-5">
                 <div class="mb-4">
                     <p class="text-sm" style="color:var(--gc-text-soft);">Assistantes planning</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Efficacite des placements</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Efficacité des placements</h2>
                 </div>
 
                 <div class="h-72">
@@ -58,8 +58,8 @@
                         <thead style="color:var(--gc-text-soft);">
                             <tr>
                                 <th class="py-2">Assistante</th>
-                                <th class="py-2 text-right">RDV places</th>
-                                <th class="py-2 text-right">Heures planifiees</th>
+                                <th class="py-2 text-right">RDV placés</th>
+                                <th class="py-2 text-right">Heures planifiées</th>
                             </tr>
                         </thead>
                         <tbody id="planner-efficiency-table"></tbody>
@@ -70,7 +70,7 @@
             <article class="gc-card p-5">
                 <div class="mb-4">
                     <p class="text-sm" style="color:var(--gc-text-soft);">Techniciens</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Kilometres terrain par jour</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Kilomètres terrain par jour</h2>
                 </div>
 
                 <div class="h-72">
@@ -78,7 +78,7 @@
                 </div>
 
                 <p class="mt-4 rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text-soft);">
-                    Calcul cache: domicile -> premier RDV -> autres RDV de la journee -> retour domicile.
+                    Calcul caché: domicile -> premier RDV -> autres RDV de la journée -> retour domicile.
                 </p>
             </article>
         </section>
@@ -87,7 +87,7 @@
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Performance terrain</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Techniciens les plus charges en kilometres</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Techniciens les plus chargés en kilomètres</h2>
                 </div>
                 <span class="rounded-full px-3 py-1 text-sm" style="background:#e0f2fe;color:#1d4ed8;">Cache BDD</span>
             </div>
@@ -161,7 +161,7 @@
                 progressLabel.textContent = `${progress}%`;
 
                 if (run.total_steps > 0) {
-                    loaderMessage.textContent = `${run.processed_steps} / ${run.total_steps} jour(s) technicien calcules...`;
+                    loaderMessage.textContent = `${run.processed_steps} / ${run.total_steps} jour(s) technicien calculés...`;
                     return;
                 }
 
@@ -263,7 +263,7 @@
                     data: {
                         labels: plannerPlacements.labels.length ? plannerPlacements.labels : ['Aucune donnee'],
                         datasets: [{
-                            label: 'RDV places',
+                            label: 'RDV placés',
                             data: plannerPlacements.values.length ? plannerPlacements.values : [0],
                             backgroundColor: pastelPalette,
                             borderColor: pastelBorders,
@@ -324,7 +324,7 @@
                 errorBox.classList.add('hidden');
                 refreshButton.disabled = false;
                 generatedAt.textContent = run.generated_at
-                    ? `Mis a jour le ${new Date(run.generated_at).toLocaleString('fr-FR')}`
+                    ? `Mis à jour le ${new Date(run.generated_at).toLocaleString('fr-FR')}`
                     : '';
             };
 

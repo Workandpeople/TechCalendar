@@ -45,7 +45,7 @@ class LotImportPreviewService
     public function retry(LotImportPreview $preview): LotImportPreview
     {
         if ($preview->status !== LotImportPreview::STATUS_FAILED) {
-            throw new RuntimeException('Seul un import en erreur peut etre relance.');
+            throw new RuntimeException('Seul un import en erreur peut être relancé.');
         }
 
         if (! filled($preview->original_file_disk) || ! filled($preview->original_file_path)) {
@@ -59,7 +59,7 @@ class LotImportPreviewService
         $preview->update([
             'status' => LotImportPreview::STATUS_PENDING,
             'progress' => 0,
-            'stage' => 'Import relance et en attente dans la file.',
+            'stage' => 'Import relancé et en attente dans la file.',
             'total_rows' => 0,
             'normalized_rows' => 0,
             'rejected_rows' => 0,

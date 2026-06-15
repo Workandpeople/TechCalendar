@@ -7,7 +7,9 @@ use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Mail\TechnicianAppointmentNotificationMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
 
@@ -20,7 +22,7 @@ it('links dashboard crm appointments to an auto-start booking search', function 
     $this->actingAs($planner)
         ->get(route('planner.dashboard'))
         ->assertOk()
-        ->assertSee('RDV a placer')
+        ->assertSee('RDV à placer')
         ->assertSee('15 demande(s)')
         ->assertSee(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']), false);
 });
@@ -81,7 +83,7 @@ it('renders lot appointment requests on the booking page', function () {
     ]);
     $placedStartsAt = now()->copy()->addDay()->setTime(11, 0);
     $lot = Lot::query()->create([
-        'name' => 'Lot Rhone',
+        'name' => 'Lot Rhône',
         'type' => Lot::TYPE_FULL_CONTROL,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $planner->id,
@@ -129,10 +131,10 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertOk()
         ->assertSee('depuis des lots')
         ->assertSee('booking-crm-pagination')
-        ->assertSee('Lot Rhone')
+        ->assertSee('Lot Rhône')
         ->assertSee('Client Lot')
         ->assertSee('Client Place')
-        ->assertSee('RDV place')
+        ->assertSee('RDV placé')
         ->assertSee('Audit interne')
         ->assertSee('Placer le RDV')
         ->assertSee('Voir le RDV')
@@ -148,7 +150,7 @@ it('searches additional booking technicians compatible with the requested servic
     ]);
     $service = Service::query()->create([
         'type' => Service::TYPE_COFFRAC,
-        'name' => 'Controle initial',
+        'name' => 'Contrôle initial',
         'average_duration_minutes' => 90,
     ]);
     $otherService = Service::query()->create([
@@ -157,7 +159,7 @@ it('searches additional booking technicians compatible with the requested servic
         'average_duration_minutes' => 120,
     ]);
 
-    Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+    Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
 
     $compatibleTechnician = User::factory()->create([
         'first_name' => 'Arthur',
@@ -165,7 +167,7 @@ it('searches additional booking technicians compatible with the requested servic
         'role' => 2,
         'admin' => false,
         'phone' => '0600000001',
-        'address' => '1 Rue de la Republique, Lyon',
+        'address' => '1 Rue de la République, Lyon',
         'department_code' => '69',
         'latitude' => 45.764,
         'longitude' => 4.8357,
@@ -237,12 +239,12 @@ it('analyzes a lot appointment request with a selected service', function () {
         'average_duration_minutes' => 120,
     ]);
 
-    Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+    Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
 
     $technician = User::factory()->create([
         'role' => 2,
         'admin' => false,
-        'address' => '1 Rue de la Republique, Lyon',
+        'address' => '1 Rue de la République, Lyon',
         'department_code' => '69',
         'latitude' => 45.764,
         'longitude' => 4.8357,
@@ -298,12 +300,12 @@ it('includes saturday in booking slot suggestions', function () {
             'average_duration_minutes' => 90,
         ]);
 
-        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
 
         $technician = User::factory()->create([
             'role' => 2,
             'admin' => false,
-            'address' => '1 Rue de la Republique, Lyon',
+            'address' => '1 Rue de la République, Lyon',
             'department_code' => '69',
             'latitude' => 45.764,
             'longitude' => 4.8357,
@@ -359,12 +361,12 @@ it('keeps absent technicians visible but suppresses booking suggestions during a
             'average_duration_minutes' => 90,
         ]);
 
-        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhone']);
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
 
         $technician = User::factory()->create([
             'role' => 2,
             'admin' => false,
-            'address' => '1 Rue de la Republique, Lyon',
+            'address' => '1 Rue de la République, Lyon',
             'department_code' => '69',
             'latitude' => 45.764,
             'longitude' => 4.8357,
@@ -461,6 +463,7 @@ it('rejects booking creation during technician absence', function () {
 
 it('links a placed appointment back to its lot appointment', function () {
     config(['services.mapbox.token' => null]);
+    Mail::fake();
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -478,7 +481,7 @@ it('links a placed appointment back to its lot appointment', function () {
         'longitude' => 4.8357,
     ]);
     $lot = Lot::query()->create([
-        'name' => 'Lot a placer',
+        'name' => 'Lot à placer',
         'type' => Lot::TYPE_FULL_CONTROL,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $planner->id,
@@ -514,4 +517,11 @@ it('links a placed appointment back to its lot appointment', function () {
         ->and($lotAppointment->service_id)->toBe($service->id)
         ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PLACED)
         ->and($lot->status)->toBe(Lot::STATUS_COMPLETED);
+
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'created'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $lotAppointment->appointment_id,
+    );
 });

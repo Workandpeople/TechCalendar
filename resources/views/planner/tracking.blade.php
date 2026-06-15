@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <div>
             <p class="text-sm" style="color: var(--gc-text-soft);">{{ $section ?? 'Planning' }}</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">{{ $title ?? 'Suivi des rdv' }}</h1>
+            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">{{ $title ?? 'Suivi des RDV' }}</h1>
         </div>
 
         <section class="gc-card p-5">
@@ -13,17 +13,17 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <button id="select-visible-techs" type="button" class="gc-btn-soft">Cocher les visibles</button>
-                    <button id="clear-selected-techs" type="button" class="gc-btn-soft">Tout decocher</button>
+                    <button id="clear-selected-techs" type="button" class="gc-btn-soft">Tout décocher</button>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div>
                     <label class="gc-label" for="technician_filter">Recherche</label>
-                    <input id="technician_filter" type="search" class="gc-input" placeholder="Nom, prenom, telephone ou adresse" autocomplete="off" />
+                    <input id="technician_filter" type="search" class="gc-input" placeholder="Nom, prénom, téléphone ou adresse" autocomplete="off" />
                 </div>
                 <div class="flex h-[42px] items-center justify-between gap-3 self-end rounded-lg border px-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                    <div class="text-xs uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Selection</div>
+                    <div class="text-xs uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Sélection</div>
                     <div class="text-xl font-semibold whitespace-nowrap" style="color:var(--gc-text);"><span id="selected-tech-count">0</span> tech(s)</div>
                 </div>
             </div>
@@ -56,7 +56,7 @@
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Rendez-vous des techniciens selectionnes</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Rendez-vous des techniciens sélectionnés</h2>
                     <p id="calendar-helper" class="text-sm" style="color:var(--gc-text-soft);">Coche au moins un technicien pour afficher ses rendez-vous.</p>
                 </div>
                 <div id="calendar-legend" class="flex flex-wrap gap-2"></div>
@@ -74,14 +74,14 @@
                         </select>
                     </div>
                     <div>
-                        <label class="gc-label" for="tracking_status_filter">Etat du RDV</label>
+                            <label class="gc-label" for="tracking_status_filter">État du RDV</label>
                         <select id="tracking_status_filter" class="gc-input">
                             <option value="all">Tous les RDV</option>
                             <option value="active">Actifs uniquement</option>
                             <option value="deleted">Soft-deleted uniquement</option>
                         </select>
                     </div>
-                    <button id="tracking-reset-filters" type="button" class="gc-btn-soft">Reinitialiser</button>
+                    <button id="tracking-reset-filters" type="button" class="gc-btn-soft">Réinitialiser</button>
                 </div>
             </div>
 
@@ -92,7 +92,7 @@
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p id="tracking-calendar-loading-title" class="text-sm font-semibold" style="color:var(--gc-text);">Chargement du calendrier</p>
-                                <p id="tracking-calendar-loading-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Preparation des paquets...</p>
+                                <p id="tracking-calendar-loading-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Préparation des paquets...</p>
                             </div>
                             <div class="h-9 w-9 shrink-0 animate-spin rounded-full border-4 border-[color:var(--gc-accent-soft)] border-t-[color:var(--gc-primary)]"></div>
                         </div>
@@ -106,7 +106,7 @@
     </div>
 
     <div id="tracking-appointment-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel max-w-6xl">
+        <div class="gc-modal-panel max-h-[calc(100vh-2rem)] max-w-6xl overflow-y-auto">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Rendez-vous</p>
@@ -139,15 +139,15 @@
                             <dd id="tracking_detail_customer" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
-                            <dt style="color:var(--gc-text-soft);">Telephone client</dt>
+                            <dt style="color:var(--gc-text-soft);">Téléphone client</dt>
                             <dd id="tracking_detail_customer_phone" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
-                            <dt style="color:var(--gc-text-soft);">Duree</dt>
+                            <dt style="color:var(--gc-text-soft);">Durée</dt>
                             <dd id="tracking_detail_duration" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
-                            <dt style="color:var(--gc-text-soft);">Debut</dt>
+                            <dt style="color:var(--gc-text-soft);">Début</dt>
                             <dd id="tracking_detail_start" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
@@ -155,7 +155,7 @@
                             <dd id="tracking_detail_end" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
-                            <dt style="color:var(--gc-text-soft);">Cree par</dt>
+                            <dt style="color:var(--gc-text-soft);">Créé par</dt>
                             <dd id="tracking_detail_created_by" class="font-medium" style="color:var(--gc-text);"></dd>
                         </div>
                         <div>
@@ -164,8 +164,38 @@
                         </div>
                     </dl>
 
+                    <form id="tracking-details-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);" data-validate-form>
+                        <div class="mb-3">
+                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Modifier le RDV</h3>
+                            <p class="text-xs" style="color:var(--gc-text-soft);">Date, heure, durée et adresse peuvent être ajustées en cas de changement de dernière minute.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div>
+                                <label class="gc-label" for="tracking_detail_starts_at">Date et heure</label>
+                                <input id="tracking_detail_starts_at" type="datetime-local" class="gc-input" required />
+                            </div>
+                            <div>
+                                <label class="gc-label" for="tracking_detail_duration_minutes">Durée (minutes)</label>
+                                <input id="tracking_detail_duration_minutes" type="number" min="15" max="600" step="5" class="gc-input" required />
+                            </div>
+                        </div>
+
+                        <div class="relative mt-3">
+                            <label class="gc-label" for="tracking_detail_address_input">Adresse</label>
+                            <input id="tracking_detail_address_input" type="text" maxlength="255" class="gc-input" required autocomplete="off" />
+                            <input id="tracking_detail_latitude" type="hidden" />
+                            <input id="tracking_detail_longitude" type="hidden" />
+                        </div>
+
+                        <div id="tracking_details_status" class="mt-2 hidden text-sm"></div>
+                        <div class="mt-3 flex justify-end">
+                            <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer les modifications</button>
+                        </div>
+                    </form>
+
                     <form id="tracking-reassign-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                        <label class="gc-label" for="tracking_reassign_technician_id">Reaffecter le RDV</label>
+                        <label class="gc-label" for="tracking_reassign_technician_id">Réaffecter le RDV</label>
                         <select id="tracking_reassign_technician_id" class="gc-input">
                             @foreach ($technicians as $technician)
                                 @php
@@ -181,10 +211,10 @@
                                 </option>
                             @endforeach
                         </select>
-                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Les techniciens incompatibles avec la prestation sont desactives.</p>
+                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Les techniciens incompatibles avec la prestation sont désactivés.</p>
                         <div id="tracking_reassign_status" class="mt-2 hidden text-sm"></div>
                         <div class="mt-3 flex justify-end">
-                            <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Reaffecter</button>
+                            <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Réaffecter</button>
                         </div>
                     </form>
                 </section>
@@ -197,7 +227,7 @@
                 <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
                 <div class="mt-3 flex flex-wrap justify-end gap-2">
                     <button id="tracking-delete-appointment-btn" type="button" class="gc-btn-danger">Soft delete le RDV</button>
-                    <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Reactiver le RDV</button>
+                    <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Réactiver le RDV</button>
                     <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary">Enregistrer le commentaire</button>
                 </div>
             </form>
@@ -220,6 +250,7 @@
         const trackingStatusFilter = document.getElementById('tracking_status_filter');
         const trackingResetFilters = document.getElementById('tracking-reset-filters');
         const trackingAppointmentModal = document.getElementById('tracking-appointment-modal');
+        const trackingDetailsForm = document.getElementById('tracking-details-form');
         const trackingCommentForm = document.getElementById('tracking-comment-form');
         const trackingReassignForm = document.getElementById('tracking-reassign-form');
         const trackingReassignSelect = document.getElementById('tracking_reassign_technician_id');
@@ -227,6 +258,7 @@
         const trackingReassignButton = document.getElementById('tracking-reassign-btn');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const trackingDetailsUrlTemplate = @json(route('planner.tracking.appointments.details', ['appointment' => '__APPOINTMENT__']));
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
         const trackingRestoreUrlTemplate = @json(route('planner.tracking.appointments.restore', ['appointment' => '__APPOINTMENT__']));
@@ -267,6 +299,15 @@
             });
         };
 
+        const formatDateTimeLocalInput = (value) => {
+            if (!value) return '';
+
+            const date = new Date(value);
+            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+
+            return offsetDate.toISOString().slice(0, 16);
+        };
+
         const setText = (id, value) => {
             const element = document.getElementById(id);
             if (element) element.textContent = value || '-';
@@ -286,6 +327,83 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+
+        const setTrackingDetailsStatus = (message, color = '#0f766e') => {
+            const status = document.getElementById('tracking_details_status');
+            if (!status) return;
+
+            status.style.color = color;
+            status.textContent = message;
+            status.classList.toggle('hidden', !message);
+        };
+
+        const initTrackingDetailAddressAutocomplete = () => {
+            const addressInput = document.getElementById('tracking_detail_address_input');
+            const latInput = document.getElementById('tracking_detail_latitude');
+            const lngInput = document.getElementById('tracking_detail_longitude');
+
+            if (!addressInput || !latInput || !lngInput || !trackingMapboxToken) return;
+
+            let list = addressInput.parentElement.querySelector('.gc-mapbox-suggestions');
+            if (!list) {
+                list = document.createElement('div');
+                list.className = 'gc-mapbox-suggestions';
+                addressInput.parentElement.appendChild(list);
+            }
+
+            if (addressInput.dataset.mapboxBound === '1') return;
+            addressInput.dataset.mapboxBound = '1';
+
+            let debounceTimer;
+            addressInput.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                latInput.value = '';
+                lngInput.value = '';
+
+                const query = addressInput.value.trim();
+                if (query.length < 3) {
+                    list.innerHTML = '';
+                    list.classList.add('hidden');
+                    return;
+                }
+
+                debounceTimer = window.setTimeout(async () => {
+                    const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`);
+                    url.searchParams.set('access_token', trackingMapboxToken);
+                    url.searchParams.set('autocomplete', 'true');
+                    url.searchParams.set('language', 'fr');
+                    url.searchParams.set('country', 'fr');
+                    url.searchParams.set('limit', '5');
+
+                    try {
+                        const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                        const payload = await response.json();
+                        const features = Array.isArray(payload.features) ? payload.features : [];
+
+                        list.innerHTML = features.map((feature) => `
+                            <button type="button" class="gc-mapbox-item" data-address="${trackingEscapeHtml(feature.place_name || '')}" data-lng="${feature.center?.[0] ?? ''}" data-lat="${feature.center?.[1] ?? ''}">
+                                ${trackingEscapeHtml(feature.place_name || '')}
+                            </button>
+                        `).join('');
+                        list.classList.toggle('hidden', features.length === 0);
+
+                        list.querySelectorAll('.gc-mapbox-item').forEach((item) => {
+                            item.addEventListener('click', () => {
+                                addressInput.value = item.dataset.address || '';
+                                lngInput.value = item.dataset.lng || '';
+                                latInput.value = item.dataset.lat || '';
+                                list.innerHTML = '';
+                                list.classList.add('hidden');
+                                window.TechCalendarForms?.refresh(addressInput.form);
+                            });
+                        });
+                    } catch (error) {
+                        list.innerHTML = '';
+                        list.classList.add('hidden');
+                    }
+                }, 250);
+            });
+        };
 
         const trackingMarkerElement = (color, label) => {
             const element = document.createElement('div');
@@ -543,7 +661,7 @@
                     isCurrent,
                     badge: isCurrent
                         ? 'Trajet vers ce RDV'
-                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                        : (from.isCurrent ? 'Suite de journée' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
                 };
             });
         };
@@ -587,7 +705,7 @@
             if (isLoading) {
                 setTrackingDayRouteSummary(`
                     <div class="flex items-center justify-between gap-3">
-                        <span style="color:var(--gc-text-soft);">Calcul de la journee du technicien...</span>
+                        <span style="color:var(--gc-text-soft);">Calcul de la journée du technicien...</span>
                         <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">En cours</span>
                     </div>
                 `);
@@ -595,7 +713,7 @@
             }
 
             if (!segments || segments.length === 0) {
-                setTrackingDayRouteSummary('<span style="color:var(--gc-text-soft);">Journee du technicien indisponible pour ce RDV.</span>');
+                setTrackingDayRouteSummary('<span style="color:var(--gc-text-soft);">Journée du technicien indisponible pour ce RDV.</span>');
                 return;
             }
 
@@ -606,8 +724,8 @@
 
             setTrackingDayRouteSummary(`
                 <div class="mb-3">
-                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journee du technicien</p>
-                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointille.</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journée du technicien</p>
+                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointillé.</p>
                 </div>
                 <div class="space-y-2">
                     ${segments.map((segment, index) => {
@@ -645,7 +763,7 @@
             setText('tracking_route_origin', props.origin_label ? `Depart: ${props.origin_label} - ${props.origin_name || '-'}` : null);
 
             if (!map) {
-                setTrackingRouteSummary('Trajet non affiche.');
+                setTrackingRouteSummary('Trajet non affiché.');
                 renderTrackingDayRouteSummary([]);
                 return;
             }
@@ -656,7 +774,7 @@
 
             if (segments.length === 0) {
                 clearTrackingDetailMap();
-                setTrackingRouteSummary('Coordonnees du RDV indisponibles.');
+                setTrackingRouteSummary('Coordonnées du RDV indisponibles.');
                 renderTrackingDayRouteSummary([]);
                 return;
             }
@@ -778,6 +896,12 @@
             setText('tracking_detail_end', formatDateTime(event.end));
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
+            document.getElementById('tracking_detail_starts_at').value = formatDateTimeLocalInput(event.start);
+            document.getElementById('tracking_detail_duration_minutes').value = props.duration_minutes || '';
+            document.getElementById('tracking_detail_address_input').value = props.address || '';
+            document.getElementById('tracking_detail_latitude').value = props.latitude || '';
+            document.getElementById('tracking_detail_longitude').value = props.longitude || '';
+            setTrackingDetailsStatus('');
             updateTrackingReassignOptions(props.service_id, props.technician_id);
             setTrackingReassignStatus('');
             trackingInitialComment = props.comment || '';
@@ -786,6 +910,8 @@
             document.getElementById('tracking-delete-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
             document.getElementById('tracking-restore-appointment-btn').classList.toggle('hidden', !props.deleted_at);
             trackingAppointmentModal.classList.remove('hidden');
+            initTrackingDetailAddressAutocomplete();
+            window.TechCalendarForms?.refresh(trackingDetailsForm);
             window.setTimeout(() => renderTrackingDetailMap(event), 80);
         };
 
@@ -805,7 +931,7 @@
 
         const showTrackingCalendarLoader = (chunkCount, technicianCount) => {
             trackingCalendarProgressBar.style.width = '0%';
-            trackingCalendarLoadingDetail.textContent = `${technicianCount} technicien(s), ${chunkCount} paquet(s) a charger.`;
+            trackingCalendarLoadingDetail.textContent = `${technicianCount} technicien(s), ${chunkCount} paquet(s) à chargér.`;
             trackingCalendarLoading.classList.remove('hidden');
             trackingCalendarLoading.classList.add('flex');
         };
@@ -813,7 +939,7 @@
         const updateTrackingCalendarLoader = (loadedChunks, chunkCount, eventCount) => {
             const progress = chunkCount > 0 ? Math.round((loadedChunks / chunkCount) * 100) : 100;
             trackingCalendarProgressBar.style.width = `${progress}%`;
-            trackingCalendarLoadingDetail.textContent = `Paquet ${loadedChunks}/${chunkCount} charge - ${eventCount} RDV trouve(s).`;
+            trackingCalendarLoadingDetail.textContent = `Paquet ${loadedChunks}/${chunkCount} chargé - ${eventCount} RDV trouvé(s).`;
         };
 
         const hideTrackingCalendarLoader = () => {
@@ -893,7 +1019,7 @@
             const selectedCheckboxes = technicianCheckboxes.filter((checkbox) => checkbox.checked);
             selectedTechCount.textContent = selectedCheckboxes.length;
             calendarHelper.textContent = selectedCheckboxes.length > 0
-                ? 'Le calendrier affiche uniquement les techniciens coches.'
+                ? 'Le calendrier affiche uniquement les techniciens cochés.'
                 : 'Coche au moins un technicien pour afficher ses rendez-vous.';
 
             calendarLegend.innerHTML = selectedCheckboxes.map((checkbox) => `
@@ -997,14 +1123,14 @@
                 nowIndicator: true,
                 hiddenDays: [0],
                 allDaySlot: false,
-	                events: async (fetchInfo, successCallback, failureCallback) => {
+	                events: async (fetchInfo, succèssCallback, failureCallback) => {
 	                    const technicianIds = selectedTechnicianIds();
 	
 	                    if (technicianIds.length === 0) {
 	                        trackingEventsAbortController?.abort();
 	                        trackingEventsRequestId++;
 	                        hideTrackingCalendarLoader();
-	                        successCallback([]);
+	                        succèssCallback([]);
 	                        return;
 	                    }
 	
@@ -1012,25 +1138,41 @@
 	                        const events = await loadTrackingEventsInBatches(technicianIds, fetchInfo);
 
 	                        if (events === null) {
-	                            successCallback([]);
+	                            succèssCallback([]);
 	                            return;
 	                        }
 
-	                        successCallback(events.map(styleTrackingEvent));
+	                        succèssCallback(events.map(styleTrackingEvent));
 	                    } catch (error) {
 	                        if (error.name === 'AbortError') {
-	                            successCallback([]);
+	                            succèssCallback([]);
 	                            return;
 	                        }
 
-	                        trackingCalendarLoadingDetail.textContent = error.message || 'Impossible de charger le calendrier.';
+	                        trackingCalendarLoadingDetail.textContent = error.message || 'Impossible de chargér le calendrier.';
 	                        failureCallback(error);
 	                    }
 	                },
+                eventContent: (arg) => {
+                    const props = arg.event.extendedProps || {};
+                    const time = arg.timeText ? `<span class="font-semibold">${trackingEscapeHtml(arg.timeText)}</span>` : '';
+                    const serviceType = props.service_type || String(props.service_label || 'RDV').split(' - ')[0] || 'RDV';
+                    const location = props.location_label || [props.postal_code, props.city].filter(Boolean).join(' ') || props.address || '';
+
+                    return {
+                        html: `
+                            <div class="min-w-0 leading-tight">
+                                <div class="truncate text-[11px]">${time} ${trackingEscapeHtml(serviceType)}</div>
+                                <div class="truncate text-[11px] font-semibold">${trackingEscapeHtml(props.customer_name || arg.event.title)}</div>
+                                <div class="truncate text-[10px] opacity-90">${trackingEscapeHtml(location)}</div>
+                            </div>
+                        `,
+                    };
+                },
                 eventDidMount: (info) => {
-                    const props = info.event.extendedProps;
-                    if (props.deleted_at) {
-                        info.el.style.opacity = '0.72';
+	                    const props = info.event.extendedProps;
+	                    if (props.deleted_at) {
+	                        info.el.style.opacity = '0.72';
                         info.el.style.borderWidth = '2px';
                     }
 
@@ -1040,7 +1182,7 @@
                         props.customer_name,
                         props.customer_phone,
                         props.address,
-                        props.created_by_name ? `Cree par: ${props.created_by_name}` : null,
+	                        props.created_by_name ? `Créé par: ${props.created_by_name}` : null,
                         props.comment,
                     ].filter(Boolean).join('\n');
                 },
@@ -1084,6 +1226,76 @@
         document.getElementById('tracking-detail-close').addEventListener('click', closeTrackingAppointmentModal);
         trackingAppointmentModal.addEventListener('click', (event) => {
             if (event.target.id === 'tracking-appointment-modal') closeTrackingAppointmentModal();
+        });
+
+        trackingDetailsForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
+            const startsAt = document.getElementById('tracking_detail_starts_at').value;
+            const durationMinutes = document.getElementById('tracking_detail_duration_minutes').value;
+            const address = document.getElementById('tracking_detail_address_input').value.trim();
+            const latitude = document.getElementById('tracking_detail_latitude').value;
+            const longitude = document.getElementById('tracking_detail_longitude').value;
+            const button = document.getElementById('tracking-save-details-btn');
+
+            if (!appointmentId) return;
+
+            button.disabled = true;
+            button.textContent = 'Enregistrement...';
+            setTrackingDetailsStatus('');
+
+            try {
+                const response = await fetch(trackingDetailsUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        starts_at: startsAt,
+                        duration_minutes: Number(durationMinutes),
+                        address,
+                        latitude: latitude === '' ? null : Number(latitude),
+                        longitude: longitude === '' ? null : Number(longitude),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
+                    throw new Error(firstError || 'Impossible de modifier le RDV.');
+                }
+
+                const updatedAppointment = payload.appointment || {};
+                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+
+                if (calendarEvent) {
+                    calendarEvent.setStart(updatedAppointment.start);
+                    calendarEvent.setEnd(updatedAppointment.end);
+                    calendarEvent.setExtendedProp('duration_minutes', updatedAppointment.duration_minutes);
+                    calendarEvent.setExtendedProp('address', updatedAppointment.address);
+                    calendarEvent.setExtendedProp('latitude', updatedAppointment.latitude);
+                    calendarEvent.setExtendedProp('longitude', updatedAppointment.longitude);
+                    calendarEvent.setExtendedProp('postal_code', updatedAppointment.postal_code);
+                    calendarEvent.setExtendedProp('city', updatedAppointment.city);
+                    calendarEvent.setExtendedProp('location_label', updatedAppointment.location_label);
+                    setText('tracking_detail_duration', updatedAppointment.duration_minutes ? `${updatedAppointment.duration_minutes} min` : '-');
+                    setText('tracking_detail_start', formatDateTime(updatedAppointment.start));
+                    setText('tracking_detail_end', formatDateTime(updatedAppointment.end));
+                    setText('tracking_detail_address', updatedAppointment.address);
+                    window.setTimeout(() => renderTrackingDetailMap(calendarEvent), 180);
+                }
+
+                setTrackingDetailsStatus('Rendez-vous mis à jour.');
+                refetchCalendar();
+            } catch (error) {
+                setTrackingDetailsStatus(error.message || 'Impossible de modifier le RDV.', '#9f1239');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Enregistrer les modifications';
+            }
         });
 
         trackingCommentForm.addEventListener('submit', async (event) => {
@@ -1157,7 +1369,7 @@
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
-                    throw new Error(firstError || 'Impossible de reaffecter le RDV.');
+                    throw new Error(firstError || 'Impossible de réaffecter le RDV.');
                 }
 
                 const technician = payload.technician || {};
@@ -1185,16 +1397,16 @@
                     applyTrackingEventStyle(calendarEvent);
                 }
 
-                setTrackingReassignStatus('Rendez-vous reaffecte.');
+                setTrackingReassignStatus('Rendez-vous réaffecté.');
                 refetchCalendar();
 
                 if (calendarEvent) {
                     window.setTimeout(() => renderTrackingDetailMap(calendarEvent), 180);
                 }
             } catch (error) {
-                setTrackingReassignStatus(error.message || 'Impossible de reaffecter le RDV.', '#9f1239');
+                setTrackingReassignStatus(error.message || 'Impossible de réaffecter le RDV.', '#9f1239');
             } finally {
-                trackingReassignButton.textContent = 'Reaffecter';
+                trackingReassignButton.textContent = 'Réaffecter';
                 updateTrackingReassignButtonState();
             }
         });
@@ -1216,7 +1428,7 @@
 
             if (comment === trackingInitialComment.trim()) {
                 status.style.color = '#9f1239';
-                status.textContent = 'Le commentaire doit etre modifie avant de soft delete le RDV.';
+                status.textContent = 'Le commentaire doit être modifié avant de soft delete le RDV.';
                 status.classList.remove('hidden');
                 return;
             }
@@ -1275,14 +1487,14 @@
 
             if (!comment) {
                 status.style.color = '#9f1239';
-                status.textContent = 'Un commentaire est obligatoire avant de reactiver le RDV.';
+                status.textContent = 'Un commentaire est obligatoire avant de réactiver le RDV.';
                 status.classList.remove('hidden');
                 return;
             }
 
             if (comment === trackingInitialComment.trim()) {
                 status.style.color = '#9f1239';
-                status.textContent = 'Le commentaire doit etre modifie avant de reactiver le RDV.';
+                status.textContent = 'Le commentaire doit être modifié avant de réactiver le RDV.';
                 status.classList.remove('hidden');
                 return;
             }
@@ -1304,7 +1516,7 @@
                 const payload = await response.json();
 
                 if (!response.ok) {
-                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : 'Impossible de reactiver le RDV.';
+                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : 'Impossible de réactiver le RDV.';
                     throw new Error(firstError);
                 }
 
@@ -1319,11 +1531,11 @@
                 document.getElementById('tracking-restore-appointment-btn').classList.add('hidden');
                 trackingInitialComment = payload.comment || comment;
                 status.style.color = '#0f766e';
-                status.textContent = 'Rendez-vous reactive.';
+                status.textContent = 'Rendez-vous réactivé.';
                 status.classList.remove('hidden');
             } catch (error) {
                 status.style.color = '#9f1239';
-                status.textContent = error.message || 'Impossible de reactiver le RDV.';
+                status.textContent = error.message || 'Impossible de réactiver le RDV.';
                 status.classList.remove('hidden');
             } finally {
                 button.disabled = false;

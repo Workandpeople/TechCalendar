@@ -47,13 +47,13 @@ class TechPlanningController extends Controller
                 [
                     'label' => 'RDV aujourd hui',
                     'value' => $todayAppointmentsCount,
-                    'detail' => 'Interventions prevues sur la journee',
+                    'detail' => 'Interventions prévues sur la journée',
                     'tone' => 'blue',
                 ],
                 [
                     'label' => 'RDV cette semaine',
                     'value' => $weekAppointments->count(),
-                    'detail' => round(((int) $weekAppointments->sum('duration_minutes')) / 60, 1).'h planifiees',
+                    'detail' => round(((int) $weekAppointments->sum('duration_minutes')) / 60, 1).'h planifiées',
                     'tone' => 'green',
                 ],
                 [

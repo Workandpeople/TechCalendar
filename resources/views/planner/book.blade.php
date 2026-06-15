@@ -4,7 +4,7 @@
             <div>
                 <p class="text-sm" style="color:var(--gc-text-soft);">Planning</p>
                 <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Prise de rdv</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Selectionne une demande CRM ou saisis un RDV manuel pour identifier les techniciens eligibles.</p>
+                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Sélectionne une demande CRM ou saisis un RDV manuel pour identifier les techniciens éligibles.</p>
             </div>
             <button id="manual-booking-toggle" type="button" class="gc-btn-primary self-start md:self-auto">
                 RDV manuel
@@ -17,15 +17,15 @@
                     <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">
                         Placement confirme
                     </span>
-                    <h2 class="mt-4 text-2xl font-semibold" style="color:var(--gc-text);">Le rendez-vous a bien ete place</h2>
+                    <h2 class="mt-4 text-2xl font-semibold" style="color:var(--gc-text);">Le rendez-vous a bien été placé</h2>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                        La prise de RDV est verrouillee sur cette page pour eviter un double placement accidentel.
+                        La prise de RDV est verrouillée sur cette page pour éviter un double placement accidentel.
                     </p>
 
                     <dl class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                             <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Reference</dt>
-                            <dd id="booking_confirmation_reference" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            <dd id="booking_confirmation_référence" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
                         </div>
                         <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                             <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Date</dt>
@@ -50,7 +50,7 @@
                     <div>
                         <p class="text-sm font-semibold" style="color:#f5df9a;">Prochaine action</p>
                         <p class="mt-2 text-sm leading-6 text-white/80">
-                            Tu peux maintenant verifier le rendez-vous dans le suivi ou repartir sur une nouvelle prise de RDV propre.
+                            Tu peux maintenant vérifier le rendez-vous dans le suivi ou repartir sur une nouvelle prise de RDV propre.
                         </p>
                     </div>
                     <div class="flex flex-col gap-3">
@@ -69,7 +69,7 @@
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV a placer depuis les CRM</h2>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV à placer depuis les CRM</h2>
                         <label class="inline-flex cursor-pointer items-center gap-3">
                             <button id="booking-source-switch" type="button" class="relative h-4 w-8 rounded-full transition" style="background:var(--gc-primary);" role="switch" aria-checked="false" aria-label="Basculer vers les lots">
                                 <span id="booking-source-switch-knob" class="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition"></span>
@@ -77,7 +77,7 @@
                             <span class="text-lg font-semibold" style="color:var(--gc-text);">depuis des lots</span>
                         </label>
                     </div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les departements couverts filtrent les techniciens.</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
                     <button id="booking-crm-refresh" type="button" class="gc-btn-soft px-3 py-2 text-sm">
@@ -90,11 +90,11 @@
 
             <div id="booking-crm-search-wrap" class="mb-4">
                 <label class="gc-label" for="booking_crm_search">Recherche client</label>
-                <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prenom du client" autocomplete="off" />
+                <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prénom du client" autocomplete="off" />
             </div>
 
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                Aucun RDV CRM ne correspond a cette recherche.
+                Aucun RDV CRM ne correspond à cette recherche.
             </div>
 
             <div id="booking-crm-source">
@@ -116,7 +116,7 @@
                                 @if ($appointment['service'])
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
                                 @else
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigne</span>
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
                                 @endif
                             </div>
                         </button>
@@ -142,7 +142,7 @@
                                     </span>
                                 </div>
                                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} a placer · {{ $lot['placed_count'] }} places
+                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à placer · {{ $lot['placed_count'] }} places
                                     @if ($lot['imported_at'])
                                         · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                     @endif
@@ -175,21 +175,21 @@
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
                                             @if ($isPlaced)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV place</span>
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
                                             @endif
                                             @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A verifier</span>
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A vérifier</span>
                                             @endif
                                         </div>
                                         <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h4>
-                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Telephone non renseigne' }}</p>
+                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
                                     </div>
 
                                     <div class="min-w-0">
-                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse a qualifier' }}</p>
+                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
                                             @if ($appointment['external_reference'])
-                                                Ref. {{ $appointment['external_reference'] }}
+                                                Réf. {{ $appointment['external_reference'] }}
                                             @elseif ($appointment['row_number'])
                                                 Ligne fichier {{ $appointment['row_number'] }}
                                             @else
@@ -198,7 +198,7 @@
                                         </p>
                                         @if ($isPlaced)
                                             <p class="mt-2 text-xs" style="color:#15803d;">
-                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignee' }}
+                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignée' }}
                                                 @if ($appointment['placed_technician_name'])
                                                     · {{ $appointment['placed_technician_name'] }}
                                                 @endif
@@ -232,7 +232,7 @@
                                                     data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
                                                     @disabled(! $appointment['can_search'])
                                                 >
-                                                    <option value="">Selectionner</option>
+                                                    <option value="">Sélectionner</option>
                                                     @foreach ($services as $service)
                                                         <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
                                                             {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
@@ -259,7 +259,7 @@
                     </details>
                 @empty
                     <div class="rounded-2xl border border-dashed p-8 text-center" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                        Aucun RDV de lot a placer pour le moment.
+                        Aucun RDV de lot à placer pour le moment.
                     </div>
                 @endforelse
             </div>
@@ -268,7 +268,7 @@
         <section id="manual-booking-section" class="gc-card hidden p-5">
             <div class="mb-4">
                 <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV manuel</h2>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Saisie rapide d'un client hors CRM. L'adresse doit etre selectionnee via Mapbox pour recuperer le departement et les coordonnees.</p>
+                <p class="text-sm" style="color:var(--gc-text-soft);">Saisie rapide d'un client hors CRM. L'adresse doit être sélectionnée via Mapbox pour récupérer le département et les coordonnées.</p>
             </div>
 
             <form id="manual-booking-form" class="grid grid-cols-1 gap-4 xl:grid-cols-12" data-validate-form>
@@ -277,17 +277,17 @@
                     <input id="manual_last_name" type="text" class="gc-input" maxlength="120" required />
                 </div>
                 <div class="xl:col-span-3">
-                    <label class="gc-label" for="manual_first_name">Prenom client</label>
+                    <label class="gc-label" for="manual_first_name">Prénom client</label>
                     <input id="manual_first_name" type="text" class="gc-input" maxlength="120" required />
                 </div>
                 <div class="xl:col-span-3">
-                    <label class="gc-label" for="manual_phone">Telephone</label>
+                    <label class="gc-label" for="manual_phone">Téléphone</label>
                     <input id="manual_phone" type="tel" class="gc-input" maxlength="30" required />
                 </div>
                 <div class="xl:col-span-3">
                     <label class="gc-label" for="manual_service_id">Prestation</label>
                     <select id="manual_service_id" class="gc-input" required>
-                        <option value="">Selectionner</option>
+                        <option value="">Sélectionner</option>
                         @foreach ($services as $service)
                             <option value="{{ $service->id }}">
                                 {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
@@ -322,7 +322,7 @@
                 <div class="flex items-center justify-between gap-4">
                     <div>
                         <p id="booking-analysis-loader-title" class="text-sm font-semibold" style="color:var(--gc-text);">Analyse en cours</p>
-                        <p id="booking-analysis-loader-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Preparation de la recherche...</p>
+                        <p id="booking-analysis-loader-detail" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Préparation de la recherche...</p>
                     </div>
                     <span id="booking-analysis-loader-label" class="shrink-0 text-sm font-semibold" style="color:var(--gc-text);">0%</span>
                 </div>
@@ -331,16 +331,16 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div id="booking-results-anchor" class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
                 <section class="gc-card flex h-[560px] flex-col p-5 xl:h-[640px]">
                     <div class="mb-4 shrink-0 space-y-4">
-                        <p class="text-sm" style="color:var(--gc-text-soft);">Techniciens eligibles</p>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Techniciens éligibles</p>
                         <h2 id="analysis-title" class="text-lg font-semibold" style="color:var(--gc-text);"></h2>
                         <p id="analysis-subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
 
                         <div class="rounded-xl border p-3" style="border-color:var(--gc-border);background:#ffffff;">
                             <label class="gc-label" for="eligible-technician-search">Ajouter un technicien manuellement</label>
-                            <input id="eligible-technician-search" type="search" class="gc-input" placeholder="Nom, prenom, telephone, departement..." autocomplete="off" />
+                            <input id="eligible-technician-search" type="search" class="gc-input" placeholder="Nom, prénom, téléphone, département..." autocomplete="off" />
                             <p id="eligible-technician-search-status" class="mt-2 hidden text-xs"></p>
                             <div id="eligible-technician-search-results" class="mt-3 hidden space-y-2"></div>
                         </div>
@@ -367,11 +367,11 @@
             <section class="gc-card p-5">
                 <div class="mb-4">
                     <p class="text-sm" style="color:var(--gc-text-soft);">Disponibilites visuelles</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV existants des techniciens retournes</h2>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV existants des techniciens retournés</h2>
                 </div>
                 <div id="booking-calendar-loader" class="mb-4 hidden rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text);">
                     <div class="flex items-center justify-between gap-3">
-                        <span id="booking-calendar-loader-detail">Calcul des propositions pour la semaine affichee...</span>
+                        <span id="booking-calendar-loader-detail">Calcul des propositions pour la semaine affichée...</span>
                         <span id="booking-calendar-loader-label" class="font-semibold">0%</span>
                     </div>
                     <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
@@ -413,7 +413,7 @@
                                 <dd id="booking_detail_customer" class="font-medium" style="color:var(--gc-text);"></dd>
                             </div>
                             <div>
-                                <dt style="color:var(--gc-text-soft);">Telephone</dt>
+                                <dt style="color:var(--gc-text-soft);">Téléphone</dt>
                                 <dd id="booking_detail_phone" class="font-medium" style="color:var(--gc-text);"></dd>
                             </div>
                             <div>
@@ -447,7 +447,7 @@
                                 <input id="booking_detail_starts_at" type="datetime-local" class="gc-input" />
                             </div>
                             <div>
-                                <label class="gc-label" for="booking_detail_duration">Duree prestation</label>
+                                <label class="gc-label" for="booking_detail_duration">Durée prestation</label>
                                 <input id="booking_detail_duration" type="number" min="30" max="480" step="5" class="gc-input" />
                             </div>
                         </div>
@@ -567,6 +567,7 @@
         const crmBookingSection = document.getElementById('crm-booking-section');
         const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
+        const bookingResultsAnchor = document.getElementById('booking-results-anchor');
         const bookingCrmSearch = document.getElementById('booking_crm_search');
         const bookingCrmGrid = document.getElementById('booking-crm-grid');
         let bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
@@ -647,7 +648,7 @@
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
             const serviceBadge = appointment.service
                 ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(appointment.service.type)}</span>`
-                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigne</span>';
+                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
 
             return `
                 <button
@@ -687,7 +688,7 @@
             const initialLabel = bookingCrmRefreshButton.textContent;
             bookingCrmRefreshButton.disabled = true;
             bookingCrmRefreshButton.textContent = 'Refresh...';
-            setBookingCrmRefreshStatus('Regeneration des RDV simules...');
+            setBookingCrmRefreshStatus('Régénération des RDV simulés...');
 
             try {
                 const response = await fetch(bookingCrmRefreshUrl, {
@@ -705,7 +706,7 @@
                 }
 
                 renderBookingCrmAppointments(payload.appointments || []);
-                setBookingCrmRefreshStatus(`${(payload.appointments || []).length} RDV CRM regeneres.`);
+                setBookingCrmRefreshStatus(`${(payload.appointments || []).length} RDV CRM régénérés.`);
             } catch (error) {
                 setBookingCrmRefreshStatus(error.message || 'Refresh CRM impossible.', 'error');
             } finally {
@@ -727,7 +728,7 @@
 
             bookingCrmPagination.classList.remove('hidden');
             bookingCrmPagination.innerHTML = `
-                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="prev" ${bookingCrmPage <= 1 ? 'disabled' : ''}>Precedent</button>
+                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="prev" ${bookingCrmPage <= 1 ? 'disabled' : ''}>Précédent</button>
                 <span class="rounded-full px-3 py-2 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Page ${bookingCrmPage}/${totalPages}</span>
                 <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="next" ${bookingCrmPage >= totalPages ? 'disabled' : ''}>Suivant</button>
             `;
@@ -845,15 +846,15 @@
             stopBookingAnalysisLoader();
             bookingAnalysisProgress = 8;
             bookingAnalysisLoaderTitle.textContent = `Analyse ${sourceLabel.toLowerCase()}`;
-            bookingAnalysisLoaderDetail.textContent = 'Lecture des donnees du rendez-vous...';
+            bookingAnalysisLoaderDetail.textContent = 'Lecture des données du rendez-vous...';
             setProgressBar(bookingAnalysisLoaderBar, bookingAnalysisLoaderLabel, bookingAnalysisProgress);
             bookingAnalysisLoader.classList.remove('hidden');
 
             const stages = [
-                'Verification du departement et de la prestation...',
-                'Recherche des techniciens eligibles...',
+                'Vérification du département et de la prestation...',
+                'Recherche des techniciens éligibles...',
                 'Calcul des trajets et contraintes horaires...',
-                'Preparation de la carte et du calendrier...',
+                'Préparation de la carte et du calendrier...',
             ];
 
             bookingAnalysisProgressTimer = window.setInterval(() => {
@@ -863,12 +864,26 @@
             }, 360);
         };
 
-        const finishBookingAnalysisLoader = (message = 'Analyse terminee.') => finishProgress(
+        const finishBookingAnalysisLoader = (message = 'Analyse terminée.') => finishProgress(
             setBookingAnalysisProgress,
             stopBookingAnalysisLoader,
             () => bookingAnalysisLoader.classList.add('hidden'),
             message,
         );
+
+        const scrollToBookingResults = () => {
+            if (!bookingResultsAnchor) return;
+
+            bookingResultsAnchor.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+
+            window.setTimeout(() => {
+                bookingMap?.resize?.();
+                bookingCalendar?.updateSize?.();
+            }, 360);
+        };
 
         const stopBookingCalendarLoader = () => {
             if (bookingCalendarProgressTimer) {
@@ -893,11 +908,11 @@
             stopBookingCalendarLoader();
             bookingCalendarProgress = 12;
             bookingCalendarLoader?.classList.remove('hidden');
-            setBookingCalendarProgress(bookingCalendarProgress, 'Calcul des propositions pour la semaine affichee...');
+            setBookingCalendarProgress(bookingCalendarProgress, 'Calcul des propositions pour la semaine affichée...');
             bookingCalendarProgressTimer = window.setInterval(() => {
                 bookingCalendarProgress = nextSoftProgress(bookingCalendarProgress, 90);
                 setBookingCalendarProgress(bookingCalendarProgress, bookingCalendarProgress < 70
-                    ? 'Verification des disponibilites techniciens...'
+                    ? 'Vérification des disponibilités des techniciens...'
                     : 'Assemblage des propositions dans le calendrier...');
             }, 300);
         };
@@ -913,7 +928,7 @@
                 setBookingCalendarProgress,
                 stopBookingCalendarLoader,
                 () => bookingCalendarLoader?.classList.add('hidden'),
-                'Calendrier pret.',
+                'Calendrier prêt.',
             );
         };
 
@@ -964,7 +979,7 @@
 
             if (!bookingMapboxToken) {
                 mapboxDebug('manual autocomplete blocked: token missing');
-                addressInput.addEventListener('focus', () => setManualStatus('Token Mapbox absent: impossible de recuperer les coordonnees automatiquement.', 'error'));
+                addressInput.addEventListener('focus', () => setManualStatus('Token Mapbox absent: impossible de récupérer les coordonnées automatiquement.', 'error'));
                 return;
             }
 
@@ -1059,7 +1074,7 @@
                 mapboxDebug('booking map blocked: missing token or mapboxgl');
                 showMapboxUnavailable('booking-map', !bookingMapboxToken
                     ? 'Token Mapbox absent côté Laravel.'
-                    : 'La librairie Mapbox GL JS n est pas chargee. Verifie la CSP script-src/script-src-elem et le chargement du CDN.');
+                    : 'La librairie Mapbox GL JS n’est pas chargée. Vérifie la CSP script-src/script-src-elem et le chargement du CDN.');
                 return null;
             }
 
@@ -1248,7 +1263,7 @@
             const label = String(props.origin_label || '').toLowerCase();
 
             if (label.includes('rdv')) {
-                return 'Depuis le RDV precedent';
+                return 'Depuis le RDV précédent';
             }
 
             return 'Depuis le domicile';
@@ -1456,8 +1471,8 @@
                 const props = previousAppointment.extendedProps || {};
 
                 return {
-                    label: 'rdv precedent',
-                    name: props.customer_name || previousAppointment.title || 'RDV precedent',
+                    label: 'rdv précédent',
+                    name: props.customer_name || previousAppointment.title || 'RDV précédent',
                     lat: Number(props.latitude),
                     lng: Number(props.longitude),
                 };
@@ -1473,7 +1488,7 @@
 
         const serviceLabelForRequest = () => currentAppointmentRequest?.service
             ? `${currentAppointmentRequest.service.type} - ${currentAppointmentRequest.service.name}`
-            : 'Prestation non renseignee';
+            : 'Prestation non renseignée';
 
         const draftPropsForTechnician = (technician, startsAt) => {
             const origin = routeOriginForTechnician(technician, startsAt);
@@ -1542,7 +1557,7 @@
 
         const openCalendarSlotModal = (info) => {
             if (!currentAppointmentRequest) {
-                showFeedback('Lance d abord une recherche CRM ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
+                showFeedback('Lance d’abord une recherche CRM ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
                 return;
             }
 
@@ -1555,7 +1570,7 @@
             const activeTechnicians = selectedAvailableTechnicians(startsAt);
 
             if (activeTechnicians.length === 0) {
-                showFeedback('Aucun technicien selectionne n est disponible sur ce creneau: ils sont absents ou non selectionnes.', 'error');
+                showFeedback('Aucun technicien sélectionné n’est disponible sur ce créneau: ils sont absents ou non sélectionnés.', 'error');
                 return;
             }
 
@@ -1709,7 +1724,7 @@
                     isCurrent,
                     badge: isCurrent
                         ? 'Trajet vers ce RDV'
-                        : (from.isCurrent ? 'Suite de journee' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                        : (from.isCurrent ? 'Suite de journée' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
                 };
             });
         };
@@ -1757,7 +1772,7 @@
             if (isLoading) {
                 summary.innerHTML = `
                     <div class="flex items-center justify-between gap-3">
-                        <span style="color:var(--gc-text-soft);">Calcul de la journee du technicien...</span>
+                        <span style="color:var(--gc-text-soft);">Calcul de la journée du technicien...</span>
                         <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">En cours</span>
                     </div>
                 `;
@@ -1765,7 +1780,7 @@
             }
 
             if (!segments || segments.length === 0) {
-                summary.innerHTML = '<span style="color:var(--gc-text-soft);">Journee du technicien indisponible pour ce RDV.</span>';
+                summary.innerHTML = '<span style="color:var(--gc-text-soft);">Journée du technicien indisponible pour ce RDV.</span>';
                 return;
             }
 
@@ -1776,8 +1791,8 @@
 
             summary.innerHTML = `
                 <div class="mb-3">
-                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journee du technicien</p>
-                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointille.</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Journée du technicien</p>
+                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Clique une ligne pour mettre son trajet en couleur. Les autres restent en pointillé.</p>
                 </div>
                 <div class="space-y-2">
                     ${segments.map((segment, index) => {
@@ -1816,7 +1831,7 @@
                 mapboxDebug('detail map blocked: missing token or mapboxgl');
                 showMapboxUnavailable('booking-detail-map', !bookingMapboxToken
                     ? 'Token Mapbox absent côté Laravel.'
-                    : 'La librairie Mapbox GL JS n est pas chargee. Verifie la CSP script-src/script-src-elem et le chargement du CDN.');
+                    : 'La librairie Mapbox GL JS n’est pas chargée. Vérifie la CSP script-src/script-src-elem et le chargement du CDN.');
                 return null;
             }
 
@@ -2014,9 +2029,9 @@
             manualBookingToggle?.classList.add('hidden');
             placementConfirmationSection?.classList.remove('hidden');
 
-            document.getElementById('booking_confirmation_reference').textContent = data.appointment_id
+            document.getElementById('booking_confirmation_référence').textContent = data.appointment_id
                 ? `RDV #${data.appointment_id}`
-                : 'RDV cree';
+                : 'RDV créé';
             document.getElementById('booking_confirmation_date').textContent = formatDateTimeForConfirmation(startsAt);
             document.getElementById('booking_confirmation_customer').textContent = props.customer_name || '-';
             document.getElementById('booking_confirmation_technician').textContent = technician?.name || props.technician_name || '-';
@@ -2066,10 +2081,10 @@
                 : (isSuggestion ? 'Proposition de rendez-vous' : 'Rendez-vous place');
             document.getElementById('booking_modal_title').textContent = props.service_label || event.title;
             document.getElementById('booking_modal_subtitle').textContent = props.is_calendar_click
-                ? 'Le RDV courant est repris; tu peux changer le technicien, l heure et la duree avant validation.'
+                ? 'Le RDV courant est repris; tu peux changer le technicien, l’heure et la durée avant validation.'
                 : (isSuggestion
-                ? 'Tu peux ajuster l heure et la duree avant validation.'
-                : 'Detail du rendez-vous deja place.');
+                ? 'Tu peux ajuster l’heure et la durée avant validation.'
+                : 'Detail du rendez-vous déjà place.');
             document.getElementById('booking_detail_technician').textContent = props.technician_name || '-';
             document.getElementById('booking_detail_customer').textContent = props.customer_name || '-';
             document.getElementById('booking_detail_phone').textContent = props.customer_phone || '-';
@@ -2102,7 +2117,7 @@
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
 
             if (isSuggestion && !props.can_validate) {
-                showDetailStatus('Validation impossible: aucune prestation CRM n est renseignee.', 'error');
+                showDetailStatus('Validation impossible: aucune prestation CRM n’est renseignée.', 'error');
             }
 
             bookingAppointmentModal.classList.remove('hidden');
@@ -2202,17 +2217,17 @@
                 ? ` Creneau client: ${new Date(filters.preferred_starts_at).toLocaleString('fr-FR')}.`
                 : '';
             document.getElementById('analysis-subtitle').textContent = filters.service_required
-                ? `Departement ${filters.department_code} + prestation ${serviceLabel}.${availabilityLabel}`
-                : `Departement ${filters.department_code}; aucun service renseigne, pas de filtre prestation.${availabilityLabel}`;
+                ? `Département ${filters.department_code} + prestation ${serviceLabel}.${availabilityLabel}`
+                : `Département ${filters.department_code}; aucun service renseigné, pas de filtre prestation.${availabilityLabel}`;
 
             if (technicians.length === 0) {
-                techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:#fecdd3;background:#fff1f2;color:#be123c;">Aucun technicien ne couvre ce departement avec ces criteres.</div>';
+                techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:#fecdd3;background:#fff1f2;color:#be123c;">Aucun technicien ne couvre ce département avec ces critères.</div>';
                 return;
             }
 
             techniciansList.innerHTML = technicians.map((technician, index) => {
                 const coverageBadge = technician.covers_requested_department
-                    ? '<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">Departement couvert</span>'
+                    ? '<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">Département couvert</span>'
                     : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Fallback proximite</span>';
                 const technicianId = String(technician.id);
                 const isSelected = selectedTechnicianIds.has(technicianId);
@@ -2233,7 +2248,7 @@
                             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" style="background:${color};">${rankLabel}</span>
                             <div class="min-w-0">
                                 <h3 class="font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</h3>
-                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(technician.phone || 'Telephone non renseigne')}</p>
+                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(technician.phone || 'Téléphone non renseigné')}</p>
                                 <div class="mt-2 flex flex-wrap gap-2">
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_distance_km)} km voiture</span>
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_duration_minutes)} min</span>
@@ -2426,7 +2441,7 @@
             }
         };
 
-        const analyzeAppointment = async (payload, sourceLabel = 'RDV') => {
+        const analyzeAppointment = async (payload, sourceLabel = 'RDV', { scrollToResults = true } = {}) => {
             currentAnalysisPayload = payload;
             currentCrmAppointmentId = payload.crm_appointment_id || null;
             analysisSection.classList.remove('hidden');
@@ -2468,13 +2483,16 @@
                 renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
                 await renderMap(currentAppointmentRequest, selectedTechnicians());
                 renderCalendar(currentCalendarEvents, currentCalendarSuggestions, currentFilters?.preferred_starts_at || null);
-                await finishBookingAnalysisLoader('Analyse terminee, affichage des resultats.');
+                await finishBookingAnalysisLoader('Analyse terminée, affichage des résultats.');
+                if (scrollToResults) {
+                    scrollToBookingResults();
+                }
                 window.setTimeout(() => {
                     shouldFetchCalendarWindow = true;
                 }, 250);
 
                 if (data.technicians.length === 0) {
-                    showFeedback(`Aucun technicien eligible pour ce ${sourceLabel}.`, 'error');
+                    showFeedback(`Aucun technicien éligible pour ce ${sourceLabel}.`, 'error');
                 } else if (suggestions.length === 0) {
                     showFeedback('Aucune proposition de placement calculee avec les contraintes actuelles.', 'error');
                 } else if (sourceLabel === 'RDV manuel' || sourceLabel === 'RDV lot') {
@@ -2484,7 +2502,7 @@
                 return true;
             } catch (error) {
                 await finishBookingAnalysisLoader('Analyse interrompue.');
-                showFeedback(error.message || 'Erreur pendant l analyse du RDV.', 'error');
+                showFeedback(error.message || 'Erreur pendant l’analyse du RDV.', 'error');
                 return false;
             }
         };
@@ -2544,7 +2562,7 @@
 
         const renderTechnicianSearchResults = (technicians) => {
             if (technicians.length === 0) {
-                technicianSearchResults.innerHTML = '<div class="rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Aucun technicien trouve.</div>';
+                technicianSearchResults.innerHTML = '<div class="rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Aucun technicien trouvé.</div>';
                 technicianSearchResults.classList.remove('hidden');
                 return;
             }
@@ -2553,7 +2571,7 @@
                 const technicianId = String(technician.id);
                 const isKnown = currentTechnicians.some((currentTechnician) => String(currentTechnician.id) === technicianId);
                 const isSelected = selectedTechnicianIds.has(technicianId);
-                const actionLabel = isSelected ? 'Deja affiche' : (isKnown ? 'Recocher' : 'Ajouter');
+                const actionLabel = isSelected ? 'Déjà affiche' : (isKnown ? 'Recocher' : 'Ajouter');
                 const coverageLabel = technician.covers_requested_department ? 'Dept. couvert' : 'Hors dept.';
                 const absenceLabel = technician.absence_label ? ` · ${technician.absence_label}` : '';
 
@@ -2588,7 +2606,7 @@
                     await refreshBookingOutputs({ fetchCalendar: true });
                     technicianSearchInput.value = '';
                     clearTechnicianSearch();
-                    setTechnicianSearchStatus(`${technician.name} ajoute a la selection.`);
+                    setTechnicianSearchStatus(`${technician.name} ajouté à la Sélection.`);
                 });
             });
         };
@@ -2602,7 +2620,7 @@
             }
 
             if (!currentAnalysisPayload) {
-                setTechnicianSearchStatus('Lance d abord une analyse CRM ou manuelle.', 'error');
+                setTechnicianSearchStatus('Lance d’abord une analyse CRM ou manuelle.', 'error');
                 return;
             }
 
@@ -2714,7 +2732,7 @@
             const manualPayload = manualAppointmentPayload();
 
             if (!manualPayload.department_code || !manualPayload.latitude || !manualPayload.longitude) {
-                setManualStatus('Selectionne une adresse Mapbox pour recuperer le departement et les coordonnees.', 'error');
+                setManualStatus('Sélectionne une adresse Mapbox pour récupérer le département et les coordonnées.', 'error');
                 return;
             }
 
@@ -2724,7 +2742,7 @@
             try {
                 const analyzed = await analyzeAppointment({ manual_appointment: manualPayload }, 'RDV manuel');
                 if (analyzed) {
-                    setManualStatus('Recherche lancee.');
+                    setManualStatus('Recherche lancée.');
                 }
             } finally {
                 submitButton.disabled = false;
@@ -2800,7 +2818,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    const firstError = data?.errors ? Object.values(data.errors)[0][0] : data.message || 'Creation impossible.';
+                    const firstError = data?.errors ? Object.values(data.errors)[0][0] : data.message || 'Création impossible.';
                     throw new Error(firstError);
                 }
 
@@ -2808,7 +2826,7 @@
                 closeBookingAppointmentModal();
                 showPlacementConfirmation(data, payload, confirmedEvent);
             } catch (error) {
-                showDetailStatus(error.message || 'Creation impossible.', 'error');
+                showDetailStatus(error.message || 'Création impossible.', 'error');
             } finally {
                 button.disabled = false;
                 button.textContent = 'Valider la prise du RDV';

@@ -48,19 +48,19 @@ class ManagerDashboardDataService
             ],
             'stats' => [
                 [
-                    'label' => 'RDV places cette semaine',
+                    'label' => 'RDV placés cette semaine',
                     'value' => $appointmentsThisWeek,
-                    'detail' => $this->formatDelta($appointmentsThisWeek, $appointmentsLastWeek).' vs semaine derniere',
+                    'detail' => $this->formatDelta($appointmentsThisWeek, $appointmentsLastWeek).' vs semaine dernière',
                     'tone' => 'blue',
                 ],
                 [
-                    'label' => 'RDV planifies',
+                    'label' => 'RDV planifiés',
                     'value' => $scheduledThisWeek,
                     'detail' => "{$cancelledThisWeek} annulation(s) cette semaine",
                     'tone' => 'green',
                 ],
                 [
-                    'label' => 'Km terrain estimes',
+                    'label' => 'Km terrain estimés',
                     'value' => "{$totalKm} km",
                     'detail' => "{$averageKmPerAppointment} km / RDV",
                     'tone' => 'gold',
@@ -68,7 +68,7 @@ class ManagerDashboardDataService
                 [
                     'label' => 'Temps de route',
                     'value' => "{$totalDriveHours}h",
-                    'detail' => $metrics->where('calculation_source', 'mapbox')->count().' jour(s) calcules Mapbox',
+                    'detail' => $metrics->where('calculation_source', 'mapbox')->count().' jour(s) calculés Mapbox',
                     'tone' => 'pink',
                 ],
                 [

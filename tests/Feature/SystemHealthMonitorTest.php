@@ -3,10 +3,14 @@
 use App\Models\SystemErrorEvent;
 use App\Models\SystemHealthCheck;
 use App\Models\SystemHealthSnapshot;
+use App\Models\SystemTestRun;
 use App\Models\User;
+use App\Jobs\RunSystemTestsJob;
 use App\Services\SystemHealthMonitor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -80,8 +84,8 @@ it('renders the admin health dashboard for admins', function () {
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertOk()
-        ->assertSee('Sante du site')
-        ->assertSee('Score sante');
+        ->assertSee('Santé du site')
+        ->assertSee('Score santé');
 });
 
 it('blocks the admin health dashboard for non-admin users', function () {
@@ -98,4 +102,93 @@ it('blocks the admin health dashboard for non-admin users', function () {
     $this->actingAs($user)
         ->get(route('admin.dashboard'))
         ->assertForbidden();
+});
+
+it('clears application logs and aggregated system errors from the admin dashboard', function () {
+    fakeHealthLog();
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'clear-logs@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+    $logPath = storage_path('logs/admin-dashboard-clear-test.log');
+    File::ensureDirectoryExists(dirname($logPath));
+    File::put($logPath, 'local.ERROR: boom');
+    SystemErrorEvent::query()->create([
+        'source' => 'laravel.log',
+        'severity' => 'ERROR',
+        'fingerprint' => hash('sha256', 'boom'),
+        'message' => 'boom',
+        'first_seen_at' => now(),
+        'last_seen_at' => now(),
+        'occurrences' => 1,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.dashboard.logs.clear'))
+        ->assertRedirect();
+
+    expect(File::get($logPath))->toBe('')
+        ->and(SystemErrorEvent::query()->count())->toBe(0);
+});
+
+it('queues a system test run from the admin dashboard', function () {
+    Queue::fake();
+    fakeHealthLog();
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'run-tests@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.dashboard.tests.run'), [
+            'suite' => SystemTestRun::SUITE_FEATURE,
+        ])
+        ->assertRedirect();
+
+    $run = SystemTestRun::query()->first();
+
+    expect($run)->not->toBeNull()
+        ->and($run->status)->toBe(SystemTestRun::STATUS_QUEUED)
+        ->and($run->suite)->toBe(SystemTestRun::SUITE_FEATURE)
+        ->and($run->triggered_by)->toBe($admin->id);
+
+    Queue::assertPushed(RunSystemTestsJob::class);
+});
+
+it('does not queue parallel system test runs', function () {
+    Queue::fake();
+    fakeHealthLog();
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'parallel-tests@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+    SystemTestRun::query()->create([
+        'triggered_by' => $admin->id,
+        'suite' => SystemTestRun::SUITE_ALL,
+        'status' => SystemTestRun::STATUS_RUNNING,
+        'started_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.dashboard'))
+        ->post(route('admin.dashboard.tests.run'), [
+            'suite' => SystemTestRun::SUITE_UNIT,
+        ])
+        ->assertRedirect(route('admin.dashboard'))
+        ->assertSessionHasErrors('tests');
+
+    expect(SystemTestRun::query()->count())->toBe(1);
+    Queue::assertNotPushed(RunSystemTestsJob::class);
 });

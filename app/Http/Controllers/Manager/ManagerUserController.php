@@ -115,7 +115,7 @@ class ManagerUserController extends Controller
 
         Mail::to($user->email)->send(new UserCreatedCredentialsMail($user, $plainPassword));
 
-        return redirect()->route('manager.users')->with('status', 'Utilisateur cree et email envoye.');
+        return redirect()->route('manager.users')->with('status', 'Utilisateur créé et email envoyé.');
     }
 
     public function update(Request $request, int $user): RedirectResponse
@@ -155,7 +155,7 @@ class ManagerUserController extends Controller
         $target->save();
         $this->syncTechRelations($target, $payload);
 
-        return redirect()->route('manager.users')->with('status', 'Utilisateur mis a jour.');
+        return redirect()->route('manager.users')->with('status', 'Utilisateur mis à jour.');
     }
 
     public function destroy(Request $request, int $user): RedirectResponse
@@ -165,12 +165,12 @@ class ManagerUserController extends Controller
         $target = User::where('admin', false)->findOrFail($user);
 
         if ($request->user()->is($target)) {
-            return back()->withErrors(['user' => 'Impossible de desactiver votre propre compte.']);
+            return back()->withErrors(['user' => 'Impossible de désactiver votre propre compte.']);
         }
 
         $target->delete();
 
-        return redirect()->route('manager.users')->with('status', 'Utilisateur desactive (soft delete).');
+        return redirect()->route('manager.users')->with('status', 'Utilisateur désactivé.');
     }
 
     public function restore(Request $request, int $user): RedirectResponse
@@ -190,16 +190,16 @@ class ManagerUserController extends Controller
         $target = User::withTrashed()->where('admin', false)->findOrFail($user);
 
         if (! $target->trashed()) {
-            return back()->withErrors(['user' => 'Suppression definitive autorisee uniquement apres soft delete.']);
+            return back()->withErrors(['user' => 'Suppression définitive autorisée uniquement après soft delete.']);
         }
 
         if ($request->user()->is($target)) {
-            return back()->withErrors(['user' => 'Impossible de supprimer definitivement votre propre compte.']);
+            return back()->withErrors(['user' => 'Impossible de supprimer définitivement votre propre compte.']);
         }
 
         $target->forceDelete();
 
-        return redirect()->route('manager.users', ['status' => 'trashed'])->with('status', 'Utilisateur supprime definitivement.');
+        return redirect()->route('manager.users', ['status' => 'trashed'])->with('status', 'Utilisateur supprimé définitivement.');
     }
 
     public function sendResetLink(Request $request, int $user): RedirectResponse
@@ -209,7 +209,7 @@ class ManagerUserController extends Controller
         $target = User::withTrashed()->where('admin', false)->findOrFail($user);
 
         if ($target->trashed()) {
-            return back()->withErrors(['user' => 'Impossible d envoyer un lien de reset a un compte supprime.']);
+            return back()->withErrors(['user' => 'Impossible d envoyér un lien de reset à un compte supprimé.']);
         }
 
         $status = Password::sendResetLink(['email' => $target->email]);
@@ -218,7 +218,7 @@ class ManagerUserController extends Controller
             return back()->withErrors(['user' => __($status)]);
         }
 
-        return redirect()->route('manager.users')->with('status', 'Lien de reinitialisation envoye.');
+        return redirect()->route('manager.users')->with('status', 'Lien de reinitialisation envoyé.');
     }
 
     public function storeAbsence(Request $request, int $user): RedirectResponse
@@ -248,7 +248,7 @@ class ManagerUserController extends Controller
 
         if ($overlapExists) {
             return back()->withErrors([
-                'absence' => 'Une absence existe deja sur cette periode pour ce technicien.',
+                'absence' => 'Une absence existe déjà sur cette période pour ce technicien.',
             ])->withInput();
         }
 
@@ -260,7 +260,7 @@ class ManagerUserController extends Controller
             'reason' => filled($payload['reason'] ?? null) ? trim((string) $payload['reason']) : null,
         ]);
 
-        return redirect()->route('manager.users', $request->query())->with('status', 'Absence ajoutee.');
+        return redirect()->route('manager.users', $request->query())->with('status', 'Absence ajoutée.');
     }
 
     public function destroyAbsence(Request $request, int $user, TechnicianAbsence $absence): RedirectResponse
@@ -277,7 +277,7 @@ class ManagerUserController extends Controller
 
         $absence->delete();
 
-        return redirect()->route('manager.users', $request->query())->with('status', 'Absence supprimee.');
+        return redirect()->route('manager.users', $request->query())->with('status', 'Absence supprimée.');
     }
 
     private function canManageUsers(Request $request): bool

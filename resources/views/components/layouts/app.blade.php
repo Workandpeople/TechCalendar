@@ -31,7 +31,7 @@
                     'items' => [
                         ['route' => 'admin.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'admin.users', 'label' => 'Gestion des users', 'icon' => 'users'],
-                        ['route' => 'admin.settings', 'label' => 'Parametres', 'icon' => 'settings'],
+                        ['route' => 'admin.settings', 'label' => 'Paramètres', 'icon' => 'settings'],
                     ],
                 ];
 
@@ -43,7 +43,7 @@
                 ];
 
                 $sections[] = [
-                    'label' => 'Gerant',
+                    'label' => 'Gérant',
                     'items' => [
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
@@ -63,7 +63,7 @@
                 ];
             } elseif ($user->role === 0) {
                 $sections[] = [
-                    'label' => 'Gerant',
+                    'label' => 'Gérant',
                     'items' => [
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
@@ -91,7 +91,7 @@
             @if ($showSidebar)
                 <aside id="app-sidebar" class="app-sidebar h-screen shrink-0 overflow-y-auto border-r border-[color:var(--gc-border)] bg-white">
                     <div class="sidebar-header flex h-16 items-center justify-between border-b border-[color:var(--gc-border)] px-4">
-                        <img src="{{ asset('images/logo.png') }}" alt="Genius Controle" class="sidebar-logo h-10 w-auto" />
+                        <img src="{{ asset('images/logo.png') }}" alt="Genius Contrôle" class="sidebar-logo h-10 w-auto" />
                         <button id="sidebar-toggle" type="button" class="sidebar-toggle rounded-lg p-2 text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]" aria-label="Replier le menu" aria-expanded="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-5 w-5">
                                 <path class="sidebar-chevron" d="m15 18-6-6 6-6" />
@@ -137,7 +137,7 @@
                             <div id="header-user-menu-dropdown" role="menu" class="header-user-menu-dropdown absolute right-0 top-full z-20 mt-2 w-40 rounded-xl border border-[color:var(--gc-border)] bg-white p-1 shadow-md">
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
-                                    <button type="submit" role="menuitem" class="w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Deconnexion</button>
+                                    <button type="submit" role="menuitem" class="w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Déconnexion</button>
                                 </form>
                             </div>
                         </div>
@@ -157,7 +157,7 @@
                 <div class="gc-modal-panel max-w-md">
                     <h2 class="text-lg font-semibold">Changement de mot de passe requis</h2>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                        Pour votre premiere connexion, vous devez definir un nouveau mot de passe.
+                        Pour votre première connexion, vous devez définir un nouveau mot de passe.
                     </p>
                     <form method="POST" action="{{ route('account.first-password.update') }}" class="mt-4 space-y-4" data-validate-form>
                         @csrf
@@ -169,7 +169,7 @@
                             <label class="gc-label" for="first_login_password_confirmation">Confirmation</label>
                             <input id="first_login_password_confirmation" name="password_confirmation" type="password" class="gc-input" required autocomplete="new-password" />
                         </div>
-                        <button type="submit" class="gc-btn-primary w-full">Mettre a jour le mot de passe</button>
+                        <button type="submit" class="gc-btn-primary w-full">Mettre à jour le mot de passe</button>
                     </form>
                 </div>
             </div>
