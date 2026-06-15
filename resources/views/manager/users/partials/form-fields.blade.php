@@ -1,5 +1,6 @@
 @php
     $target = $user;
+    $formatTimeValue = fn ($value): string => filled($value) ? substr((string) $value, 0, 5) : '';
 @endphp
 
 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -91,12 +92,12 @@
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
             <label class="gc-label" for="{{ $prefix }}_day_start_time">Début de journée</label>
-            <input id="{{ $prefix }}_day_start_time" name="day_start_time" type="time" class="gc-input" value="{{ old('day_start_time', $target?->day_start_time) }}" />
+            <input id="{{ $prefix }}_day_start_time" name="day_start_time" type="time" class="gc-input" value="{{ $formatTimeValue(old('day_start_time', $target?->day_start_time)) }}" />
         </div>
 
         <div>
             <label class="gc-label" for="{{ $prefix }}_day_end_time">Fin de journée</label>
-            <input id="{{ $prefix }}_day_end_time" name="day_end_time" type="time" class="gc-input" value="{{ old('day_end_time', $target?->day_end_time) }}" />
+            <input id="{{ $prefix }}_day_end_time" name="day_end_time" type="time" class="gc-input" value="{{ $formatTimeValue(old('day_end_time', $target?->day_end_time)) }}" />
         </div>
     </div>
 </div>

@@ -49,11 +49,11 @@ class AdminUserController extends Controller
             });
         }
 
-        if (array_key_exists('role', $validated)) {
+        if (filled($validated['role'] ?? null)) {
             $query->where('role', (int) $validated['role']);
         }
 
-        if (array_key_exists('admin', $validated)) {
+        if (filled($validated['admin'] ?? null)) {
             $query->where('admin', (bool) $validated['admin']);
         }
 
@@ -75,6 +75,8 @@ class AdminUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         abort_unless((bool) $request->user()?->admin, 403);
+
+        $this->normalizeTechTimeInputs($request);
 
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
@@ -117,6 +119,8 @@ class AdminUserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         abort_unless((bool) $request->user()?->admin, 403);
+
+        $this->normalizeTechTimeInputs($request);
 
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
@@ -243,6 +247,29 @@ class AdminUserController extends Controller
             'day_end_time' => $payload['day_end_time'],
             'break_duration_minutes' => (int) $payload['break_duration_minutes'],
         ];
+    }
+
+    private function normalizeTechTimeInputs(Request $request): void
+    {
+        $normalized = [];
+
+        foreach (['day_start_time', 'day_end_time'] as $field) {
+            $value = $request->input($field);
+
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+
+            if (preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', trim($value), $matches) !== 1) {
+                continue;
+            }
+
+            $normalized[$field] = sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+        }
+
+        if ($normalized !== []) {
+            $request->merge($normalized);
+        }
     }
 
     private function syncTechRelations(User $user, array $payload): void

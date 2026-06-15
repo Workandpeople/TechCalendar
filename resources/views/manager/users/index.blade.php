@@ -90,8 +90,8 @@
                                                 data-user-department-code="{{ $user->department_code }}"
                                                 data-user-latitude="{{ $user->latitude }}"
                                                 data-user-longitude="{{ $user->longitude }}"
-                                                data-user-day-start-time="{{ $user->day_start_time }}"
-                                                data-user-day-end-time="{{ $user->day_end_time }}"
+                                                data-user-day-start-time="{{ filled($user->day_start_time) ? substr((string) $user->day_start_time, 0, 5) : '' }}"
+                                                data-user-day-end-time="{{ filled($user->day_end_time) ? substr((string) $user->day_end_time, 0, 5) : '' }}"
                                                 data-user-break-duration-minutes="{{ $user->break_duration_minutes }}"
                                                 data-user-service-ids='@json($user->services->pluck('id')->values())'
                                                 data-user-department-codes='@json($user->departments->pluck('code')->values())'
@@ -649,8 +649,8 @@
                     document.getElementById('edit_department_code').value = button.dataset.userDepartmentCode || '';
                     document.getElementById('edit_latitude').value = button.dataset.userLatitude || '';
                     document.getElementById('edit_longitude').value = button.dataset.userLongitude || '';
-                    document.getElementById('edit_day_start_time').value = button.dataset.userDayStartTime || '';
-                    document.getElementById('edit_day_end_time').value = button.dataset.userDayEndTime || '';
+                    document.getElementById('edit_day_start_time').value = (button.dataset.userDayStartTime || '').slice(0, 5);
+                    document.getElementById('edit_day_end_time').value = (button.dataset.userDayEndTime || '').slice(0, 5);
                     document.getElementById('edit_break_duration_minutes').value = button.dataset.userBreakDurationMinutes || '';
                     setCheckboxValues('[data-service-checkbox="edit"]', parseJsonDataset(button.dataset.userServiceIds));
                     syncServiceSelectAll('edit');
@@ -717,18 +717,34 @@
             const instantInputs = ['role', 'status']
                 .map((id) => document.getElementById(id))
                 .filter(Boolean);
+            let filtersDebounceTimer;
+            let lastSubmittedFilters = new URLSearchParams(new FormData(filtersForm)).toString();
 
-            instantInputs.forEach((input) => {
-                input.addEventListener('change', () => filtersForm.submit());
-            });
+            const submitFilters = () => {
+                const currentFilters = new URLSearchParams(new FormData(filtersForm)).toString();
 
-            let debounceTimer;
+                if (currentFilters === lastSubmittedFilters) {
+                    return;
+                }
+
+                lastSubmittedFilters = currentFilters;
+                filtersForm.submit();
+            };
+
+            const scheduleFiltersSubmit = (delay = 800) => {
+                clearTimeout(filtersDebounceTimer);
+                filtersDebounceTimer = setTimeout(submitFilters, delay);
+            };
+
             if (searchInput) {
                 searchInput.addEventListener('input', () => {
-                    clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(() => filtersForm.submit(), 350);
+                    scheduleFiltersSubmit(800);
                 });
             }
+
+            instantInputs.forEach((input) => {
+                input.addEventListener('change', () => scheduleFiltersSubmit(250));
+            });
         }
 
         roleInputs.forEach((input) => {

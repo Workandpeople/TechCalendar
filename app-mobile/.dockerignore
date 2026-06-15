@@ -1,0 +1,12 @@
+node_modules
+vendor/bundle
+ios/Pods
+ios/build
+android/.gradle
+android/app/build
+android/build
+.git
+.DS_Store
+npm-debug.log
+yarn-error.log
+coverage
