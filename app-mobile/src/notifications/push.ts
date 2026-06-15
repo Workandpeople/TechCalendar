@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { getApp } from '@react-native-firebase/app';
 import {
   AuthorizationStatus,
+  hasPermission,
   getInitialNotification,
   getMessaging,
   getToken,
@@ -25,23 +26,31 @@ export async function registerForPushNotifications(): Promise<boolean> {
 
   try {
     const permission = await requestPermission(messaging);
-    const isAuthorized = permission === AuthorizationStatus.AUTHORIZED
-      || permission === AuthorizationStatus.PROVISIONAL;
-
-    if (!isAuthorized) {
+    if (!isPermissionAuthorized(permission)) {
       return false;
     }
 
-    await registerDeviceForRemoteMessages(messaging);
-    const token = await getToken(messaging);
+    return registerCurrentDeviceToken(messaging);
+  } catch {
+    return false;
+  }
+}
 
-    if (!token) {
+export async function registerPushTokenIfAuthorized(): Promise<boolean> {
+  const messaging = getMessagingInstance();
+
+  if (!messaging) {
+    return false;
+  }
+
+  try {
+    const permission = await hasPermission(messaging);
+
+    if (!isPermissionAuthorized(permission)) {
       return false;
     }
 
-    await registerPushToken(token, Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown');
-
-    return true;
+    return registerCurrentDeviceToken(messaging);
   } catch {
     return false;
   }
@@ -99,4 +108,22 @@ function getMessagingInstance() {
   } catch {
     return null;
   }
+}
+
+function isPermissionAuthorized(permission: number): boolean {
+  return permission === AuthorizationStatus.AUTHORIZED
+    || permission === AuthorizationStatus.PROVISIONAL;
+}
+
+async function registerCurrentDeviceToken(messaging: NonNullable<ReturnType<typeof getMessagingInstance>>): Promise<boolean> {
+  await registerDeviceForRemoteMessages(messaging);
+  const token = await getToken(messaging);
+
+  if (!token) {
+    return false;
+  }
+
+  await registerPushToken(token, Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown');
+
+  return true;
 }

@@ -33,7 +33,15 @@ import {
 import { ApiError, isNetworkError } from './src/api/client';
 import { updateNotificationPreferences } from './src/api/preferences';
 import { getPlanning } from './src/api/planning';
-import { getCachedPlanning, getCachedPlanningInfo, getCachedUser } from './src/storage/cache';
+import {
+  getCachedPlanning,
+  getCachedPlanningInfo,
+  getCachedUser,
+  getPushOnboardingDecision,
+  markBiometricOnboardingAsked,
+  setPushOnboardingDecision,
+  wasBiometricOnboardingAsked,
+} from './src/storage/cache';
 import {
   getBiometricCredentials,
   getBiometryType,
@@ -44,6 +52,7 @@ import {
 import {
   getOpeningNotification,
   registerForPushNotifications,
+  registerPushTokenIfAuthorized,
   subscribeToForegroundMessages,
   subscribeToNotificationOpens,
   subscribeToPushTokenRefresh,
@@ -208,12 +217,13 @@ function formatBiometryLabel(type: string): string {
 }
 
 async function askForBiometricEnrollment(): Promise<void> {
-  const [biometryType, alreadyConfigured] = await Promise.all([
+  const [biometryType, alreadyConfigured, alreadyAsked] = await Promise.all([
     getBiometryType(),
     hasBiometricCredentials(),
+    wasBiometricOnboardingAsked(),
   ]);
 
-  if (!biometryType || alreadyConfigured) {
+  if (!biometryType || alreadyConfigured || alreadyAsked) {
     return;
   }
 
@@ -227,12 +237,17 @@ async function askForBiometricEnrollment(): Promise<void> {
         {
           text: 'Plus tard',
           style: 'cancel',
-          onPress: () => resolve(),
+          onPress: () => {
+            markBiometricOnboardingAsked()
+              .catch(() => undefined)
+              .finally(() => resolve());
+          },
         },
         {
           text: 'Activer',
           onPress: () => {
-            setBiometricCredentialsFromOfflineCredentials()
+            markBiometricOnboardingAsked()
+              .then(() => setBiometricCredentialsFromOfflineCredentials())
               .then(enabled => {
                 if (!enabled) {
                   Alert.alert('Activation impossible', `${label} n’a pas pu être activé sur cet appareil.`);
@@ -247,6 +262,16 @@ async function askForBiometricEnrollment(): Promise<void> {
 }
 
 async function askForPushEnrollment(): Promise<boolean> {
+  const decision = await getPushOnboardingDecision();
+
+  if (decision === 'accepted') {
+    return registerForPushNotifications();
+  }
+
+  if (decision === 'declined') {
+    return false;
+  }
+
   return new Promise<boolean>(resolve => {
     Alert.alert(
       'Activer les notifications ?',
@@ -255,12 +280,17 @@ async function askForPushEnrollment(): Promise<boolean> {
         {
           text: 'Plus tard',
           style: 'cancel',
-          onPress: () => resolve(false),
+          onPress: () => {
+            setPushOnboardingDecision('declined')
+              .catch(() => undefined)
+              .finally(() => resolve(false));
+          },
         },
         {
           text: 'Autoriser',
           onPress: () => {
-            registerForPushNotifications()
+            setPushOnboardingDecision('accepted')
+              .then(() => registerForPushNotifications())
               .then(resolve)
               .catch(() => resolve(false));
           },
@@ -784,6 +814,8 @@ function PlanningScreen({
     }
 
     const unsubscribeTokenRefresh = subscribeToPushTokenRefresh();
+    registerPushTokenIfAuthorized().catch(() => undefined);
+
     const unsubscribeForeground = subscribeToForegroundMessages(message => {
       Alert.alert(
         message.notification?.title || 'Planning mis à jour',
@@ -1144,7 +1176,9 @@ function ProfileModal({
       onUserUpdated(updatedUser);
 
       if (key === 'notification_push_enabled' && value) {
-        registerForPushNotifications().catch(() => undefined);
+        setPushOnboardingDecision('accepted')
+          .then(() => registerForPushNotifications())
+          .catch(() => undefined);
       }
     } catch (exception) {
       setError(errorMessage(exception));

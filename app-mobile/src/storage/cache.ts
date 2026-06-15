@@ -4,6 +4,10 @@ import { MobileUser, PlanningCacheInfo, PlanningPayload } from '../types/api';
 const USER_CACHE_KEY = 'tech-calendar.cached-user';
 const PLANNING_CACHE_KEY = 'tech-calendar.cached-planning';
 const PLANNING_CACHE_INFO_KEY = 'tech-calendar.cached-planning-info';
+const BIOMETRIC_ONBOARDING_ASKED_KEY = 'tech-calendar.biometric-onboarding-asked';
+const PUSH_ONBOARDING_DECISION_KEY = 'tech-calendar.push-onboarding-decision';
+
+export type PushOnboardingDecision = 'accepted' | 'declined';
 
 export async function setCachedUser(user: MobileUser): Promise<void> {
   await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
@@ -51,6 +55,24 @@ export async function clearCachedSession(): Promise<void> {
     AsyncStorage.removeItem(PLANNING_CACHE_KEY),
     AsyncStorage.removeItem(PLANNING_CACHE_INFO_KEY),
   ]);
+}
+
+export async function wasBiometricOnboardingAsked(): Promise<boolean> {
+  return await AsyncStorage.getItem(BIOMETRIC_ONBOARDING_ASKED_KEY) === 'true';
+}
+
+export async function markBiometricOnboardingAsked(): Promise<void> {
+  await AsyncStorage.setItem(BIOMETRIC_ONBOARDING_ASKED_KEY, 'true');
+}
+
+export async function getPushOnboardingDecision(): Promise<PushOnboardingDecision | null> {
+  const decision = await AsyncStorage.getItem(PUSH_ONBOARDING_DECISION_KEY);
+
+  return decision === 'accepted' || decision === 'declined' ? decision : null;
+}
+
+export async function setPushOnboardingDecision(decision: PushOnboardingDecision): Promise<void> {
+  await AsyncStorage.setItem(PUSH_ONBOARDING_DECISION_KEY, decision);
 }
 
 async function readJson<T>(key: string): Promise<T | null> {
