@@ -23,3 +23,7 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Firebase mobile client configs. Keep real app configs local/CI-injected.
+/app-mobile/android/app/google-services.json
+/app-mobile/ios/TechCalendarMobile/GoogleService-Info.plist

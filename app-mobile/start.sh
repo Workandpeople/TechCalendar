@@ -49,8 +49,8 @@ CONFIG
 
 npm install
 
-docker compose up --build -d
-docker compose exec -T metro npm install
+# Renew the anonymous node_modules volume so Metro cannot keep stale dependencies.
+docker compose up --build -d --force-recreate --renew-anon-volumes
 
 printf "Waiting for Metro on port 8081..."
 for i in {1..30}; do

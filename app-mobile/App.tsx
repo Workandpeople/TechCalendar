@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -11,28 +11,44 @@ import {
   RefreshControl,
   SafeAreaView,
   ScrollView,
-  Share,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
+import Share from 'react-native-share';
 import {
   changeFirstPassword,
   login as apiLogin,
   logout as apiLogout,
   me as apiMe,
   offlineLogin,
+  restoreOnlineSessionFromOfflineCredentials,
 } from './src/api/auth';
 import { ApiError, isNetworkError } from './src/api/client';
+import { updateNotificationPreferences } from './src/api/preferences';
 import { getPlanning } from './src/api/planning';
-import { getCachedPlanning, getCachedUser } from './src/storage/cache';
-import { getToken } from './src/storage/secure';
+import { getCachedPlanning, getCachedPlanningInfo, getCachedUser } from './src/storage/cache';
+import {
+  getBiometricCredentials,
+  getBiometryType,
+  getToken,
+  hasBiometricCredentials,
+  setBiometricCredentialsFromOfflineCredentials,
+} from './src/storage/secure';
+import {
+  getOpeningNotification,
+  registerForPushNotifications,
+  subscribeToForegroundMessages,
+  subscribeToNotificationOpens,
+  subscribeToPushTokenRefresh,
+} from './src/notifications/push';
 import colors from './src/theme/colors';
-import { MobileUser, PlanningAppointment, PlanningPayload } from './src/types/api';
+import { MobileUser, PlanningAppointment, PlanningCacheInfo, PlanningPayload } from './src/types/api';
 
 type MenuOption = {
   label: string;
@@ -40,10 +56,13 @@ type MenuOption = {
   destructive?: boolean;
 };
 
+type SessionMode = 'online' | 'offline';
+
 function App(): React.JSX.Element {
   const [user, setUser] = useState<MobileUser | null>(null);
   const [booting, setBooting] = useState(true);
   const [bootNotice, setBootNotice] = useState<string | null>(null);
+  const [sessionMode, setSessionMode] = useState<SessionMode>('online');
 
   useEffect(() => {
     let mounted = true;
@@ -59,6 +78,7 @@ function App(): React.JSX.Element {
           const currentUser = await apiMe();
           if (mounted) {
             setUser(currentUser);
+            setSessionMode('online');
           }
         } catch (exception) {
           if (isNetworkError(exception)) {
@@ -66,6 +86,7 @@ function App(): React.JSX.Element {
 
             if (cachedUser && mounted) {
               setUser(cachedUser);
+              setSessionMode('offline');
               setBootNotice('Mode hors ligne: session restaurée depuis ce téléphone.');
             }
 
@@ -92,6 +113,7 @@ function App(): React.JSX.Element {
     try {
       const loggedUser = await apiLogin(email, password);
       setBootNotice(null);
+      setSessionMode('online');
       setUser(loggedUser);
     } catch (exception) {
       if (isNetworkError(exception)) {
@@ -99,6 +121,7 @@ function App(): React.JSX.Element {
 
         if (cachedUser) {
           setBootNotice('Mode hors ligne: données restaurées depuis la dernière synchronisation.');
+          setSessionMode('offline');
           setUser(cachedUser);
           return;
         }
@@ -113,10 +136,18 @@ function App(): React.JSX.Element {
   const handleLogout = useCallback(async () => {
     await apiLogout();
     setBootNotice(null);
+    setSessionMode('online');
     setUser(null);
   }, []);
 
   const handlePasswordChanged = useCallback((updatedUser: MobileUser) => {
+    setSessionMode('online');
+    setUser(updatedUser);
+  }, []);
+
+  const handleOnlineSessionRestored = useCallback((updatedUser: MobileUser) => {
+    setBootNotice(null);
+    setSessionMode('online');
     setUser(updatedUser);
   }, []);
 
@@ -128,7 +159,14 @@ function App(): React.JSX.Element {
       ) : user?.must_change_password ? (
         <FirstPasswordScreen user={user} notice={bootNotice} onChanged={handlePasswordChanged} onLogout={handleLogout} />
       ) : user ? (
-        <PlanningScreen user={user} initialNotice={bootNotice} onLogout={handleLogout} />
+        <PlanningScreen
+          user={user}
+          initialNotice={bootNotice}
+          sessionMode={sessionMode}
+          onLogout={handleLogout}
+          onOnlineSessionRestored={handleOnlineSessionRestored}
+          onUserUpdated={setUser}
+        />
       ) : (
         <LoginScreen onLogin={handleLogin} />
       )}
@@ -151,13 +189,54 @@ function LoadingScreen(): React.JSX.Element {
   );
 }
 
+function formatBiometryLabel(type: string): string {
+  switch (type) {
+    case 'FaceID':
+      return 'Face ID';
+    case 'TouchID':
+      return 'Touch ID';
+    case 'Fingerprint':
+      return 'l’empreinte digitale';
+    case 'Face':
+      return 'la reconnaissance faciale';
+    case 'Iris':
+      return 'la reconnaissance de l’iris';
+    default:
+      return 'la biométrie';
+  }
+}
+
 function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }): React.JSX.Element {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [biometricSubmitting, setBiometricSubmitting] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canSubmit = email.includes('@') && password.length >= 1 && !submitting;
+  const canSubmit = email.includes('@') && password.length >= 1 && !submitting && !biometricSubmitting;
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadBiometricStatus() {
+      const [biometryType, alreadyConfigured] = await Promise.all([
+        getBiometryType(),
+        hasBiometricCredentials(),
+      ]);
+      const configured = alreadyConfigured || await setBiometricCredentialsFromOfflineCredentials();
+
+      if (mounted && biometryType && configured) {
+        setBiometricLabel(formatBiometryLabel(biometryType));
+      }
+    }
+
+    loadBiometricStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const submit = useCallback(async () => {
     if (!canSubmit) {
@@ -175,6 +254,31 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
       setSubmitting(false);
     }
   }, [canSubmit, email, onLogin, password]);
+
+  const submitWithBiometrics = useCallback(async () => {
+    if (!biometricLabel || biometricSubmitting || submitting) {
+      return;
+    }
+
+    setBiometricSubmitting(true);
+    setError(null);
+
+    try {
+      const credentials = await getBiometricCredentials();
+
+      if (!credentials) {
+        setError('Authentification biométrique annulée ou indisponible.');
+        return;
+      }
+
+      setEmail(credentials.email);
+      await onLogin(credentials.email, credentials.password);
+    } catch (exception) {
+      setError(errorMessage(exception));
+    } finally {
+      setBiometricSubmitting(false);
+    }
+  }, [biometricLabel, biometricSubmitting, onLogin, submitting]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -217,6 +321,24 @@ function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) =
             />
 
             {error ? <Text style={styles.formError}>{error}</Text> : null}
+
+            {biometricLabel ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={submitting || biometricSubmitting}
+                onPress={submitWithBiometrics}
+                style={[styles.biometricButton, (submitting || biometricSubmitting) && styles.primaryButtonDisabled]}
+              >
+                {biometricSubmitting ? (
+                  <ActivityIndicator color={colors.ink} />
+                ) : (
+                  <>
+                    <Text style={styles.biometricButtonIcon}>◇</Text>
+                    <Text style={styles.biometricButtonText}>Se connecter avec {biometricLabel}</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
@@ -341,21 +463,32 @@ function FirstPasswordScreen({
 function PlanningScreen({
   user,
   initialNotice,
+  sessionMode,
   onLogout,
+  onOnlineSessionRestored,
+  onUserUpdated,
 }: {
   user: MobileUser;
   initialNotice: string | null;
+  sessionMode: SessionMode;
   onLogout: () => Promise<void>;
+  onOnlineSessionRestored: (user: MobileUser) => void;
+  onUserUpdated: (user: MobileUser) => void;
 }): React.JSX.Element {
   const netInfo = useNetInfo();
+  const reconnectingRef = useRef(false);
   const [planning, setPlanning] = useState<PlanningPayload | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<PlanningCacheInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [restoreBlocked, setRestoreBlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(initialNotice);
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [selectedAppointment, setSelectedAppointment] = useState<PlanningAppointment | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   const loadPlanning = useCallback(async (asRefresh = false) => {
     if (asRefresh) {
@@ -367,14 +500,21 @@ function PlanningScreen({
 
     try {
       const payload = await getPlanning();
+      const updatedCacheInfo = await getCachedPlanningInfo();
       setPlanning(payload);
+      setCacheInfo(updatedCacheInfo);
       setOfflineNotice(null);
+      setRestoreBlocked(false);
       setSelectedDate(current => selectStableDate(current, payload.appointments));
     } catch (exception) {
-      const cachedPlanning = await getCachedPlanning();
+      const [cachedPlanning, cachedInfo] = await Promise.all([
+        getCachedPlanning(),
+        getCachedPlanningInfo(),
+      ]);
 
       if (cachedPlanning && isNetworkError(exception)) {
         setPlanning(cachedPlanning);
+        setCacheInfo(cachedInfo);
         setSelectedDate(current => selectStableDate(current, cachedPlanning.appointments));
         setOfflineNotice('Mode hors ligne: planning affiché depuis la dernière synchronisation.');
       } else {
@@ -390,10 +530,14 @@ function PlanningScreen({
     let mounted = true;
 
     async function warmStart() {
-      const cachedPlanning = await getCachedPlanning();
+      const [cachedPlanning, cachedInfo] = await Promise.all([
+        getCachedPlanning(),
+        getCachedPlanningInfo(),
+      ]);
 
       if (cachedPlanning && mounted) {
         setPlanning(cachedPlanning);
+        setCacheInfo(cachedInfo);
         setSelectedDate(current => selectStableDate(current, cachedPlanning.appointments));
         setLoading(false);
       }
@@ -409,10 +553,95 @@ function PlanningScreen({
   }, [loadPlanning]);
 
   useEffect(() => {
-    if (netInfo.isConnected && offlineNotice && planning) {
+    if (netInfo.isConnected && offlineNotice && planning && sessionMode === 'online') {
       loadPlanning(true);
     }
-  }, [loadPlanning, netInfo.isConnected, offlineNotice, planning]);
+  }, [loadPlanning, netInfo.isConnected, offlineNotice, planning, sessionMode]);
+
+  useEffect(() => {
+    if (netInfo.isConnected === false) {
+      setRestoreBlocked(false);
+    }
+  }, [netInfo.isConnected]);
+
+  useEffect(() => {
+    if (
+      netInfo.isConnected !== true
+      || sessionMode !== 'offline'
+      || reconnectingRef.current
+      || restoreBlocked
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function restoreSession() {
+      reconnectingRef.current = true;
+      setReconnecting(true);
+      setOfflineNotice('Connexion retrouvée: resynchronisation du planning...');
+      setError(null);
+
+      try {
+        const restoredUser = await restoreOnlineSessionFromOfflineCredentials();
+
+        if (cancelled) {
+          return;
+        }
+
+        onOnlineSessionRestored(restoredUser);
+        await loadPlanning(true);
+      } catch (exception) {
+        if (!cancelled) {
+          setRestoreBlocked(true);
+          setOfflineNotice('Mode hors ligne maintenu: reconnecte-toi en ligne pour resynchroniser ce téléphone.');
+          setError(errorMessage(exception));
+        }
+      } finally {
+        if (!cancelled) {
+          setReconnecting(false);
+        }
+
+        reconnectingRef.current = false;
+      }
+    }
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPlanning, netInfo.isConnected, onOnlineSessionRestored, restoreBlocked, sessionMode]);
+
+  useEffect(() => {
+    if (!user.notification_push_enabled) {
+      return undefined;
+    }
+
+    registerForPushNotifications().catch(() => undefined);
+
+    const unsubscribeTokenRefresh = subscribeToPushTokenRefresh();
+    const unsubscribeForeground = subscribeToForegroundMessages(message => {
+      Alert.alert(
+        message.notification?.title || 'Planning mis à jour',
+        message.notification?.body || 'Ton planning a été modifié.',
+      );
+      loadPlanning(true);
+    });
+    const unsubscribeOpens = subscribeToNotificationOpens(() => loadPlanning(true));
+
+    getOpeningNotification().then(message => {
+      if (message) {
+        loadPlanning(true);
+      }
+    }).catch(() => undefined);
+
+    return () => {
+      unsubscribeTokenRefresh();
+      unsubscribeForeground();
+      unsubscribeOpens();
+    };
+  }, [loadPlanning, user.notification_push_enabled]);
 
   const appointmentsByDate = useMemo(() => groupAppointmentsByDate(planning?.appointments ?? []), [planning]);
   const selectedAppointments = appointmentsByDate.get(selectedDate) ?? [];
@@ -456,6 +685,16 @@ function PlanningScreen({
               <View style={styles.profileDropdown}>
                 <Text style={styles.profileDropdownName}>{user.full_name}</Text>
                 <Text style={styles.profileDropdownEmail}>{user.email}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setProfileOpen(false);
+                    setProfileVisible(true);
+                  }}
+                  style={styles.dropdownProfileButton}
+                >
+                  <Text style={styles.dropdownProfileText}>Profil</Text>
+                </Pressable>
                 <Pressable accessibilityRole="button" onPress={onLogout} style={styles.dropdownLogoutButton}>
                   <Text style={styles.dropdownLogoutText}>Déconnexion</Text>
                 </Pressable>
@@ -466,6 +705,15 @@ function PlanningScreen({
 
         {offlineNotice ? <Text style={styles.offlineBanner}>{offlineNotice}</Text> : null}
         {netInfo.isConnected === false ? <Text style={styles.offlineBanner}>Aucune connexion détectée.</Text> : null}
+        {reconnecting ? (
+          <View style={styles.syncStatusCard}>
+            <ActivityIndicator color={colors.ink} />
+            <View style={styles.syncStatusTextBlock}>
+              <Text style={styles.syncStatusTitle}>Retour en ligne détecté</Text>
+              <Text style={styles.syncStatusText}>Restauration de la session et synchronisation du planning...</Text>
+            </View>
+          </View>
+        ) : null}
 
         {loading && !planning ? (
           <View style={styles.mobileLoader}>
@@ -498,6 +746,11 @@ function PlanningScreen({
                 tone="coral"
               />
             </View>
+
+            <SyncInfoCard
+              cacheInfo={cacheInfo}
+              isOffline={sessionMode === 'offline' || netInfo.isConnected === false}
+            />
 
             <NextAppointmentCard
               appointment={planning.widgets.next_appointment}
@@ -533,6 +786,12 @@ function PlanningScreen({
       <AppointmentDetailsModal
         appointment={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
+      />
+      <ProfileModal
+        visible={profileVisible}
+        user={user}
+        onClose={() => setProfileVisible(false)}
+        onUserUpdated={onUserUpdated}
       />
     </SafeAreaView>
   );
@@ -691,6 +950,109 @@ function AppointmentDetailsModal({
   );
 }
 
+function ProfileModal({
+  visible,
+  user,
+  onClose,
+  onUserUpdated,
+}: {
+  visible: boolean;
+  user: MobileUser;
+  onClose: () => void;
+  onUserUpdated: (user: MobileUser) => void;
+}): React.JSX.Element {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const updatePreference = useCallback(async (key: 'notification_mail_enabled' | 'notification_push_enabled', value: boolean) => {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const updatedUser = await updateNotificationPreferences({
+        notification_mail_enabled: key === 'notification_mail_enabled' ? value : user.notification_mail_enabled,
+        notification_push_enabled: key === 'notification_push_enabled' ? value : user.notification_push_enabled,
+      });
+
+      onUserUpdated(updatedUser);
+
+      if (key === 'notification_push_enabled' && value) {
+        registerForPushNotifications().catch(() => undefined);
+      }
+    } catch (exception) {
+      setError(errorMessage(exception));
+    } finally {
+      setSaving(false);
+    }
+  }, [onUserUpdated, saving, user.notification_mail_enabled, user.notification_push_enabled]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.appointmentModal}>
+          <View style={styles.modalHandle} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleBlock}>
+                <Text style={styles.modalEyebrow}>Profil technicien</Text>
+                <Text style={styles.modalTitle}>{user.full_name}</Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={onClose} style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseText}>Fermer</Text>
+              </Pressable>
+            </View>
+
+            <InfoRow label="Email" value={user.email} />
+            {user.phone ? <InfoRow label="Téléphone" value={user.phone} /> : null}
+            {user.department_code ? <InfoRow label="Département" value={user.department_code} /> : null}
+            {user.address ? <InfoRow label="Adresse" value={user.address} /> : null}
+            <InfoRow label="Journée" value={`${user.day_start_time || '--:--'} - ${user.day_end_time || '--:--'}`} />
+
+            <Text style={styles.modalSectionLabel}>Notifications</Text>
+            <View style={styles.preferenceCard}>
+              <View style={styles.preferenceTextBlock}>
+                <Text style={styles.preferenceTitle}>Emails RDV</Text>
+                <Text style={styles.preferenceDescription}>Recevoir les notifications de placement, modification ou annulation par email.</Text>
+              </View>
+              <Switch
+                value={user.notification_mail_enabled}
+                disabled={saving}
+                onValueChange={value => {
+                  updatePreference('notification_mail_enabled', value).catch(() => undefined);
+                }}
+                trackColor={{ false: colors.inkSoft, true: colors.goldSoft }}
+                thumbColor={user.notification_mail_enabled ? colors.gold : colors.inkMuted}
+              />
+            </View>
+            <View style={styles.preferenceCard}>
+              <View style={styles.preferenceTextBlock}>
+                <Text style={styles.preferenceTitle}>Notifications push</Text>
+                <Text style={styles.preferenceDescription}>Recevoir les alertes directement sur ce téléphone.</Text>
+              </View>
+              <Switch
+                value={user.notification_push_enabled}
+                disabled={saving}
+                onValueChange={value => {
+                  updatePreference('notification_push_enabled', value).catch(() => undefined);
+                }}
+                trackColor={{ false: colors.inkSoft, true: colors.goldSoft }}
+                thumbColor={user.notification_push_enabled ? colors.gold : colors.inkMuted}
+              />
+            </View>
+
+            {saving ? <Text style={styles.preferenceSaving}>Mise à jour des préférences...</Text> : null}
+            {error ? <Text style={styles.formError}>{error}</Text> : null}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function PasswordInput({
   value,
   onChangeText,
@@ -759,6 +1121,29 @@ function WidgetCard({
       <Text style={styles.widgetLabel}>{label}</Text>
       <Text style={[styles.widgetValue, toneStyle.text]}>{value}</Text>
       <Text style={styles.widgetDetail}>{detail}</Text>
+    </View>
+  );
+}
+
+function SyncInfoCard({
+  cacheInfo,
+  isOffline,
+}: {
+  cacheInfo: PlanningCacheInfo | null;
+  isOffline: boolean;
+}): React.JSX.Element {
+  const title = isOffline ? 'Planning hors ligne' : 'Planning synchronisé';
+  const detail = cacheInfo
+    ? `Dernière synchro: ${formatDateTime(cacheInfo.cached_at)}`
+    : 'Aucune synchronisation locale enregistrée.';
+
+  return (
+    <View style={[styles.syncInfoCard, isOffline && styles.syncInfoCardOffline]}>
+      <View style={styles.syncInfoDot} />
+      <View style={styles.syncInfoTextBlock}>
+        <Text style={styles.syncInfoTitle}>{title}</Text>
+        <Text style={styles.syncInfoText}>{detail}</Text>
+      </View>
     </View>
   );
 }
@@ -876,16 +1261,21 @@ async function exportCalendar(appointments: PlanningAppointment[]): Promise<void
   }
 
   const ics = buildIcs(appointments);
-  const dataUrl = `data:text/calendar;charset=utf8,${encodeURIComponent(ics)}`;
+  const fileName = `tech-calendar-planning-${toDateKey(new Date())}.ics`;
+  const calendarFileUrl = `data:text/calendar;base64,${base64EncodeUtf8(ics)}`;
 
   try {
-    await Share.share({
-      title: 'Planning Tech Calendar',
-      message: Platform.OS === 'ios' ? 'Planning Tech Calendar en pièce jointe ICS.' : ics,
-      url: dataUrl,
+    await Share.open({
+      title: 'Ajouter au calendrier',
+      subject: 'Planning Tech Calendar',
+      message: 'Planning Tech Calendar au format iCalendar.',
+      url: calendarFileUrl,
+      type: 'text/calendar',
+      filename: fileName,
+      failOnCancel: false,
     });
   } catch {
-    Alert.alert('Export impossible', 'Le menu de partage du téléphone n’a pas pu être ouvert.');
+    Alert.alert('Export impossible', 'Le fichier calendrier n’a pas pu être préparé.');
   }
 }
 
@@ -923,6 +1313,38 @@ function escapeIcs(value: string): string {
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
     .replace(/\n/g, '\\n');
+}
+
+function base64EncodeUtf8(value: string): string {
+  const binary = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_, hex: string) => {
+    return String.fromCharCode(Number.parseInt(hex, 16));
+  });
+
+  return base64EncodeBinary(binary);
+}
+
+function base64EncodeBinary(binary: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let output = '';
+
+  for (let index = 0; index < binary.length; index += 3) {
+    const first = binary.charCodeAt(index);
+    const second = binary.charCodeAt(index + 1);
+    const third = binary.charCodeAt(index + 2);
+    const hasSecond = !Number.isNaN(second);
+    const hasThird = !Number.isNaN(third);
+    const encodedFirst = Math.floor(first / 4);
+    const encodedSecond = ((first % 4) * 16) + (hasSecond ? Math.floor(second / 16) : 0);
+    const encodedThird = hasSecond ? ((second % 16) * 4) + (hasThird ? Math.floor(third / 64) : 0) : 64;
+    const encodedFourth = hasThird ? third % 64 : 64;
+
+    output += alphabet.charAt(encodedFirst)
+      + alphabet.charAt(encodedSecond)
+      + alphabet.charAt(encodedThird)
+      + alphabet.charAt(encodedFourth);
+  }
+
+  return output;
 }
 
 function buildWeekDays(
@@ -987,6 +1409,16 @@ function formatDayAndTime(value: string): string {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
@@ -1203,6 +1635,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  biometricButton: {
+    marginTop: 18,
+    minHeight: 54,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.inkSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  biometricButtonIcon: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  biometricButtonText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+  },
   offlineNotice: {
     marginBottom: 12,
     padding: 12,
@@ -1308,6 +1762,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  dropdownProfileButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: colors.goldSoft,
+  },
+  dropdownProfileText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
   dropdownLogoutButton: {
     marginTop: 12,
     paddingVertical: 10,
@@ -1331,6 +1797,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '800',
+  },
+  syncStatusCard: {
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  syncStatusTextBlock: {
+    flex: 1,
+  },
+  syncStatusTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  syncStatusText: {
+    marginTop: 2,
+    color: colors.inkMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   mobileLoader: {
     minHeight: 420,
@@ -1376,6 +1868,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+  },
+  syncInfoCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(48, 138, 95, 0.18)',
+    backgroundColor: colors.greenSoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  syncInfoCardOffline: {
+    borderColor: 'rgba(226, 185, 101, 0.34)',
+    backgroundColor: colors.goldSoft,
+  },
+  syncInfoDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.ink,
+  },
+  syncInfoTextBlock: {
+    flex: 1,
+  },
+  syncInfoTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  syncInfoText: {
+    marginTop: 2,
+    color: colors.inkMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   widgetCard: {
     width: '48%',
@@ -1778,6 +2306,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  preferenceCard: {
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FBFDFD',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  preferenceTextBlock: {
+    flex: 1,
+  },
+  preferenceTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  preferenceDescription: {
+    marginTop: 4,
+    color: colors.inkMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  preferenceSaving: {
+    marginTop: 12,
+    color: colors.inkMuted,
+    fontSize: 13,
+    fontWeight: '800',
   },
   modalActions: {
     flexDirection: 'row',

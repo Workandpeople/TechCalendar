@@ -2,6 +2,7 @@
 
 use App\Models\Appointment;
 use App\Models\MobileAccessToken;
+use App\Models\MobilePushToken;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
@@ -99,6 +100,68 @@ it('requires mobile technicians to replace their initial password', function () 
 
     expect($technician->must_change_password)->toBeFalse()
         ->and(Hash::check('New-secure-password1', $technician->password))->toBeTrue();
+});
+
+it('updates mobile notification preferences and stores push tokens', function () {
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+        'password' => Hash::make('secret-password'),
+    ]);
+
+    $token = $this->postJson(route('api.mobile.login'), [
+        'email' => 'tech@example.test',
+        'password' => 'secret-password',
+        'device_name' => 'iPhone test',
+    ])
+        ->assertOk()
+        ->assertJsonPath('user.notification_mail_enabled', true)
+        ->assertJsonPath('user.notification_push_enabled', true)
+        ->json('token');
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->patchJson(route('api.mobile.preferences.update'), [
+            'notification_mail_enabled' => false,
+            'notification_push_enabled' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('user.notification_mail_enabled', false)
+        ->assertJsonPath('user.notification_push_enabled', true);
+
+    $technician->refresh();
+
+    expect($technician->notification_mail_enabled)->toBeFalse()
+        ->and($technician->notification_push_enabled)->toBeTrue();
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.push-tokens.store'), [
+            'token' => 'fcm-token-test',
+            'platform' => 'ios',
+            'device_name' => 'iPhone de test',
+        ])
+        ->assertOk();
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.push-tokens.store'), [
+            'token' => 'fcm-token-test',
+            'platform' => 'ios',
+            'device_name' => 'iPhone renommé',
+        ])
+        ->assertOk();
+
+    expect(MobilePushToken::query()->count())->toBe(1);
+
+    $pushToken = MobilePushToken::query()->first();
+
+    expect($pushToken->user_id)->toBe($technician->id)
+        ->and($pushToken->token)->toBe('fcm-token-test')
+        ->and($pushToken->platform)->toBe('ios')
+        ->and($pushToken->device_name)->toBe('iPhone renommé')
+        ->and($pushToken->last_used_at)->not->toBeNull();
 });
 
 it('returns the authenticated technician planning and cached weekly widgets', function () {

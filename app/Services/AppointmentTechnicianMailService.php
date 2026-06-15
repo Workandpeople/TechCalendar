@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Mail;
 
 class AppointmentTechnicianMailService
 {
+    public function __construct(private readonly FirebaseCloudMessagingService $pushNotifications) {}
+
     public function created(Appointment $appointment): void
     {
         $this->notifyCurrentTechnician($appointment, 'created');
@@ -53,23 +55,33 @@ class AppointmentTechnicianMailService
 
     private function notify(Appointment $appointment, ?User $recipient, string $eventType): void
     {
-        if (! $recipient || ! filled($recipient->email)) {
+        if (! $recipient) {
             return;
         }
 
-        Mail::to($recipient->email)->queue(
-            new TechnicianAppointmentNotificationMail(
-                appointment: $this->freshAppointment($appointment),
-                recipient: $recipient,
-                eventType: $eventType,
-            )
-        );
+        $appointment = $this->freshAppointment($appointment);
+
+        if ((bool) $recipient->notification_mail_enabled && filled($recipient->email)) {
+            Mail::to($recipient->email)->queue(
+                new TechnicianAppointmentNotificationMail(
+                    appointment: $appointment,
+                    recipient: $recipient,
+                    eventType: $eventType,
+                )
+            );
+        }
+
+        $this->pushNotifications->sendAppointmentNotification($appointment, $recipient, $eventType);
     }
 
     private function freshAppointment(Appointment $appointment): Appointment
     {
         return Appointment::withTrashed()
-            ->with(['service:id,type,name', 'technician:id,first_name,last_name,email', 'creator:id,first_name,last_name'])
+            ->with([
+                'service:id,type,name',
+                'technician:id,first_name,last_name,email,notification_mail_enabled,notification_push_enabled',
+                'creator:id,first_name,last_name',
+            ])
             ->findOrFail($appointment->id);
     }
 }

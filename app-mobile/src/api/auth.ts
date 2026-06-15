@@ -1,10 +1,10 @@
-import { apiFetch } from './client';
+import { ApiError, apiFetch, isNetworkError } from './client';
 import { ChangePasswordPayload, LoginPayload, MobileUser } from '../types/api';
-import { clearCachedSession, getCachedUser, setCachedUser } from '../storage/cache';
+import { getCachedUser, setCachedUser } from '../storage/cache';
 import {
-  clearOfflineCredentials,
   clearToken,
   getOfflineCredentials,
+  setBiometricCredentials,
   setOfflineCredentials,
   setToken,
 } from '../storage/secure';
@@ -21,6 +21,7 @@ export async function login(email: string, password: string): Promise<MobileUser
 
   await setToken(payload.token);
   await setOfflineCredentials(email, password);
+  await setBiometricCredentials(email, password);
   await setCachedUser(payload.user);
 
   return payload.user;
@@ -41,6 +42,16 @@ export async function offlineLogin(email: string, password: string): Promise<Mob
   }
 
   return cachedUser;
+}
+
+export async function restoreOnlineSessionFromOfflineCredentials(): Promise<MobileUser> {
+  const credentials = await getOfflineCredentials();
+
+  if (!credentials) {
+    throw new Error('Aucune session hors ligne disponible sur ce téléphone.');
+  }
+
+  return login(credentials.email, credentials.password);
 }
 
 export async function me(): Promise<MobileUser> {
@@ -65,6 +76,7 @@ export async function changeFirstPassword(password: string, passwordConfirmation
 
   await setCachedUser(payload.user);
   await setOfflineCredentials(payload.user.email, password);
+  await setBiometricCredentials(payload.user.email, password);
 
   return payload.user;
 }
@@ -75,9 +87,11 @@ export async function logout(): Promise<void> {
       auth: true,
       method: 'POST',
     });
+  } catch (exception) {
+    if (!isNetworkError(exception) && !(exception instanceof ApiError && exception.status === 401)) {
+      throw exception;
+    }
   } finally {
     await clearToken();
-    await clearOfflineCredentials();
-    await clearCachedSession();
   }
 }

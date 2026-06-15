@@ -1,4 +1,4 @@
-package com.techcalendarmobile
+package fr.geniuscontrole.techcalendar.android
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

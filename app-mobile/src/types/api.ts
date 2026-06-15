@@ -6,6 +6,8 @@ export type MobileUser = {
   initials: string;
   email: string;
   must_change_password: boolean;
+  notification_mail_enabled: boolean;
+  notification_push_enabled: boolean;
   phone: string | null;
   address: string | null;
   department_code: string | null;
@@ -49,6 +51,11 @@ export type PlanningPayload = {
   };
   widgets: PlanningWidgets;
   appointments: PlanningAppointment[];
+};
+
+export type PlanningCacheInfo = {
+  cached_at: string;
+  generated_at: string | null;
 };
 
 export type LoginPayload = {

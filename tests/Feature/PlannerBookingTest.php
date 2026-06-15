@@ -461,6 +461,53 @@ it('rejects booking creation during technician absence', function () {
     }
 });
 
+it('places a crm appointment without service when a service is selected at validation time', function () {
+    Mail::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_MAR,
+        'name' => 'Contrôle MAR choisi au placement',
+        'average_duration_minutes' => 105,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'latitude' => 47.2184,
+        'longitude' => -1.5536,
+    ]);
+    $technician->services()->attach($service);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'crm_appointment_id' => 'crm-open-nantes-003',
+            'crm_service_id' => $service->id,
+            'technician_id' => $technician->id,
+            'starts_at' => now()->addDay()->setTime(10, 30)->toIso8601String(),
+            'duration_minutes' => 105,
+            'comment' => 'Service choisi dans le modal',
+        ])
+        ->assertCreated()
+        ->assertJsonStructure(['appointment_id']);
+
+    $appointment = Appointment::query()->firstOrFail();
+
+    expect($appointment->service_id)->toBe($service->id)
+        ->and($appointment->customer_first_name)->toBe('Nora')
+        ->and($appointment->customer_last_name)->toBe('Petit')
+        ->and($appointment->comment)->toBe('Service choisi dans le modal');
+
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'created'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $appointment->id,
+    );
+});
+
 it('links a placed appointment back to its lot appointment', function () {
     config(['services.mapbox.token' => null]);
     Mail::fake();
@@ -480,6 +527,7 @@ it('links a placed appointment back to its lot appointment', function () {
         'latitude' => 45.764,
         'longitude' => 4.8357,
     ]);
+    $technician->services()->attach($service);
     $lot = Lot::query()->create([
         'name' => 'Lot à placer',
         'type' => Lot::TYPE_FULL_CONTROL,

@@ -1,6 +1,9 @@
-package com.techcalendarmobile
+package fr.geniuscontrole.techcalendar.android
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -22,6 +25,24 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    createNotificationChannels()
     loadReactNative(this)
+  }
+
+  private fun createNotificationChannels() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      return
+    }
+
+    val notificationManager = getSystemService(NotificationManager::class.java)
+    val appointmentsChannel = NotificationChannel(
+      "appointments",
+      "Rendez-vous",
+      NotificationManager.IMPORTANCE_HIGH,
+    ).apply {
+      description = "Notifications de placement, modification et annulation de rendez-vous"
+    }
+
+    notificationManager.createNotificationChannel(appointmentsChannel)
   }
 }

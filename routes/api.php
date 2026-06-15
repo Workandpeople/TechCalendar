@@ -16,6 +16,10 @@ Route::prefix('mobile')->group(function (): void {
             ->name('api.mobile.logout');
         Route::post('/first-password', [MobileAuthController::class, 'updateFirstPassword'])
             ->name('api.mobile.first-password.update');
+        Route::patch('/preferences', [MobileAuthController::class, 'updatePreferences'])
+            ->name('api.mobile.preferences.update');
+        Route::post('/push-tokens', [MobileAuthController::class, 'storePushToken'])
+            ->name('api.mobile.push-tokens.store');
         Route::get('/planning', MobilePlanningController::class)
             ->name('api.mobile.planning');
     });

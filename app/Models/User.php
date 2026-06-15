@@ -20,6 +20,8 @@ use Illuminate\Notifications\Notifiable;
     'email',
     'password',
     'must_change_password',
+    'notification_mail_enabled',
+    'notification_push_enabled',
     'role',
     'admin',
     'phone',
@@ -48,6 +50,8 @@ class User extends Authenticatable
             'role' => 'integer',
             'admin' => 'boolean',
             'must_change_password' => 'boolean',
+            'notification_mail_enabled' => 'boolean',
+            'notification_push_enabled' => 'boolean',
             'latitude' => 'float',
             'longitude' => 'float',
             'break_duration_minutes' => 'integer',
@@ -86,5 +90,10 @@ class User extends Authenticatable
     public function absences(): HasMany
     {
         return $this->hasMany(TechnicianAbsence::class, 'technician_id');
+    }
+
+    public function mobilePushTokens(): HasMany
+    {
+        return $this->hasMany(MobilePushToken::class);
     }
 }

@@ -420,6 +420,19 @@
                                 <dt style="color:var(--gc-text-soft);">Prestation</dt>
                                 <dd id="booking_detail_service" class="font-medium" style="color:var(--gc-text);"></dd>
                             </div>
+                            <div id="booking_detail_service_select_wrap" class="hidden">
+                                <dt style="color:var(--gc-text-soft);">Prestation à définir</dt>
+                                <dd class="mt-2">
+                                    <select id="booking_detail_service_select" class="gc-input">
+                                        <option value="">Sélectionner une prestation</option>
+                                        @foreach ($services as $service)
+                                            <option value="{{ $service->id }}" data-duration="{{ $service->average_duration_minutes }}">
+                                                {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </dd>
+                            </div>
                             <div>
                                 <dt style="color:var(--gc-text-soft);">Adresse</dt>
                                 <dd id="booking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
@@ -496,6 +509,7 @@
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
         const bookingInitialCrmAppointmentId = @json($initialCrmAppointmentId);
+        const bookingServices = @json($bookingServices);
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
         let bookingMap = null;
         let bookingCalendar = null;
@@ -1341,6 +1355,12 @@
 
         const requestDurationMinutes = () => Math.max(30, Number(currentAppointmentRequest?.service?.average_duration_minutes || 60));
 
+        const serviceById = (serviceId) => bookingServices.find((service) => String(service.id) === String(serviceId));
+
+        const serviceLabel = (service) => service
+            ? `${service.type} - ${service.name}`
+            : 'Prestation non renseignée';
+
         const technicianById = (technicianId) => currentTechnicians.find((technician) => String(technician.id) === String(technicianId));
 
         const selectedTechnicians = () => currentTechnicians
@@ -1513,6 +1533,7 @@
                 customer_phone: currentAppointmentRequest.phone,
                 service_label: serviceLabelForRequest(),
                 crm_appointment_id: currentAppointmentRequest.id,
+                crm_service_id: null,
                 lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
                 can_validate: Boolean(currentAppointmentRequest.service),
                 duration_minutes: requestDurationMinutes(),
@@ -1536,6 +1557,9 @@
             document.getElementById('booking_detail_origin').textContent = `${event.extendedProps.origin_label || '-'}${event.extendedProps.origin_name ? ` (${event.extendedProps.origin_name})` : ''}`;
             document.getElementById('booking_detail_technician_id').value = technician.id;
             renderRouteSummary(event.extendedProps, null, true);
+            if (requiresCrmServiceSelection(event.extendedProps)) {
+                syncCrmServiceSelection();
+            }
             requestAnimationFrame(() => renderDetailMap(event));
         };
 
@@ -2065,6 +2089,53 @@
             bookingDetailStatus.classList.remove('hidden');
         };
 
+        const hideDetailStatus = () => {
+            bookingDetailStatus.textContent = '';
+            bookingDetailStatus.classList.add('hidden');
+        };
+
+        const requiresCrmServiceSelection = (props) => Boolean(
+            props?.is_suggestion
+            && props.crm_appointment_id
+            && !props.lot_appointment_id
+            && !currentAppointmentRequest?.service
+        );
+
+        const syncCrmServiceSelection = ({ updateDuration = false } = {}) => {
+            if (!selectedCalendarEvent) return;
+
+            const serviceSelect = document.getElementById('booking_detail_service_select');
+            const selectedService = serviceById(serviceSelect?.value);
+            const confirmButton = document.getElementById('booking-confirm-suggestion-btn');
+            const durationInput = document.getElementById('booking_detail_duration');
+            const props = selectedCalendarEvent.extendedProps || {};
+
+            selectedCalendarEvent.extendedProps = {
+                ...props,
+                crm_service_id: selectedService?.id || null,
+                service_label: serviceLabel(selectedService),
+                can_validate: Boolean(selectedService),
+            };
+
+            document.getElementById('booking_detail_service').textContent = serviceLabel(selectedService);
+            document.getElementById('booking_modal_title').textContent = serviceLabel(selectedService);
+
+            if (selectedService && updateDuration) {
+                durationInput.value = selectedService.average_duration_minutes;
+                selectedCalendarEvent.extendedProps.duration_minutes = Number(selectedService.average_duration_minutes);
+                selectedCalendarEvent.end = addMinutes(selectedCalendarEvent.start, selectedService.average_duration_minutes);
+            }
+
+            confirmButton.disabled = !selectedService;
+
+            if (selectedService) {
+                hideDetailStatus();
+                return;
+            }
+
+            showDetailStatus('Choisis une prestation avant de valider ce RDV CRM.', 'error');
+        };
+
         const openBookingAppointmentModal = async (event) => {
             selectedCalendarEvent = event;
             const props = event.extendedProps;
@@ -2072,10 +2143,13 @@
             const allowTechnicianChange = Boolean(props.allow_technician_change);
             const technicianSelectWrap = document.getElementById('booking_detail_technician_select_wrap');
             const technicianSelect = document.getElementById('booking_detail_technician_select');
+            const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
+            const serviceSelect = document.getElementById('booking_detail_service_select');
             const startsAtInput = document.getElementById('booking_detail_starts_at');
             const durationInput = document.getElementById('booking_detail_duration');
+            const shouldSelectCrmService = requiresCrmServiceSelection(props);
 
-            bookingDetailStatus.classList.add('hidden');
+            hideDetailStatus();
             document.getElementById('booking_modal_kind').textContent = props.is_calendar_click
                 ? 'Placement depuis le calendrier'
                 : (isSuggestion ? 'Proposition de rendez-vous' : 'Rendez-vous place');
@@ -2099,6 +2173,12 @@
             document.getElementById('booking_detail_comment').value = props.comment || '';
             renderRouteSummary(props, null, true);
 
+            serviceSelectWrap.classList.toggle('hidden', !shouldSelectCrmService);
+            serviceSelect.value = props.crm_service_id || '';
+            serviceSelect.onchange = shouldSelectCrmService
+                ? () => syncCrmServiceSelection({ updateDuration: true })
+                : null;
+
             technicianSelectWrap.classList.toggle('hidden', !allowTechnicianChange);
             technicianSelect.innerHTML = selectedTechnicians()
                 .filter((technician) => !technicianIsAbsentAt(technician, event.start) || String(technician.id) === String(props.technician_id))
@@ -2116,8 +2196,10 @@
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
 
-            if (isSuggestion && !props.can_validate) {
-                showDetailStatus('Validation impossible: aucune prestation CRM n’est renseignée.', 'error');
+            if (shouldSelectCrmService) {
+                syncCrmServiceSelection();
+            } else if (isSuggestion && !props.can_validate) {
+                showDetailStatus('Validation impossible: aucune prestation n’est renseignée.', 'error');
             }
 
             bookingAppointmentModal.classList.remove('hidden');
@@ -2794,6 +2876,8 @@
 
         document.getElementById('booking-confirm-suggestion-btn').addEventListener('click', async () => {
             const button = document.getElementById('booking-confirm-suggestion-btn');
+            const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
+            const serviceSelect = document.getElementById('booking_detail_service_select');
             const payload = {
                 ...(currentAnalysisPayload || { crm_appointment_id: document.getElementById('booking_detail_crm_id').value }),
                 technician_id: document.getElementById('booking_detail_technician_id').value,
@@ -2801,6 +2885,16 @@
                 duration_minutes: document.getElementById('booking_detail_duration').value,
                 comment: document.getElementById('booking_detail_comment').value,
             };
+
+            if (!serviceSelectWrap.classList.contains('hidden')) {
+                if (!serviceSelect.value) {
+                    showDetailStatus('Choisis une prestation avant de valider ce RDV CRM.', 'error');
+                    serviceSelect.focus();
+                    return;
+                }
+
+                payload.crm_service_id = Number(serviceSelect.value);
+            }
 
             button.disabled = true;
             button.textContent = 'Validation...';

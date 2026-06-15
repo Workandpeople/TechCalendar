@@ -47,4 +47,10 @@ return [
         'import_chunk_size' => env('OPENAI_IMPORT_CHUNK_SIZE', 10),
     ],
 
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'service_account_path' => env('FIREBASE_SERVICE_ACCOUNT_PATH'),
+        'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON'),
+    ],
+
 ];

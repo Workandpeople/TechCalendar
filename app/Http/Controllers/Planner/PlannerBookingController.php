@@ -31,15 +31,25 @@ class PlannerBookingController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
+        $services = Service::query()
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get(['id', 'type', 'name', 'average_duration_minutes']);
+
         return view('planner.book', [
             'crmAppointments' => $crmAppointments->pending(15),
             'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
-            'services' => Service::query()
-                ->orderBy('type')
-                ->orderBy('name')
-                ->get(['id', 'type', 'name', 'average_duration_minutes']),
+            'services' => $services,
+            'bookingServices' => $services
+                ->map(fn (Service $service): array => [
+                    'id' => $service->id,
+                    'type' => $service->type,
+                    'name' => $service->name,
+                    'average_duration_minutes' => $service->average_duration_minutes,
+                ])
+                ->values(),
         ]);
     }
 
@@ -207,10 +217,16 @@ class PlannerBookingController extends Controller
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
         if (! $crmAppointment['service']) {
-            $serviceErrorKey = ! empty($payload['lot_appointment_id']) ? 'lot_service_id' : 'crm_appointment_id';
+            $serviceErrorKey = ! empty($payload['lot_appointment_id']) ? 'lot_service_id' : 'crm_service_id';
 
             throw ValidationException::withMessages([
                 $serviceErrorKey => 'Impossible de valider sans prestation renseignée.',
+            ]);
+        }
+
+        if (! $this->technicianSupportsService((int) $payload['technician_id'], (int) $crmAppointment['service']['id'])) {
+            throw ValidationException::withMessages([
+                'technician_id' => 'Ce technicien ne réalise pas cette prestation.',
             ]);
         }
 
@@ -577,6 +593,11 @@ class PlannerBookingController extends Controller
     {
         return [
             'crm_appointment_id' => ['nullable', 'string', 'required_without_all:manual_appointment,lot_appointment_id'],
+            'crm_service_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('services', 'id'),
+            ],
             'lot_appointment_id' => [
                 'nullable',
                 'integer',
@@ -614,11 +635,28 @@ class PlannerBookingController extends Controller
         if (! empty($payload['crm_appointment_id'])) {
             $appointment = $crmAppointments->find((string) $payload['crm_appointment_id']);
 
-            return $appointment ? [
+            if (! $appointment) {
+                return null;
+            }
+
+            $service = $appointment['service'];
+
+            if (! $service && isset($payload['crm_service_id'])) {
+                $selectedService = Service::query()->find((int) $payload['crm_service_id']);
+                $service = $selectedService ? [
+                    'id' => $selectedService->id,
+                    'type' => $selectedService->type,
+                    'name' => $selectedService->name,
+                    'average_duration_minutes' => $selectedService->average_duration_minutes,
+                ] : null;
+            }
+
+            return [
                 ...$appointment,
+                'service' => $service,
                 'is_manual' => false,
                 'preferred_starts_at' => null,
-            ] : null;
+            ];
         }
 
         if (! empty($payload['lot_appointment_id'])) {
@@ -822,6 +860,16 @@ class PlannerBookingController extends Controller
         if ($lot->status !== $status) {
             $lot->update(['status' => $status]);
         }
+    }
+
+    private function technicianSupportsService(int $technicianId, int $serviceId): bool
+    {
+        return User::query()
+            ->whereKey($technicianId)
+            ->where('role', 2)
+            ->where('admin', false)
+            ->whereHas('services', fn ($query) => $query->where('services.id', $serviceId))
+            ->exists();
     }
 
     /**

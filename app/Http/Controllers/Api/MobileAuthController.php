@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MobileAccessToken;
+use App\Models\MobilePushToken;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -104,6 +105,55 @@ class MobileAuthController extends Controller
         ]);
     }
 
+    public function updatePreferences(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless((bool) $user, 403);
+
+        $payload = $request->validate([
+            'notification_mail_enabled' => ['required', 'boolean'],
+            'notification_push_enabled' => ['required', 'boolean'],
+        ]);
+
+        $user->forceFill([
+            'notification_mail_enabled' => (bool) $payload['notification_mail_enabled'],
+            'notification_push_enabled' => (bool) $payload['notification_push_enabled'],
+        ])->save();
+
+        return response()->json([
+            'message' => 'Préférences mises à jour.',
+            'user' => $this->serializeUser($user->refresh()),
+        ]);
+    }
+
+    public function storePushToken(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless((bool) $user, 403);
+
+        $payload = $request->validate([
+            'token' => ['required', 'string', 'max:512'],
+            'platform' => ['required', 'string', 'in:ios,android,unknown'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        MobilePushToken::query()->updateOrCreate(
+            ['token' => $payload['token']],
+            [
+                'user_id' => $user->id,
+                'platform' => $payload['platform'],
+                'device_name' => $payload['device_name'] ?? null,
+                'last_used_at' => now(),
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Token push enregistré.',
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -117,6 +167,8 @@ class MobileAuthController extends Controller
             'initials' => $user->initials,
             'email' => $user->email,
             'must_change_password' => (bool) $user->must_change_password,
+            'notification_mail_enabled' => (bool) ($user->notification_mail_enabled ?? true),
+            'notification_push_enabled' => (bool) ($user->notification_push_enabled ?? true),
             'phone' => $user->phone,
             'address' => $user->address,
             'department_code' => $user->department_code,
