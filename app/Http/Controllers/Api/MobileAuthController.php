@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
@@ -79,6 +80,30 @@ class MobileAuthController extends Controller
         ]);
     }
 
+    public function updateFirstPassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless((bool) $user, 403);
+
+        $payload = $request->validate([
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ], [
+            'password.required' => 'Renseigne ton nouveau mot de passe.',
+            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
+        ]);
+
+        $user->forceFill([
+            'password' => Hash::make($payload['password']),
+            'must_change_password' => false,
+        ])->save();
+
+        return response()->json([
+            'message' => 'Mot de passe mis à jour.',
+            'user' => $this->serializeUser($user->refresh()),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -91,6 +116,7 @@ class MobileAuthController extends Controller
             'full_name' => $user->full_name,
             'initials' => $user->initials,
             'email' => $user->email,
+            'must_change_password' => (bool) $user->must_change_password,
             'phone' => $user->phone,
             'address' => $user->address,
             'department_code' => $user->department_code,

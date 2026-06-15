@@ -69,6 +69,38 @@ it('rejects non technician accounts on mobile login', function () {
         ->assertJsonPath('errors.email.0', 'Cette application est réservée aux techniciens.');
 });
 
+it('requires mobile technicians to replace their initial password', function () {
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+        'password' => Hash::make('temporary-password'),
+        'must_change_password' => true,
+    ]);
+
+    $token = $this->postJson(route('api.mobile.login'), [
+        'email' => 'tech@example.test',
+        'password' => 'temporary-password',
+    ])
+        ->assertOk()
+        ->assertJsonPath('user.must_change_password', true)
+        ->json('token');
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.first-password.update'), [
+            'password' => 'New-secure-password1',
+            'password_confirmation' => 'New-secure-password1',
+        ])
+        ->assertOk()
+        ->assertJsonPath('user.must_change_password', false);
+
+    $technician->refresh();
+
+    expect($technician->must_change_password)->toBeFalse()
+        ->and(Hash::check('New-secure-password1', $technician->password))->toBeTrue();
+});
+
 it('returns the authenticated technician planning and cached weekly widgets', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15 08:00:00', 'Europe/Paris'));
 

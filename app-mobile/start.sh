@@ -9,13 +9,21 @@ PLATFORM="${1:-ios}"
 API_URL="${TECHCALENDAR_API_URL:-https://techcalendar.lucas-dinnichert.fr/api}"
 
 install_ios_pods() {
-  if command -v bundle >/dev/null 2>&1; then
-    bundle config set path vendor/bundle
-    bundle install
+  BUNDLE_CMD=()
+
+  if [ -x "/opt/homebrew/opt/ruby/bin/ruby" ] && /opt/homebrew/opt/ruby/bin/ruby -S bundle -v >/dev/null 2>&1; then
+    BUNDLE_CMD=(/opt/homebrew/opt/ruby/bin/ruby -S bundle)
+  elif command -v bundle >/dev/null 2>&1 && bundle -v >/dev/null 2>&1; then
+    BUNDLE_CMD=(bundle)
+  fi
+
+  if [ "${#BUNDLE_CMD[@]}" -gt 0 ]; then
+    "${BUNDLE_CMD[@]}" config set path vendor/bundle
+    "${BUNDLE_CMD[@]}" install
 
     (
       cd ios
-      bundle exec pod install
+      "${BUNDLE_CMD[@]}" exec pod install
     )
 
     return

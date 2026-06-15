@@ -12,6 +12,12 @@ export class ApiError extends Error {
   }
 }
 
+export class NetworkError extends Error {
+  constructor(message = 'Connexion réseau indisponible.') {
+    super(message);
+  }
+}
+
 type ApiOptions = Omit<RequestInit, 'headers'> & {
   auth?: boolean;
   headers?: Record<string, string>;
@@ -32,10 +38,16 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: mergedHeaders,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: mergedHeaders,
+    });
+  } catch {
+    throw new NetworkError();
+  }
   const text = await response.text();
   const data = text ? parseJson(text) : null;
 
@@ -48,6 +60,10 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   }
 
   return data as T;
+}
+
+export function isNetworkError(exception: unknown): boolean {
+  return exception instanceof NetworkError;
 }
 
 function parseJson(text: string): any {

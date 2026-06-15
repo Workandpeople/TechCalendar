@@ -5,6 +5,7 @@ export type MobileUser = {
   full_name: string;
   initials: string;
   email: string;
+  must_change_password: boolean;
   phone: string | null;
   address: string | null;
   department_code: string | null;
@@ -54,5 +55,10 @@ export type LoginPayload = {
   token: string;
   token_type: 'Bearer';
   expires_at: string;
+  user: MobileUser;
+};
+
+export type ChangePasswordPayload = {
+  message: string;
   user: MobileUser;
 };

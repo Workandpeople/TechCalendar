@@ -14,6 +14,8 @@ Route::prefix('mobile')->group(function (): void {
             ->name('api.mobile.me');
         Route::post('/logout', [MobileAuthController::class, 'logout'])
             ->name('api.mobile.logout');
+        Route::post('/first-password', [MobileAuthController::class, 'updateFirstPassword'])
+            ->name('api.mobile.first-password.update');
         Route::get('/planning', MobilePlanningController::class)
             ->name('api.mobile.planning');
     });
