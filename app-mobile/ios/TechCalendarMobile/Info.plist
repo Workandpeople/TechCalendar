@@ -41,6 +41,8 @@
 	</dict>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Tech Calendar utilise Face ID pour sécuriser l’accès au planning hors ligne.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tech Calendar peut demander l’accès à la photothèque uniquement si une action de partage iOS choisie par l’utilisateur nécessite une image ou un fichier.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

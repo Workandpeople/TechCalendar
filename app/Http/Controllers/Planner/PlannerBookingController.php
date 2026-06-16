@@ -1308,6 +1308,7 @@ class PlannerBookingController extends Controller
             travelAfter: $travelAfter,
             nextAppointment: $nextAppointment,
             isPreferred: true,
+            drivingRoutes: $drivingRoutes,
         );
     }
 
@@ -1375,6 +1376,7 @@ class PlannerBookingController extends Controller
             travelTo: $travelTo,
             travelAfter: $travelAfter,
             nextAppointment: $nextAppointment,
+            drivingRoutes: $drivingRoutes,
         );
     }
 
@@ -1467,9 +1469,27 @@ class PlannerBookingController extends Controller
         array $travelAfter,
         ?Appointment $nextAppointment,
         bool $isPreferred = false,
+        ?MapboxDrivingRouteService $drivingRoutes = null,
     ): array {
         $kind = $isPreferred ? 'preferred' : 'suggestion';
         $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
+        $homeTravelTo = $travelTo;
+        $returnHomeTravel = $travelAfter;
+
+        if ($drivingRoutes && $technician->latitude !== null && $technician->longitude !== null) {
+            $homeTravelTo = $drivingRoutes->estimate(
+                (float) $technician->latitude,
+                (float) $technician->longitude,
+                (float) $crmAppointment['latitude'],
+                (float) $crmAppointment['longitude'],
+            );
+            $returnHomeTravel = $drivingRoutes->estimate(
+                (float) $crmAppointment['latitude'],
+                (float) $crmAppointment['longitude'],
+                (float) $technician->latitude,
+                (float) $technician->longitude,
+            );
+        }
 
         return [
             'id' => sprintf('%s-%d-%s-%s', $kind, $technician->id, $date->format('Ymd'), $startsAt->format('Hi')),
@@ -1502,6 +1522,12 @@ class PlannerBookingController extends Controller
                 'travel_to_minutes' => (int) $travelTo['duration_minutes'],
                 'travel_after_distance_km' => round((float) $travelAfter['distance_km'], 1),
                 'travel_after_minutes' => (int) $travelAfter['duration_minutes'],
+                'home_to_distance_km' => round((float) $homeTravelTo['distance_km'], 1),
+                'home_to_minutes' => (int) $homeTravelTo['duration_minutes'],
+                'return_home_distance_km' => round((float) $returnHomeTravel['distance_km'], 1),
+                'return_home_minutes' => (int) $returnHomeTravel['duration_minutes'],
+                'has_previous_appointment' => str_contains(mb_strtolower($originLabel), 'rdv'),
+                'has_next_appointment' => $nextAppointment !== null,
                 'duration_minutes' => $durationMinutes,
                 'next_appointment_id' => $nextAppointment?->id,
                 'preferred_locked' => $isPreferred,

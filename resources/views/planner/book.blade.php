@@ -1273,16 +1273,6 @@
 
         const formatRouteDistance = (distanceKm) => `${Number(distanceKm || 0).toFixed(1)} km`;
 
-        const suggestionOriginLabel = (props) => {
-            const label = String(props.origin_label || '').toLowerCase();
-
-            if (label.includes('rdv')) {
-                return 'Depuis le RDV précédent';
-            }
-
-            return 'Depuis le domicile';
-        };
-
         const ensureSuggestionTooltip = () => {
             if (bookingSuggestionTooltip) {
                 return bookingSuggestionTooltip;
@@ -1294,7 +1284,7 @@
                 'z-index:90',
                 'display:none',
                 'pointer-events:none',
-                'max-width:320px',
+                'max-width:360px',
                 'border-radius:16px',
                 'padding:12px 14px',
                 'background:#31424c',
@@ -1322,23 +1312,54 @@
             if (!props?.is_suggestion) return;
 
             const tooltip = ensureSuggestionTooltip();
-            const originName = props.origin_name ? ` · ${props.origin_name}` : '';
-            const nextRoute = props.next_appointment_id ? `
-                <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
-                    <p style="font-weight:700;">Vers le prochain RDV</p>
-                    <p style="margin-top:3px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(props.travel_after_distance_km))} · ${escapeHtml(formatRouteDuration(props.travel_after_minutes))}</p>
+            const originName = props.origin_name ? String(props.origin_name) : '';
+            const hasPreviousAppointment = Boolean(props.has_previous_appointment)
+                || String(props.origin_label || '').toLowerCase().includes('rdv');
+            const hasNextAppointment = Boolean(props.has_next_appointment || props.next_appointment_id);
+            const tooltipRows = [{
+                title: 'Domicile → proposition',
+                detail: props.technician_address || 'Adresse du technicien',
+                distance: props.home_to_distance_km ?? props.travel_to_distance_km,
+                duration: props.home_to_minutes ?? props.travel_to_minutes,
+            }];
+
+            if (hasPreviousAppointment) {
+                tooltipRows.push({
+                    title: 'RDV précédent → proposition',
+                    detail: originName || 'Dernier RDV de la journée',
+                    distance: props.travel_to_distance_km,
+                    duration: props.travel_to_minutes,
+                });
+            }
+
+            if (hasNextAppointment) {
+                tooltipRows.push({
+                    title: 'Proposition → prochain RDV',
+                    detail: 'Trajet nécessaire pour conserver la suite du planning',
+                    distance: props.travel_after_distance_km,
+                    duration: props.travel_after_minutes,
+                });
+            } else {
+                tooltipRows.push({
+                    title: 'Proposition → retour domicile',
+                    detail: props.technician_address || 'Adresse du technicien',
+                    distance: props.return_home_distance_km ?? props.travel_after_distance_km,
+                    duration: props.return_home_minutes ?? props.travel_after_minutes,
+                });
+            }
+
+            const rowsHtml = tooltipRows.map((row, index) => `
+                <div style="${index === 0 ? 'margin-top:10px;' : 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;'}">
+                    <p style="font-weight:700;">${escapeHtml(row.title)}</p>
+                    ${row.detail ? `<p style="margin-top:3px;color:rgba(255,255,255,.72);">${escapeHtml(row.detail)}</p>` : ''}
+                    <p style="margin-top:5px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(row.distance))} · ${escapeHtml(formatRouteDuration(row.duration))}</p>
                 </div>
-            ` : '';
+            `).join('');
 
             tooltip.innerHTML = `
                 <div>
-                    <p style="font-weight:800;letter-spacing:.02em;">Trajet de la proposition</p>
-                    <div style="margin-top:10px;">
-                        <p style="font-weight:700;">${escapeHtml(suggestionOriginLabel(props))}</p>
-                        ${originName ? `<p style="margin-top:3px;color:rgba(255,255,255,.78);">${escapeHtml(originName.replace(/^ · /, ''))}</p>` : ''}
-                        <p style="margin-top:5px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(props.travel_to_distance_km))} · ${escapeHtml(formatRouteDuration(props.travel_to_minutes))}</p>
-                    </div>
-                    ${nextRoute}
+                    <p style="font-weight:800;letter-spacing:.02em;">Distances de la proposition</p>
+                    ${rowsHtml}
                 </div>
             `;
             tooltip.style.display = 'block';

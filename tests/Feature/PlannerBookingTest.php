@@ -339,8 +339,105 @@ it('includes saturday in booking slot suggestions', function () {
 
         expect(array_key_exists('travel_to_distance_km', $firstSuggestionProps))->toBeTrue()
             ->and(array_key_exists('travel_after_distance_km', $firstSuggestionProps))->toBeTrue()
+            ->and(array_key_exists('home_to_distance_km', $firstSuggestionProps))->toBeTrue()
+            ->and(array_key_exists('return_home_distance_km', $firstSuggestionProps))->toBeTrue()
             ->and($firstSuggestionProps['travel_to_distance_km'])->toBeGreaterThanOrEqual(0)
-            ->and($firstSuggestionProps['travel_after_distance_km'])->toBeGreaterThanOrEqual(0);
+            ->and($firstSuggestionProps['travel_after_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($firstSuggestionProps['home_to_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($firstSuggestionProps['return_home_distance_km'])->toBeGreaterThanOrEqual(0);
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
+});
+
+it('adds home previous and next route metrics to booking suggestions', function () {
+    config(['services.mapbox.token' => null]);
+    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+
+    try {
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_AUDIT,
+            'name' => 'Audit intercalé',
+            'average_duration_minutes' => 90,
+        ]);
+
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
+
+        $technician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'address' => '1 Rue de la République, Lyon',
+            'department_code' => '69',
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+            'day_start_time' => '07:00',
+            'day_end_time' => '21:00',
+        ]);
+        $technician->services()->attach($service);
+        $technician->departments()->attach('69');
+
+        Appointment::query()->create([
+            'service_id' => $service->id,
+            'technician_id' => $technician->id,
+            'created_by' => $planner->id,
+            'customer_first_name' => 'Avant',
+            'customer_last_name' => 'Client',
+            'customer_phone' => '0600000001',
+            'address' => '10 Rue de Brest, 69002 Lyon',
+            'latitude' => 45.7627,
+            'longitude' => 4.8337,
+            'starts_at' => \Carbon\Carbon::parse('2026-06-11 09:00:00'),
+            'duration_minutes' => 60,
+            'ends_at' => \Carbon\Carbon::parse('2026-06-11 10:00:00'),
+        ]);
+        Appointment::query()->create([
+            'service_id' => $service->id,
+            'technician_id' => $technician->id,
+            'created_by' => $planner->id,
+            'customer_first_name' => 'Après',
+            'customer_last_name' => 'Client',
+            'customer_phone' => '0600000002',
+            'address' => '5 Place des Terreaux, 69001 Lyon',
+            'latitude' => 45.7675,
+            'longitude' => 4.8342,
+            'starts_at' => \Carbon\Carbon::parse('2026-06-11 14:00:00'),
+            'duration_minutes' => 60,
+            'ends_at' => \Carbon\Carbon::parse('2026-06-11 15:00:00'),
+        ]);
+
+        $response = $this->actingAs($planner)
+            ->postJson(route('planner.book.analyze'), [
+                'manual_appointment' => [
+                    'first_name' => 'Entre',
+                    'last_name' => 'Client',
+                    'phone' => '0700000000',
+                    'address' => '20 Place Bellecour, 69002 Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'service_id' => $service->id,
+                ],
+            ])
+            ->assertOk();
+
+        $suggestion = collect($response->json('suggestions'))
+            ->first(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11'));
+
+        expect($suggestion)->not->toBeNull();
+
+        $props = $suggestion['extendedProps'];
+
+        expect($props['has_previous_appointment'])->toBeTrue()
+            ->and($props['has_next_appointment'])->toBeTrue()
+            ->and($props['origin_label'])->toBe('rdv précédent')
+            ->and($props['home_to_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($props['travel_to_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($props['travel_after_distance_km'])->toBeGreaterThanOrEqual(0)
+            ->and($props['return_home_distance_km'])->toBeGreaterThanOrEqual(0);
     } finally {
         \Carbon\Carbon::setTestNow();
     }
