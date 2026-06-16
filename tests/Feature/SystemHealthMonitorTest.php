@@ -231,3 +231,12 @@ it('forces dashboard test runs to use a safe testing environment', function () {
         ->and($environment['QUEUE_CONNECTION'])->toBe('sync')
         ->and($environment['MAIL_MAILER'])->toBe('array');
 });
+
+it('documents the php extensions required by dashboard test runs', function () {
+    $job = new RunSystemTestsJob(123);
+    $reflection = new ReflectionClass($job);
+    $method = $reflection->getMethod('requiredPhpExtensions');
+    $method->setAccessible(true);
+
+    expect($method->invoke($job))->toContain('pdo_sqlite');
+});

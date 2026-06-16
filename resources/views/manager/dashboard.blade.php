@@ -116,27 +116,28 @@
         </section>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    @vite('resources/js/chart.js')
     <script>
         (() => {
-            const root = document.querySelector('[data-manager-dashboard]');
-            if (!root) {
-                return;
-            }
+            const initializeManagerDashboardCharts = () => {
+                const root = document.querySelector('[data-manager-dashboard]');
+                if (!root) {
+                    return;
+                }
 
-            const dataUrl = root.dataset.dataUrl;
-            const refreshUrl = root.dataset.refreshUrl;
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const pastelPalette = ['#bfdbfe', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#bae6fd', '#fed7aa', '#c7d2fe'];
-            const pastelBorders = ['#60a5fa', '#4ade80', '#f59e0b', '#fb7185', '#a78bfa', '#38bdf8', '#fb923c', '#818cf8'];
-            const toneMap = {
-                blue: ['#dbeafe', '#1d4ed8'],
-                green: ['#dcfce7', '#15803d'],
-                gold: ['#fef3c7', '#b45309'],
-                pink: ['#ffe4e6', '#be123c'],
-                orange: ['#ffedd5', '#c2410c'],
-            };
-            const charts = {};
+                const dataUrl = root.dataset.dataUrl;
+                const refreshUrl = root.dataset.refreshUrl;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                const pastelPalette = ['#bfdbfe', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#bae6fd', '#fed7aa', '#c7d2fe'];
+                const pastelBorders = ['#60a5fa', '#4ade80', '#f59e0b', '#fb7185', '#a78bfa', '#38bdf8', '#fb923c', '#818cf8'];
+                const toneMap = {
+                    blue: ['#dbeafe', '#1d4ed8'],
+                    green: ['#dcfce7', '#15803d'],
+                    gold: ['#fef3c7', '#b45309'],
+                    pink: ['#ffe4e6', '#be123c'],
+                    orange: ['#ffedd5', '#c2410c'],
+                };
+                const charts = {};
 
             const loader = document.getElementById('manager-dashboard-loader');
             const loaderMessage = document.getElementById('manager-dashboard-loader-message');
@@ -390,6 +391,14 @@
                 errorBox.classList.remove('hidden');
                 errorMessage.textContent = error.message;
             });
+            };
+
+            if (window.Chart) {
+                initializeManagerDashboardCharts();
+                return;
+            }
+
+            window.addEventListener('techcalendar:charts-ready', initializeManagerDashboardCharts, { once: true });
         })();
     </script>
 </x-layouts.app>

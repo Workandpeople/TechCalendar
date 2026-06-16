@@ -123,6 +123,8 @@ class RunSystemTestsJob implements ShouldQueue
 
     private function prepareRuntime(string $runtimeDirectory): void
     {
+        $this->ensureRequiredPhpExtensions();
+
         foreach ([
             $runtimeDirectory,
             $runtimeDirectory.'/bootstrap-cache',
@@ -149,6 +151,34 @@ class RunSystemTestsJob implements ShouldQueue
             base_path('vendor/pestphp/pest/.temp'),
             base_path('vendor/pestphp/pest-plugin-mutate/.temp'),
             base_path('vendor/pestphp/pest-plugin-mutate/.temp/pest-mutate-cache'),
+        ];
+    }
+
+    private function ensureRequiredPhpExtensions(): void
+    {
+        $missingExtensions = array_values(array_filter(
+            $this->requiredPhpExtensions(),
+            fn (string $extension): bool => ! extension_loaded($extension)
+        ));
+
+        if ($missingExtensions === []) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Le runner de tests nécessite les extensions PHP suivantes: '
+            .implode(', ', $missingExtensions)
+            .'. En production Debian/Ubuntu avec PHP 8.3: sudo apt install php8.3-sqlite3 && sudo systemctl restart php8.3-fpm && php artisan queue:restart'
+        );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function requiredPhpExtensions(): array
+    {
+        return [
+            'pdo_sqlite',
         ];
     }
 

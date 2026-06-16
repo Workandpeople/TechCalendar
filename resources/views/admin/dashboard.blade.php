@@ -240,59 +240,70 @@
         </section>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    @vite('resources/js/chart.js')
     <script>
-        const adminHealthCharts = @json($charts);
+        (() => {
+            const initializeAdminHealthCharts = () => {
+                const adminHealthCharts = @json($charts);
 
-        const scoreTrend = adminHealthCharts.scoreTrend || [];
-        new Chart(document.getElementById('admin-health-score-chart'), {
-            type: 'line',
-            data: {
-                labels: scoreTrend.map((item) => item.label),
-                datasets: [{
-                    label: 'Score',
-                    data: scoreTrend.map((item) => item.value),
-                    fill: true,
-                    tension: 0.35,
-                    backgroundColor: 'rgba(191,219,254,0.45)',
-                    borderColor: '#60a5fa',
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#60a5fa',
-                    pointBorderWidth: 2,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { ticks: { color: '#6b7780' }, grid: { display: false } },
-                    y: { min: 0, max: 100, ticks: { color: '#6b7780' }, grid: { color: 'rgba(107,119,128,0.14)' } },
-                },
-            },
-        });
-
-        const statusSplit = adminHealthCharts.statusSplit || [];
-        new Chart(document.getElementById('admin-health-status-chart'), {
-            type: 'doughnut',
-            data: {
-                labels: statusSplit.map((item) => item.label),
-                datasets: [{
-                    data: statusSplit.map((item) => item.value),
-                    backgroundColor: ['#bbf7d0', '#fde68a', '#fecdd3'],
-                    borderColor: '#ffffff',
-                    borderWidth: 3,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#31424c' },
+                const scoreTrend = adminHealthCharts.scoreTrend || [];
+                new Chart(document.getElementById('admin-health-score-chart'), {
+                    type: 'line',
+                    data: {
+                        labels: scoreTrend.map((item) => item.label),
+                        datasets: [{
+                            label: 'Score',
+                            data: scoreTrend.map((item) => item.value),
+                            fill: true,
+                            tension: 0.35,
+                            backgroundColor: 'rgba(191,219,254,0.45)',
+                            borderColor: '#60a5fa',
+                            pointBackgroundColor: '#ffffff',
+                            pointBorderColor: '#60a5fa',
+                            pointBorderWidth: 2,
+                        }],
                     },
-                },
-            },
-        });
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { ticks: { color: '#6b7780' }, grid: { display: false } },
+                            y: { min: 0, max: 100, ticks: { color: '#6b7780' }, grid: { color: 'rgba(107,119,128,0.14)' } },
+                        },
+                    },
+                });
+
+                const statusSplit = adminHealthCharts.statusSplit || [];
+                new Chart(document.getElementById('admin-health-status-chart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: statusSplit.map((item) => item.label),
+                        datasets: [{
+                            data: statusSplit.map((item) => item.value),
+                            backgroundColor: ['#bbf7d0', '#fde68a', '#fecdd3'],
+                            borderColor: '#ffffff',
+                            borderWidth: 3,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#31424c' },
+                            },
+                        },
+                    },
+                });
+            };
+
+            if (window.Chart) {
+                initializeAdminHealthCharts();
+                return;
+            }
+
+            window.addEventListener('techcalendar:charts-ready', initializeAdminHealthCharts, { once: true });
+        })();
     </script>
 </x-layouts.app>

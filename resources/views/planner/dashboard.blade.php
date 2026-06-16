@@ -118,120 +118,131 @@
         </section>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    @vite('resources/js/chart.js')
     <script>
-        const plannerDashboardCharts = @json($charts);
-        const dashboardCrmSearch = document.getElementById('dashboard_crm_search');
-        const dashboardCrmCards = Array.from(document.querySelectorAll('.dashboard-crm-card'));
-        const dashboardCrmCount = document.getElementById('dashboard-crm-count');
-        const dashboardCrmEmpty = document.getElementById('dashboard-crm-empty');
-        const pastelPalette = ['#bfdbfe', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#bae6fd'];
-        const pastelBorders = ['#60a5fa', '#4ade80', '#f59e0b', '#fb7185', '#a78bfa', '#38bdf8'];
+        (() => {
+            const initializePlannerDashboardCharts = () => {
+                const plannerDashboardCharts = @json($charts);
+                const dashboardCrmSearch = document.getElementById('dashboard_crm_search');
+                const dashboardCrmCards = Array.from(document.querySelectorAll('.dashboard-crm-card'));
+                const dashboardCrmCount = document.getElementById('dashboard-crm-count');
+                const dashboardCrmEmpty = document.getElementById('dashboard-crm-empty');
+                const pastelPalette = ['#bfdbfe', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#bae6fd'];
+                const pastelBorders = ['#60a5fa', '#4ade80', '#f59e0b', '#fb7185', '#a78bfa', '#38bdf8'];
 
-        const filterDashboardCrmCards = () => {
-            const query = dashboardCrmSearch.value.trim().toLowerCase();
-            let visibleCount = 0;
+                const filterDashboardCrmCards = () => {
+                    const query = dashboardCrmSearch.value.trim().toLowerCase();
+                    let visibleCount = 0;
 
-            dashboardCrmCards.forEach((card) => {
-                const isVisible = query === '' || card.dataset.client.includes(query);
-                card.classList.toggle('hidden', !isVisible);
-                if (isVisible) visibleCount++;
-            });
+                    dashboardCrmCards.forEach((card) => {
+                        const isVisible = query === '' || card.dataset.client.includes(query);
+                        card.classList.toggle('hidden', !isVisible);
+                        if (isVisible) visibleCount++;
+                    });
 
-            dashboardCrmCount.textContent = `${visibleCount} demande(s)`;
-            dashboardCrmEmpty.classList.toggle('hidden', visibleCount > 0);
-        };
+                    dashboardCrmCount.textContent = `${visibleCount} demande(s)`;
+                    dashboardCrmEmpty.classList.toggle('hidden', visibleCount > 0);
+                };
 
-        dashboardCrmSearch.addEventListener('input', filterDashboardCrmCards);
+                dashboardCrmSearch.addEventListener('input', filterDashboardCrmCards);
 
-        const buildDataset = (items) => ({
-            labels: items.map((item) => item.label),
-            values: items.map((item) => item.value),
-        });
+                const buildDataset = (items) => ({
+                    labels: items.map((item) => item.label),
+                    values: items.map((item) => item.value),
+                });
 
-        const baseOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#31424c',
-                        font: { size: 12 },
+                const baseOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#31424c',
+                                font: { size: 12 },
+                            },
+                        },
                     },
-                },
-            },
-            scales: {
-                x: {
-                    ticks: { color: '#6b7780' },
-                    grid: { display: false },
-                },
-                y: {
-                    beginAtZero: true,
-                    ticks: { color: '#6b7780', precision: 0 },
-                    grid: { color: 'rgba(107,119,128,0.14)' },
-                },
-            },
-        };
-
-        const weeklyTrend = buildDataset(plannerDashboardCharts.weeklyTrend || []);
-        new Chart(document.getElementById('weekly-trend-chart'), {
-            type: 'bar',
-            data: {
-                labels: weeklyTrend.labels,
-                datasets: [{
-                    label: 'RDV placés',
-                    data: weeklyTrend.values,
-                    backgroundColor: pastelPalette,
-                    borderColor: pastelBorders,
-                    borderWidth: 2,
-                    borderRadius: 12,
-                }],
-            },
-            options: baseOptions,
-        });
-
-        const serviceTypes = buildDataset(plannerDashboardCharts.serviceTypes || []);
-        new Chart(document.getElementById('service-types-chart'), {
-            type: 'doughnut',
-            data: {
-                labels: serviceTypes.labels.length ? serviceTypes.labels : ['Aucune donnee'],
-                datasets: [{
-                    data: serviceTypes.values.length ? serviceTypes.values : [1],
-                    backgroundColor: pastelPalette,
-                    borderColor: '#ffffff',
-                    borderWidth: 3,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#31424c' },
+                    scales: {
+                        x: {
+                            ticks: { color: '#6b7780' },
+                            grid: { display: false },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#6b7780', precision: 0 },
+                            grid: { color: 'rgba(107,119,128,0.14)' },
+                        },
                     },
-                },
-            },
-        });
+                };
 
-        const plannerEfficiency = buildDataset(plannerDashboardCharts.plannerEfficiency || []);
-        new Chart(document.getElementById('planner-efficiency-chart'), {
-            type: 'bar',
-            data: {
-                labels: plannerEfficiency.labels.length ? plannerEfficiency.labels : ['Aucune donnee'],
-                datasets: [{
-                    label: 'RDV créés',
-                    data: plannerEfficiency.values.length ? plannerEfficiency.values : [0],
-                    backgroundColor: ['#fecdd3', '#ddd6fe', '#bae6fd', '#bbf7d0', '#fde68a'],
-                    borderColor: ['#fb7185', '#a78bfa', '#38bdf8', '#4ade80', '#f59e0b'],
-                    borderWidth: 2,
-                    borderRadius: 10,
-                }],
-            },
-            options: {
-                ...baseOptions,
-                indexAxis: 'y',
-            },
-        });
+                const weeklyTrend = buildDataset(plannerDashboardCharts.weeklyTrend || []);
+                new Chart(document.getElementById('weekly-trend-chart'), {
+                    type: 'bar',
+                    data: {
+                        labels: weeklyTrend.labels,
+                        datasets: [{
+                            label: 'RDV placés',
+                            data: weeklyTrend.values,
+                            backgroundColor: pastelPalette,
+                            borderColor: pastelBorders,
+                            borderWidth: 2,
+                            borderRadius: 12,
+                        }],
+                    },
+                    options: baseOptions,
+                });
+
+                const serviceTypes = buildDataset(plannerDashboardCharts.serviceTypes || []);
+                new Chart(document.getElementById('service-types-chart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: serviceTypes.labels.length ? serviceTypes.labels : ['Aucune donnée'],
+                        datasets: [{
+                            data: serviceTypes.values.length ? serviceTypes.values : [1],
+                            backgroundColor: pastelPalette,
+                            borderColor: '#ffffff',
+                            borderWidth: 3,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#31424c' },
+                            },
+                        },
+                    },
+                });
+
+                const plannerEfficiency = buildDataset(plannerDashboardCharts.plannerEfficiency || []);
+                new Chart(document.getElementById('planner-efficiency-chart'), {
+                    type: 'bar',
+                    data: {
+                        labels: plannerEfficiency.labels.length ? plannerEfficiency.labels : ['Aucune donnée'],
+                        datasets: [{
+                            label: 'RDV créés',
+                            data: plannerEfficiency.values.length ? plannerEfficiency.values : [0],
+                            backgroundColor: ['#fecdd3', '#ddd6fe', '#bae6fd', '#bbf7d0', '#fde68a'],
+                            borderColor: ['#fb7185', '#a78bfa', '#38bdf8', '#4ade80', '#f59e0b'],
+                            borderWidth: 2,
+                            borderRadius: 10,
+                        }],
+                    },
+                    options: {
+                        ...baseOptions,
+                        indexAxis: 'y',
+                    },
+                });
+            };
+
+            if (window.Chart) {
+                initializePlannerDashboardCharts();
+                return;
+            }
+
+            window.addEventListener('techcalendar:charts-ready', initializePlannerDashboardCharts, { once: true });
+        })();
     </script>
 </x-layouts.app>
