@@ -25,15 +25,14 @@
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Ajouter un lot par fichier</h2>
                     <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportés: .xlsx, .csv et .txt. Le fichier original est conservé en stockage privé après import.</p>
                 </div>
-                <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Max {{ \App\Services\LotSpreadsheetExtractor::MAX_ROWS }} lignes</span>
             </div>
 
             <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px_300px_180px_auto] lg:items-end">
                 @csrf
-                <div id="lot-file-field" class="rounded-2xl border border-transparent p-2 transition">
+                <div id="lot-file-field">
                     <label class="gc-label" for="lot_file">Fichier du lot</label>
                     <input id="lot_file" name="file" type="file" class="gc-input" accept=".xlsx,.csv,.txt" required />
-                    <p id="lot-file-selected" class="mt-2 hidden rounded-xl px-3 py-2 text-sm font-medium" style="background:#ecfdf5;color:#047857;"></p>
+                    <p id="lot-file-selected" class="mt-1 hidden text-xs font-medium" style="color:#047857;"></p>
                 </div>
                 <div>
                     <label class="gc-label" for="lot_name">Nom du lot</label>
@@ -338,7 +337,6 @@
         const lockedLotImportStatuses = ['pending', 'processing'];
 
         const lotImportForm = document.getElementById('lot-import-form');
-        const lotFileField = document.getElementById('lot-file-field');
         const lotImportFile = document.getElementById('lot_file');
         const lotFileSelected = document.getElementById('lot-file-selected');
         const lotImportType = document.getElementById('lot_type');
@@ -405,12 +403,11 @@
             const hasType = Boolean(lotImportType?.value);
             const hasSampling = !needsSampling || Number(lotSamplingPercentage?.value || 0) > 0;
 
-            if (lotFileField && lotFileSelected) {
-                lotFileField.style.borderColor = hasFile ? '#86efac' : 'transparent';
-                lotFileField.style.background = hasFile ? '#f0fdf4' : 'transparent';
+            if (lotImportFile && lotFileSelected) {
+                lotImportFile.style.borderColor = hasFile ? '#86efac' : '';
                 lotFileSelected.classList.toggle('hidden', !hasFile);
                 lotFileSelected.textContent = selectedFile
-                    ? `Fichier sélectionné : ${selectedFile.name} (${formatFileSize(selectedFile.size)})`
+                    ? `Fichier sélectionné: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`
                     : '';
             }
 

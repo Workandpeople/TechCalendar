@@ -285,6 +285,7 @@
         let trackingDetailMapRenderRequestId = 0;
         let trackingEventsAbortController = null;
         let trackingEventsRequestId = 0;
+        let trackingAppointmentTooltip = null;
 
         const formatDateTime = (value) => {
             if (!value) return '-';
@@ -327,6 +328,95 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+
+        const ensureTrackingAppointmentTooltip = () => {
+            if (trackingAppointmentTooltip) {
+                return trackingAppointmentTooltip;
+            }
+
+            trackingAppointmentTooltip = document.createElement('div');
+            trackingAppointmentTooltip.style.cssText = [
+                'position:fixed',
+                'z-index:90',
+                'display:none',
+                'pointer-events:none',
+                'max-width:360px',
+                'border-radius:16px',
+                'padding:12px 14px',
+                'background:#31424c',
+                'color:#ffffff',
+                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
+                'font-size:12px',
+                'line-height:1.45',
+                'transform:translate(-50%, calc(-100% - 14px))',
+            ].join(';');
+            document.body.appendChild(trackingAppointmentTooltip);
+
+            return trackingAppointmentTooltip;
+        };
+
+        const moveTrackingAppointmentTooltip = (event) => {
+            const tooltip = ensureTrackingAppointmentTooltip();
+            const safeLeft = Math.min(Math.max(event.clientX, 180), window.innerWidth - 180);
+            const safeTop = Math.max(event.clientY, 120);
+
+            tooltip.style.left = `${safeLeft}px`;
+            tooltip.style.top = `${safeTop}px`;
+        };
+
+        const trackingAppointmentServiceType = (props) => (
+            props.service_type
+            || String(props.service_label || 'RDV').split(' - ')[0]
+            || 'RDV'
+        );
+
+        const trackingAppointmentLocationLabel = (props) => {
+            const postalCity = [props.postal_code, props.city]
+                .filter(Boolean)
+                .join(' ');
+
+            return postalCity || props.location_label || props.address || 'Lieu non renseigné';
+        };
+
+        const showTrackingAppointmentTooltip = (mouseEvent, calendarEvent) => {
+            const props = calendarEvent.extendedProps || {};
+            const tooltip = ensureTrackingAppointmentTooltip();
+            const serviceType = trackingAppointmentServiceType(props);
+            const location = trackingAppointmentLocationLabel(props);
+            const timeRange = [formatDateTime(calendarEvent.start), formatDateTime(calendarEvent.end)]
+                .filter((value) => value && value !== '-')
+                .join(' → ');
+
+            tooltip.innerHTML = `
+                <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(serviceType)}</p>
+                        ${props.deleted_at ? '<span style="border-radius:9999px;background:rgba(254,226,226,.18);color:#fecdd3;padding:3px 8px;font-size:11px;font-weight:700;">Désactivé</span>' : ''}
+                    </div>
+                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
+                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Client</p>
+                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(props.customer_name || calendarEvent.title || '-')}</p>
+                    </div>
+                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
+                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Code postal / ville</p>
+                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(location)}</p>
+                    </div>
+                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
+                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Type de RDV</p>
+                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(props.service_label || serviceType)}</p>
+                    </div>
+                    ${timeRange ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);">${trackingEscapeHtml(timeRange)}</p>` : ''}
+                </div>
+            `;
+            tooltip.style.display = 'block';
+            moveTrackingAppointmentTooltip(mouseEvent);
+        };
+
+        const hideTrackingAppointmentTooltip = () => {
+            if (trackingAppointmentTooltip) {
+                trackingAppointmentTooltip.style.display = 'none';
+            }
+        };
 
         const setTrackingDetailsStatus = (message, color = '#0f766e') => {
             const status = document.getElementById('tracking_details_status');
@@ -1156,8 +1246,8 @@
                 eventContent: (arg) => {
                     const props = arg.event.extendedProps || {};
                     const time = arg.timeText ? `<span class="font-semibold">${trackingEscapeHtml(arg.timeText)}</span>` : '';
-                    const serviceType = props.service_type || String(props.service_label || 'RDV').split(' - ')[0] || 'RDV';
-                    const location = props.location_label || [props.postal_code, props.city].filter(Boolean).join(' ') || props.address || '';
+                    const serviceType = trackingAppointmentServiceType(props);
+                    const location = trackingAppointmentLocationLabel(props);
 
                     return {
                         html: `
@@ -1176,7 +1266,7 @@
                         info.el.style.borderWidth = '2px';
                     }
 
-                    info.el.title = [
+                    info.el.setAttribute('aria-label', [
                         props.deleted_at ? 'RDV soft-deleted' : null,
                         props.service_label,
                         props.customer_name,
@@ -1184,10 +1274,28 @@
                         props.address,
 	                        props.created_by_name ? `Créé par: ${props.created_by_name}` : null,
                         props.comment,
-                    ].filter(Boolean).join('\n');
+                    ].filter(Boolean).join(' - '));
+                },
+                eventMouseEnter: (info) => {
+                    const moveHandler = (event) => moveTrackingAppointmentTooltip(event);
+
+                    info.el._trackingAppointmentTooltipMoveHandler = moveHandler;
+                    info.el.addEventListener('mousemove', moveHandler);
+                    showTrackingAppointmentTooltip(info.jsEvent, info.event);
+                },
+                eventMouseLeave: (info) => {
+                    const moveHandler = info.el._trackingAppointmentTooltipMoveHandler;
+
+                    if (moveHandler) {
+                        info.el.removeEventListener('mousemove', moveHandler);
+                        delete info.el._trackingAppointmentTooltipMoveHandler;
+                    }
+
+                    hideTrackingAppointmentTooltip();
                 },
                 eventClick: (info) => {
                     info.jsEvent.preventDefault();
+                    hideTrackingAppointmentTooltip();
                     openTrackingAppointmentModal(info.event);
                 },
             });

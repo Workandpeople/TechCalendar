@@ -10,8 +10,6 @@ use ZipArchive;
 
 class LotSpreadsheetExtractor
 {
-    public const MAX_ROWS = 350;
-
     /**
      * @return Collection<int, array{row_number:int,data:array<string, string|null>}>
      */
@@ -66,10 +64,6 @@ class LotSpreadsheetExtractor
                     'row_number' => $rowNumber,
                     'data' => $this->combineRow($headers, $values),
                 ]);
-
-                if ($rows->count() >= self::MAX_ROWS) {
-                    break;
-                }
             }
 
             return $rows;
@@ -152,10 +146,6 @@ class LotSpreadsheetExtractor
                     'row_number' => $rowNumber,
                     'data' => $this->combineRow($headers, $values),
                 ]);
-
-                if ($rows->count() >= self::MAX_ROWS) {
-                    break;
-                }
             }
 
             return $rows;
