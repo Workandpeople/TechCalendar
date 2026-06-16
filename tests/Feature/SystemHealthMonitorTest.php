@@ -192,3 +192,42 @@ it('does not queue parallel system test runs', function () {
     expect(SystemTestRun::query()->count())->toBe(1);
     Queue::assertNotPushed(RunSystemTestsJob::class);
 });
+
+it('builds dashboard test commands with isolated Pest cache paths', function () {
+    $job = new RunSystemTestsJob(123);
+    $runtimeDirectory = storage_path('framework/testing/system-runs/123');
+    $reflection = new ReflectionClass($job);
+    $method = $reflection->getMethod('commandForSuite');
+    $method->setAccessible(true);
+
+    $command = $method->invoke($job, SystemTestRun::SUITE_FEATURE, $runtimeDirectory);
+    $serializedCommand = implode(' ', $command);
+
+    expect($command)
+        ->toContain(PHP_BINARY)
+        ->toContain(base_path('vendor/bin/pest'))
+        ->toContain('--compact')
+        ->toContain('--colors=never')
+        ->toContain('--configuration=phpunit.xml')
+        ->toContain('--do-not-cache-result')
+        ->toContain('--testsuite=Feature')
+        ->and($serializedCommand)->toContain($runtimeDirectory.'/phpunit-cache');
+});
+
+it('forces dashboard test runs to use a safe testing environment', function () {
+    $job = new RunSystemTestsJob(123);
+    $runtimeDirectory = storage_path('framework/testing/system-runs/123');
+    $reflection = new ReflectionClass($job);
+    $method = $reflection->getMethod('processEnvironment');
+    $method->setAccessible(true);
+
+    $environment = $method->invoke($job, $runtimeDirectory);
+
+    expect($environment['APP_ENV'])->toBe('testing')
+        ->and($environment['APP_CONFIG_CACHE'])->toBe($runtimeDirectory.'/bootstrap-cache/config.php')
+        ->and($environment['DB_CONNECTION'])->toBe('sqlite')
+        ->and($environment['DB_DATABASE'])->toBe(':memory:')
+        ->and($environment['CACHE_STORE'])->toBe('array')
+        ->and($environment['QUEUE_CONNECTION'])->toBe('sync')
+        ->and($environment['MAIL_MAILER'])->toBe('array');
+});

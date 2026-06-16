@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use RuntimeException;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -29,7 +30,8 @@ class RunSystemTestsJob implements ShouldQueue
     public function handle(): void
     {
         $run = SystemTestRun::query()->findOrFail($this->runId);
-        $command = $this->commandForSuite((string) $run->suite);
+        $runtimeDirectory = storage_path('framework/testing/system-runs/'.$run->id);
+        $command = $this->commandForSuite((string) $run->suite, $runtimeDirectory);
 
         $run->update([
             'status' => SystemTestRun::STATUS_RUNNING,
@@ -42,7 +44,9 @@ class RunSystemTestsJob implements ShouldQueue
         ]);
 
         try {
-            $process = new Process($command, base_path(), null, null, $this->timeout);
+            $this->prepareRuntime($runtimeDirectory);
+
+            $process = new Process($command, base_path(), $this->processEnvironment($runtimeDirectory), null, $this->timeout);
             $process->run();
 
             $output = trim($process->getOutput().PHP_EOL.$process->getErrorOutput());
@@ -60,17 +64,23 @@ class RunSystemTestsJob implements ShouldQueue
                 'output' => $this->truncateOutput($exception->getTraceAsString()),
                 'finished_at' => now(),
             ]);
-
-            throw $exception;
         }
     }
 
     /**
      * @return array<int, string>
      */
-    private function commandForSuite(string $suite): array
+    private function commandForSuite(string $suite, string $runtimeDirectory): array
     {
-        $command = [PHP_BINARY, 'artisan', 'test', '--compact'];
+        $command = [
+            PHP_BINARY,
+            base_path('vendor/bin/pest'),
+            '--compact',
+            '--colors=never',
+            '--configuration=phpunit.xml',
+            '--do-not-cache-result',
+            '--cache-directory='.$runtimeDirectory.'/phpunit-cache',
+        ];
 
         if ($suite === SystemTestRun::SUITE_UNIT) {
             $command[] = '--testsuite=Unit';
@@ -81,6 +91,89 @@ class RunSystemTestsJob implements ShouldQueue
         }
 
         return $command;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function processEnvironment(string $runtimeDirectory): array
+    {
+        $bootstrapCacheDirectory = $runtimeDirectory.'/bootstrap-cache';
+
+        return [
+            'APP_ENV' => 'testing',
+            'APP_CONFIG_CACHE' => $bootstrapCacheDirectory.'/config.php',
+            'APP_EVENTS_CACHE' => $bootstrapCacheDirectory.'/events.php',
+            'APP_PACKAGES_CACHE' => $bootstrapCacheDirectory.'/packages.php',
+            'APP_ROUTES_CACHE' => $bootstrapCacheDirectory.'/routes.php',
+            'APP_SERVICES_CACHE' => $bootstrapCacheDirectory.'/services.php',
+            'BCRYPT_ROUNDS' => '4',
+            'CACHE_STORE' => 'array',
+            'DB_CONNECTION' => 'sqlite',
+            'DB_DATABASE' => ':memory:',
+            'MAIL_MAILER' => 'array',
+            'QUEUE_CONNECTION' => 'sync',
+            'SESSION_DRIVER' => 'array',
+            'TMP' => $runtimeDirectory.'/tmp',
+            'TEMP' => $runtimeDirectory.'/tmp',
+            'TMPDIR' => $runtimeDirectory.'/tmp',
+            'XDG_CACHE_HOME' => $runtimeDirectory.'/cache',
+        ];
+    }
+
+    private function prepareRuntime(string $runtimeDirectory): void
+    {
+        foreach ([
+            $runtimeDirectory,
+            $runtimeDirectory.'/bootstrap-cache',
+            $runtimeDirectory.'/cache',
+            $runtimeDirectory.'/phpunit-cache',
+            $runtimeDirectory.'/tmp',
+        ] as $directory) {
+            $this->ensureWritableDirectory($directory);
+        }
+
+        foreach ($this->requiredWritablePestDirectories() as $directory) {
+            $this->ensureWritableDirectory($directory, true);
+        }
+    }
+
+    /**
+     * Pest mutate instantiates this cache even when mutation testing is not used.
+     *
+     * @return array<int, string>
+     */
+    private function requiredWritablePestDirectories(): array
+    {
+        return [
+            base_path('vendor/pestphp/pest/.temp'),
+            base_path('vendor/pestphp/pest-plugin-mutate/.temp'),
+            base_path('vendor/pestphp/pest-plugin-mutate/.temp/pest-mutate-cache'),
+        ];
+    }
+
+    private function ensureWritableDirectory(string $directory, bool $isVendorCache = false): void
+    {
+        if (! is_dir($directory)) {
+            @mkdir($directory, 0755, true);
+        }
+
+        clearstatcache(true, $directory);
+
+        if (is_dir($directory) && is_writable($directory)) {
+            return;
+        }
+
+        if ($isVendorCache) {
+            throw new RuntimeException(
+                "Le runner de tests doit pouvoir écrire dans {$directory}. "
+                .'Pest utilise encore certains caches sous vendor. En production, crée ce dossier et donne-le au user du worker queue/PHP-FPM, par exemple: '
+                .'sudo mkdir -p /var/www/TechCalendar/vendor/pestphp/pest/.temp /var/www/TechCalendar/vendor/pestphp/pest-plugin-mutate/.temp/pest-mutate-cache && '
+                .'sudo chown -R www-data:www-data /var/www/TechCalendar/vendor/pestphp/pest/.temp /var/www/TechCalendar/vendor/pestphp/pest-plugin-mutate/.temp'
+            );
+        }
+
+        throw new RuntimeException("Le runner de tests doit pouvoir écrire dans {$directory}.");
     }
 
     private function truncateOutput(string $output): string
