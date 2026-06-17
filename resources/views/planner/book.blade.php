@@ -2553,6 +2553,9 @@
             currentCrmAppointmentId = payload.crm_appointment_id || null;
             analysisSection.classList.remove('hidden');
             startBookingAnalysisLoader(sourceLabel);
+            if (scrollToResults) {
+                window.requestAnimationFrame(scrollToBookingResults);
+            }
             clearFeedback();
             techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Analyse en cours...</div>';
 
@@ -2591,9 +2594,6 @@
                 await renderMap(currentAppointmentRequest, selectedTechnicians());
                 renderCalendar(currentCalendarEvents, currentCalendarSuggestions, currentFilters?.preferred_starts_at || null);
                 await finishBookingAnalysisLoader('Analyse terminée, affichage des résultats.');
-                if (scrollToResults) {
-                    scrollToBookingResults();
-                }
                 window.setTimeout(() => {
                     shouldFetchCalendarWindow = true;
                 }, 250);
