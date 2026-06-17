@@ -296,21 +296,15 @@
                             <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
                             <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="30" />
                         </div>
-                        <div class="md:col-span-2">
-                            <label class="gc-label" for="lot_appointment_address">Adresse</label>
-                            <input id="lot_appointment_address" class="gc-input" data-lot-appointment-field="address" type="text" maxlength="255" />
-                        </div>
-                        <div>
-                            <label class="gc-label" for="lot_appointment_postal_code">Code postal</label>
-                            <input id="lot_appointment_postal_code" class="gc-input" data-lot-appointment-field="postal_code" type="text" maxlength="20" />
-                        </div>
-                        <div>
-                            <label class="gc-label" for="lot_appointment_city">Ville</label>
-                            <input id="lot_appointment_city" class="gc-input" data-lot-appointment-field="city" type="text" maxlength="120" />
-                        </div>
-                        <div>
-                            <label class="gc-label" for="lot_appointment_department_code">Département</label>
-                            <input id="lot_appointment_department_code" class="gc-input" data-lot-appointment-field="department_code" type="text" maxlength="3" />
+                        <div class="relative md:col-span-2 xl:col-span-3">
+                            <label class="gc-label" for="lot_appointment_full_address">Adresse</label>
+                            <input id="lot_appointment_full_address" class="gc-input" type="text" maxlength="255" autocomplete="off" placeholder="Saisir une adresse..." />
+                            <div id="lot-appointment-address-suggestions" class="absolute left-0 right-0 top-full z-20 mt-2 hidden overflow-hidden rounded-xl border bg-white shadow-xl" style="border-color:var(--gc-border);"></div>
+                            <p id="lot-appointment-address-meta" class="mt-1 text-xs" style="color:var(--gc-text-soft);"></p>
+                            <input id="lot_appointment_address" data-lot-appointment-field="address" type="hidden" />
+                            <input id="lot_appointment_postal_code" data-lot-appointment-field="postal_code" type="hidden" />
+                            <input id="lot_appointment_city" data-lot-appointment-field="city" type="hidden" />
+                            <input id="lot_appointment_department_code" data-lot-appointment-field="department_code" type="hidden" />
                         </div>
                         <div class="md:col-span-2 xl:col-span-3">
                             <label class="gc-label" for="lot_appointment_comment">Commentaire</label>
@@ -478,11 +472,16 @@
         const lotAppointmentRecalculate = document.getElementById('lot-appointment-recalculate');
         const lotAppointmentEditStatus = document.getElementById('lot-appointment-edit-status');
         const lotAppointmentEditGps = document.getElementById('lot-appointment-edit-gps');
+        const lotAppointmentFullAddress = document.getElementById('lot_appointment_full_address');
+        const lotAppointmentAddressSuggestions = document.getElementById('lot-appointment-address-suggestions');
+        const lotAppointmentAddressMeta = document.getElementById('lot-appointment-address-meta');
         const lotMapboxToken = @json($mapboxToken ?? null);
         const lotAppointmentData = new Map();
         let currentLotAppointment = null;
         let lotAppointmentMap = null;
         let lotAppointmentMarker = null;
+        let lotAppointmentAddressTimer = null;
+        let lotAppointmentAddressAbortController = null;
 
         document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
             try {
@@ -950,6 +949,218 @@
                 .trim();
         }
 
+        function lotAppointmentFullAddressLabel(appointment) {
+            return [
+                appointment?.address,
+                lotAppointmentLocation(appointment),
+            ]
+                .filter(Boolean)
+                .join(', ')
+                .trim();
+        }
+
+        function lotAppointmentHiddenField(name) {
+            return lotAppointmentEditForm?.querySelector(`[data-lot-appointment-field="${name}"]`);
+        }
+
+        function setLotAppointmentHiddenValue(name, value) {
+            const field = lotAppointmentHiddenField(name);
+
+            if (field) {
+                field.value = value || '';
+            }
+        }
+
+        function lotAppointmentDepartmentFromPostalCode(postalCode) {
+            const match = String(postalCode || '').match(/^(\d{2})/);
+
+            return match ? match[1] : '';
+        }
+
+        function setLotAppointmentAddressMeta(appointment) {
+            if (!lotAppointmentAddressMeta) return;
+
+            const location = lotAppointmentLocation(appointment);
+            lotAppointmentAddressMeta.textContent = location
+                ? `Adresse qualifiée : ${location}${appointment?.department_code ? ` · dept. ${appointment.department_code}` : ''}`
+                : 'Sélectionne une suggestion Mapbox pour récupérer le code postal, la ville et les coordonnées.';
+        }
+
+        function hideLotAppointmentAddressSuggestions() {
+            if (!lotAppointmentAddressSuggestions) return;
+
+            lotAppointmentAddressSuggestions.classList.add('hidden');
+            lotAppointmentAddressSuggestions.innerHTML = '';
+        }
+
+        function lotAppointmentFeatureText(feature, type) {
+            if (Array.isArray(feature?.place_type) && feature.place_type.includes(type)) {
+                return feature.text || '';
+            }
+
+            return (feature?.context || [])
+                .find((item) => String(item?.id || '').startsWith(`${type}.`))
+                ?.text || '';
+        }
+
+        function lotAppointmentSuggestionPayload(feature) {
+            const coordinates = feature?.center || feature?.geometry?.coordinates || [];
+            const postalCode = lotAppointmentFeatureText(feature, 'postcode');
+            const city = lotAppointmentFeatureText(feature, 'place')
+                || lotAppointmentFeatureText(feature, 'locality')
+                || lotAppointmentFeatureText(feature, 'region');
+            const streetNumber = feature?.address || feature?.properties?.address || '';
+            const streetName = feature?.text || '';
+            const address = [streetNumber, streetName].filter(Boolean).join(' ').trim()
+                || String(feature?.place_name || '').split(',')[0]?.trim()
+                || '';
+            const departmentCode = lotAppointmentDepartmentFromPostalCode(postalCode);
+
+            return {
+                address,
+                postal_code: postalCode,
+                city,
+                department_code: departmentCode,
+                latitude: Number(coordinates[1]),
+                longitude: Number(coordinates[0]),
+                label: [
+                    address,
+                    [postalCode, city].filter(Boolean).join(' '),
+                ].filter(Boolean).join(', '),
+                place_name: feature?.place_name || '',
+            };
+        }
+
+        function applyLotAppointmentAddressSuggestion(payload) {
+            setLotAppointmentHiddenValue('address', payload.address);
+            setLotAppointmentHiddenValue('postal_code', payload.postal_code);
+            setLotAppointmentHiddenValue('city', payload.city);
+            setLotAppointmentHiddenValue('department_code', payload.department_code);
+
+            if (lotAppointmentFullAddress) {
+                lotAppointmentFullAddress.value = payload.label || payload.place_name || payload.address || '';
+            }
+
+            currentLotAppointment = {
+                ...(currentLotAppointment || {}),
+                address: payload.address,
+                postal_code: payload.postal_code,
+                city: payload.city,
+                department_code: payload.department_code,
+                latitude: Number.isFinite(payload.latitude) ? payload.latitude : currentLotAppointment?.latitude,
+                longitude: Number.isFinite(payload.longitude) ? payload.longitude : currentLotAppointment?.longitude,
+            };
+
+            setLotAppointmentAddressMeta(currentLotAppointment);
+
+            if (lotAppointmentEditGps) {
+                lotAppointmentEditGps.textContent = lotAppointmentGpsLabel(currentLotAppointment);
+            }
+
+            renderLotAppointmentMap(currentLotAppointment);
+            hideLotAppointmentAddressSuggestions();
+        }
+
+        function renderLotAppointmentAddressSuggestions(features) {
+            if (!lotAppointmentAddressSuggestions) return;
+
+            const suggestions = (features || [])
+                .map(lotAppointmentSuggestionPayload)
+                .filter((suggestion) => suggestion.address || suggestion.place_name)
+                .slice(0, 6);
+
+            if (suggestions.length === 0) {
+                lotAppointmentAddressSuggestions.innerHTML = '<div class="px-4 py-3 text-sm" style="color:var(--gc-text-soft);">Aucune adresse trouvée.</div>';
+                lotAppointmentAddressSuggestions.classList.remove('hidden');
+                return;
+            }
+
+            lotAppointmentAddressSuggestions.innerHTML = suggestions.map((suggestion, index) => `
+                <button
+                    type="button"
+                    class="block w-full px-4 py-3 text-left text-sm transition hover:bg-slate-50"
+                    data-lot-appointment-address-suggestion="${index}"
+                >
+                    <span class="block font-semibold" style="color:var(--gc-text);">${escapeHtml(suggestion.label || suggestion.place_name)}</span>
+                    ${suggestion.place_name && suggestion.place_name !== suggestion.label ? `<span class="block text-xs" style="color:var(--gc-text-soft);">${escapeHtml(suggestion.place_name)}</span>` : ''}
+                </button>
+            `).join('');
+
+            lotAppointmentAddressSuggestions.querySelectorAll('[data-lot-appointment-address-suggestion]').forEach((button) => {
+                button.addEventListener('mousedown', (event) => event.preventDefault());
+                button.addEventListener('click', () => applyLotAppointmentAddressSuggestion(suggestions[Number(button.dataset.lotAppointmentAddressSuggestion)]));
+            });
+
+            lotAppointmentAddressSuggestions.classList.remove('hidden');
+        }
+
+        async function searchLotAppointmentAddressSuggestions(query) {
+            if (!lotMapboxToken || !lotAppointmentAddressSuggestions) {
+                setLotAppointmentAddressMeta({
+                    address: query,
+                    postal_code: null,
+                    city: null,
+                    department_code: null,
+                });
+                return;
+            }
+
+            lotAppointmentAddressAbortController?.abort();
+            lotAppointmentAddressAbortController = new AbortController();
+
+            const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`);
+            url.searchParams.set('access_token', lotMapboxToken);
+            url.searchParams.set('country', 'fr');
+            url.searchParams.set('language', 'fr');
+            url.searchParams.set('types', 'address,postcode,place,locality');
+            url.searchParams.set('limit', '6');
+
+            try {
+                const response = await fetch(url.toString(), {
+                    signal: lotAppointmentAddressAbortController.signal,
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!response.ok) {
+                    hideLotAppointmentAddressSuggestions();
+                    return;
+                }
+
+                const data = await response.json();
+                renderLotAppointmentAddressSuggestions(data.features || []);
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    hideLotAppointmentAddressSuggestions();
+                }
+            }
+        }
+
+        function handleLotAppointmentAddressInput() {
+            const value = lotAppointmentFullAddress?.value?.trim() || '';
+
+            setLotAppointmentHiddenValue('address', value);
+            setLotAppointmentHiddenValue('postal_code', '');
+            setLotAppointmentHiddenValue('city', '');
+            setLotAppointmentHiddenValue('department_code', '');
+            setLotAppointmentAddressMeta({
+                address: value,
+                postal_code: null,
+                city: null,
+                department_code: null,
+            });
+
+            window.clearTimeout(lotAppointmentAddressTimer);
+
+            if (value.length < 3) {
+                hideLotAppointmentAddressSuggestions();
+                return;
+            }
+
+            lotAppointmentAddressTimer = window.setTimeout(() => {
+                void searchLotAppointmentAddressSuggestions(value);
+            }, 280);
+        }
+
         function lotAppointmentReference(appointment) {
             if (appointment?.external_reference) {
                 return `Réf. ${appointment.external_reference}`;
@@ -1068,6 +1279,13 @@
                 field.value = appointment?.[field.dataset.lotAppointmentField] || '';
             });
 
+            if (lotAppointmentFullAddress) {
+                lotAppointmentFullAddress.value = lotAppointmentFullAddressLabel(appointment);
+            }
+
+            setLotAppointmentAddressMeta(appointment);
+            hideLotAppointmentAddressSuggestions();
+
             if (lotAppointmentEditGps) {
                 lotAppointmentEditGps.textContent = lotAppointmentGpsLabel(appointment);
             }
@@ -1093,6 +1311,8 @@
             lotAppointmentEditModal?.classList.add('hidden');
             lotAppointmentEditModal?.classList.remove('flex');
             currentLotAppointment = null;
+            lotAppointmentAddressAbortController?.abort();
+            hideLotAppointmentAddressSuggestions();
         }
 
         function lotAppointmentEditPayload() {
@@ -1163,7 +1383,9 @@
                 fillLotAppointmentEditForm(data.appointment);
                 updateLotAppointmentRow(data.appointment);
                 setLotAppointmentEditStatus(data.message || 'RDV du lot mis à jour.', '#15803d');
-                window.setTimeout(closeLotAppointmentEditModal, 450);
+                if (!forceGeocode) {
+                    window.setTimeout(closeLotAppointmentEditModal, 450);
+                }
             } catch (error) {
                 setLotAppointmentEditStatus('Erreur réseau pendant la modification.', '#be123c');
             } finally {
@@ -1179,6 +1401,10 @@
 
         lotAppointmentEditClose?.addEventListener('click', closeLotAppointmentEditModal);
         lotAppointmentEditCancel?.addEventListener('click', closeLotAppointmentEditModal);
+        lotAppointmentFullAddress?.addEventListener('input', handleLotAppointmentAddressInput);
+        lotAppointmentFullAddress?.addEventListener('blur', () => {
+            window.setTimeout(hideLotAppointmentAddressSuggestions, 160);
+        });
         lotAppointmentEditForm?.addEventListener('submit', (event) => {
             event.preventDefault();
             void saveLotAppointmentEdit();

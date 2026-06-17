@@ -105,6 +105,8 @@ it('renders manager lots from database', function () {
         ->assertSee('69100 Villeurbanne')
         ->assertSee('RDV placé')
         ->assertSee('Voir le RDV')
+        ->assertSee('lot_appointment_full_address')
+        ->assertSee('lot-appointment-address-suggestions')
         ->assertSee('lot-appointment-edit-map')
         ->assertSee('Recalculer')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
