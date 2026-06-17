@@ -413,7 +413,6 @@
             const tooltip = ensureTrackingAppointmentTooltip();
             const serviceType = trackingAppointmentServiceType(props);
             const serviceLabel = props.service_label || serviceType;
-            const postalCity = trackingAppointmentLocationLabel(props);
             const fullAddress = trackingAppointmentFullAddress(props);
             const timeRange = [formatDateTime(calendarEvent.start), formatDateTime(calendarEvent.end)]
                 .filter((value) => value && value !== '-')
@@ -431,16 +430,13 @@
                         <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
                         ${props.deleted_at ? '<span style="border-radius:9999px;background:rgba(254,226,226,.18);color:#fecdd3;padding:3px 8px;font-size:11px;font-weight:700;">Désactivé</span>' : ''}
                     </div>
-                    ${tooltipRow('Type de RDV', serviceType)}
-                    ${serviceLabel !== serviceType ? tooltipRow('Prestation', serviceLabel) : ''}
-                    ${tooltipRow('Adresse complète', fullAddress)}
-                    ${postalCity !== fullAddress ? tooltipRow('Code postal / ville', postalCity) : ''}
-                    ${tooltipRow('Client', props.customer_name || calendarEvent.title || '-')}
-                    ${tooltipRow('Téléphone', props.customer_phone)}
-                    ${tooltipRow('Durée', props.duration_minutes ? `${props.duration_minutes} min` : '')}
-                    ${tooltipRow('Créé par', props.created_by_name)}
+                    ${tooltipRow('RDV', serviceLabel || serviceType)}
+                    ${tooltipRow('Adresse', fullAddress)}
+                    ${tooltipRow('Client', [
+                        props.customer_name || calendarEvent.title || '-',
+                        props.customer_phone,
+                    ].filter(Boolean).join(' · '))}
                     ${timeRange ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);">${trackingEscapeHtml(timeRange)}</p>` : ''}
-                    ${props.comment ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);"><strong>Commentaire :</strong> ${trackingEscapeHtml(props.comment)}</p>` : ''}
                 </div>
             `;
             tooltip.style.display = 'block';
