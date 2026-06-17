@@ -16,7 +16,10 @@ class ManagerDashboardDataService
     public function payload(Carbon $weekStart, Carbon $weekEnd): array
     {
         $metrics = TechnicianDailyRouteMetric::query()
-            ->with('technician:id,first_name,last_name,department_code')
+            ->with([
+                'technician:id,first_name,last_name,department_code,role',
+                'technician.departments:code',
+            ])
             ->whereBetween('service_date', [$weekStart->toDateString(), $weekEnd->toDateString()])
             ->get();
 
@@ -133,8 +136,7 @@ class ManagerDashboardDataService
                 $distanceKm = round((float) $technicianMetrics->sum('drive_distance_km'), 1);
 
                 return [
-                    'name' => trim(($technician?->last_name ?? '').' '.($technician?->first_name ?? '')),
-                    'department_code' => $technician?->department_code ?: '--',
+                    'name' => $technician?->full_name_with_departments ?? 'Technicien (--)',
                     'appointment_count' => $appointmentCount,
                     'drive_distance_km' => $distanceKm,
                     'drive_duration_hours' => round(((int) $technicianMetrics->sum('drive_duration_minutes')) / 60, 1),

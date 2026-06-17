@@ -128,7 +128,7 @@
                         <div id="header-user-menu" class="header-user-menu relative">
                             <button id="header-user-menu-trigger" type="button" class="flex items-center gap-3 rounded-xl border border-[color:var(--gc-border)] px-3 py-2" aria-haspopup="menu" aria-expanded="false">
                                 <span class="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--gc-primary)] text-sm font-semibold text-white">{{ $user->initials }}</span>
-                                <span class="text-sm font-medium text-[color:var(--gc-text)] {{ $isTechPlanningPage ? 'hidden sm:inline' : '' }}">{{ $user->full_name }}</span>
+                                <span class="text-sm font-medium text-[color:var(--gc-text)] {{ $isTechPlanningPage ? 'hidden sm:inline' : '' }}">{{ $user->full_name_with_departments }}</span>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-4 w-4 text-[color:var(--gc-text-soft)]">
                                     <path d="m6 9 6 6 6-6" />
                                 </svg>

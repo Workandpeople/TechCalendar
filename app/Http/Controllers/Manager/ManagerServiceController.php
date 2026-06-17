@@ -39,11 +39,12 @@ class ManagerServiceController extends Controller
             ->paginate(20)
             ->withQueryString();
         $technicians = User::query()
+            ->with('departments:code')
             ->where('role', 2)
             ->where('admin', false)
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->get(['id', 'first_name', 'last_name', 'email', 'department_code']);
+            ->get(['id', 'first_name', 'last_name', 'email', 'department_code', 'role']);
 
         return view('manager.services.index', [
             'services' => $services,

@@ -67,7 +67,7 @@
                     <tbody>
                         @forelse ($users as $user)
                             <tr class="border-b last:border-b-0" style="border-color:var(--gc-border);">
-                                <td class="px-4 py-3">{{ $user->full_name }}</td>
+                                <td class="px-4 py-3">{{ $user->full_name_with_departments }}</td>
                                 <td class="px-4 py-3">{{ $user->email }}</td>
                                 <td class="px-4 py-3">
                                     @if ($user->role === 0) Gérant @elseif ($user->role === 1) Planning @else Tech @endif
@@ -116,19 +116,19 @@
                                                     class="gc-btn-soft"
                                                     data-modal-open="absence-user-modal"
                                                     data-user-id="{{ $user->id }}"
-                                                    data-user-name="{{ $user->full_name }}"
+                                                    data-user-name="{{ $user->full_name_with_departments }}"
                                                     data-user-absences='@json($absencePayload)'
                                                 >Absence</button>
                                             @endif
 
-                                            <button type="button" class="gc-btn-danger" data-modal-open="delete-user-modal" data-delete-url="{{ route('manager.users.destroy', $user->id) }}" data-user-name="{{ $user->full_name }}">Soft delete</button>
+                                            <button type="button" class="gc-btn-danger" data-modal-open="delete-user-modal" data-delete-url="{{ route('manager.users.destroy', $user->id) }}" data-user-name="{{ $user->full_name_with_departments }}">Soft delete</button>
                                         @else
                                             <form method="POST" action="{{ route('manager.users.restore', $user->id) }}" class="inline">
                                                 @csrf
                                                 <button type="submit" class="gc-btn-soft">Restaurer</button>
                                             </form>
 
-                                            <button type="button" class="gc-btn-danger" data-modal-open="force-delete-user-modal" data-force-delete-url="{{ route('manager.users.force-delete', $user->id) }}" data-user-name="{{ $user->full_name }}">Suppression définitive</button>
+                                            <button type="button" class="gc-btn-danger" data-modal-open="force-delete-user-modal" data-force-delete-url="{{ route('manager.users.force-delete', $user->id) }}" data-user-name="{{ $user->full_name_with_departments }}">Suppression définitive</button>
                                         @endif
                                     </div>
                                 </td>

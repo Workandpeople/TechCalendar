@@ -2,6 +2,7 @@
 
 use App\Models\Appointment;
 use App\Mail\TechnicianAppointmentNotificationMail;
+use App\Models\Department;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
@@ -23,6 +24,9 @@ it('reassigns a tracking appointment to another compatible technician', function
         'name' => 'Audit interne',
         'average_duration_minutes' => 120,
     ]);
+    Department::query()->updateOrCreate(['code' => '01'], ['name' => 'Ain']);
+    Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
+
     $oldTechnician = User::factory()->create([
         'role' => 2,
         'admin' => false,
@@ -38,6 +42,7 @@ it('reassigns a tracking appointment to another compatible technician', function
     ]);
     $oldTechnician->services()->attach($service);
     $newTechnician->services()->attach($service);
+    $newTechnician->departments()->attach(['69', '01']);
 
     $startsAt = Carbon::parse('2026-06-12 10:00:00');
     $appointment = Appointment::query()->create([
@@ -76,7 +81,7 @@ it('reassigns a tracking appointment to another compatible technician', function
         ->assertOk()
         ->assertJsonPath('message', 'Rendez-vous réaffecté.')
         ->assertJsonPath('technician.id', $newTechnician->id)
-        ->assertJsonPath('technician.name', $newTechnician->full_name);
+        ->assertJsonPath('technician.name', $newTechnician->full_name_with_departments);
 
     expect($appointment->refresh()->technician_id)->toBe($newTechnician->id)
         ->and(TechnicianDailyRouteMetric::query()

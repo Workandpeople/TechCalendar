@@ -22,13 +22,13 @@ class PlannerTrackingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $technicians = User::query()
-            ->with('services:id')
+            ->with(['services:id', 'departments:code'])
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code']);
+            ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code', 'role']);
 
         return view('planner.tracking', [
             'technicians' => $technicians,
@@ -71,7 +71,8 @@ class PlannerTrackingController extends Controller
         $appointmentsQuery = Appointment::withTrashed()
             ->with([
                 'service:id,type,name',
-                'technician:id,first_name,last_name,address,latitude,longitude',
+                'technician:id,first_name,last_name,address,department_code,latitude,longitude,role',
+                'technician.departments:code',
                 'creator:id,first_name,last_name',
             ])
             ->whereIn('technician_id', $technicianIds)
@@ -96,7 +97,7 @@ class PlannerTrackingController extends Controller
 
         return response()->json([
             'events' => $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnician): array {
-                $technicianName = $appointment->technician?->full_name ?? 'Technicien';
+                $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
@@ -257,7 +258,7 @@ class PlannerTrackingController extends Controller
         }
 
         $technician = User::query()
-            ->with('services:id')
+            ->with(['services:id', 'departments:code'])
             ->whereKey($targetTechnicianId)
             ->where('role', 2)
             ->where('admin', false)
@@ -304,7 +305,7 @@ class PlannerTrackingController extends Controller
             'message' => 'Rendez-vous réaffecté.',
             'technician' => [
                 'id' => $technician->id,
-                'name' => $technician->full_name,
+                'name' => $technician->full_name_with_departments,
                 'address' => $technician->address,
                 'latitude' => $technician->latitude,
                 'longitude' => $technician->longitude,

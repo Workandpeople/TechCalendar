@@ -508,7 +508,7 @@ class PlannerBookingController extends Controller
 
             return [
                 'id' => $technician->id,
-                'name' => $technician->full_name,
+                'name' => $technician->full_name_with_departments,
                 'phone' => $technician->phone,
                 'address' => $technician->address,
                 'department_code' => $technician->department_code,
@@ -578,7 +578,11 @@ class PlannerBookingController extends Controller
         }
 
         return Appointment::withTrashed()
-            ->with(['service:id,type,name', 'technician:id,first_name,last_name,latitude,longitude,address'])
+            ->with([
+                'service:id,type,name',
+                'technician:id,first_name,last_name,department_code,role,latitude,longitude,address',
+                'technician.departments:code',
+            ])
             ->whereIn('technician_id', $technicianIds)
             ->where('starts_at', '<', $end)
             ->where('ends_at', '>', $start)
@@ -689,7 +693,8 @@ class PlannerBookingController extends Controller
                     ->with([
                         'appointment:id,technician_id,service_id,starts_at,ends_at',
                         'appointment.service:id,type,name',
-                        'appointment.technician:id,first_name,last_name',
+                        'appointment.technician:id,first_name,last_name,department_code,role',
+                        'appointment.technician.departments:code',
                     ])
                     ->where(function ($query) use ($placeableStatus): void {
                         $query
@@ -745,7 +750,7 @@ class PlannerBookingController extends Controller
                         'appointment_id' => $appointment->appointment_id,
                         'is_placed' => $this->isPlacedLotAppointment($appointment),
                         'placed_at' => $appointment->appointment?->starts_at,
-                        'placed_technician_name' => $appointment->appointment?->technician?->full_name,
+                        'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
                         'placed_service_label' => $appointment->appointment?->service
                             ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
                             : null,
@@ -943,7 +948,7 @@ class PlannerBookingController extends Controller
 
             return [
                 'id' => $appointment->id,
-                'title' => $appointment->technician?->full_name.' | '.$serviceLabel,
+                'title' => $appointment->technician?->full_name_with_departments.' | '.$serviceLabel,
                 'start' => $appointment->starts_at?->toIso8601String(),
                 'end' => $appointment->ends_at?->toIso8601String(),
                 'backgroundColor' => $isDeleted ? 'rgba(190,18,60,0.22)' : '#9ccfe3',
@@ -951,7 +956,7 @@ class PlannerBookingController extends Controller
                 'textColor' => '#31424c',
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
-                    'technician_name' => $appointment->technician?->full_name,
+                    'technician_name' => $appointment->technician?->full_name_with_departments,
                     'technician_address' => $appointment->technician?->address,
                     'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                     'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
@@ -1493,12 +1498,12 @@ class PlannerBookingController extends Controller
 
         return [
             'id' => sprintf('%s-%d-%s-%s', $kind, $technician->id, $date->format('Ymd'), $startsAt->format('Hi')),
-            'title' => ($isPreferred ? 'Dispo client' : 'Proposition').' | '.$technician->full_name,
+            'title' => ($isPreferred ? 'Dispo client' : 'Proposition').' | '.$technician->full_name_with_departments,
             'start' => $startsAt->toIso8601String(),
             'end' => $endsAt->toIso8601String(),
             'extendedProps' => [
                 'technician_id' => $technician->id,
-                'technician_name' => $technician->full_name,
+                'technician_name' => $technician->full_name_with_departments,
                 'technician_address' => $technician->address,
                 'technician_latitude' => $technician->latitude ? (float) $technician->latitude : null,
                 'technician_longitude' => $technician->longitude ? (float) $technician->longitude : null,

@@ -240,7 +240,7 @@
                     ? technicianRows.map((technician) => `
                         <tr class="border-t" style="border-color:var(--gc-border);">
                             <td class="py-3 font-medium" style="color:var(--gc-text);">
-                                ${escapeHtml(technician.name)} <span style="color:var(--gc-text-soft);">(${escapeHtml(technician.department_code)})</span>
+                                ${escapeHtml(technician.name)}
                             </td>
                             <td class="py-3 text-right">${escapeHtml(technician.appointment_count)}</td>
                             <td class="py-3 text-right">${escapeHtml(technician.drive_distance_km)} km</td>

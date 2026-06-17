@@ -126,9 +126,9 @@
                                     @checked(in_array($technician->id, array_map('intval', old('technician_ids', [])), true))
                                 />
                                 <span class="min-w-0">
-                                    <span class="block truncate font-medium" style="color:var(--gc-text);">{{ $technician->full_name }}</span>
+                                    <span class="block truncate font-medium" style="color:var(--gc-text);">{{ $technician->full_name_with_departments }}</span>
                                     <span class="block truncate text-xs" style="color:var(--gc-text-soft);">
-                                        {{ $technician->department_code ? 'Département '.$technician->department_code.' · ' : '' }}{{ $technician->email }}
+                                        {{ $technician->assigned_department_codes ? 'Départements '.$technician->assigned_department_codes.' · ' : '' }}{{ $technician->email }}
                                     </span>
                                 </span>
                             </label>

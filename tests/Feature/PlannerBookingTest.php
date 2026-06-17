@@ -161,6 +161,7 @@ it('searches additional booking technicians compatible with the requested servic
         'average_duration_minutes' => 120,
     ]);
 
+    Department::query()->updateOrCreate(['code' => '01'], ['name' => 'Ain']);
     Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
 
     $compatibleTechnician = User::factory()->create([
@@ -178,7 +179,7 @@ it('searches additional booking technicians compatible with the requested servic
         'break_duration_minutes' => 45,
     ]);
     $compatibleTechnician->services()->attach($service);
-    $compatibleTechnician->departments()->attach('69');
+    $compatibleTechnician->departments()->attach(['69', '01']);
 
     $incompatibleTechnician = User::factory()->create([
         'first_name' => 'Martin',
@@ -211,6 +212,7 @@ it('searches additional booking technicians compatible with the requested servic
         ->assertOk()
         ->assertJsonCount(1, 'technicians')
         ->assertJsonPath('technicians.0.id', $compatibleTechnician->id)
+        ->assertJsonPath('technicians.0.name', $compatibleTechnician->full_name_with_departments)
         ->assertJsonStructure([
             'technicians' => [[
                 'id',
@@ -284,7 +286,8 @@ it('analyzes a lot appointment request with a selected service', function () {
         ->assertJsonPath('crm_appointment.service.id', $service->id)
         ->assertJsonPath('filters.is_lot', true)
         ->assertJsonCount(1, 'technicians')
-        ->assertJsonPath('technicians.0.id', $technician->id);
+        ->assertJsonPath('technicians.0.id', $technician->id)
+        ->assertJsonPath('technicians.0.name', $technician->full_name_with_departments);
 });
 
 it('includes saturday in booking slot suggestions', function () {

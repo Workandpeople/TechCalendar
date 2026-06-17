@@ -29,7 +29,8 @@ it('renders active technicians in the service creation form', function () {
         ->get(route('manager.services'))
         ->assertOk()
         ->assertSee('Attribuer à des techniciens')
-        ->assertSee($technician->full_name)
+        ->assertSee($technician->full_name_with_departments)
+        ->assertSee('Départements 69')
         ->assertSee($technician->email)
         ->assertDontSee($planningUser->email);
 });

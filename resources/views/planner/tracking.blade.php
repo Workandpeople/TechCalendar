@@ -31,22 +31,22 @@
             <div id="technician-list" class="mt-4 grid max-h-96 grid-cols-1 gap-3 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
                 @foreach ($technicians as $technician)
                     @php
-                        $departmentCode = $technician->department_code ?: '--';
-                        $technicianLabel = trim($technician->last_name.' '.$technician->first_name);
+                        $departmentCodes = $technician->assigned_department_codes ?: '--';
+                        $technicianLabel = $technician->full_name_with_departments;
                     @endphp
                     <label
                         class="technician-card flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition hover:bg-[color:var(--gc-accent-soft)]"
                         style="border-color:var(--gc-border);"
-                        data-search="{{ str($technicianLabel.' '.$technician->phone.' '.$technician->address.' '.$departmentCode)->lower() }}"
+                        data-search="{{ str($technicianLabel.' '.$technician->phone.' '.$technician->address.' '.$departmentCodes)->lower() }}"
                     >
                         <input
                             type="checkbox"
                             class="gc-check technician-checkbox"
                             value="{{ $technician->id }}"
-                            data-name="{{ $technicianLabel }} ({{ $departmentCode }})"
+                            data-name="{{ $technicianLabel }}"
                         />
                         <span class="min-w-0 font-medium" style="color:var(--gc-text);">
-                            {{ $technicianLabel }} <span style="color:var(--gc-text-soft);">({{ $departmentCode }})</span>
+                            {{ $technicianLabel }}
                         </span>
                     </label>
                 @endforeach
@@ -199,8 +199,7 @@
                         <select id="tracking_reassign_technician_id" class="gc-input">
                             @foreach ($technicians as $technician)
                                 @php
-                                    $departmentCode = $technician->department_code ?: '--';
-                                    $technicianLabel = trim($technician->last_name.' '.$technician->first_name).' ('.$departmentCode.')';
+                                    $technicianLabel = $technician->full_name_with_departments;
                                 @endphp
                                 <option
                                     value="{{ $technician->id }}"

@@ -66,6 +66,39 @@ class User extends Authenticatable
         return Attribute::get(fn (): string => trim("{$this->first_name} {$this->last_name}"));
     }
 
+    protected function assignedDepartmentCodes(): Attribute
+    {
+        return Attribute::get(function (): string {
+            $codes = $this->relationLoaded('departments')
+                ? $this->departments->pluck('code')
+                : $this->departments()->pluck('departments.code');
+
+            $codes = $codes
+                ->filter()
+                ->map(fn ($code): string => mb_strtoupper(trim((string) $code)))
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($codes->isEmpty() && filled($this->department_code)) {
+                $codes->push(mb_strtoupper((string) $this->department_code));
+            }
+
+            return $codes->implode(',');
+        });
+    }
+
+    protected function fullNameWithDepartments(): Attribute
+    {
+        return Attribute::get(function (): string {
+            if ((int) $this->role !== 2) {
+                return $this->full_name;
+            }
+
+            return trim($this->full_name.' ('.($this->assigned_department_codes ?: '--').')');
+        });
+    }
+
     protected function initials(): Attribute
     {
         return Attribute::get(function (): string {

@@ -23,7 +23,7 @@
                         <p class="mt-1 text-sm text-white/75">Tes interventions et prochains trajets.</p>
                     </div>
                     <span class="hidden rounded-2xl bg-white/10 px-3 py-2 text-sm font-medium text-white sm:inline-flex">
-                        {{ $technician->full_name }}
+                        {{ $technician->full_name_with_departments }}
                     </span>
                 </div>
             </div>

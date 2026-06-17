@@ -234,7 +234,8 @@ class ManagerLotController extends Controller
                     ->with([
                         'appointment:id,technician_id,service_id,starts_at,ends_at',
                         'appointment.service:id,type,name',
-                        'appointment.technician:id,first_name,last_name',
+                        'appointment.technician:id,first_name,last_name,department_code,role',
+                        'appointment.technician.departments:code',
                     ])
                     ->when(! empty($filters['q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['q'])))
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
@@ -323,7 +324,7 @@ class ManagerLotController extends Controller
                     'appointment_id' => $appointment->appointment_id,
                     'is_placed' => $this->isPlacedLotAppointment($appointment),
                     'placed_at' => $appointment->appointment?->starts_at,
-                    'placed_technician_name' => $appointment->appointment?->technician?->full_name,
+                    'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
                     'placed_service_label' => $appointment->appointment?->service
                         ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
                         : null,
