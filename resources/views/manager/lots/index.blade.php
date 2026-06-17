@@ -178,7 +178,13 @@
 
                         <div class="grid grid-cols-1">
                             @foreach ($lot['appointments'] as $appointment)
-                                @php $isPlaced = (bool) $appointment['is_placed']; @endphp
+                                @php
+                                    $isPlaced = (bool) $appointment['is_placed'];
+                                    $appointmentLocation = trim(implode(' ', array_filter([
+                                        $appointment['postal_code'] ?? null,
+                                        $appointment['city'] ?? null,
+                                    ])));
+                                @endphp
                                 <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_auto] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -196,6 +202,9 @@
 
                                     <div class="min-w-0">
                                         <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
+                                        @if ($appointmentLocation !== '')
+                                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointmentLocation }}</p>
+                                        @endif
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
                                             @if ($appointment['external_reference'])
                                                 Réf. {{ $appointment['external_reference'] }}

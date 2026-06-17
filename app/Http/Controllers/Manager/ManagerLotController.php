@@ -268,6 +268,8 @@ class ManagerLotController extends Controller
                 ->orWhere('customer_last_name', 'like', "%{$search}%")
                 ->orWhere('customer_phone', 'like', "%{$search}%")
                 ->orWhere('address', 'like', "%{$search}%")
+                ->orWhere('postal_code', 'like', "%{$search}%")
+                ->orWhere('city', 'like', "%{$search}%")
                 ->orWhere('department_code', 'like', "%{$search}%");
         });
     }
@@ -302,28 +304,34 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
-            'appointments' => $appointments->map(fn (LotAppointment $appointment): array => [
-                'id' => $appointment->id,
-                'external_reference' => $appointment->external_reference,
-                'row_number' => $appointment->row_number,
-                'source' => $appointment->source ?: $lot->source,
-                'customer_name' => $appointment->customer_name,
-                'customer_phone' => $appointment->customer_phone,
-                'address' => $appointment->address,
-                'department_code' => $appointment->department_code,
-                'status' => $appointment->status,
-                'status_label' => $appointment->statusLabel(),
-                'appointment_id' => $appointment->appointment_id,
-                'is_placed' => $this->isPlacedLotAppointment($appointment),
-                'placed_at' => $appointment->appointment?->starts_at,
-                'placed_technician_name' => $appointment->appointment?->technician?->full_name,
-                'placed_service_label' => $appointment->appointment?->service
-                    ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
-                    : null,
-                'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
-                'ai_confidence' => $appointment->ai_confidence,
-                'ai_warnings' => $appointment->ai_warnings ?? [],
-            ])->values(),
+            'appointments' => $appointments->map(function (LotAppointment $appointment) use ($lot): array {
+                $rawPayload = $appointment->raw_payload ?? [];
+
+                return [
+                    'id' => $appointment->id,
+                    'external_reference' => $appointment->external_reference,
+                    'row_number' => $appointment->row_number,
+                    'source' => $appointment->source ?: $lot->source,
+                    'customer_name' => $appointment->customer_name,
+                    'customer_phone' => $appointment->customer_phone,
+                    'address' => $appointment->address,
+                    'postal_code' => $appointment->postal_code ?: ($rawPayload['postal_code'] ?? null),
+                    'city' => $appointment->city ?: ($rawPayload['city'] ?? null),
+                    'department_code' => $appointment->department_code,
+                    'status' => $appointment->status,
+                    'status_label' => $appointment->statusLabel(),
+                    'appointment_id' => $appointment->appointment_id,
+                    'is_placed' => $this->isPlacedLotAppointment($appointment),
+                    'placed_at' => $appointment->appointment?->starts_at,
+                    'placed_technician_name' => $appointment->appointment?->technician?->full_name,
+                    'placed_service_label' => $appointment->appointment?->service
+                        ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                        : null,
+                    'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
+                    'ai_confidence' => $appointment->ai_confidence,
+                    'ai_warnings' => $appointment->ai_warnings ?? [],
+                ];
+            })->values(),
             'appointments_count' => $appointments->count(),
             'placed_count' => $placedAppointments->count(),
             'placeable_count' => $placeableAppointments->count(),

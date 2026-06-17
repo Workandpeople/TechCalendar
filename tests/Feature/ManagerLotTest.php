@@ -53,7 +53,9 @@ it('renders manager lots from database', function () {
         'source' => 'Export AuditPro',
         'customer_name' => 'Camille Martin',
         'customer_phone' => '06 12 34 80 69',
-        'address' => '20 Rue Bellecordiere, 69002 Lyon',
+        'address' => '20 Rue Bellecordiere',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
         'department_code' => '69',
         'service_type' => Service::TYPE_AUDIT,
         'service_name' => 'Audit qualité site client',
@@ -80,9 +82,13 @@ it('renders manager lots from database', function () {
         'source' => 'Export AuditPro',
         'customer_name' => 'Lucie Placee',
         'customer_phone' => '06 12 34 80 70',
-        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'address' => '10 Rue de la Barre',
         'department_code' => '69',
         'status' => LotAppointment::STATUS_PLACED,
+        'raw_payload' => [
+            'postal_code' => '69100',
+            'city' => 'Villeurbanne',
+        ],
     ]);
 
     $this->actingAs($manager)
@@ -93,7 +99,10 @@ it('renders manager lots from database', function () {
         ->assertSee('100% contrôle contact')
         ->assertSee('audit-juin.xlsx')
         ->assertSee('Camille Martin')
+        ->assertSee('20 Rue Bellecordiere')
+        ->assertSee('69002 Lyon')
         ->assertSee('Lucie Placee')
+        ->assertSee('69100 Villeurbanne')
         ->assertSee('RDV placé')
         ->assertSee('Voir le RDV')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
@@ -668,7 +677,9 @@ it('stores the original spreadsheet when importing a lot', function () {
                     'customer_first_name' => 'Camille',
                     'customer_last_name' => 'Martin',
                     'customer_phone' => '0612345678',
-                    'address' => '20 Rue Bellecordiere, 69002 Lyon',
+                    'address' => '20 Rue Bellecordiere',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
                     'department_code' => '69',
                     'latitude' => 45.7578,
                     'longitude' => 4.832,
@@ -730,7 +741,9 @@ it('confirms selected preview rows and creates a lot', function () {
                     'customer_first_name' => 'Camille',
                     'customer_last_name' => 'Martin',
                     'customer_phone' => '0612345678',
-                    'address' => '20 Rue Bellecordiere, 69002 Lyon',
+                    'address' => '20 Rue Bellecordiere',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
                     'department_code' => '69',
                     'latitude' => 45.7578,
                     'longitude' => 4.832,
@@ -769,6 +782,8 @@ it('confirms selected preview rows and creates a lot', function () {
     ]);
     $this->assertDatabaseHas('lot_appointments', [
         'customer_name' => 'Camille Martin',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
         'department_code' => '69',
         'service_id' => null,
         'service_type' => null,

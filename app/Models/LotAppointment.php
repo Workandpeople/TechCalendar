@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'customer_last_name',
     'customer_phone',
     'address',
+    'postal_code',
+    'city',
     'department_code',
     'latitude',
     'longitude',

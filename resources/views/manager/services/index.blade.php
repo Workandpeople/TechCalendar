@@ -33,7 +33,7 @@
                 </div>
 
                 <div class="md:col-span-2 flex items-center justify-between">
-                    <button type="button" class="gc-btn-primary" data-modal-open="create-service-modal">Creer une prestation</button>
+                    <button type="button" class="gc-btn-primary" data-modal-open="create-service-modal">Créer une prestation</button>
                     <div class="flex items-center gap-2">
                         <a href="{{ route('manager.services') }}" class="gc-link">Réinitialiser les filtres</a>
                     </div>
@@ -76,7 +76,7 @@
                                             data-modal-open="delete-service-modal"
                                             data-delete-url="{{ route('manager.services.destroy', $service->id) }}"
                                             data-service-name="{{ $service->name }}"
-                                        >Supprimér</button>
+                                        >Supprimer</button>
                                     </div>
                                 </td>
                             </tr>
@@ -96,13 +96,50 @@
 
     <div id="create-service-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
-            <h2 class="text-lg font-semibold">Creer une prestation</h2>
+            <h2 class="text-lg font-semibold">Créer une prestation</h2>
             <form method="POST" action="{{ route('manager.services.store') }}" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @include('manager.services.partials.form-fields', ['prefix' => 'create', 'types' => $types])
+                <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p class="font-semibold" style="color:var(--gc-text);">Attribuer à des techniciens</p>
+                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Optionnel: coche les techniciens qui réalisent cette nouvelle prestation.</p>
+                        </div>
+                        @if ($technicians->isNotEmpty())
+                            <div class="flex shrink-0 items-center gap-3 text-sm">
+                                <button type="button" class="gc-link" data-service-technicians-select="all">Tout cocher</button>
+                                <button type="button" class="gc-link" data-service-technicians-select="none">Tout décocher</button>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="mt-4 grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+                        @forelse ($technicians as $technician)
+                            <label class="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition hover:-translate-y-0.5 hover:shadow-sm" style="border-color:var(--gc-border);">
+                                <input
+                                    type="checkbox"
+                                    name="technician_ids[]"
+                                    value="{{ $technician->id }}"
+                                    class="gc-checkbox"
+                                    data-service-technician-checkbox
+                                    @checked(in_array($technician->id, array_map('intval', old('technician_ids', [])), true))
+                                />
+                                <span class="min-w-0">
+                                    <span class="block truncate font-medium" style="color:var(--gc-text);">{{ $technician->full_name }}</span>
+                                    <span class="block truncate text-xs" style="color:var(--gc-text-soft);">
+                                        {{ $technician->department_code ? 'Département '.$technician->department_code.' · ' : '' }}{{ $technician->email }}
+                                    </span>
+                                </span>
+                            </label>
+                        @empty
+                            <p class="rounded-lg border p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">Aucun technicien actif disponible.</p>
+                        @endforelse
+                    </div>
+                </div>
                 <div class="flex justify-end gap-2">
                     <button type="button" class="gc-link" data-modal-close="create-service-modal">Annuler</button>
-                    <button type="submit" class="gc-btn-primary">Creer</button>
+                    <button type="submit" class="gc-btn-primary">Créer</button>
                 </div>
             </form>
         </div>
@@ -125,13 +162,13 @@
 
     <div id="delete-service-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
-            <h2 class="text-lg font-semibold">Supprimér la prestation</h2>
+            <h2 class="text-lg font-semibold">Supprimer la prestation</h2>
             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">La prestation <span id="delete-service-name" class="font-medium" style="color:var(--gc-text);"></span> sera supprimée.</p>
             <form id="delete-service-form" method="POST" action="#" class="mt-4 flex justify-end gap-2">
                 @csrf
                 @method('DELETE')
                 <button type="button" class="gc-link" data-modal-close="delete-service-modal">Annuler</button>
-                <button type="submit" class="gc-btn-danger">Supprimér</button>
+                <button type="submit" class="gc-btn-danger">Supprimer</button>
             </form>
         </div>
     </div>
@@ -140,6 +177,7 @@
         const openButtons = document.querySelectorAll('[data-modal-open]');
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('service-filters-form');
+        const serviceTechnicianCheckboxes = Array.from(document.querySelectorAll('[data-service-technician-checkbox]'));
 
         const openModal = (id) => {
             const modal = document.getElementById(id);
@@ -179,6 +217,18 @@
 
         closeButtons.forEach((button) => {
             button.addEventListener('click', () => closeModal(button.dataset.modalClose));
+        });
+
+        document.querySelectorAll('[data-service-technicians-select]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const checked = button.dataset.serviceTechniciansSelect === 'all';
+                serviceTechnicianCheckboxes.forEach((checkbox) => {
+                    checkbox.checked = checked;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+
+                window.TechCalendarForms?.refresh(document.querySelector('#create-service-modal form'));
+            });
         });
 
         document.querySelectorAll('.gc-modal').forEach((modal) => {

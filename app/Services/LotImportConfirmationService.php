@@ -80,6 +80,8 @@ class LotImportConfirmationService
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_phone' => $this->nullableString($appointmentPayload['customer_phone'] ?? null),
                     'address' => $this->nullableString($appointmentPayload['address'] ?? null),
+                    'postal_code' => $this->nullableString($appointmentPayload['postal_code'] ?? null),
+                    'city' => $this->nullableString($appointmentPayload['city'] ?? null),
                     'department_code' => $this->nullableString($appointmentPayload['department_code'] ?? null),
                     'latitude' => $this->coordinate($appointmentPayload['latitude'] ?? null, -90, 90),
                     'longitude' => $this->coordinate($appointmentPayload['longitude'] ?? null, -180, 180),

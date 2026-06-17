@@ -98,21 +98,23 @@
             </div>
 
             <div id="booking-crm-source">
-                <div id="booking-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div id="booking-crm-grid" class="space-y-2">
                     @foreach ($crmAppointments as $appointment)
                         <button
                             type="button"
-                            class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
-                            style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
+                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
+                            style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
                             data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
                         >
-                            <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
-                            <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
-                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
-                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">{{ $appointment['address'] }}</p>
-                            <div class="mt-3 flex flex-wrap gap-2">
-                                <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] }}</span>
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
+                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">{{ $appointment['source'] }}</p>
+                            </div>
+                            <p class="truncate text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
+                            <p class="truncate text-sm" style="color:var(--gc-text);">{{ $appointment['address'] }}</p>
+                            <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                                <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
                                 @if ($appointment['service'])
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
                                 @else
@@ -616,7 +618,7 @@
         const bookingCalendarLoaderLabel = document.getElementById('booking-calendar-loader-label');
         const bookingCalendarLoaderBar = document.getElementById('booking-calendar-loader-bar');
         const confirmationTrackLink = document.getElementById('booking-confirmation-track-link');
-        const bookingCrmPageSize = 5;
+        const bookingCrmPageSize = 10;
         let bookingCrmPage = 1;
         let bookingSourceMode = 'crm';
         let bookingAnalysisProgress = 0;
@@ -667,17 +669,19 @@
             return `
                 <button
                     type="button"
-                    class="crm-appointment-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
-                    style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
+                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
+                    style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
                     data-client="${escapeHtml(customerName.toLowerCase())}"
                 >
-                    <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">${escapeHtml(appointment.source)}</span>
-                    <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</h3>
-                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
-                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(appointment.address)}</p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. ${escapeHtml(appointment.department_code)}</span>
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</p>
+                        <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(appointment.source)}</p>
+                    </div>
+                    <p class="truncate text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
+                    <p class="truncate text-sm" style="color:var(--gc-text);">${escapeHtml(appointment.address)}</p>
+                    <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                        <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
                         ${serviceBadge}
                     </div>
                 </button>

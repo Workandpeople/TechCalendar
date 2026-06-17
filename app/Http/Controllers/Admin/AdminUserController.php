@@ -7,6 +7,7 @@ use App\Mail\UserCreatedCredentialsMail;
 use App\Models\Department;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\UserNameNormalizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -97,6 +98,7 @@ class AdminUserController extends Controller
             'department_codes' => ['nullable', 'array', 'required_if:role,2'],
             'department_codes.*' => ['string', Rule::exists('departments', 'code')],
         ]);
+        $payload = UserNameNormalizer::normalizePayload($payload);
 
         $plainPassword = Str::password(10);
         $user = User::query()->create([
@@ -141,6 +143,7 @@ class AdminUserController extends Controller
             'department_codes' => ['nullable', 'array', 'required_if:role,2'],
             'department_codes.*' => ['string', Rule::exists('departments', 'code')],
         ]);
+        $payload = UserNameNormalizer::normalizePayload($payload);
 
         if ($request->user()->is($user) && ! (bool) $payload['admin']) {
             return back()->withErrors(['user' => 'Impossible de retirer le statut admin de votre propre compte.']);

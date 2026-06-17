@@ -38,6 +38,7 @@ it('exposes the initial crm appointment id on the booking page', function () {
         ->assertOk()
         ->assertSee('15 demande(s)')
         ->assertSee('booking-crm-refresh')
+        ->assertSee('const bookingCrmPageSize = 10;', false)
         ->assertSee('const bookingInitialCrmAppointmentId = "crm-audit-lyon-001";', false);
 });
 

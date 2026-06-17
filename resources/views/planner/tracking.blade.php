@@ -54,12 +54,12 @@
         </section>
 
         <section class="gc-card p-5">
-            <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div class="mb-4">
                 <div>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Rendez-vous des techniciens sélectionnés</h2>
                     <p id="calendar-helper" class="text-sm" style="color:var(--gc-text-soft);">Coche au moins un technicien pour afficher ses rendez-vous.</p>
                 </div>
-                <div id="calendar-legend" class="flex flex-wrap gap-2"></div>
+                <div id="calendar-legend" class="mt-3 flex flex-wrap gap-2"></div>
             </div>
 
             <div class="mb-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
@@ -269,7 +269,16 @@
         const trackingCalendarLoadingDetail = document.getElementById('tracking-calendar-loading-detail');
         const trackingCalendarProgressBar = document.getElementById('tracking-calendar-progress-bar');
         const trackingEventsBatchSize = 80;
-        const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
+        const routeColors = [
+            '#1d4ed8', '#047857', '#b91c1c', '#7e22ce', '#0f766e', '#c2410c', '#4338ca', '#be123c',
+            '#0369a1', '#15803d', '#a21caf', '#b45309', '#0e7490', '#6d28d9', '#9f1239', '#166534',
+            '#1e40af', '#854d0e', '#0f766e', '#7f1d1d', '#4c1d95', '#155e75', '#365314', '#991b1b',
+            '#2563eb', '#059669', '#dc2626', '#9333ea', '#0891b2', '#ea580c', '#4f46e5', '#e11d48',
+            '#0284c7', '#16a34a', '#c026d3', '#ca8a04', '#0d9488', '#8b5cf6', '#f43f5e', '#22c55e',
+            '#3b82f6', '#10b981', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#6366f1', '#f59e0b',
+            '#1e3a8a', '#064e3b', '#7f1d1d', '#581c87', '#164e63', '#7c2d12', '#312e81', '#881337',
+            '#075985', '#14532d', '#701a75', '#713f12', '#134e4a', '#5b21b6', '#9d174d', '#166534',
+        ];
         const trackingQueryParams = new URLSearchParams(window.location.search);
         const trackingInitialTechnicianIds = new Set([
             ...trackingQueryParams.getAll('technician_id'),
@@ -1099,13 +1108,106 @@
             }
         };
 
-        const selectedTechnicianColorMap = () => selectedTechnicianIds().reduce((colors, id, index) => ({
-            ...colors,
-            [id]: routeColors[index % routeColors.length],
-        }), {});
+        const generatedTechnicianColor = (index) => {
+            const hue = Math.round((index * 137.508) % 360);
+
+            return `hsl(${hue} 74% 34%)`;
+        };
+
+        const trackingColorToRgb = (color) => {
+            if (!color) return null;
+
+            if (color.startsWith('#')) {
+                const hex = color.replace('#', '');
+                const normalized = hex.length === 3
+                    ? hex.split('').map((part) => part + part).join('')
+                    : hex;
+
+                return {
+                    r: parseInt(normalized.slice(0, 2), 16),
+                    g: parseInt(normalized.slice(2, 4), 16),
+                    b: parseInt(normalized.slice(4, 6), 16),
+                };
+            }
+
+            const hslMatch = color.match(/hsl\((\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%\)/);
+            if (!hslMatch) return null;
+
+            const h = Number(hslMatch[1]) / 360;
+            const s = Number(hslMatch[2]) / 100;
+            const l = Number(hslMatch[3]) / 100;
+            const hueToRgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6) return p + (q - p) * 6 * t;
+                if (t < 1 / 2) return q;
+                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+
+                return p;
+            };
+
+            if (s === 0) {
+                const grey = Math.round(l * 255);
+
+                return { r: grey, g: grey, b: grey };
+            }
+
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+
+            return {
+                r: Math.round(hueToRgb(p, q, h + 1 / 3) * 255),
+                g: Math.round(hueToRgb(p, q, h) * 255),
+                b: Math.round(hueToRgb(p, q, h - 1 / 3) * 255),
+            };
+        };
+
+        const trackingTextColorForBackground = (backgroundColor) => {
+            const rgb = trackingColorToRgb(backgroundColor);
+            if (!rgb) return '#ffffff';
+
+            const luminance = ((0.299 * rgb.r) + (0.587 * rgb.g) + (0.114 * rgb.b)) / 255;
+
+            return luminance > 0.58 ? '#17202a' : '#ffffff';
+        };
+
+        const trackingTechnicianColorMap = () => {
+            const colors = {};
+            const usedColors = new Set();
+
+            technicianCheckboxes.forEach((checkbox, index) => {
+                let color = routeColors[index] || generatedTechnicianColor(index);
+                let fallbackIndex = index;
+
+                while (usedColors.has(color)) {
+                    fallbackIndex += routeColors.length;
+                    color = generatedTechnicianColor(fallbackIndex);
+                }
+
+                usedColors.add(color);
+                colors[Number(checkbox.value)] = color;
+            });
+
+            return colors;
+        };
+
+        const trackingTechnicianThemeMap = () => {
+            const colors = trackingTechnicianColorMap();
+
+            return Object.fromEntries(Object.entries(colors).map(([id, backgroundColor]) => [
+                id,
+                {
+                    backgroundColor,
+                    borderColor: backgroundColor,
+                    textColor: trackingTextColorForBackground(backgroundColor),
+                },
+            ]));
+        };
+
+        const selectedTechnicianColorMap = () => trackingTechnicianColorMap();
 
         const updateLegend = () => {
-            const colors = selectedTechnicianColorMap();
+            const themes = trackingTechnicianThemeMap();
             const selectedCheckboxes = technicianCheckboxes.filter((checkbox) => checkbox.checked);
             selectedTechCount.textContent = selectedCheckboxes.length;
             calendarHelper.textContent = selectedCheckboxes.length > 0
@@ -1113,35 +1215,43 @@
                 : 'Coche au moins un technicien pour afficher ses rendez-vous.';
 
             calendarLegend.innerHTML = selectedCheckboxes.map((checkbox) => `
-                <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                    <span style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${colors[Number(checkbox.value)]};"></span>
-                    ${checkbox.dataset.name}
+                <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold shadow-sm" style="border-color:${themes[Number(checkbox.value)]?.borderColor || 'var(--gc-border)'};background:${themes[Number(checkbox.value)]?.backgroundColor || '#31424c'};color:${themes[Number(checkbox.value)]?.textColor || '#ffffff'};">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:currentColor;opacity:.9;"></span>
+                    ${trackingEscapeHtml(checkbox.dataset.name)}
                 </span>
             `).join('');
         };
 
         const styleTrackingEvent = (event) => {
             const isDeleted = Boolean(event.extendedProps?.deleted_at);
-            const colors = selectedTechnicianColorMap();
-            const color = colors[event.extendedProps?.technician_id] || '#31424c';
+            const themes = trackingTechnicianThemeMap();
+            const theme = themes[event.extendedProps?.technician_id] || {
+                backgroundColor: '#31424c',
+                borderColor: '#31424c',
+                textColor: '#ffffff',
+            };
 
             return {
                 ...event,
-                backgroundColor: isDeleted ? 'rgba(190,18,60,0.14)' : color,
-                borderColor: isDeleted ? '#be123c' : color,
-                textColor: isDeleted ? '#7f1d1d' : '#ffffff',
+                backgroundColor: isDeleted ? 'rgba(190,18,60,0.14)' : theme.backgroundColor,
+                borderColor: isDeleted ? '#be123c' : theme.borderColor,
+                textColor: isDeleted ? '#7f1d1d' : theme.textColor,
                 classNames: isDeleted ? ['appointment-soft-deleted'] : [],
             };
         };
 
         const applyTrackingEventStyle = (event) => {
             const isDeleted = Boolean(event.extendedProps?.deleted_at);
-            const colors = selectedTechnicianColorMap();
-            const color = colors[event.extendedProps?.technician_id] || '#31424c';
+            const themes = trackingTechnicianThemeMap();
+            const theme = themes[event.extendedProps?.technician_id] || {
+                backgroundColor: '#31424c',
+                borderColor: '#31424c',
+                textColor: '#ffffff',
+            };
 
-            event.setProp('backgroundColor', isDeleted ? 'rgba(190,18,60,0.14)' : color);
-            event.setProp('borderColor', isDeleted ? '#be123c' : color);
-            event.setProp('textColor', isDeleted ? '#7f1d1d' : '#ffffff');
+            event.setProp('backgroundColor', isDeleted ? 'rgba(190,18,60,0.14)' : theme.backgroundColor);
+            event.setProp('borderColor', isDeleted ? '#be123c' : theme.borderColor);
+            event.setProp('textColor', isDeleted ? '#7f1d1d' : theme.textColor);
             event.setProp('classNames', isDeleted ? ['appointment-soft-deleted'] : []);
         };
 

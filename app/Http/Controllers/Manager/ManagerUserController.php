@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Services\UserNameNormalizer;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -101,6 +102,7 @@ class ManagerUserController extends Controller
             'department_codes' => ['nullable', 'array', 'required_if:role,2'],
             'department_codes.*' => ['string', Rule::exists('departments', 'code')],
         ]);
+        $payload = UserNameNormalizer::normalizePayload($payload);
 
         $plainPassword = Str::password(10);
         $user = User::query()->create([
@@ -146,6 +148,7 @@ class ManagerUserController extends Controller
             'department_codes' => ['nullable', 'array', 'required_if:role,2'],
             'department_codes.*' => ['string', Rule::exists('departments', 'code')],
         ]);
+        $payload = UserNameNormalizer::normalizePayload($payload);
 
         $target->fill([
             'first_name' => $payload['first_name'],
