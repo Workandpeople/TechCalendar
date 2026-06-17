@@ -318,7 +318,22 @@
                         </div>
                     </div>
 
-                    <div id="lot-appointment-edit-gps" class="rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);"></div>
+                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                        <div>
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <label class="gc-label mb-0">Position Mapbox</label>
+                                <button id="lot-appointment-recalculate" type="button" class="gc-btn-soft text-sm disabled:cursor-not-allowed disabled:opacity-50">
+                                    Recalculer
+                                </button>
+                            </div>
+                            <div id="lot-appointment-edit-map" class="h-[280px] overflow-hidden rounded-xl border" style="border-color:var(--gc-border);background:#eef2f7;"></div>
+                        </div>
+                        <div class="rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Coordonnées</p>
+                            <p id="lot-appointment-edit-gps" class="mt-2" style="color:var(--gc-text);"></p>
+                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Utilise “Recalculer” si Mapbox a mal positionné le point pendant l’import.</p>
+                        </div>
+                    </div>
                     <p id="lot-appointment-edit-status" class="hidden text-sm"></p>
 
                     <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
@@ -413,6 +428,9 @@
         }
     </style>
 
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+
     <script>
         const lotFiltersForm = document.getElementById('manager-lot-filters-form');
         const lotSearchInput = document.getElementById('q');
@@ -457,10 +475,14 @@
         const lotAppointmentEditClose = document.getElementById('lot-appointment-edit-close');
         const lotAppointmentEditCancel = document.getElementById('lot-appointment-edit-cancel');
         const lotAppointmentEditSubmit = document.getElementById('lot-appointment-edit-submit');
+        const lotAppointmentRecalculate = document.getElementById('lot-appointment-recalculate');
         const lotAppointmentEditStatus = document.getElementById('lot-appointment-edit-status');
         const lotAppointmentEditGps = document.getElementById('lot-appointment-edit-gps');
+        const lotMapboxToken = @json($mapboxToken ?? null);
         const lotAppointmentData = new Map();
         let currentLotAppointment = null;
+        let lotAppointmentMap = null;
+        let lotAppointmentMarker = null;
 
         document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
             try {
@@ -948,6 +970,91 @@
             return 'GPS non renseigné.';
         }
 
+        function lotAppointmentCoordinates(appointment) {
+            const latitude = Number(appointment?.latitude);
+            const longitude = Number(appointment?.longitude);
+
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                return null;
+            }
+
+            return { latitude, longitude };
+        }
+
+        function lotAppointmentMarkerElement() {
+            const element = document.createElement('div');
+            element.style.cssText = [
+                'width:22px',
+                'height:22px',
+                'border-radius:9999px',
+                'background:#e11d48',
+                'border:3px solid #ffffff',
+                'box-shadow:0 8px 20px rgba(15,23,42,.32)',
+            ].join(';');
+
+            return element;
+        }
+
+        function ensureLotAppointmentMap() {
+            const container = document.getElementById('lot-appointment-edit-map');
+
+            if (!container || !lotMapboxToken || !window.mapboxgl) {
+                if (container) {
+                    container.innerHTML = '<div class="flex h-full items-center justify-center px-4 text-center text-sm" style="color:var(--gc-text-soft);">Mapbox indisponible ou token absent.</div>';
+                }
+
+                return null;
+            }
+
+            window.mapboxgl.accessToken = lotMapboxToken;
+
+            if (!lotAppointmentMap) {
+                lotAppointmentMap = new window.mapboxgl.Map({
+                    container: 'lot-appointment-edit-map',
+                    style: 'mapbox://styles/mapbox/streets-v12',
+                    center: [2.2137, 46.2276],
+                    zoom: 4.6,
+                    interactive: false,
+                    attributionControl: false,
+                });
+            }
+
+            return lotAppointmentMap;
+        }
+
+        function renderLotAppointmentMap(appointment) {
+            const map = ensureLotAppointmentMap();
+
+            if (!map) return;
+
+            const coordinates = lotAppointmentCoordinates(appointment);
+
+            window.setTimeout(() => {
+                map.resize();
+
+                if (lotAppointmentMarker) {
+                    lotAppointmentMarker.remove();
+                    lotAppointmentMarker = null;
+                }
+
+                if (!coordinates) {
+                    map.setCenter([2.2137, 46.2276]);
+                    map.setZoom(4.6);
+                    return;
+                }
+
+                lotAppointmentMarker = new window.mapboxgl.Marker({
+                    element: lotAppointmentMarkerElement(),
+                    anchor: 'center',
+                })
+                    .setLngLat([coordinates.longitude, coordinates.latitude])
+                    .addTo(map);
+
+                map.setCenter([coordinates.longitude, coordinates.latitude]);
+                map.setZoom(13);
+            }, 80);
+        }
+
         function setLotAppointmentEditStatus(message, color = '#0f766e') {
             if (!lotAppointmentEditStatus) return;
 
@@ -964,6 +1071,8 @@
             if (lotAppointmentEditGps) {
                 lotAppointmentEditGps.textContent = lotAppointmentGpsLabel(appointment);
             }
+
+            renderLotAppointmentMap(appointment);
         }
 
         function openLotAppointmentEditModal(appointmentId) {
@@ -1019,14 +1128,15 @@
             warningElement.classList.toggle('hidden', warnings.length === 0);
         }
 
-        async function saveLotAppointmentEdit() {
+        async function saveLotAppointmentEdit(forceGeocode = false) {
             if (!currentLotAppointment?.update_url || lotAppointmentEditSubmit?.disabled) {
                 return;
             }
 
             lotAppointmentEditSubmit.disabled = true;
-            lotAppointmentEditSubmit.textContent = 'Enregistrement...';
-            setLotAppointmentEditStatus('Nettoyage et géocodage en cours...');
+            lotAppointmentRecalculate.disabled = true;
+            lotAppointmentEditSubmit.textContent = forceGeocode ? 'Recalcul...' : 'Enregistrement...';
+            setLotAppointmentEditStatus(forceGeocode ? 'Recalcul Mapbox des coordonnées...' : 'Nettoyage et géocodage en cours...');
 
             try {
                 const response = await fetch(currentLotAppointment.update_url, {
@@ -1036,7 +1146,10 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': csrfToken(),
                     },
-                    body: JSON.stringify(lotAppointmentEditPayload()),
+                    body: JSON.stringify({
+                        ...lotAppointmentEditPayload(),
+                        force_geocode: forceGeocode,
+                    }),
                 });
                 const data = await response.json();
 
@@ -1055,6 +1168,7 @@
                 setLotAppointmentEditStatus('Erreur réseau pendant la modification.', '#be123c');
             } finally {
                 lotAppointmentEditSubmit.disabled = false;
+                lotAppointmentRecalculate.disabled = false;
                 lotAppointmentEditSubmit.textContent = 'Enregistrer';
             }
         }
@@ -1068,6 +1182,9 @@
         lotAppointmentEditForm?.addEventListener('submit', (event) => {
             event.preventDefault();
             void saveLotAppointmentEdit();
+        });
+        lotAppointmentRecalculate?.addEventListener('click', () => {
+            void saveLotAppointmentEdit(true);
         });
 
         function lotImportEditRow(rowNumber) {

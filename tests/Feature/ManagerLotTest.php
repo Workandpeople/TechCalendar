@@ -105,6 +105,8 @@ it('renders manager lots from database', function () {
         ->assertSee('69100 Villeurbanne')
         ->assertSee('RDV placé')
         ->assertSee('Voir le RDV')
+        ->assertSee('lot-appointment-edit-map')
+        ->assertSee('Recalculer')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
         ->assertSee('RDV à placer');
 });
@@ -134,18 +136,30 @@ it('updates a persisted lot appointment and refreshes geocoding data', function 
         'status' => LotAppointment::STATUS_PENDING,
     ]);
 
+    $geocodeCalls = 0;
     $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
-        ->once()
+        ->twice()
         ->with('1 LES PETITES GRANGES 01000 Bourg-en-Bresse')
-        ->andReturn([
-            'latitude' => 46.204391,
-            'longitude' => 5.22512,
-            'formatted_address' => '1 Les Petites Granges, 01000 Bourg-en-Bresse, France',
-            'mapbox_id' => 'address.456',
-            'mapbox_confidence' => 0.91,
-            'warnings' => [],
-        ]);
+        ->andReturnUsing(function () use (&$geocodeCalls): array {
+            $geocodeCalls++;
+
+            return $geocodeCalls === 1 ? [
+                'latitude' => 46.204391,
+                'longitude' => 5.22512,
+                'formatted_address' => '1 Les Petites Granges, 01000 Bourg-en-Bresse, France',
+                'mapbox_id' => 'address.456',
+                'mapbox_confidence' => 0.91,
+                'warnings' => [],
+            ] : [
+                'latitude' => 46.205,
+                'longitude' => 5.226,
+                'formatted_address' => '1 Les Petites Granges, 01000 Bourg-en-Bresse, France',
+                'mapbox_id' => 'address.789',
+                'mapbox_confidence' => 0.93,
+                'warnings' => [],
+            ];
+        });
     app()->instance(MapboxAddressGeocoder::class, $geocoder);
 
     $this->actingAs($manager)
@@ -181,6 +195,23 @@ it('updates a persisted lot appointment and refreshes geocoding data', function 
         'latitude' => 46.204391,
         'longitude' => 5.22512,
     ]);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.update', $lotAppointment), [
+            'external_reference' => 'EXT-42',
+            'customer_name' => 'Camille Martin',
+            'customer_first_name' => 'Camille',
+            'customer_last_name' => 'Martin',
+            'customer_phone' => '0612345678',
+            'address' => '1 LES PETITES GRANGES',
+            'postal_code' => '01000',
+            'city' => 'Bourg-en-Bresse',
+            'comment' => 'Correction depuis la gestion des lots.',
+            'force_geocode' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.latitude', 46.205)
+        ->assertJsonPath('appointment.longitude', 5.226);
 });
 
 it('filters manager lots by lot status', function () {

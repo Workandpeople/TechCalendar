@@ -23,9 +23,10 @@ class LotAppointmentUpdateService
         $departmentCode = $this->departmentFromPostalCode($postalCode)
             ?: $this->nullableString($attributes['department_code'] ?? null);
         $rawPayload = $appointment->raw_payload ?? [];
+        $forceGeocode = (bool) ($attributes['force_geocode'] ?? false);
         $addressChanged = $this->fullAddress($appointment->address, $appointment->postal_code, $appointment->city)
             !== $this->fullAddress($cleanAddress, $postalCode, $city);
-        $geocoding = $addressChanged || $appointment->latitude === null || $appointment->longitude === null
+        $geocoding = $forceGeocode || $addressChanged || $appointment->latitude === null || $appointment->longitude === null
             ? $this->geocoder->geocode($this->fullAddress($cleanAddress, $postalCode, $city))
             : null;
 

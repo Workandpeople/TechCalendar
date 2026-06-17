@@ -49,6 +49,7 @@ class ManagerLotController extends Controller
                 'placed_count' => $lots->sum('placed_count'),
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
+            'mapboxToken' => config('services.mapbox.token'),
         ]);
     }
 
@@ -183,6 +184,7 @@ class ManagerLotController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'department_code' => ['nullable', 'string', 'max:3'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            'force_geocode' => ['nullable', 'boolean'],
         ]);
 
         try {
@@ -228,6 +230,7 @@ class ManagerLotController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'department_code' => ['nullable', 'string', 'max:3'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            'force_geocode' => ['nullable', 'boolean'],
         ]);
 
         $lotAppointment = $updater->update($lotAppointment, $payload)
