@@ -741,6 +741,8 @@ class PlannerBookingController extends Controller
                         'customer_name' => $appointment->customer_name,
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
+                        'postal_code' => $appointment->postal_code ?: ($appointment->raw_payload['postal_code'] ?? null),
+                        'city' => $appointment->city ?: ($appointment->raw_payload['city'] ?? null),
                         'department_code' => $appointment->department_code,
                         'row_number' => $appointment->row_number,
                         'external_reference' => $appointment->external_reference,

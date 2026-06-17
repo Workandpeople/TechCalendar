@@ -109,6 +109,80 @@ it('renders manager lots from database', function () {
         ->assertSee('RDV à placer');
 });
 
+it('updates a persisted lot appointment and refreshes geocoding data', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot à corriger',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'row_number' => 4,
+        'customer_name' => 'Client ancien',
+        'customer_phone' => '0600000000',
+        'address' => 'Ancienne adresse',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.75,
+        'longitude' => 4.83,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('1 LES PETITES GRANGES 01000 Bourg-en-Bresse')
+        ->andReturn([
+            'latitude' => 46.204391,
+            'longitude' => 5.22512,
+            'formatted_address' => '1 Les Petites Granges, 01000 Bourg-en-Bresse, France',
+            'mapbox_id' => 'address.456',
+            'mapbox_confidence' => 0.91,
+            'warnings' => [],
+        ]);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.update', $lotAppointment), [
+            'external_reference' => 'EXT-42',
+            'customer_name' => 'Camille Martin',
+            'customer_first_name' => 'Camille',
+            'customer_last_name' => 'Martin',
+            'customer_phone' => '0612345678',
+            'address' => '1 LES PETITES GRANGES - 000 0E 0369 - 000 0E 0370',
+            'postal_code' => '01000',
+            'city' => 'Bourg-en-Bresse',
+            'comment' => 'Correction depuis la gestion des lots.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'RDV du lot mis à jour.')
+        ->assertJsonPath('appointment.customer_name', 'Camille Martin')
+        ->assertJsonPath('appointment.address', '1 LES PETITES GRANGES')
+        ->assertJsonPath('appointment.postal_code', '01000')
+        ->assertJsonPath('appointment.city', 'Bourg-en-Bresse')
+        ->assertJsonPath('appointment.department_code', '01')
+        ->assertJsonPath('appointment.latitude', 46.204391)
+        ->assertJsonPath('appointment.longitude', 5.22512);
+
+    $this->assertDatabaseHas('lot_appointments', [
+        'id' => $lotAppointment->id,
+        'external_reference' => 'EXT-42',
+        'customer_name' => 'Camille Martin',
+        'address' => '1 LES PETITES GRANGES',
+        'postal_code' => '01000',
+        'city' => 'Bourg-en-Bresse',
+        'department_code' => '01',
+        'latitude' => 46.204391,
+        'longitude' => 5.22512,
+    ]);
+});
+
 it('filters manager lots by lot status', function () {
     $manager = User::factory()->create([
         'role' => 0,

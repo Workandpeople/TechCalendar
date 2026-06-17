@@ -185,10 +185,14 @@
                                         $appointment['city'] ?? null,
                                     ])));
                                 @endphp
-                                <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_auto] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
+                                <article
+                                    class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_auto] xl:items-center"
+                                    data-lot-appointment-row="{{ $appointment['id'] }}"
+                                    style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};"
+                                >
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
+                                            <span data-lot-appointment-department class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
                                             @if ($isPlaced)
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
                                             @endif
@@ -196,16 +200,14 @@
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">À vérifier</span>
                                             @endif
                                         </div>
-                                        <h3 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h3>
-                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
+                                        <h3 data-lot-appointment-customer class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h3>
+                                        <p data-lot-appointment-phone class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
                                     </div>
 
                                     <div class="min-w-0">
-                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
-                                        @if ($appointmentLocation !== '')
-                                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointmentLocation }}</p>
-                                        @endif
-                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
+                                        <p data-lot-appointment-address class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
+                                        <p data-lot-appointment-location class="{{ $appointmentLocation === '' ? 'hidden ' : '' }}mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointmentLocation }}</p>
+                                        <p data-lot-appointment-reference class="mt-1 text-xs" style="color:var(--gc-text-soft);">
                                             @if ($appointment['external_reference'])
                                                 Réf. {{ $appointment['external_reference'] }}
                                             @elseif ($appointment['row_number'])
@@ -214,9 +216,7 @@
                                                 RDV lot #{{ $appointment['id'] }}
                                             @endif
                                         </p>
-                                        @if (! empty($appointment['ai_warnings']))
-                                            <p class="mt-1 text-xs" style="color:#b45309;">{{ implode(' · ', $appointment['ai_warnings']) }}</p>
-                                        @endif
+                                        <p data-lot-appointment-warnings class="{{ empty($appointment['ai_warnings']) ? 'hidden ' : '' }}mt-1 text-xs" style="color:#b45309;">{{ implode(' · ', $appointment['ai_warnings']) }}</p>
                                         @if ($isPlaced)
                                             <p class="mt-2 text-xs" style="color:#15803d;">
                                                 {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignée' }}
@@ -230,7 +230,14 @@
                                         @endif
                                     </div>
 
-                                    <div class="flex justify-start xl:justify-end">
+                                    <div class="flex flex-wrap justify-start gap-2 xl:justify-end">
+                                        <button
+                                            type="button"
+                                            class="gc-btn-soft whitespace-nowrap lot-appointment-edit-trigger"
+                                            data-lot-appointment-id="{{ $appointment['id'] }}"
+                                        >
+                                            Modifier
+                                        </button>
                                         @if ($isPlaced && $appointment['tracking_url'])
                                             <a href="{{ $appointment['tracking_url'] }}" class="gc-btn-soft whitespace-nowrap">
                                                 Voir le RDV
@@ -241,6 +248,9 @@
                                             </span>
                                         @endif
                                     </div>
+                                    <script type="application/json" data-lot-appointment-json="{{ $appointment['id'] }}">
+                                        @json($appointment)
+                                    </script>
                                 </article>
                             @endforeach
                         </div>
@@ -252,6 +262,72 @@
                 </div>
             @endforelse
         </section>
+
+        <div id="lot-appointment-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">RDV du lot</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Modifier les informations</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">L’adresse est nettoyée puis géocodée à l’enregistrement.</p>
+                    </div>
+                    <button id="lot-appointment-edit-close" type="button" class="gc-link">Fermer</button>
+                </div>
+
+                <form id="lot-appointment-edit-form" class="space-y-4 overflow-y-auto p-5">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div>
+                            <label class="gc-label" for="lot_appointment_external_reference">Référence</label>
+                            <input id="lot_appointment_external_reference" class="gc-input" data-lot-appointment-field="external_reference" type="text" maxlength="120" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_customer_first_name">Prénom</label>
+                            <input id="lot_appointment_customer_first_name" class="gc-input" data-lot-appointment-field="customer_first_name" type="text" maxlength="120" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_customer_last_name">Nom</label>
+                            <input id="lot_appointment_customer_last_name" class="gc-input" data-lot-appointment-field="customer_last_name" type="text" maxlength="120" />
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="gc-label" for="lot_appointment_customer_name">Nom complet client</label>
+                            <input id="lot_appointment_customer_name" class="gc-input" data-lot-appointment-field="customer_name" type="text" maxlength="190" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
+                            <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="30" />
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="gc-label" for="lot_appointment_address">Adresse</label>
+                            <input id="lot_appointment_address" class="gc-input" data-lot-appointment-field="address" type="text" maxlength="255" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_postal_code">Code postal</label>
+                            <input id="lot_appointment_postal_code" class="gc-input" data-lot-appointment-field="postal_code" type="text" maxlength="20" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_city">Ville</label>
+                            <input id="lot_appointment_city" class="gc-input" data-lot-appointment-field="city" type="text" maxlength="120" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_department_code">Département</label>
+                            <input id="lot_appointment_department_code" class="gc-input" data-lot-appointment-field="department_code" type="text" maxlength="3" />
+                        </div>
+                        <div class="md:col-span-2 xl:col-span-3">
+                            <label class="gc-label" for="lot_appointment_comment">Commentaire</label>
+                            <textarea id="lot_appointment_comment" class="gc-input min-h-28" data-lot-appointment-field="comment" maxlength="2000"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="lot-appointment-edit-gps" class="rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);"></div>
+                    <p id="lot-appointment-edit-status" class="hidden text-sm"></p>
+
+                    <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                        <button id="lot-appointment-edit-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                        <button id="lot-appointment-edit-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <div id="lot-import-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
             <div class="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -376,6 +452,27 @@
         let lotImportActualProgress = 0;
         let lotImportVisualProgress = 0;
         let lotImportProgressTimer = null;
+        const lotAppointmentEditModal = document.getElementById('lot-appointment-edit-modal');
+        const lotAppointmentEditForm = document.getElementById('lot-appointment-edit-form');
+        const lotAppointmentEditClose = document.getElementById('lot-appointment-edit-close');
+        const lotAppointmentEditCancel = document.getElementById('lot-appointment-edit-cancel');
+        const lotAppointmentEditSubmit = document.getElementById('lot-appointment-edit-submit');
+        const lotAppointmentEditStatus = document.getElementById('lot-appointment-edit-status');
+        const lotAppointmentEditGps = document.getElementById('lot-appointment-edit-gps');
+        const lotAppointmentData = new Map();
+        let currentLotAppointment = null;
+
+        document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
+            try {
+                const appointment = JSON.parse(script.textContent || '{}');
+
+                if (appointment.id) {
+                    lotAppointmentData.set(String(appointment.id), appointment);
+                }
+            } catch (error) {
+                // Données de secours ignorées : la ligne restera visible, seul le modal ne s’ouvrira pas.
+            }
+        });
 
         if (lotFiltersForm) {
             lotFiltersForm.querySelectorAll('select').forEach((select) => {
@@ -823,6 +920,155 @@
                 .replaceAll('"', '&quot;')
                 .replaceAll("'", '&#039;');
         }
+
+        function lotAppointmentLocation(appointment) {
+            return [appointment?.postal_code, appointment?.city]
+                .filter(Boolean)
+                .join(' ')
+                .trim();
+        }
+
+        function lotAppointmentReference(appointment) {
+            if (appointment?.external_reference) {
+                return `Réf. ${appointment.external_reference}`;
+            }
+
+            if (appointment?.row_number) {
+                return `Ligne fichier ${appointment.row_number}`;
+            }
+
+            return `RDV lot #${appointment?.id || '--'}`;
+        }
+
+        function lotAppointmentGpsLabel(appointment) {
+            if (appointment?.latitude && appointment?.longitude) {
+                return `GPS: ${Number(appointment.latitude).toFixed(5)}, ${Number(appointment.longitude).toFixed(5)}`;
+            }
+
+            return 'GPS non renseigné.';
+        }
+
+        function setLotAppointmentEditStatus(message, color = '#0f766e') {
+            if (!lotAppointmentEditStatus) return;
+
+            lotAppointmentEditStatus.textContent = message || '';
+            lotAppointmentEditStatus.style.color = color;
+            lotAppointmentEditStatus.classList.toggle('hidden', !message);
+        }
+
+        function fillLotAppointmentEditForm(appointment) {
+            lotAppointmentEditForm?.querySelectorAll('[data-lot-appointment-field]').forEach((field) => {
+                field.value = appointment?.[field.dataset.lotAppointmentField] || '';
+            });
+
+            if (lotAppointmentEditGps) {
+                lotAppointmentEditGps.textContent = lotAppointmentGpsLabel(appointment);
+            }
+        }
+
+        function openLotAppointmentEditModal(appointmentId) {
+            const appointment = lotAppointmentData.get(String(appointmentId));
+
+            if (!appointment?.update_url) {
+                return;
+            }
+
+            currentLotAppointment = appointment;
+            fillLotAppointmentEditForm(appointment);
+            setLotAppointmentEditStatus('');
+            lotAppointmentEditModal?.classList.remove('hidden');
+            lotAppointmentEditModal?.classList.add('flex');
+        }
+
+        function closeLotAppointmentEditModal() {
+            lotAppointmentEditModal?.classList.add('hidden');
+            lotAppointmentEditModal?.classList.remove('flex');
+            currentLotAppointment = null;
+        }
+
+        function lotAppointmentEditPayload() {
+            const payload = {};
+
+            lotAppointmentEditForm?.querySelectorAll('[data-lot-appointment-field]').forEach((field) => {
+                payload[field.dataset.lotAppointmentField] = field.value;
+            });
+
+            return payload;
+        }
+
+        function updateLotAppointmentRow(appointment) {
+            const row = document.querySelector(`[data-lot-appointment-row="${appointment.id}"]`);
+
+            if (!row) return;
+
+            const location = lotAppointmentLocation(appointment);
+            const warnings = Array.isArray(appointment.ai_warnings) ? appointment.ai_warnings.filter(Boolean) : [];
+
+            row.querySelector('[data-lot-appointment-department]').textContent = `Dept. ${appointment.department_code || '--'}`;
+            row.querySelector('[data-lot-appointment-customer]').textContent = appointment.customer_name || 'Client à qualifier';
+            row.querySelector('[data-lot-appointment-phone]').textContent = appointment.customer_phone || 'Téléphone non renseigné';
+            row.querySelector('[data-lot-appointment-address]').textContent = appointment.address || 'Adresse à qualifier';
+            row.querySelector('[data-lot-appointment-reference]').textContent = lotAppointmentReference(appointment);
+
+            const locationElement = row.querySelector('[data-lot-appointment-location]');
+            locationElement.textContent = location;
+            locationElement.classList.toggle('hidden', location === '');
+
+            const warningElement = row.querySelector('[data-lot-appointment-warnings]');
+            warningElement.textContent = warnings.join(' · ');
+            warningElement.classList.toggle('hidden', warnings.length === 0);
+        }
+
+        async function saveLotAppointmentEdit() {
+            if (!currentLotAppointment?.update_url || lotAppointmentEditSubmit?.disabled) {
+                return;
+            }
+
+            lotAppointmentEditSubmit.disabled = true;
+            lotAppointmentEditSubmit.textContent = 'Enregistrement...';
+            setLotAppointmentEditStatus('Nettoyage et géocodage en cours...');
+
+            try {
+                const response = await fetch(currentLotAppointment.update_url, {
+                    method: 'PATCH',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken(),
+                    },
+                    body: JSON.stringify(lotAppointmentEditPayload()),
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    setLotAppointmentEditStatus(data.message || Object.values(data.errors || {})?.[0]?.[0] || 'Modification impossible.', '#be123c');
+                    return;
+                }
+
+                lotAppointmentData.set(String(data.appointment.id), data.appointment);
+                currentLotAppointment = data.appointment;
+                fillLotAppointmentEditForm(data.appointment);
+                updateLotAppointmentRow(data.appointment);
+                setLotAppointmentEditStatus(data.message || 'RDV du lot mis à jour.', '#15803d');
+                window.setTimeout(closeLotAppointmentEditModal, 450);
+            } catch (error) {
+                setLotAppointmentEditStatus('Erreur réseau pendant la modification.', '#be123c');
+            } finally {
+                lotAppointmentEditSubmit.disabled = false;
+                lotAppointmentEditSubmit.textContent = 'Enregistrer';
+            }
+        }
+
+        document.querySelectorAll('.lot-appointment-edit-trigger').forEach((button) => {
+            button.addEventListener('click', () => openLotAppointmentEditModal(button.dataset.lotAppointmentId));
+        });
+
+        lotAppointmentEditClose?.addEventListener('click', closeLotAppointmentEditModal);
+        lotAppointmentEditCancel?.addEventListener('click', closeLotAppointmentEditModal);
+        lotAppointmentEditForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            void saveLotAppointmentEdit();
+        });
 
         function lotImportEditRow(rowNumber) {
             return lotImportPreviewRows.querySelector(`[data-edit-row="${String(rowNumber || '')}"]`);

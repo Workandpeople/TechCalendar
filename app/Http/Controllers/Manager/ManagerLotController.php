@@ -8,6 +8,7 @@ use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
 use App\Services\LotExcelImportService;
 use App\Services\LotAutoCompletionCalculator;
+use App\Services\LotAppointmentUpdateService;
 use App\Services\LotImportConfirmationService;
 use App\Services\LotImportPreviewService;
 use App\Services\LotImportPreviewRowUpdateService;
@@ -209,6 +210,41 @@ class ManagerLotController extends Controller
         );
     }
 
+    public function updateAppointment(
+        Request $request,
+        LotAppointment $lotAppointment,
+        LotAppointmentUpdateService $updater,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'external_reference' => ['nullable', 'string', 'max:120'],
+            'customer_name' => ['nullable', 'string', 'max:190'],
+            'customer_first_name' => ['nullable', 'string', 'max:120'],
+            'customer_last_name' => ['nullable', 'string', 'max:120'],
+            'customer_phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'city' => ['nullable', 'string', 'max:120'],
+            'department_code' => ['nullable', 'string', 'max:3'],
+            'comment' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $lotAppointment = $updater->update($lotAppointment, $payload)
+            ->loadMissing([
+                'lot',
+                'appointment:id,technician_id,service_id,starts_at,ends_at',
+                'appointment.service:id,type,name',
+                'appointment.technician:id,first_name,last_name,department_code,role',
+                'appointment.technician.departments:code',
+            ]);
+
+        return response()->json([
+            'message' => 'RDV du lot mis à jour.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -305,38 +341,50 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
-            'appointments' => $appointments->map(function (LotAppointment $appointment) use ($lot): array {
-                $rawPayload = $appointment->raw_payload ?? [];
-
-                return [
-                    'id' => $appointment->id,
-                    'external_reference' => $appointment->external_reference,
-                    'row_number' => $appointment->row_number,
-                    'source' => $appointment->source ?: $lot->source,
-                    'customer_name' => $appointment->customer_name,
-                    'customer_phone' => $appointment->customer_phone,
-                    'address' => $appointment->address,
-                    'postal_code' => $appointment->postal_code ?: ($rawPayload['postal_code'] ?? null),
-                    'city' => $appointment->city ?: ($rawPayload['city'] ?? null),
-                    'department_code' => $appointment->department_code,
-                    'status' => $appointment->status,
-                    'status_label' => $appointment->statusLabel(),
-                    'appointment_id' => $appointment->appointment_id,
-                    'is_placed' => $this->isPlacedLotAppointment($appointment),
-                    'placed_at' => $appointment->appointment?->starts_at,
-                    'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
-                    'placed_service_label' => $appointment->appointment?->service
-                        ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
-                        : null,
-                    'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
-                    'ai_confidence' => $appointment->ai_confidence,
-                    'ai_warnings' => $appointment->ai_warnings ?? [],
-                ];
-            })->values(),
+            'appointments' => $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
             'placed_count' => $placedAppointments->count(),
             'placeable_count' => $placeableAppointments->count(),
             'departments' => $appointments->pluck('department_code')->filter()->unique()->sort()->values(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeLotAppointment(LotAppointment $appointment, Lot $lot): array
+    {
+        $rawPayload = $appointment->raw_payload ?? [];
+
+        return [
+            'id' => $appointment->id,
+            'update_url' => route('manager.lots.appointments.update', $appointment),
+            'external_reference' => $appointment->external_reference,
+            'row_number' => $appointment->row_number,
+            'source' => $appointment->source ?: $lot->source,
+            'customer_name' => $appointment->customer_name,
+            'customer_first_name' => $appointment->customer_first_name,
+            'customer_last_name' => $appointment->customer_last_name,
+            'customer_phone' => $appointment->customer_phone,
+            'address' => $appointment->address,
+            'postal_code' => $appointment->postal_code ?: ($rawPayload['postal_code'] ?? null),
+            'city' => $appointment->city ?: ($rawPayload['city'] ?? null),
+            'department_code' => $appointment->department_code,
+            'latitude' => $appointment->latitude,
+            'longitude' => $appointment->longitude,
+            'comment' => $appointment->comment,
+            'status' => $appointment->status,
+            'status_label' => $appointment->statusLabel(),
+            'appointment_id' => $appointment->appointment_id,
+            'is_placed' => $this->isPlacedLotAppointment($appointment),
+            'placed_at' => $appointment->appointment?->starts_at,
+            'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
+            'placed_service_label' => $appointment->appointment?->service
+                ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                : null,
+            'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
+            'ai_confidence' => $appointment->ai_confidence,
+            'ai_warnings' => $appointment->ai_warnings ?? [],
         ];
     }
 

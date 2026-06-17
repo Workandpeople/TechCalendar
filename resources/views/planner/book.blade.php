@@ -171,7 +171,21 @@
                         <div class="border-t" style="border-color:var(--gc-border);">
                             <div class="grid grid-cols-1">
                             @foreach ($lot['appointments'] as $appointment)
-                                @php $isPlaced = (bool) $appointment['is_placed']; @endphp
+                                @php
+                                    $isPlaced = (bool) $appointment['is_placed'];
+                                    $appointmentPostalCity = trim(implode(' ', array_filter([
+                                        $appointment['postal_code'] ?? null,
+                                        $appointment['city'] ?? null,
+                                    ])));
+                                    $appointmentAddress = trim((string) ($appointment['address'] ?? ''));
+                                    $appointmentFullAddress = $appointmentAddress !== ''
+                                        ? $appointmentAddress
+                                        : 'Adresse à qualifier';
+
+                                    if ($appointmentPostalCity !== '' && ! str_contains(mb_strtolower($appointmentFullAddress), mb_strtolower($appointmentPostalCity))) {
+                                        $appointmentFullAddress .= ', '.$appointmentPostalCity;
+                                    }
+                                @endphp
                                 <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(280px,auto)] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -188,7 +202,7 @@
                                     </div>
 
                                     <div class="min-w-0">
-                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
+                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointmentFullAddress }}</p>
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
                                             @if ($appointment['external_reference'])
                                                 Réf. {{ $appointment['external_reference'] }}

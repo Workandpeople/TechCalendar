@@ -95,7 +95,9 @@ it('renders lot appointment requests on the booking page', function () {
         'lot_id' => $lot->id,
         'customer_name' => 'Client Lot',
         'customer_phone' => '0600000003',
-        'address' => '20 Place Bellecour, 69002 Lyon',
+        'address' => '20 Place Bellecour',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
         'department_code' => '69',
         'latitude' => 45.7578,
         'longitude' => 4.832,
@@ -135,6 +137,7 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertSee('booking-crm-pagination')
         ->assertSee('Lot Rhône')
         ->assertSee('Client Lot')
+        ->assertSee('20 Place Bellecour, 69002 Lyon')
         ->assertSee('Client Place')
         ->assertSee('RDV placé')
         ->assertSee('Audit interne')
