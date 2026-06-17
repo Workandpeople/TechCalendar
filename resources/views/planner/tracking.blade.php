@@ -378,42 +378,69 @@
             || 'RDV'
         );
 
-        const trackingAppointmentLocationLabel = (props) => {
-            const postalCity = [props.postal_code, props.city]
+        const trackingAppointmentPostalCity = (props) => (
+            [props.postal_code, props.city]
                 .filter(Boolean)
-                .join(' ');
+                .join(' ')
+                .trim()
+        );
+
+        const trackingAppointmentLocationLabel = (props) => {
+            const postalCity = trackingAppointmentPostalCity(props);
 
             return postalCity || props.location_label || props.address || 'Lieu non renseigné';
+        };
+
+        const trackingAppointmentFullAddress = (props) => {
+            const address = String(props.address || '').trim();
+            const postalCity = trackingAppointmentPostalCity(props);
+            const location = String(props.location_label || '').trim();
+            const suffix = postalCity || (location && location !== address ? location : '');
+
+            if (!address) {
+                return suffix || 'Adresse non renseignée';
+            }
+
+            if (!suffix || address.toLowerCase().includes(suffix.toLowerCase())) {
+                return address;
+            }
+
+            return `${address}, ${suffix}`;
         };
 
         const showTrackingAppointmentTooltip = (mouseEvent, calendarEvent) => {
             const props = calendarEvent.extendedProps || {};
             const tooltip = ensureTrackingAppointmentTooltip();
             const serviceType = trackingAppointmentServiceType(props);
-            const location = trackingAppointmentLocationLabel(props);
+            const serviceLabel = props.service_label || serviceType;
+            const postalCity = trackingAppointmentLocationLabel(props);
+            const fullAddress = trackingAppointmentFullAddress(props);
             const timeRange = [formatDateTime(calendarEvent.start), formatDateTime(calendarEvent.end)]
                 .filter((value) => value && value !== '-')
                 .join(' → ');
+            const tooltipRow = (label, value) => value ? `
+                <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
+                    <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">${label}</p>
+                    <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(value)}</p>
+                </div>
+            ` : '';
 
             tooltip.innerHTML = `
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                        <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(serviceType)}</p>
+                        <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
                         ${props.deleted_at ? '<span style="border-radius:9999px;background:rgba(254,226,226,.18);color:#fecdd3;padding:3px 8px;font-size:11px;font-weight:700;">Désactivé</span>' : ''}
                     </div>
-                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
-                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Client</p>
-                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(props.customer_name || calendarEvent.title || '-')}</p>
-                    </div>
-                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
-                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Code postal / ville</p>
-                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(location)}</p>
-                    </div>
-                    <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
-                        <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Type de RDV</p>
-                        <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(props.service_label || serviceType)}</p>
-                    </div>
+                    ${tooltipRow('Type de RDV', serviceType)}
+                    ${serviceLabel !== serviceType ? tooltipRow('Prestation', serviceLabel) : ''}
+                    ${tooltipRow('Adresse complète', fullAddress)}
+                    ${postalCity !== fullAddress ? tooltipRow('Code postal / ville', postalCity) : ''}
+                    ${tooltipRow('Client', props.customer_name || calendarEvent.title || '-')}
+                    ${tooltipRow('Téléphone', props.customer_phone)}
+                    ${tooltipRow('Durée', props.duration_minutes ? `${props.duration_minutes} min` : '')}
+                    ${tooltipRow('Créé par', props.created_by_name)}
                     ${timeRange ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);">${trackingEscapeHtml(timeRange)}</p>` : ''}
+                    ${props.comment ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);"><strong>Commentaire :</strong> ${trackingEscapeHtml(props.comment)}</p>` : ''}
                 </div>
             `;
             tooltip.style.display = 'block';
@@ -1355,15 +1382,16 @@
                 eventContent: (arg) => {
                     const props = arg.event.extendedProps || {};
                     const time = arg.timeText ? `<span class="font-semibold">${trackingEscapeHtml(arg.timeText)}</span>` : '';
-                    const serviceType = trackingAppointmentServiceType(props);
-                    const location = trackingAppointmentLocationLabel(props);
+                    const technicianName = props.technician_name || 'Technicien non renseigné';
+                    const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
+                    const fullAddress = trackingAppointmentFullAddress(props);
 
                     return {
                         html: `
                             <div class="min-w-0 leading-tight">
-                                <div class="truncate text-[11px]">${time} ${trackingEscapeHtml(serviceType)}</div>
-                                <div class="truncate text-[11px] font-semibold">${trackingEscapeHtml(props.customer_name || arg.event.title)}</div>
-                                <div class="truncate text-[10px] opacity-90">${trackingEscapeHtml(location)}</div>
+                                <div class="truncate text-[11px] font-semibold">${time} ${trackingEscapeHtml(technicianName)}</div>
+                                <div class="truncate text-[11px]">${trackingEscapeHtml(serviceLabel)}</div>
+                                <div class="truncate text-[10px] opacity-90">${trackingEscapeHtml(fullAddress)}</div>
                             </div>
                         `,
                     };
@@ -1375,12 +1403,17 @@
                         info.el.style.borderWidth = '2px';
                     }
 
+                    const fullAddress = trackingAppointmentFullAddress(props);
+                    const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
+
                     info.el.setAttribute('aria-label', [
-                        props.deleted_at ? 'RDV soft-deleted' : null,
-                        props.service_label,
-                        props.customer_name,
-                        props.customer_phone,
-                        props.address,
+                        props.deleted_at ? 'RDV désactivé' : null,
+                        props.technician_name ? `Technicien: ${props.technician_name}` : null,
+                        serviceLabel ? `Type de RDV: ${serviceLabel}` : null,
+                        fullAddress ? `Adresse: ${fullAddress}` : null,
+                        props.customer_name ? `Client: ${props.customer_name}` : null,
+                        props.customer_phone ? `Téléphone: ${props.customer_phone}` : null,
+                        props.duration_minutes ? `Durée: ${props.duration_minutes} min` : null,
 	                        props.created_by_name ? `Créé par: ${props.created_by_name}` : null,
                         props.comment,
                     ].filter(Boolean).join(' - '));
