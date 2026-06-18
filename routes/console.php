@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use App\Services\CoffracAppointmentService;
 use App\Services\SystemHealthMonitor;
 use App\Services\TechnicianDailyRouteMetricService;
 use Carbon\Carbon;
@@ -44,8 +45,20 @@ Artisan::command('health:check', function (SystemHealthMonitor $healthMonitor): 
     return $snapshot->overall_status === 'fail' ? 1 : 0;
 })->purpose('Execute les checks de sante applicative et persiste un snapshot.');
 
+Artisan::command('coffrac:sync', function (CoffracAppointmentService $coffracAppointments): int {
+    $result = $coffracAppointments->sync();
+
+    $this->info($result['message']);
+
+    return $result['available'] ? 0 : 1;
+})->purpose('Synchronise les RDV Coffrac a placer et deja places dans la base locale.');
+
 Schedule::command('health:check')
     ->everyFiveMinutes();
 
 Schedule::command('route-metrics:compute')
     ->hourly();
+
+Schedule::command('coffrac:sync')
+    ->twiceDaily(7, 18)
+    ->withoutOverlapping();

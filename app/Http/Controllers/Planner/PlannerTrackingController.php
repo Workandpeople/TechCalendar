@@ -8,12 +8,15 @@ use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use App\Services\AppointmentTechnicianMailService;
+use App\Services\CoffracAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 
 class PlannerTrackingController extends Controller
 {
@@ -144,6 +147,8 @@ class PlannerTrackingController extends Controller
                         'origin_label' => $previousAppointment ? 'RDV précédent' : 'Domicile',
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
+                        'status' => $appointment->status,
+                        'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
                         'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                         'created_by_name' => $appointment->creator?->full_name,
                     ],
@@ -404,6 +409,65 @@ class PlannerTrackingController extends Controller
         return response()->json([
             'message' => 'Commentaire mis à jour.',
             'comment' => $appointment->comment,
+        ]);
+    }
+
+    public function markProblem(
+        Request $request,
+        int $appointment,
+        CoffracAppointmentService $coffracAppointments,
+        AppointmentTechnicianMailService $appointmentMails,
+    ): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $appointment = Appointment::withTrashed()->findOrFail($appointment);
+
+        if ($appointment->trashed()) {
+            throw ValidationException::withMessages([
+                'comment' => 'Réactive le RDV avant de le déclarer en problème.',
+            ]);
+        }
+
+        $payload = $request->validate([
+            'comment' => ['required', 'string', 'max:2000'],
+        ]);
+
+        if (trim($payload['comment']) === trim((string) $appointment->comment)) {
+            throw ValidationException::withMessages([
+                'comment' => 'Le commentaire doit être modifié avant de déclarer un problème RDV.',
+            ]);
+        }
+
+        try {
+            $appointment = DB::transaction(function () use ($appointment, $coffracAppointments, $payload): Appointment {
+                $appointment->update([
+                    'comment' => $payload['comment'],
+                    'status' => Appointment::STATUS_PROBLEM,
+                    'problem_reported_at' => now(),
+                ]);
+
+                $appointment = Appointment::withTrashed()
+                    ->with(['technician:id,email', 'service:id,type,name'])
+                    ->findOrFail($appointment->id);
+
+                $coffracAppointments->markProblem($appointment, (string) $payload['comment']);
+
+                return $appointment;
+            });
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'comment' => $exception->getMessage(),
+            ]);
+        }
+
+        $appointmentMails->problemReported($appointment);
+
+        return response()->json([
+            'message' => 'Problème RDV déclaré.',
+            'comment' => $appointment->comment,
+            'status' => $appointment->status,
+            'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
         ]);
     }
 

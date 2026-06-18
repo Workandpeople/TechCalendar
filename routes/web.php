@@ -114,6 +114,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
     Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])
         ->name('planner.tracking.appointments.comment');
+    Route::post('/planner/tracking/appointments/{appointment}/problem', [PlannerTrackingController::class, 'markProblem'])
+        ->name('planner.tracking.appointments.problem');
     Route::patch('/planner/tracking/appointments/{appointment}/details', [PlannerTrackingController::class, 'updateDetails'])
         ->name('planner.tracking.appointments.details');
     Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])

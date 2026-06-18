@@ -225,6 +225,7 @@
                 <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
                 <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
                 <div class="mt-3 flex flex-wrap justify-end gap-2">
+                    <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
                     <button id="tracking-delete-appointment-btn" type="button" class="gc-btn-danger">Soft delete le RDV</button>
                     <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Réactiver le RDV</button>
                     <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary">Enregistrer le commentaire</button>
@@ -257,6 +258,7 @@
         const trackingReassignButton = document.getElementById('tracking-reassign-btn');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const trackingDetailsUrlTemplate = @json(route('planner.tracking.appointments.details', ['appointment' => '__APPOINTMENT__']));
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
@@ -1030,6 +1032,7 @@
             document.getElementById('tracking_comment_status').classList.add('hidden');
             document.getElementById('tracking-delete-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
             document.getElementById('tracking-restore-appointment-btn').classList.toggle('hidden', !props.deleted_at);
+            document.getElementById('tracking-problem-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
             trackingAppointmentModal.classList.remove('hidden');
             initTrackingDetailAddressAutocomplete();
             window.TechCalendarForms?.refresh(trackingDetailsForm);
@@ -1246,6 +1249,7 @@
 
         const styleTrackingEvent = (event) => {
             const isDeleted = Boolean(event.extendedProps?.deleted_at);
+            const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
                 backgroundColor: '#31424c',
@@ -1255,15 +1259,19 @@
 
             return {
                 ...event,
-                backgroundColor: isDeleted ? 'rgba(190,18,60,0.14)' : theme.backgroundColor,
-                borderColor: isDeleted ? '#be123c' : theme.borderColor,
-                textColor: isDeleted ? '#7f1d1d' : theme.textColor,
-                classNames: isDeleted ? ['appointment-soft-deleted'] : [],
+                backgroundColor: isDeleted ? 'rgba(190,18,60,0.14)' : (isProblem ? '#fef3c7' : theme.backgroundColor),
+                borderColor: isDeleted ? '#be123c' : (isProblem ? '#d97706' : theme.borderColor),
+                textColor: isDeleted ? '#7f1d1d' : (isProblem ? '#713f12' : theme.textColor),
+                classNames: [
+                    ...(isDeleted ? ['appointment-soft-deleted'] : []),
+                    ...(isProblem ? ['appointment-problem'] : []),
+                ],
             };
         };
 
         const applyTrackingEventStyle = (event) => {
             const isDeleted = Boolean(event.extendedProps?.deleted_at);
+            const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
                 backgroundColor: '#31424c',
@@ -1271,10 +1279,13 @@
                 textColor: '#ffffff',
             };
 
-            event.setProp('backgroundColor', isDeleted ? 'rgba(190,18,60,0.14)' : theme.backgroundColor);
-            event.setProp('borderColor', isDeleted ? '#be123c' : theme.borderColor);
-            event.setProp('textColor', isDeleted ? '#7f1d1d' : theme.textColor);
-            event.setProp('classNames', isDeleted ? ['appointment-soft-deleted'] : []);
+            event.setProp('backgroundColor', isDeleted ? 'rgba(190,18,60,0.14)' : (isProblem ? '#fef3c7' : theme.backgroundColor));
+            event.setProp('borderColor', isDeleted ? '#be123c' : (isProblem ? '#d97706' : theme.borderColor));
+            event.setProp('textColor', isDeleted ? '#7f1d1d' : (isProblem ? '#713f12' : theme.textColor));
+            event.setProp('classNames', [
+                ...(isDeleted ? ['appointment-soft-deleted'] : []),
+                ...(isProblem ? ['appointment-problem'] : []),
+            ]);
         };
 
         const refetchCalendar = () => {
@@ -1394,8 +1405,10 @@
                 },
                 eventDidMount: (info) => {
 	                    const props = info.event.extendedProps;
-	                    if (props.deleted_at) {
-	                        info.el.style.opacity = '0.72';
+                    if (props.deleted_at) {
+                        info.el.style.opacity = '0.72';
+                        info.el.style.borderWidth = '2px';
+                    } else if (props.status === 'problem') {
                         info.el.style.borderWidth = '2px';
                     }
 
@@ -1404,6 +1417,7 @@
 
                     info.el.setAttribute('aria-label', [
                         props.deleted_at ? 'RDV désactivé' : null,
+                        props.status === 'problem' ? 'Problème RDV' : null,
                         props.technician_name ? `Technicien: ${props.technician_name}` : null,
                         serviceLabel ? `Type de RDV: ${serviceLabel}` : null,
                         fullAddress ? `Adresse: ${fullAddress}` : null,
@@ -1654,6 +1668,71 @@
             } finally {
                 trackingReassignButton.textContent = 'Réaffecter';
                 updateTrackingReassignButtonState();
+            }
+        });
+
+        document.getElementById('tracking-problem-appointment-btn').addEventListener('click', async () => {
+            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
+            const comment = document.getElementById('tracking_detail_comment').value.trim();
+            const status = document.getElementById('tracking_comment_status');
+            const button = document.getElementById('tracking-problem-appointment-btn');
+
+            if (!appointmentId) return;
+
+            if (!comment) {
+                status.style.color = '#9f1239';
+                status.textContent = 'Un commentaire est obligatoire avant de déclarer un problème RDV.';
+                status.classList.remove('hidden');
+                return;
+            }
+
+            if (comment === trackingInitialComment.trim()) {
+                status.style.color = '#9f1239';
+                status.textContent = 'Le commentaire doit être modifié avant de déclarer un problème RDV.';
+                status.classList.remove('hidden');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Signalement...';
+            status.classList.add('hidden');
+
+            try {
+                const response = await fetch(trackingProblemUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ comment }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : 'Impossible de déclarer le problème RDV.';
+                    throw new Error(firstError);
+                }
+
+                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+                if (calendarEvent) {
+                    calendarEvent.setExtendedProp('comment', payload.comment || comment);
+                    calendarEvent.setExtendedProp('status', payload.status || 'problem');
+                    calendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
+                    applyTrackingEventStyle(calendarEvent);
+                }
+
+                trackingInitialComment = payload.comment || comment;
+                status.style.color = '#92400e';
+                status.textContent = 'Problème RDV déclaré.';
+                status.classList.remove('hidden');
+            } catch (error) {
+                status.style.color = '#9f1239';
+                status.textContent = error.message || 'Impossible de déclarer le problème RDV.';
+                status.classList.remove('hidden');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Problème RDV';
             }
         });
 

@@ -36,7 +36,7 @@
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">CRM simulés</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Coffrac</p>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV à placer</h2>
                     <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Clique sur une demande pour lancér directement la recherche de techniciens.</p>
                 </div>
@@ -52,7 +52,7 @@
             </div>
 
             <div id="dashboard-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                Aucun RDV CRM ne correspond à cette recherche.
+                Aucun RDV Coffrac ne correspond à cette recherche.
             </div>
 
             <div id="dashboard-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">

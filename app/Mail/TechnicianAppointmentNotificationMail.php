@@ -52,6 +52,7 @@ class TechnicianAppointmentNotificationMail extends Mailable
             'reassigned_from' => 'Rendez-vous retiré de votre planning',
             'cancelled' => 'Rendez-vous annulé',
             'restored' => 'Rendez-vous réactivé',
+            'problem_reported' => 'Problème rendez-vous déclaré',
             'comment_updated' => 'Commentaire mis à jour',
             default => 'Mise à jour de rendez-vous',
         };
@@ -66,6 +67,7 @@ class TechnicianAppointmentNotificationMail extends Mailable
             'reassigned_from' => 'Ce rendez-vous a été retiré de votre planning.',
             'cancelled' => 'Ce rendez-vous a été désactivé dans le planning.',
             'restored' => 'Ce rendez-vous a été réactivé dans le planning.',
+            'problem_reported' => 'Un problème vient d’être déclaré sur ce rendez-vous.',
             'comment_updated' => 'Le commentaire de ce rendez-vous a été mis à jour.',
             default => 'Ce rendez-vous a été mis à jour.',
         };

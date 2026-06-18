@@ -11,21 +11,23 @@ use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\AppointmentTechnicianMailService;
+use App\Services\CoffracAppointmentService;
 use App\Services\MapboxDrivingRouteService;
-use App\Services\SimulatedCrmAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 
 class PlannerBookingController extends Controller
 {
     public function index(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments,
+        CoffracAppointmentService $coffracAppointments,
         LotAutoCompletionCalculator $autoCompletion
     ): View
     {
@@ -35,9 +37,13 @@ class PlannerBookingController extends Controller
             ->orderBy('type')
             ->orderBy('name')
             ->get(['id', 'type', 'name', 'average_duration_minutes']);
+        $coffracPending = $coffracAppointments->pendingWithStatus(15);
+        $externalAppointmentSources = $this->externalAppointmentSources($coffracPending['status']);
 
         return view('planner.book', [
-            'crmAppointments' => $crmAppointments->pending(15),
+            'crmAppointments' => $coffracPending['appointments'],
+            'coffracApiStatus' => $coffracPending['status'],
+            'externalAppointmentSources' => $externalAppointmentSources,
             'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
@@ -55,7 +61,7 @@ class PlannerBookingController extends Controller
 
     public function analyze(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments,
+        CoffracAppointmentService $coffracAppointments,
         MapboxDrivingRouteService $drivingRoutes
     ): JsonResponse
     {
@@ -63,7 +69,7 @@ class PlannerBookingController extends Controller
 
         $payload = $request->validate($this->appointmentRequestRules());
 
-        $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
+        $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
 
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
@@ -111,18 +117,22 @@ class PlannerBookingController extends Controller
 
     public function refreshCrmAppointments(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments
+        CoffracAppointmentService $coffracAppointments
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+        $coffracAppointments->sync();
+        $coffracPending = $coffracAppointments->pendingWithStatus(15, shuffle: true);
 
         return response()->json([
-            'appointments' => $crmAppointments->pending(15, shuffle: true),
+            'appointments' => $coffracPending['appointments'],
+            'coffrac_api_status' => $coffracPending['status'],
+            'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
         ]);
     }
 
     public function searchTechnicians(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments,
+        CoffracAppointmentService $coffracAppointments,
         MapboxDrivingRouteService $drivingRoutes
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
@@ -132,7 +142,7 @@ class PlannerBookingController extends Controller
             'query' => ['required', 'string', 'min:2', 'max:80'],
         ]);
 
-        $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
+        $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
         $technicians = $this->searchTechniciansForAppointment(
@@ -149,7 +159,7 @@ class PlannerBookingController extends Controller
 
     public function calendarWindow(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments,
+        CoffracAppointmentService $coffracAppointments,
         MapboxDrivingRouteService $drivingRoutes
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
@@ -165,7 +175,7 @@ class PlannerBookingController extends Controller
             ],
         ]);
 
-        $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
+        $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
         $windowStart = Carbon::parse($payload['start']);
@@ -196,7 +206,7 @@ class PlannerBookingController extends Controller
 
     public function store(
         Request $request,
-        SimulatedCrmAppointmentService $crmAppointments,
+        CoffracAppointmentService $coffracAppointments,
         AppointmentTechnicianMailService $appointmentMails,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
@@ -213,7 +223,7 @@ class PlannerBookingController extends Controller
             'comment' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $crmAppointment = $this->resolveRequestedAppointment($payload, $crmAppointments);
+        $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
         if (! $crmAppointment['service']) {
@@ -241,37 +251,71 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        $appointment = Appointment::query()->create([
-            'service_id' => $crmAppointment['service']['id'],
-            'technician_id' => $payload['technician_id'],
-            'created_by' => $request->user()->id,
-            'customer_first_name' => $crmAppointment['first_name'],
-            'customer_last_name' => $crmAppointment['last_name'],
-            'customer_phone' => $crmAppointment['phone'],
-            'address' => $crmAppointment['address'],
-            'latitude' => $crmAppointment['latitude'],
-            'longitude' => $crmAppointment['longitude'],
-            'starts_at' => $startsAt,
-            'duration_minutes' => $durationMinutes,
-            'ends_at' => $endsAt,
-            'comment' => $payload['comment'] ?? null,
-        ]);
+        if (($crmAppointment['external_source'] ?? null) === CoffracAppointmentService::SOURCE
+            && Appointment::query()
+                ->where('external_source', CoffracAppointmentService::SOURCE)
+                ->where('external_reference', (string) ($crmAppointment['external_reference'] ?? ''))
+                ->exists()) {
+            throw ValidationException::withMessages([
+                'crm_appointment_id' => 'Ce RDV Coffrac a déjà été placé dans TechCalendar.',
+            ]);
+        }
 
-        if (! empty($payload['lot_appointment_id'])) {
-            $lotAppointment = LotAppointment::query()
-                ->with('lot')
-                ->whereKey((int) $payload['lot_appointment_id'])
-                ->first();
-
-            if ($lotAppointment) {
-                $lotAppointment->update([
-                    'appointment_id' => $appointment->id,
+        try {
+            $appointment = DB::transaction(function () use (
+                $coffracAppointments,
+                $crmAppointment,
+                $durationMinutes,
+                $endsAt,
+                $payload,
+                $request,
+                $startsAt
+            ): Appointment {
+                $appointment = Appointment::query()->create([
                     'service_id' => $crmAppointment['service']['id'],
-                    'status' => LotAppointment::STATUS_PLACED,
+                    'technician_id' => $payload['technician_id'],
+                    'created_by' => $request->user()->id,
+                    'customer_first_name' => $crmAppointment['first_name'],
+                    'customer_last_name' => $crmAppointment['last_name'],
+                    'customer_phone' => $crmAppointment['phone'],
+                    'address' => $crmAppointment['address'],
+                    'latitude' => $crmAppointment['latitude'],
+                    'longitude' => $crmAppointment['longitude'],
+                    'starts_at' => $startsAt,
+                    'duration_minutes' => $durationMinutes,
+                    'ends_at' => $endsAt,
+                    'comment' => $payload['comment'] ?? null,
+                    'status' => Appointment::STATUS_SCHEDULED,
+                    'external_source' => $crmAppointment['external_source'] ?? null,
+                    'external_reference' => $crmAppointment['external_reference'] ?? null,
+                    'external_payload' => $crmAppointment['external_payload'] ?? null,
                 ]);
 
-                $this->refreshLotStatus($lotAppointment->lot);
-            }
+                if (! empty($payload['lot_appointment_id'])) {
+                    $lotAppointment = LotAppointment::query()
+                        ->with('lot')
+                        ->whereKey((int) $payload['lot_appointment_id'])
+                        ->first();
+
+                    if ($lotAppointment) {
+                        $lotAppointment->update([
+                            'appointment_id' => $appointment->id,
+                            'service_id' => $crmAppointment['service']['id'],
+                            'status' => LotAppointment::STATUS_PLACED,
+                        ]);
+
+                        $this->refreshLotStatus($lotAppointment->lot);
+                    }
+                }
+
+                $coffracAppointments->markPlaced($appointment, $crmAppointment);
+
+                return $appointment;
+            });
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'crm_appointment_id' => $exception->getMessage(),
+            ]);
         }
 
         $appointmentMails->created($appointment);
@@ -634,10 +678,19 @@ class PlannerBookingController extends Controller
      * @param array<string, mixed> $payload
      * @return array<string, mixed>|null
      */
-    private function resolveRequestedAppointment(array $payload, SimulatedCrmAppointmentService $crmAppointments): ?array
+    private function resolveRequestedAppointment(
+        array $payload,
+        CoffracAppointmentService $coffracAppointments
+    ): ?array
     {
         if (! empty($payload['crm_appointment_id'])) {
-            $appointment = $crmAppointments->find((string) $payload['crm_appointment_id']);
+            $crmAppointmentId = (string) $payload['crm_appointment_id'];
+
+            if (! str_starts_with($crmAppointmentId, CoffracAppointmentService::SOURCE.'-')) {
+                return null;
+            }
+
+            $appointment = $coffracAppointments->find($crmAppointmentId);
 
             if (! $appointment) {
                 return null;
@@ -953,9 +1006,13 @@ class PlannerBookingController extends Controller
                 'title' => $appointment->technician?->full_name_with_departments.' | '.$serviceLabel,
                 'start' => $appointment->starts_at?->toIso8601String(),
                 'end' => $appointment->ends_at?->toIso8601String(),
-                'backgroundColor' => $isDeleted ? 'rgba(190,18,60,0.22)' : '#9ccfe3',
-                'borderColor' => $isDeleted ? '#be123c' : '#31424c',
-                'textColor' => '#31424c',
+                'backgroundColor' => $isDeleted
+                    ? 'rgba(190,18,60,0.22)'
+                    : ($appointment->status === Appointment::STATUS_PROBLEM ? '#fef3c7' : '#9ccfe3'),
+                'borderColor' => $isDeleted
+                    ? '#be123c'
+                    : ($appointment->status === Appointment::STATUS_PROBLEM ? '#d97706' : '#31424c'),
+                'textColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#713f12' : '#31424c',
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $appointment->technician?->full_name_with_departments,
@@ -970,6 +1027,8 @@ class PlannerBookingController extends Controller
                     'longitude' => (float) $appointment->longitude,
                     'duration_minutes' => (int) $appointment->duration_minutes,
                     'comment' => $appointment->comment,
+                    'status' => $appointment->status,
+                    'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
                     'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                     'origin_label' => $previousAppointment ? 'rdv précédent' : 'domicile',
                     'origin_latitude' => $originLat,
@@ -1538,6 +1597,50 @@ class PlannerBookingController extends Controller
                 'duration_minutes' => $durationMinutes,
                 'next_appointment_id' => $nextAppointment?->id,
                 'preferred_locked' => $isPreferred,
+            ],
+        ];
+    }
+
+    /**
+     * @param array{state?: string, label?: string, detail?: string, count?: int} $coffracStatus
+     * @return array<int, array<string, mixed>>
+     */
+    private function externalAppointmentSources(array $coffracStatus): array
+    {
+        $reservedStatus = [
+            'state' => 'not_configured',
+            'label' => 'Connecteur à connecter',
+            'detail' => 'Emplacement préparé pour une future application externe.',
+            'count' => 0,
+        ];
+
+        return [
+            [
+                'key' => CoffracAppointmentService::SOURCE,
+                'label' => 'Coffrac',
+                'refresh_label' => 'Actualiser Coffrac',
+                'enabled' => true,
+                'status' => $coffracStatus,
+            ],
+            [
+                'key' => 'external_app_2',
+                'label' => 'Connecteur 2',
+                'refresh_label' => 'Actualiser connecteur 2',
+                'enabled' => false,
+                'status' => [
+                    ...$reservedStatus,
+                    'label' => 'Connecteur 2 à connecter',
+                ],
+            ],
+            [
+                'key' => 'external_app_3',
+                'label' => 'Connecteur 3',
+                'refresh_label' => 'Actualiser connecteur 3',
+                'enabled' => false,
+                'status' => [
+                    ...$reservedStatus,
+                    'label' => 'Connecteur 3 à connecter',
+                ],
             ],
         ];
     }

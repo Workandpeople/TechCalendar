@@ -2,18 +2,21 @@
 
 use App\Models\Appointment;
 use App\Models\Department;
+use App\Models\ExternalAppointmentRequest;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Mail\TechnicianAppointmentNotificationMail;
+use App\Services\CoffracAppointmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
 
-it('links dashboard crm appointments to an auto-start booking search', function () {
+it('does not fallback to simulated appointments on the planning dashboard', function () {
     $planner = User::factory()->create([
         'role' => 1,
         'admin' => false,
@@ -23,27 +26,125 @@ it('links dashboard crm appointments to an auto-start booking search', function 
         ->get(route('planner.dashboard'))
         ->assertOk()
         ->assertSee('RDV à placer')
-        ->assertSee('15 demande(s)')
-        ->assertSee(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']), false);
+        ->assertSee('0 demande(s)')
+        ->assertDontSee('crm-audit-lyon-001');
 });
 
-it('exposes the initial crm appointment id on the booking page', function () {
+it('uses coffrac appointment requests on the planning dashboard when configured', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 44,
+            'source' => 'Coffrac',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => null,
+            'customer_first_name' => 'Claire',
+            'customer_last_name' => 'COFFRAC',
+            'phone' => '0600000044',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+        ]],
+    ]));
+    app(CoffracAppointmentService::class)->sync();
+
     $planner = User::factory()->create([
         'role' => 1,
         'admin' => false,
     ]);
 
     $this->actingAs($planner)
-        ->get(route('planner.book', ['crm_appointment_id' => 'crm-audit-lyon-001']))
+        ->get(route('planner.dashboard'))
         ->assertOk()
-        ->assertSee('15 demande(s)')
-        ->assertSee('booking-crm-refresh')
-        ->assertSee('const bookingCrmPageSize = 10;', false)
-        ->assertSee('window.requestAnimationFrame(scrollToBookingResults);', false)
-        ->assertSee('const bookingInitialCrmAppointmentId = "crm-audit-lyon-001";', false);
+        ->assertSee('RDV à placer')
+        ->assertSee('1 demande(s)')
+        ->assertSee('COFFRAC Claire')
+        ->assertSee(route('planner.book', ['crm_appointment_id' => 'coffrac-44']), false);
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'GET'
+        && str_starts_with($request->url(), 'https://coffrac.test/api/techcalendar/appointments')
+        && str_contains($request->url(), 'status=all')
+        && $request->hasHeader('Authorization', 'Bearer secret-token'));
 });
 
-it('refreshes simulated crm appointment requests on the booking page', function () {
+it('exposes the initial coffrac appointment id on the booking page', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 44,
+            'source' => 'Coffrac',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => null,
+            'customer_first_name' => 'Claire',
+            'customer_last_name' => 'COFFRAC',
+            'phone' => '0600000044',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+        ]],
+    ]));
+    app(CoffracAppointmentService::class)->sync();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.book', ['crm_appointment_id' => 'coffrac-44']))
+        ->assertOk()
+        ->assertSee('RDV externes à placer')
+        ->assertSee('API Coffrac disponible')
+        ->assertSee('booking-crm-refresh')
+        ->assertSee('Actualiser connecteur 2')
+        ->assertSee('Connecteur 3 à connecter')
+        ->assertSee('const bookingCrmPageSize = 10;', false)
+        ->assertSee('window.requestAnimationFrame(scrollToBookingResults);', false)
+        ->assertSee('const bookingInitialCrmAppointmentId = "coffrac-44";', false);
+});
+
+it('refreshes coffrac appointment requests on the booking page', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 44,
+            'source' => 'Coffrac',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => null,
+            'customer_first_name' => 'Claire',
+            'customer_last_name' => 'COFFRAC',
+            'phone' => '0600000044',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+            'documents' => [[
+                'id' => 9,
+                'scope' => 'dossier',
+                'name' => 'Avis de passage',
+                'url' => 'https://coffrac.test/documents/avis.pdf',
+            ]],
+        ]],
+    ]));
+
     $planner = User::factory()->create([
         'role' => 1,
         'admin' => false,
@@ -52,7 +153,15 @@ it('refreshes simulated crm appointment requests on the booking page', function 
     $this->actingAs($planner)
         ->postJson(route('planner.book.crm-appointments.refresh'))
         ->assertOk()
-        ->assertJsonCount(15, 'appointments')
+        ->assertJsonCount(1, 'appointments')
+        ->assertJsonPath('appointments.0.id', 'coffrac-44')
+        ->assertJsonPath('appointments.0.documents.0.name', 'Avis de passage')
+        ->assertJsonPath('coffrac_api_status.state', 'available')
+        ->assertJsonPath('coffrac_api_status.label', 'API Coffrac disponible')
+        ->assertJsonPath('external_sources.0.key', 'coffrac')
+        ->assertJsonPath('external_sources.1.enabled', false)
+        ->assertJsonPath('external_sources.1.status.label', 'Connecteur 2 à connecter')
+        ->assertJsonPath('external_sources.2.status.label', 'Connecteur 3 à connecter')
         ->assertJsonStructure([
             'appointments' => [[
                 'id',
@@ -64,9 +173,116 @@ it('refreshes simulated crm appointment requests on the booking page', function 
                 'department_code',
                 'latitude',
                 'longitude',
+                'documents',
                 'service',
             ]],
         ]);
+
+    $this->assertDatabaseHas('external_appointment_requests', [
+        'source' => 'coffrac',
+        'external_reference' => '44',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'customer_last_name' => 'COFFRAC',
+    ]);
+});
+
+it('syncs pending and placed coffrac appointment requests with documents locally', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    User::factory()->create([
+        'admin' => true,
+        'role' => 0,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.coffrac@example.test',
+    ]);
+    $technician->services()->attach($service);
+
+    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+        'result' => true,
+        'data' => [
+            [
+                'id' => 44,
+                'source' => 'Coffrac',
+                'status_name' => 'Prise de RDV',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => null,
+                'customer_first_name' => 'Claire',
+                'customer_last_name' => 'COFFRAC',
+                'phone' => '0600000044',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'documents' => [[
+                    'id' => 9,
+                    'scope' => 'dossier',
+                    'name' => 'Avis de passage',
+                    'url' => 'https://coffrac.test/documents/avis.pdf',
+                ]],
+            ],
+            [
+                'id' => 45,
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'Inspection Coffrac',
+                'customer_first_name' => 'Nora',
+                'customer_last_name' => 'PLACEE',
+                'phone' => '0600000045',
+                'address' => '8 Place Royale, 44000 Nantes, France',
+                'department_code' => '44',
+                'latitude' => 47.2142,
+                'longitude' => -1.5586,
+                'technician_email' => 'tech.coffrac@example.test',
+                'starts_at' => '2026-06-22T10:30:00+02:00',
+                'duration_minutes' => 90,
+                'documents' => [[
+                    'id' => 10,
+                    'scope' => 'fiche',
+                    'name' => 'Rapport préparatoire',
+                    'url' => 'https://coffrac.test/documents/rapport.pdf',
+                ]],
+            ],
+        ],
+    ]));
+
+    $this->artisan('coffrac:sync')
+        ->assertSuccessful();
+
+    $pending = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '44')
+        ->firstOrFail();
+    $placed = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '45')
+        ->firstOrFail();
+
+    expect($pending->status)->toBe(ExternalAppointmentRequest::STATUS_PENDING)
+        ->and($pending->documents[0]['name'])->toBe('Avis de passage')
+        ->and($placed->status)->toBe(ExternalAppointmentRequest::STATUS_PLACED)
+        ->and($placed->documents[0]['name'])->toBe('Rapport préparatoire')
+        ->and($placed->technician_email)->toBe('tech.coffrac@example.test')
+        ->and($placed->duration_minutes)->toBe(90);
+
+    $appointment = Appointment::query()
+        ->where('external_source', 'coffrac')
+        ->where('external_reference', '45')
+        ->firstOrFail();
+
+    expect($appointment->service_id)->toBe($service->id)
+        ->and($appointment->technician_id)->toBe($technician->id)
+        ->and($appointment->starts_at->timezone(config('app.timezone'))->format('Y-m-d H:i'))->toBe('2026-06-22 10:30');
 });
 
 it('renders lot appointment requests on the booking page', function () {
@@ -566,8 +782,43 @@ it('rejects booking creation during technician absence', function () {
     }
 });
 
-it('places a crm appointment without service when a service is selected at validation time', function () {
+it('places a coffrac appointment without service when a service is selected at validation time', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
     Mail::fake();
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+        if ($request->method() === 'GET') {
+            return Http::response([
+                'result' => true,
+                'data' => [[
+                    'id' => 45,
+                    'source' => 'Coffrac',
+                    'service_type' => Service::TYPE_COFFRAC,
+                    'service_name' => null,
+                    'customer_first_name' => 'Nora',
+                    'customer_last_name' => 'PETIT',
+                    'phone' => '0648764421',
+                    'address' => '8 Place Royale, 44000 Nantes, France',
+                    'department_code' => '44',
+                    'latitude' => 47.2142,
+                    'longitude' => -1.5586,
+                ]],
+            ]);
+        }
+
+        if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/45/placed') {
+            return Http::response([
+                'result' => true,
+                'message' => 'Rendez-vous basculé en attente visite.',
+            ]);
+        }
+
+        return Http::response(['message' => 'Unexpected request'], 500);
+    });
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -585,10 +836,11 @@ it('places a crm appointment without service when a service is selected at valid
         'longitude' => -1.5536,
     ]);
     $technician->services()->attach($service);
+    app(CoffracAppointmentService::class)->sync();
 
     $this->actingAs($planner)
         ->postJson(route('planner.book.appointments.store'), [
-            'crm_appointment_id' => 'crm-open-nantes-003',
+            'crm_appointment_id' => 'coffrac-45',
             'crm_service_id' => $service->id,
             'technician_id' => $technician->id,
             'starts_at' => now()->addDay()->setTime(10, 30)->toIso8601String(),
@@ -602,8 +854,101 @@ it('places a crm appointment without service when a service is selected at valid
 
     expect($appointment->service_id)->toBe($service->id)
         ->and($appointment->customer_first_name)->toBe('Nora')
-        ->and($appointment->customer_last_name)->toBe('Petit')
+        ->and($appointment->customer_last_name)->toBe('PETIT')
+        ->and($appointment->external_source)->toBe('coffrac')
+        ->and($appointment->external_reference)->toBe('45')
         ->and($appointment->comment)->toBe('Service choisi dans le modal');
+
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'created'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $appointment->id,
+    );
+});
+
+it('places a coffrac appointment and moves it to attente visite', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+    Mail::fake();
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+        if ($request->method() === 'GET') {
+            return Http::response([
+                'result' => true,
+                'data' => [[
+                    'id' => 44,
+                    'source' => 'Coffrac',
+                    'service_type' => Service::TYPE_COFFRAC,
+                    'service_name' => 'Inspection Coffrac',
+                    'customer_first_name' => 'Claire',
+                    'customer_last_name' => 'DUPONT',
+                    'phone' => '0600000044',
+                    'address' => '20 Place Bellecour, 69002 Lyon, France',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                ]],
+            ]);
+        }
+
+        if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/placed') {
+            return Http::response([
+                'result' => true,
+                'message' => 'Rendez-vous basculé en attente visite.',
+            ]);
+        }
+
+        return Http::response(['message' => 'Unexpected request'], 500);
+    });
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.coffrac@example.test',
+        'latitude' => 45.764,
+        'longitude' => 4.8357,
+    ]);
+    $technician->services()->attach($service);
+    app(CoffracAppointmentService::class)->sync();
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'crm_appointment_id' => 'coffrac-44',
+            'technician_id' => $technician->id,
+            'starts_at' => '2026-06-22 10:30:00',
+            'duration_minutes' => 90,
+            'comment' => 'Placement confirmé depuis TechCalendar',
+        ])
+        ->assertCreated()
+        ->assertJsonStructure(['appointment_id']);
+
+    $appointment = Appointment::query()->firstOrFail();
+
+    expect($appointment->external_source)->toBe('coffrac')
+        ->and($appointment->external_reference)->toBe('44')
+        ->and($appointment->status)->toBe(Appointment::STATUS_SCHEDULED)
+        ->and($appointment->service_id)->toBe($service->id)
+        ->and($appointment->customer_first_name)->toBe('Claire')
+        ->and($appointment->customer_last_name)->toBe('DUPONT');
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/placed'
+        && $request['technician_email'] === 'tech.coffrac@example.test'
+        && $request['duration_minutes'] === 90
+        && $request['comment'] === 'Placement confirmé depuis TechCalendar');
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,

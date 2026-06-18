@@ -8,6 +8,7 @@ use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 
 uses(RefreshDatabase::class);
@@ -490,4 +491,132 @@ it('filters tracking events by appointment soft-delete status', function () {
         ->and($deletedEvents)->toHaveCount(1)
         ->and($deletedEvents[0]['id'])->toBe($deletedAppointment->id)
         ->and($deletedEvents[0]['extendedProps']['deleted_at'])->not->toBeNull();
+});
+
+it('requires a changed comment before reporting an appointment problem', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+
+    $startsAt = Carbon::parse('2026-06-22 10:30:00');
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Claire',
+        'customer_last_name' => 'DUPONT',
+        'customer_phone' => '0600000044',
+        'address' => '20 Place Bellecour, 69002 Lyon',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'comment' => 'Commentaire initial',
+        'external_source' => 'coffrac',
+        'external_reference' => '44',
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.appointments.problem', $appointment), [
+            'comment' => 'Commentaire initial',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('comment');
+
+    expect($appointment->refresh()->status)->toBe(Appointment::STATUS_SCHEDULED)
+        ->and($appointment->problem_reported_at)->toBeNull();
+
+    Http::assertNothingSent();
+});
+
+it('reports a coffrac appointment problem and moves it to probleme rendez-vous', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Mail::fake();
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/44/problem' => Http::response([
+            'result' => true,
+            'message' => 'Rendez-vous basculé en problème.',
+        ]),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.coffrac@example.test',
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+
+    $startsAt = Carbon::parse('2026-06-22 10:30:00');
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Claire',
+        'customer_last_name' => 'DUPONT',
+        'customer_phone' => '0600000044',
+        'address' => '20 Place Bellecour, 69002 Lyon',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'comment' => 'Commentaire initial',
+        'external_source' => 'coffrac',
+        'external_reference' => '44',
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.appointments.problem', $appointment), [
+            'comment' => 'Client absent au rendez-vous, à retraiter côté Coffrac.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Problème RDV déclaré.')
+        ->assertJsonPath('status', Appointment::STATUS_PROBLEM);
+
+    $appointment->refresh();
+
+    expect($appointment->status)->toBe(Appointment::STATUS_PROBLEM)
+        ->and($appointment->problem_reported_at)->not->toBeNull()
+        ->and($appointment->comment)->toBe('Client absent au rendez-vous, à retraiter côté Coffrac.');
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/problem'
+        && $request['comment'] === 'Client absent au rendez-vous, à retraiter côté Coffrac.');
+
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'problem_reported'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $appointment->id,
+    );
 });

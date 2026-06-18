@@ -1225,9 +1225,13 @@
                     style: 'mapbox://styles/mapbox/streets-v12',
                     center: [2.2137, 46.2276],
                     zoom: 4.6,
-                    interactive: false,
                     attributionControl: false,
                 });
+
+                lotAppointmentMap.addControl(new window.mapboxgl.NavigationControl({
+                    showCompass: false,
+                    visualizePitch: false,
+                }), 'top-right');
             }
 
             return lotAppointmentMap;

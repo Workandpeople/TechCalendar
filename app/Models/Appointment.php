@@ -21,10 +21,19 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'duration_minutes',
     'ends_at',
     'comment',
+    'status',
+    'problem_reported_at',
+    'external_source',
+    'external_reference',
+    'external_payload',
 ])]
 class Appointment extends Model
 {
     use SoftDeletes;
+
+    public const STATUS_SCHEDULED = 'scheduled';
+
+    public const STATUS_PROBLEM = 'problem';
 
     public function service(): BelongsTo
     {
@@ -49,6 +58,8 @@ class Appointment extends Model
             'duration_minutes' => 'integer',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
+            'problem_reported_at' => 'datetime',
+            'external_payload' => 'array',
             'deleted_at' => 'datetime',
         ];
     }

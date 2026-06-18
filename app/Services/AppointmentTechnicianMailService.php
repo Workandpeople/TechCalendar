@@ -26,6 +26,11 @@ class AppointmentTechnicianMailService
         $this->notifyCurrentTechnician($appointment, 'comment_updated');
     }
 
+    public function problemReported(Appointment $appointment): void
+    {
+        $this->notifyCurrentTechnician($appointment, 'problem_reported');
+    }
+
     public function cancelled(Appointment $appointment): void
     {
         $this->notifyCurrentTechnician($appointment, 'cancelled');

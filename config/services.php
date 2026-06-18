@@ -53,4 +53,11 @@ return [
         'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON'),
     ],
 
+    'coffrac' => [
+        'api_url' => env('COFFRAC_API_URL'),
+        'api_token' => env('COFFRAC_API_TOKEN'),
+        'timeout' => env('COFFRAC_API_TIMEOUT', 15),
+        'connect_timeout' => env('COFFRAC_API_CONNECT_TIMEOUT', 5),
+    ],
+
 ];

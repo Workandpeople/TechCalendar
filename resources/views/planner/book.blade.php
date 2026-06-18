@@ -1,10 +1,52 @@
 <x-layouts.app>
+    @php
+        $coffracApiStatus = $coffracApiStatus ?? [
+            'state' => 'unavailable',
+            'label' => 'API Coffrac indisponible',
+            'detail' => 'Statut API Coffrac inconnu.',
+            'count' => $crmAppointments->count(),
+        ];
+        $externalAppointmentSources = $externalAppointmentSources ?? [
+            [
+                'key' => 'coffrac',
+                'label' => 'Coffrac',
+                'refresh_label' => 'Actualiser Coffrac',
+                'enabled' => true,
+                'status' => $coffracApiStatus,
+            ],
+            [
+                'key' => 'external_app_2',
+                'label' => 'Connecteur 2',
+                'refresh_label' => 'Actualiser connecteur 2',
+                'enabled' => false,
+                'status' => [
+                    'state' => 'not_configured',
+                    'label' => 'Connecteur 2 à connecter',
+                    'detail' => 'Emplacement préparé pour une future application externe.',
+                    'count' => 0,
+                ],
+            ],
+            [
+                'key' => 'external_app_3',
+                'label' => 'Connecteur 3',
+                'refresh_label' => 'Actualiser connecteur 3',
+                'enabled' => false,
+                'status' => [
+                    'state' => 'not_configured',
+                    'label' => 'Connecteur 3 à connecter',
+                    'detail' => 'Emplacement préparé pour une future application externe.',
+                    'count' => 0,
+                ],
+            ],
+        ];
+    @endphp
+
     <div class="space-y-6">
         <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
                 <p class="text-sm" style="color:var(--gc-text-soft);">Planning</p>
                 <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Prise de rdv</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Sélectionne une demande CRM ou saisis un RDV manuel pour identifier les techniciens éligibles.</p>
+                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.</p>
             </div>
             <button id="manual-booking-toggle" type="button" class="gc-btn-primary self-start md:self-auto">
                 RDV manuel
@@ -66,10 +108,39 @@
         </section>
 
         <section id="crm-booking-section" class="gc-card p-5">
-            <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div class="mb-4 space-y-3">
+                <div id="booking-external-controls" class="flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        @foreach ($externalAppointmentSources as $source)
+                            @php
+                                $sourceStatus = $source['status'] ?? ['state' => 'unavailable', 'label' => 'Indisponible', 'detail' => ''];
+                                $sourceButtonStyle = match ($sourceStatus['state'] ?? 'unavailable') {
+                                    'available' => 'background:#dcfce7;color:#15803d;border-color:#86efac;',
+                                    default => 'background:#fee2e2;color:#be123c;border-color:#fecdd3;',
+                                };
+                            @endphp
+                            <button
+                                @if ($source['key'] === 'coffrac') id="booking-crm-refresh" @endif
+                                type="button"
+                                class="gc-btn-soft px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                style="{{ $sourceButtonStyle }}"
+                                data-external-refresh-source="{{ $source['key'] }}"
+                                data-api-state="{{ $sourceStatus['state'] ?? 'unavailable' }}"
+                                data-api-label="{{ $sourceStatus['label'] ?? '' }}"
+                                data-api-detail="{{ $sourceStatus['detail'] ?? '' }}"
+                                title="{{ $sourceStatus['detail'] ?? $source['refresh_label'] }}"
+                                @disabled(! $source['enabled'])
+                            >
+                                {{ $source['refresh_label'] }}
+                            </button>
+                        @endforeach
+                    </div>
+                    <span id="booking-crm-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
+                </div>
+
                 <div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV à placer depuis les CRM</h2>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV externes à placer</h2>
                         <label class="inline-flex cursor-pointer items-center gap-3">
                             <button id="booking-source-switch" type="button" class="relative h-4 w-8 rounded-full transition" style="background:var(--gc-primary);" role="switch" aria-checked="false" aria-label="Basculer vers les lots">
                                 <span id="booking-source-switch-knob" class="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition"></span>
@@ -79,13 +150,6 @@
                     </div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens.</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
-                    <button id="booking-crm-refresh" type="button" class="gc-btn-soft px-3 py-2 text-sm">
-                        Refresh CRM
-                    </button>
-                    <span id="booking-crm-count" class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);" data-crm-count="{{ $crmAppointments->count() }}" data-lot-count="{{ $lotRequests->sum('appointments_count') }}">{{ $crmAppointments->count() }} demande(s)</span>
-                    <span id="booking-crm-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
-                </div>
             </div>
 
             <div id="booking-crm-search-wrap" class="mb-4">
@@ -94,7 +158,7 @@
             </div>
 
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                Aucun RDV CRM ne correspond à cette recherche.
+                Aucun RDV externe ne correspond à cette recherche.
             </div>
 
             <div id="booking-crm-source">
@@ -284,7 +348,7 @@
         <section id="manual-booking-section" class="gc-card hidden p-5">
             <div class="mb-4">
                 <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV manuel</h2>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Saisie rapide d'un client hors CRM. L'adresse doit être sélectionnée via Mapbox pour récupérer le département et les coordonnées.</p>
+                <p class="text-sm" style="color:var(--gc-text-soft);">Saisie rapide d'un client hors application externe. L'adresse doit être sélectionnée via Mapbox pour récupérer le département et les coordonnées.</p>
             </div>
 
             <form id="manual-booking-form" class="grid grid-cols-1 gap-4 xl:grid-cols-12" data-validate-form>
@@ -489,6 +553,7 @@
                         <div id="booking_detail_status" class="mt-3 hidden text-sm"></div>
 
                         <div class="mt-4 flex flex-wrap justify-end gap-2">
+                            <button id="booking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
                             <button id="booking-save-comment-btn" type="button" class="gc-btn-soft">Enregistrer commentaire</button>
                             <button id="booking-confirm-suggestion-btn" type="button" class="gc-btn-primary">Valider la prise du RDV</button>
                         </div>
@@ -521,6 +586,7 @@
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
+        const bookingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const bookingTrackingUrl = @json(route('planner.tracking'));
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
@@ -543,6 +609,7 @@
         let technicianSearchAbortController = null;
         let technicianSearchTimer = null;
         let calendarWindowAbortController = null;
+        let bookingInitialDetailComment = '';
         let calendarWindowRequestId = 0;
         let lastCalendarDateInfo = null;
         let mapRenderRequestId = 0;
@@ -601,13 +668,13 @@
         const bookingCrmSearch = document.getElementById('booking_crm_search');
         const bookingCrmGrid = document.getElementById('booking-crm-grid');
         let bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
-        const bookingCrmCount = document.getElementById('booking-crm-count');
         const bookingCrmEmpty = document.getElementById('booking-crm-empty');
         const bookingCrmSource = document.getElementById('booking-crm-source');
         const bookingLotSource = document.getElementById('booking-lot-source');
         const bookingCrmSearchWrap = document.getElementById('booking-crm-search-wrap');
         const bookingCrmPagination = document.getElementById('booking-crm-pagination');
         const bookingCrmRefreshButton = document.getElementById('booking-crm-refresh');
+        const bookingExternalRefreshButtons = Array.from(document.querySelectorAll('[data-external-refresh-source]'));
         const bookingCrmRefreshStatus = document.getElementById('booking-crm-refresh-status');
         const bookingSourceSwitch = document.getElementById('booking-source-switch');
         const bookingSourceSwitchKnob = document.getElementById('booking-source-switch-knob');
@@ -639,6 +706,19 @@
         let bookingAnalysisProgressTimer = null;
         let bookingCalendarProgress = 0;
         let bookingCalendarProgressTimer = null;
+
+        const externalRefreshStatusStyles = {
+            available: {
+                background: '#dcfce7',
+                color: '#15803d',
+                borderColor: '#86efac',
+            },
+            unavailable: {
+                background: '#fee2e2',
+                color: '#be123c',
+                borderColor: '#fecdd3',
+            },
+        };
 
         const escapeHtml = (value) => String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -702,12 +782,30 @@
             `;
         };
 
-        const renderBookingCrmAppointments = (appointments) => {
+        const setBookingExternalSourceStatus = (sourceKey, apiStatus) => {
+            if (!apiStatus) return;
+
+            const state = apiStatus.state || 'unavailable';
+            const style = externalRefreshStatusStyles[state] || externalRefreshStatusStyles.unavailable;
+            const button = document.querySelector(`[data-external-refresh-source="${sourceKey}"]`);
+
+            if (!button) return;
+
+            button.dataset.apiState = state;
+            button.dataset.apiLabel = apiStatus.label || '';
+            button.dataset.apiDetail = apiStatus.detail || '';
+            button.title = button.dataset.apiDetail || button.textContent.trim();
+            button.style.setProperty('background', style.background);
+            button.style.setProperty('color', style.color);
+            button.style.setProperty('border-color', style.borderColor);
+        };
+
+        const renderBookingCrmAppointments = (appointments, apiStatus = null) => {
             if (!bookingCrmGrid) return;
 
             bookingCrmGrid.innerHTML = appointments.map(renderBookingCrmCard).join('');
             bookingCrmCards = Array.from(bookingCrmGrid.querySelectorAll('.crm-appointment-card'));
-            bookingCrmCount.dataset.crmCount = String(appointments.length);
+            setBookingExternalSourceStatus('coffrac', apiStatus);
             bookingCrmSearch.value = '';
             bookingCrmPage = 1;
             bindBookingCrmCards();
@@ -717,10 +815,10 @@
         const refreshBookingCrmAppointments = async () => {
             if (!bookingCrmRefreshButton || bookingCrmRefreshButton.disabled) return;
 
-            const initialLabel = bookingCrmRefreshButton.textContent;
+            const initialLabel = bookingCrmRefreshButton.textContent.trim();
             bookingCrmRefreshButton.disabled = true;
-            bookingCrmRefreshButton.textContent = 'Refresh...';
-            setBookingCrmRefreshStatus('Régénération des RDV simulés...');
+            bookingCrmRefreshButton.textContent = 'Actualisation...';
+            setBookingCrmRefreshStatus('Actualisation des RDV Coffrac...');
 
             try {
                 const response = await fetch(bookingCrmRefreshUrl, {
@@ -734,13 +832,13 @@
                 const payload = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(payload.message || 'Refresh CRM impossible.');
+                    throw new Error(payload.message || 'Actualisation Coffrac impossible.');
                 }
 
-                renderBookingCrmAppointments(payload.appointments || []);
-                setBookingCrmRefreshStatus(`${(payload.appointments || []).length} RDV CRM régénérés.`);
+                renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null);
+                setBookingCrmRefreshStatus(payload.coffrac_api_status?.detail || `${(payload.appointments || []).length} RDV Coffrac actualisés.`);
             } catch (error) {
-                setBookingCrmRefreshStatus(error.message || 'Refresh CRM impossible.', 'error');
+                setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');
             } finally {
                 bookingCrmRefreshButton.disabled = false;
                 bookingCrmRefreshButton.textContent = initialLabel;
@@ -788,7 +886,6 @@
                 card.classList.toggle('hidden', !isVisible);
             });
 
-            bookingCrmCount.textContent = `${matchingCards.length} demande(s) CRM`;
             bookingCrmEmpty.classList.toggle('hidden', bookingSourceMode !== 'crm' || matchingCards.length > 0);
             renderBookingCrmPagination(matchingCards.length);
         };
@@ -800,15 +897,12 @@
             bookingCrmSource?.classList.toggle('hidden', isLotMode);
             bookingLotSource?.classList.toggle('hidden', !isLotMode);
             bookingCrmSearchWrap?.classList.toggle('hidden', isLotMode);
-            bookingCrmRefreshButton?.classList.toggle('hidden', isLotMode);
+            bookingExternalRefreshButtons.forEach((button) => button.classList.toggle('hidden', isLotMode));
             bookingCrmRefreshStatus?.classList.toggle('hidden', isLotMode || bookingCrmRefreshStatus.textContent === '');
             bookingCrmEmpty?.classList.add('hidden');
             bookingSourceSwitch?.setAttribute('aria-checked', String(isLotMode));
             bookingSourceSwitch?.style.setProperty('background', isLotMode ? '#d8c27a' : 'var(--gc-primary)');
             bookingSourceSwitchKnob?.style.setProperty('transform', isLotMode ? 'translateX(1rem)' : 'translateX(0)');
-            bookingCrmCount.textContent = isLotMode
-                ? `${bookingCrmCount.dataset.lotCount || 0} RDV de lot`
-                : `${bookingCrmCount.dataset.crmCount || bookingCrmCards.length} demande(s) CRM`;
 
             if (isLotMode) {
                 bookingCrmPagination?.classList.add('hidden');
@@ -1620,7 +1714,7 @@
 
         const openCalendarSlotModal = (info) => {
             if (!currentAppointmentRequest) {
-                showFeedback('Lance d’abord une recherche CRM ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
+                showFeedback('Lance d’abord une recherche Coffrac ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
                 return;
             }
 
@@ -2172,7 +2266,7 @@
                 return;
             }
 
-            showDetailStatus('Choisis une prestation avant de valider ce RDV CRM.', 'error');
+            showDetailStatus('Choisis une prestation avant de valider ce RDV Coffrac.', 'error');
         };
 
         const openBookingAppointmentModal = async (event) => {
@@ -2210,6 +2304,7 @@
             startsAtInput.value = formatDateTimeForInput(event.start);
             durationInput.value = props.duration_minutes || Math.max(30, Math.round(((event.end || addMinutes(event.start, requestDurationMinutes())) - event.start) / 60000));
             document.getElementById('booking_detail_comment').value = props.comment || '';
+            bookingInitialDetailComment = props.comment || '';
             renderRouteSummary(props, null, true);
 
             serviceSelectWrap.classList.toggle('hidden', !shouldSelectCrmService);
@@ -2231,6 +2326,7 @@
 
             startsAtInput.disabled = !isSuggestion;
             durationInput.disabled = !isSuggestion;
+            document.getElementById('booking-problem-appointment-btn').classList.toggle('hidden', isSuggestion || Boolean(props.deleted_at));
             document.getElementById('booking-save-comment-btn').classList.toggle('hidden', isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
@@ -2628,7 +2724,7 @@
             }
         };
 
-        const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, 'RDV CRM');
+        const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, 'RDV Coffrac');
         const lotServiceSelectFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-service-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
 
@@ -2741,7 +2837,7 @@
             }
 
             if (!currentAnalysisPayload) {
-                setTechnicianSearchStatus('Lance d’abord une analyse CRM ou manuelle.', 'error');
+                setTechnicianSearchStatus('Lance d’abord une analyse Coffrac ou manuelle.', 'error');
                 return;
             }
 
@@ -2904,12 +3000,69 @@
                 }
 
                 selectedCalendarEvent?.setExtendedProp('comment', payload.comment || comment);
+                bookingInitialDetailComment = payload.comment || comment;
                 showDetailStatus('Commentaire enregistre.');
             } catch (error) {
                 showDetailStatus(error.message || 'Enregistrement impossible.', 'error');
             } finally {
                 button.disabled = false;
                 button.textContent = 'Enregistrer commentaire';
+            }
+        });
+
+        document.getElementById('booking-problem-appointment-btn').addEventListener('click', async () => {
+            const appointmentId = document.getElementById('booking_detail_appointment_id').value;
+            const comment = document.getElementById('booking_detail_comment').value.trim();
+            const button = document.getElementById('booking-problem-appointment-btn');
+
+            if (!appointmentId) return;
+
+            if (!comment) {
+                showDetailStatus('Un commentaire est obligatoire avant de déclarer un problème RDV.', 'error');
+                return;
+            }
+
+            if (comment === bookingInitialDetailComment.trim()) {
+                showDetailStatus('Le commentaire doit être modifié avant de déclarer un problème RDV.', 'error');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Signalement...';
+
+            try {
+                const response = await fetch(bookingProblemUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({ comment }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload.message || 'Signalement impossible.';
+                    throw new Error(firstError);
+                }
+
+                if (selectedCalendarEvent) {
+                    selectedCalendarEvent.setExtendedProp('comment', payload.comment || comment);
+                    selectedCalendarEvent.setExtendedProp('status', payload.status || 'problem');
+                    selectedCalendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
+                    selectedCalendarEvent.setProp('backgroundColor', '#fef3c7');
+                    selectedCalendarEvent.setProp('borderColor', '#d97706');
+                    selectedCalendarEvent.setProp('textColor', '#713f12');
+                }
+
+                bookingInitialDetailComment = payload.comment || comment;
+                showDetailStatus('Problème RDV déclaré.');
+            } catch (error) {
+                showDetailStatus(error.message || 'Signalement impossible.', 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Problème RDV';
             }
         });
 
@@ -2927,7 +3080,7 @@
 
             if (!serviceSelectWrap.classList.contains('hidden')) {
                 if (!serviceSelect.value) {
-                    showDetailStatus('Choisis une prestation avant de valider ce RDV CRM.', 'error');
+                    showDetailStatus('Choisis une prestation avant de valider ce RDV Coffrac.', 'error');
                     serviceSelect.focus();
                     return;
                 }
