@@ -18,6 +18,7 @@ use Throwable;
 class CoffracAppointmentService
 {
     public const SOURCE = 'coffrac';
+    private const SYNC_MESSAGE_MAX_LENGTH = 240;
 
     public function isConfigured(): bool
     {
@@ -131,6 +132,8 @@ class CoffracAppointmentService
             $message = $exception instanceof RuntimeException
                 ? $exception->getMessage()
                 : 'Coffrac ne répond pas pour le moment.';
+            $message = $this->syncMessage($message);
+
             $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
                 'appointments_count' => 0,
             ]);
@@ -625,7 +628,7 @@ class CoffracAppointmentService
         $sync = ExternalApiSync::query()->firstOrNew(['source' => self::SOURCE]);
         $sync->fill([
             'state' => $state,
-            'message' => $message,
+            'message' => $this->syncMessage($message),
             'last_finished_at' => now(),
             'metadata' => $metadata,
         ]);
@@ -637,6 +640,13 @@ class CoffracAppointmentService
         $sync->save();
 
         return $sync;
+    }
+
+    private function syncMessage(string $message): string
+    {
+        $message = trim((string) preg_replace('/\s+/u', ' ', $message));
+
+        return Str::limit($message !== '' ? $message : 'Statut Coffrac indisponible.', self::SYNC_MESSAGE_MAX_LENGTH - 3, '...');
     }
 
     /**

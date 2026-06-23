@@ -2,6 +2,7 @@
 
 use App\Models\Appointment;
 use App\Models\Department;
+use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\Lot;
 use App\Models\LotAppointment;
@@ -184,6 +185,35 @@ it('refreshes coffrac appointment requests on the booking page', function () {
         'status' => ExternalAppointmentRequest::STATUS_PENDING,
         'customer_last_name' => 'COFFRAC',
     ]);
+});
+
+it('keeps coffrac refresh stable when the remote api returns a long error', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake(fn () => Http::response([
+        'message' => str_repeat('Erreur SQL Coffrac distante ', 30),
+    ], 500));
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.refresh'))
+        ->assertOk()
+        ->assertJsonCount(0, 'appointments')
+        ->assertJsonPath('coffrac_api_status.state', 'unavailable')
+        ->assertJsonPath('coffrac_api_status.label', 'API Coffrac indisponible');
+
+    $sync = ExternalApiSync::query()->where('source', 'coffrac')->firstOrFail();
+
+    expect($sync->state)->toBe(ExternalApiSync::STATE_UNAVAILABLE)
+        ->and(mb_strlen((string) $sync->message))->toBeLessThanOrEqual(240)
+        ->and($sync->message)->toContain('Erreur SQL Coffrac distante');
 });
 
 it('syncs pending and placed coffrac appointment requests with documents locally', function () {
