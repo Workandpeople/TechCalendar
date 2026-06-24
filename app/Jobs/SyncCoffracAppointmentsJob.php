@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
 {
@@ -31,5 +32,12 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
     public function handle(CoffracAppointmentService $coffracAppointments): void
     {
         $coffracAppointments->sync();
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        app(CoffracAppointmentService::class)->markSyncFailed(
+            'Synchronisation Coffrac interrompue: '.$exception->getMessage(),
+        );
     }
 }

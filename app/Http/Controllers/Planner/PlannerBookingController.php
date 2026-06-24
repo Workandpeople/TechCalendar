@@ -26,6 +26,8 @@ use RuntimeException;
 
 class PlannerBookingController extends Controller
 {
+    private const CRM_APPOINTMENT_LIST_LIMIT = 300;
+
     public function index(
         Request $request,
         CoffracAppointmentService $coffracAppointments,
@@ -38,7 +40,7 @@ class PlannerBookingController extends Controller
             ->orderBy('type')
             ->orderBy('name')
             ->get(['id', 'type', 'name', 'average_duration_minutes']);
-        $coffracPending = $coffracAppointments->pendingWithStatus(15);
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
         $externalAppointmentSources = $this->externalAppointmentSources($coffracPending['status']);
 
         return view('planner.book', [
@@ -73,6 +75,12 @@ class PlannerBookingController extends Controller
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
 
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
+
+        if (! is_numeric($crmAppointment['latitude'] ?? null) || ! is_numeric($crmAppointment['longitude'] ?? null)) {
+            throw ValidationException::withMessages([
+                'crm_appointment_id' => 'Coordonnées GPS absentes pour ce RDV. Ouvre le détail du RDV, corrige l’adresse puis relance le géocodage Mapbox.',
+            ]);
+        }
 
         $technicians = $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
         $technicianIds = $technicians->pluck('id');
@@ -127,7 +135,7 @@ class PlannerBookingController extends Controller
             SyncCoffracAppointmentsJob::dispatch();
         }
 
-        $coffracPending = $coffracAppointments->pendingWithStatus(15, shuffle: true);
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT, shuffle: true);
 
         return response()->json([
             'sync_queued' => $coffracAppointments->isConfigured(),
@@ -146,7 +154,7 @@ class PlannerBookingController extends Controller
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
-        $coffracPending = $coffracAppointments->pendingWithStatus(15, shuffle: true);
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT, shuffle: true);
 
         return response()->json([
             'appointments' => $coffracPending['appointments'],
@@ -182,7 +190,7 @@ class PlannerBookingController extends Controller
 
         abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
 
-        $coffracPending = $coffracAppointments->pendingWithStatus(15);
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
 
         return response()->json([
             'message' => 'RDV externe mis à jour.',

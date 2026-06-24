@@ -46,9 +46,9 @@ class CoffracAppointmentService
     }
 
     /**
-     * @return array{appointments: Collection<int, array<string, mixed>>, status: array{state:string,label:string,detail:string,count:int}}
+     * @return array{appointments: Collection<int, array<string, mixed>>, status: array<string, mixed>}
      */
-    public function pendingWithStatus(int $limit = 15, bool $shuffle = false): array
+    public function pendingWithStatus(int $limit = 300, bool $shuffle = false): array
     {
         if (! $this->isConfigured()) {
             $this->persistSyncState(
@@ -68,9 +68,15 @@ class CoffracAppointmentService
             ];
         }
 
-        $query = ExternalAppointmentRequest::query()
+        $baseQuery = ExternalAppointmentRequest::query()
             ->where('source', self::SOURCE)
-            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->where('status', ExternalAppointmentRequest::STATUS_PENDING);
+        $totalPendingAppointments = (clone $baseQuery)->count();
+        $missingCoordinatesCount = (clone $baseQuery)
+            ->where(fn ($query) => $query->whereNull('latitude')->orWhereNull('longitude'))
+            ->count();
+
+        $query = (clone $baseQuery)
             ->orderByDesc('remote_updated_at')
             ->orderByDesc('fetched_at')
             ->orderByDesc('id')
@@ -78,7 +84,6 @@ class CoffracAppointmentService
 
         $appointments = $query->get()
             ->map(fn (ExternalAppointmentRequest $appointment): array => $this->appointmentFromStoredRequest($appointment))
-            ->filter()
             ->values();
 
         if ($shuffle) {
@@ -87,7 +92,11 @@ class CoffracAppointmentService
 
         return [
             'appointments' => $appointments,
-            'status' => $this->statusFromLastSync($appointments->count()),
+            'status' => $this->statusFromLastSync(
+                $totalPendingAppointments,
+                $appointments->count(),
+                $missingCoordinatesCount,
+            ),
         ];
     }
 
@@ -837,10 +846,6 @@ class CoffracAppointmentService
 
     private function appointmentFromStoredRequest(ExternalAppointmentRequest $request): array
     {
-        if ($request->latitude === null || $request->longitude === null) {
-            return [];
-        }
-
         return [
             'id' => self::SOURCE.'-'.$request->external_reference,
             'external_source' => self::SOURCE,
@@ -855,8 +860,8 @@ class CoffracAppointmentService
             'postal_code' => $request->postal_code,
             'city' => $request->city,
             'department_code' => strtoupper((string) $request->department_code),
-            'latitude' => (float) $request->latitude,
-            'longitude' => (float) $request->longitude,
+            'latitude' => $request->latitude !== null ? (float) $request->latitude : null,
+            'longitude' => $request->longitude !== null ? (float) $request->longitude : null,
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => false,
@@ -936,7 +941,7 @@ class CoffracAppointmentService
     /**
      * @return array{state:string,label:string,detail:string,count:int,progress:int,stage:string}
      */
-    private function statusFromLastSync(int $count): array
+    private function statusFromLastSync(int $count, ?int $displayedCount = null, int $missingCoordinatesCount = 0): array
     {
         $sync = ExternalApiSync::query()->where('source', self::SOURCE)->first();
 
@@ -949,13 +954,17 @@ class CoffracAppointmentService
             );
         }
 
-        $state = match ($sync->state) {
+        $isStaleSync = $sync->state === ExternalApiSync::STATE_SYNCING
+            && $sync->updated_at !== null
+            && $sync->updated_at->lt(now()->subMinutes(10));
+
+        $state = $isStaleSync ? 'unavailable' : match ($sync->state) {
             ExternalApiSync::STATE_AVAILABLE => 'available',
             ExternalApiSync::STATE_SYNCING => 'syncing',
             ExternalApiSync::STATE_NOT_CONFIGURED => 'not_configured',
             default => 'unavailable',
         };
-        $label = match ($sync->state) {
+        $label = $isStaleSync ? 'Synchronisation Coffrac interrompue' : match ($sync->state) {
             ExternalApiSync::STATE_AVAILABLE => 'API Coffrac disponible',
             ExternalApiSync::STATE_SYNCING => 'Synchronisation Coffrac en cours',
             ExternalApiSync::STATE_NOT_CONFIGURED => 'API Coffrac non configurée',
@@ -963,15 +972,19 @@ class CoffracAppointmentService
         };
         $lastSync = $sync->last_successful_at?->format('d/m/Y H:i');
         $metadata = $sync->metadata ?? [];
-        $detail = trim(($sync->message ?: 'Statut Coffrac inconnu.').($lastSync ? " Dernière synchro: {$lastSync}." : ''));
+        $detail = $isStaleSync
+            ? 'La synchronisation Coffrac semble bloquée. Vérifie que le worker de queue est lancé puis relance une actualisation.'
+            : trim(($sync->message ?: 'Statut Coffrac inconnu.').($lastSync ? " Dernière synchro: {$lastSync}." : ''));
 
         return $this->availabilityStatus(
             $state,
             $label,
             $detail,
             $count,
-            (int) ($metadata['progress'] ?? ($state === 'syncing' ? 5 : 100)),
+            $isStaleSync ? 100 : (int) ($metadata['progress'] ?? ($state === 'syncing' ? 5 : 100)),
             (string) ($metadata['stage'] ?? $sync->message ?? $label),
+            $displayedCount,
+            $missingCoordinatesCount,
         );
     }
 
@@ -1049,6 +1062,14 @@ class CoffracAppointmentService
         return $sync;
     }
 
+    public function markSyncFailed(string $message): ExternalApiSync
+    {
+        return $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $this->syncMessage($message), [
+            'progress' => 100,
+            'stage' => 'Synchronisation Coffrac en erreur.',
+        ]);
+    }
+
     private function broadcastSync(ExternalApiSync $sync): void
     {
         try {
@@ -1079,13 +1100,24 @@ class CoffracAppointmentService
     /**
      * @return array{state:string,label:string,detail:string,count:int,progress:int,stage:string}
      */
-    private function availabilityStatus(string $state, string $label, string $detail, int $count, int $progress = 100, string $stage = ''): array
+    private function availabilityStatus(
+        string $state,
+        string $label,
+        string $detail,
+        int $count,
+        int $progress = 100,
+        string $stage = '',
+        ?int $displayedCount = null,
+        int $missingCoordinatesCount = 0,
+    ): array
     {
         return [
             'state' => $state,
             'label' => $label,
             'detail' => $detail,
             'count' => $count,
+            'displayed_count' => $displayedCount ?? $count,
+            'missing_coordinates_count' => $missingCoordinatesCount,
             'progress' => max(0, min(100, $progress)),
             'stage' => $stage !== '' ? $stage : $label,
         ];

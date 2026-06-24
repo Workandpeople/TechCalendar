@@ -181,6 +181,7 @@
                             style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
                             data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
+                            data-has-coordinates="{{ is_numeric($appointment['latitude'] ?? null) && is_numeric($appointment['longitude'] ?? null) ? '1' : '0' }}"
                         >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
@@ -194,6 +195,9 @@
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
                                 @else
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
+                                @endif
+                                @if (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null))
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;">GPS à recalculer</span>
                                 @endif
                                 <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -800,6 +804,8 @@
         let bookingCalendarProgressTimer = null;
         let externalSyncSubscription = null;
         let externalSyncLocalRefreshTimer = null;
+        let externalSyncPollingTimer = null;
+        let externalSyncPollStartedAt = null;
 
         const externalRefreshStatusStyles = {
             available: {
@@ -855,9 +861,13 @@
 
         const renderBookingCrmCard = (appointment) => {
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
+            const hasCoordinates = Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
             const serviceBadge = appointment.service
                 ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(appointment.service.type)}</span>`
                 : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
+            const gpsBadge = hasCoordinates
+                ? ''
+                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;">GPS à recalculer</span>';
 
             return `
                 <div
@@ -867,6 +877,7 @@
                     style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
                     data-client="${escapeHtml(customerName.toLowerCase())}"
+                    data-has-coordinates="${hasCoordinates ? '1' : '0'}"
                 >
                     <div class="min-w-0">
                         <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</p>
@@ -877,6 +888,7 @@
                     <div class="flex flex-wrap items-center gap-2 md:justify-end">
                         <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
                         ${serviceBadge}
+                        ${gpsBadge}
                         <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -933,15 +945,49 @@
             }
         };
 
-        const renderBookingCrmAppointments = (appointments, apiStatus = null) => {
+        const bookingExternalStatusMessage = (apiStatus) => {
+            if (!apiStatus) return '';
+
+            const progress = clampProgress(apiStatus.progress ?? (apiStatus.state === 'syncing' ? 5 : 100));
+            const pieces = [];
+
+            if (apiStatus.state === 'syncing') {
+                pieces.push(`${progress}%`);
+            }
+
+            pieces.push(apiStatus.stage || apiStatus.detail || apiStatus.label || 'Statut Coffrac inconnu.');
+
+            if (Number.isFinite(Number(apiStatus.count))) {
+                const totalCount = Number(apiStatus.count);
+                const displayedCount = Number.isFinite(Number(apiStatus.displayed_count))
+                    ? Number(apiStatus.displayed_count)
+                    : totalCount;
+
+                pieces.push(displayedCount < totalCount
+                    ? `${displayedCount}/${totalCount} RDV à placer affichés`
+                    : `${totalCount} RDV à placer en local`);
+            }
+
+            if (Number(apiStatus.missing_coordinates_count || 0) > 0) {
+                pieces.push(`${Number(apiStatus.missing_coordinates_count)} à regéocoder`);
+            }
+
+            return pieces.join(' · ');
+        };
+
+        const renderBookingCrmAppointments = (appointments, apiStatus = null, options = {}) => {
             if (!bookingCrmGrid) return;
+
+            const preserveUi = Boolean(options.preserveUi);
+            const previousSearch = bookingCrmSearch.value;
+            const previousPage = bookingCrmPage;
 
             bookingCrmAppointments = Array.isArray(appointments) ? appointments : [];
             bookingCrmGrid.innerHTML = bookingCrmAppointments.map(renderBookingCrmCard).join('');
             bookingCrmCards = Array.from(bookingCrmGrid.querySelectorAll('.crm-appointment-card'));
             setBookingExternalSourceStatus('coffrac', apiStatus);
-            bookingCrmSearch.value = '';
-            bookingCrmPage = 1;
+            bookingCrmSearch.value = preserveUi ? previousSearch : '';
+            bookingCrmPage = preserveUi ? previousPage : 1;
             bindBookingCrmCards();
             filterBookingCrmCards();
         };
@@ -958,6 +1004,7 @@
                 stage: 'Synchronisation Coffrac lancée...',
             });
             setBookingCrmRefreshStatus('Lancement de la synchronisation Coffrac...');
+            startExternalSyncPolling();
 
             try {
                 const response = await fetch(bookingCrmRefreshUrl, {
@@ -974,8 +1021,8 @@
                     throw new Error(payload.message || 'Actualisation Coffrac impossible.');
                 }
 
-                renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null);
-                setBookingCrmRefreshStatus(payload.message || payload.coffrac_api_status?.detail || `${(payload.appointments || []).length} RDV Coffrac disponibles en local.`);
+                renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null, { preserveUi: true });
+                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || payload.message || `${(payload.appointments || []).length} RDV Coffrac disponibles en local.`);
             } catch (error) {
                 setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');
             } finally {
@@ -983,7 +1030,7 @@
             }
         };
 
-        const loadBookingCrmAppointmentsFromLocal = async () => {
+        const loadBookingCrmAppointmentsFromLocal = async (options = {}) => {
             const response = await fetch(bookingCrmIndexUrl, {
                 method: 'GET',
                 headers: {
@@ -996,8 +1043,46 @@
                 throw new Error(payload.message || 'Rechargement des RDV Coffrac impossible.');
             }
 
-            renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null);
-            setBookingCrmRefreshStatus(payload.coffrac_api_status?.detail || 'RDV Coffrac rechargés depuis la base locale.');
+            renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null, {
+                preserveUi: Boolean(options.preserveUi),
+            });
+
+            if (!options.quiet) {
+                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || 'RDV Coffrac rechargés depuis la base locale.');
+            }
+
+            return payload;
+        };
+
+        const stopExternalSyncPolling = () => {
+            window.clearInterval(externalSyncPollingTimer);
+            externalSyncPollingTimer = null;
+            externalSyncPollStartedAt = null;
+        };
+
+        const startExternalSyncPolling = () => {
+            stopExternalSyncPolling();
+            externalSyncPollStartedAt = Date.now();
+
+            externalSyncPollingTimer = window.setInterval(async () => {
+                try {
+                    const payload = await loadBookingCrmAppointmentsFromLocal({ preserveUi: true, quiet: true });
+                    const status = payload.coffrac_api_status || {};
+
+                    setBookingCrmRefreshStatus(bookingExternalStatusMessage(status));
+
+                    if (status.state !== 'syncing') {
+                        stopExternalSyncPolling();
+                        return;
+                    }
+
+                    if (clampProgress(status.progress || 0) <= 3 && externalSyncPollStartedAt && Date.now() - externalSyncPollStartedAt > 30000) {
+                        setBookingCrmRefreshStatus('La synchronisation est toujours en attente de démarrage. Vérifie que le worker de queue tourne bien.', 'error');
+                    }
+                } catch (error) {
+                    setBookingCrmRefreshStatus(error.message || 'Impossible de relire le statut Coffrac.', 'error');
+                }
+            }, 2500);
         };
 
         const scheduleBookingCrmLocalRefresh = () => {
@@ -1031,7 +1116,10 @@
             setBookingCrmRefreshStatus(payload.stage || payload.message || label, state === 'unavailable' ? 'error' : 'info');
 
             if (state !== 'syncing') {
+                stopExternalSyncPolling();
                 scheduleBookingCrmLocalRefresh();
+            } else if (!externalSyncPollingTimer) {
+                startExternalSyncPolling();
             }
         };
 
@@ -3351,12 +3439,25 @@
                 card.addEventListener('click', (event) => {
                     if (event.target.closest('.crm-appointment-detail-button')) return;
 
+                    if (card.dataset.hasCoordinates !== '1') {
+                        openCrmAppointmentDetail(card.dataset.crmId);
+                        setCrmDetailStatus('Coordonnées GPS absentes: corrige l’adresse puis enregistre pour relancer Mapbox.', 'error');
+                        return;
+                    }
+
                     analyzeCrmAppointment(card.dataset.crmId);
                 });
                 card.addEventListener('keydown', (event) => {
                     if (!['Enter', ' '].includes(event.key)) return;
 
                     event.preventDefault();
+
+                    if (card.dataset.hasCoordinates !== '1') {
+                        openCrmAppointmentDetail(card.dataset.crmId);
+                        setCrmDetailStatus('Coordonnées GPS absentes: corrige l’adresse puis enregistre pour relancer Mapbox.', 'error');
+                        return;
+                    }
+
                     analyzeCrmAppointment(card.dataset.crmId);
                 });
             });
@@ -3394,6 +3495,9 @@
 
         bookingCrmRefreshButton?.addEventListener('click', refreshBookingCrmAppointments);
         subscribeToExternalApiSync();
+        if (bookingCrmRefreshButton?.dataset.apiState === 'syncing') {
+            startExternalSyncPolling();
+        }
 
         setBookingSourceMode('crm');
 

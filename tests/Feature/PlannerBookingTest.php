@@ -160,6 +160,105 @@ it('refreshes coffrac appointment requests on the booking page', function () {
     ]);
 });
 
+it('returns a large local coffrac list and keeps appointments without gps visible', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    ExternalApiSync::query()->create([
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_AVAILABLE,
+        'message' => 'Synchronisation Coffrac terminée.',
+        'last_successful_at' => now(),
+        'metadata' => ['progress' => 100, 'stage' => 'Synchronisation Coffrac terminée.'],
+    ]);
+
+    foreach (range(1, 18) as $index) {
+        ExternalAppointmentRequest::query()->create([
+            'source' => 'coffrac',
+            'external_reference' => (string) (9000 + $index),
+            'status' => ExternalAppointmentRequest::STATUS_PENDING,
+            'source_label' => 'Coffrac',
+            'customer_first_name' => 'Client',
+            'customer_last_name' => sprintf('TEST%02d', $index),
+            'phone' => '0600000000',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+            'fetched_at' => now(),
+        ]);
+    }
+
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '9999',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Sans',
+        'customer_last_name' => 'GPS',
+        'phone' => '0600000000',
+        'address' => 'Adresse à corriger',
+        'department_code' => '69',
+        'latitude' => null,
+        'longitude' => null,
+        'fetched_at' => now(),
+    ]);
+
+    $this->actingAs($planner)
+        ->getJson(route('planner.book.crm-appointments.index'))
+        ->assertOk()
+        ->assertJsonCount(19, 'appointments')
+        ->assertJsonPath('coffrac_api_status.count', 19)
+        ->assertJsonPath('coffrac_api_status.missing_coordinates_count', 1)
+        ->assertJsonFragment([
+            'id' => 'coffrac-9999',
+            'latitude' => null,
+            'longitude' => null,
+        ]);
+});
+
+it('rejects coffrac analysis when the local appointment has no gps coordinates', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '9999',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Sans',
+        'customer_last_name' => 'GPS',
+        'phone' => '0600000000',
+        'address' => 'Adresse à corriger',
+        'department_code' => '69',
+        'latitude' => null,
+        'longitude' => null,
+        'fetched_at' => now(),
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.analyze'), [
+            'crm_appointment_id' => 'coffrac-9999',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['crm_appointment_id'])
+        ->assertJsonPath('errors.crm_appointment_id.0', 'Coordonnées GPS absentes pour ce RDV. Ouvre le détail du RDV, corrige l’adresse puis relance le géocodage Mapbox.');
+});
+
 it('keeps coffrac sync stable when the remote api returns a long error', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
