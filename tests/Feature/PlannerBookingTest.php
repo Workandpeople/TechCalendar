@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
@@ -288,6 +289,126 @@ it('geocodes coffrac pending appointments without remote coordinates', function 
         ->and($stored->longitude)->toBe(2.379024)
         ->and($appointments)->toHaveCount(1)
         ->and($appointments->first()['id'])->toBe('coffrac-4256');
+});
+
+it('updates a local coffrac appointment before booking it', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit choisi depuis le détail',
+        'average_duration_minutes' => 120,
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '4257',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'MARTIN',
+        'phone' => '0600004257',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'documents' => [[
+            'name' => 'Avis Coffrac',
+            'url' => 'https://coffrac.test/documents/4257.pdf',
+        ]],
+        'payload' => ['id' => 4257],
+        'fetched_at' => now(),
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('22 Rue Victor Hugo, 69002 Lyon')
+        ->andReturn([
+            'latitude' => 45.754921,
+            'longitude' => 4.829713,
+            'formatted_address' => '22 Rue Victor Hugo, 69002 Lyon, France',
+            'mapbox_id' => 'address.69002',
+            'mapbox_confidence' => 0.94,
+            'warnings' => [],
+        ]);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    $this->actingAs($planner)
+        ->patchJson(route('planner.book.crm-appointments.update', ['crmAppointmentId' => 'coffrac-4257']), [
+            'service_id' => $service->id,
+            'address' => '22 Rue Victor Hugo, 69002 Lyon',
+            'comment' => 'Client à rappeler avant intervention.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.id', 'coffrac-4257')
+        ->assertJsonPath('appointment.service.id', $service->id)
+        ->assertJsonPath('appointment.address', '22 Rue Victor Hugo, 69002 Lyon, France')
+        ->assertJsonPath('appointment.postal_code', '69002')
+        ->assertJsonPath('appointment.city', 'Lyon')
+        ->assertJsonPath('appointment.department_code', '69')
+        ->assertJsonPath('appointment.comment', 'Client à rappeler avant intervention.')
+        ->assertJsonPath('appointment.documents.0.name', 'Avis Coffrac');
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4257')
+        ->firstOrFail();
+
+    expect($stored->service_type)->toBe(Service::TYPE_AUDIT)
+        ->and($stored->service_name)->toBe('Audit choisi depuis le détail')
+        ->and($stored->address)->toBe('22 Rue Victor Hugo, 69002 Lyon, France')
+        ->and($stored->postal_code)->toBe('69002')
+        ->and($stored->city)->toBe('Lyon')
+        ->and($stored->latitude)->toBe(45.754921)
+        ->and($stored->longitude)->toBe(4.829713)
+        ->and($stored->comment)->toBe('Client à rappeler avant intervention.');
+});
+
+it('matches a coffrac appointment service through an external alias', function () {
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Résidentiel EC 104',
+        'average_duration_minutes' => 90,
+    ]);
+    ExternalServiceAlias::query()->create([
+        'service_id' => $service->id,
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_type' => Service::TYPE_COFFRAC,
+        'external_name' => 'RES EC 104 (01/01/25)',
+        'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
+        'normalized_external_name' => ExternalServiceAlias::normalizeValue('RES EC 104 (01/01/25)'),
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '5000',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'service_type' => Service::TYPE_COFFRAC,
+        'service_name' => 'RES EC 104 (01/01/25)',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'MARTIN',
+        'phone' => '0600005000',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'fetched_at' => now(),
+    ]);
+
+    $appointment = app(CoffracAppointmentService::class)->find('coffrac-5000');
+
+    expect($appointment['service']['id'])->toBe($service->id)
+        ->and($appointment['service']['name'])->toBe('Résidentiel EC 104')
+        ->and($appointment['service']['average_duration_minutes'])->toBe(90);
 });
 
 it('syncs pending and placed coffrac appointment requests with documents locally', function () {

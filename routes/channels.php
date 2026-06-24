@@ -20,3 +20,8 @@ Broadcast::channel('lot-import-preview.{uuid}', function ($user, string $uuid): 
         || (bool) $user->admin
         || (int) $user->role === 0;
 });
+
+Broadcast::channel('external-api-sync.{source}', function ($user, string $source): bool {
+    return in_array($source, ['coffrac'], true)
+        && ((bool) $user->admin || in_array((int) $user->role, [0, 1], true));
+});

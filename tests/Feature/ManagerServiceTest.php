@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\Service;
+use App\Models\ExternalServiceAlias;
 use App\Models\User;
+use App\Services\CoffracAppointmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -72,6 +74,38 @@ it('assigns a new service to selected technicians', function () {
     expect($service->technicians()->pluck('users.id')->all())
         ->toEqualCanonicalizing([$firstTechnician->id, $secondTechnician->id])
         ->and($otherTechnician->services()->whereKey($service->id)->exists())->toBeFalse();
+});
+
+it('stores coffrac aliases for a service', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('manager.services.store'), [
+            'type' => Service::TYPE_COFFRAC,
+            'name' => 'Résidentiel EC 104',
+            'average_duration_minutes' => 90,
+            'external_aliases' => implode("\n", [
+                'RES EC 104 (01/01/25)',
+                'RES EC 104 LUMINAIRE',
+                'COFFRAC | SAV - RES EC 104',
+            ]),
+        ])
+        ->assertRedirect(route('manager.services'))
+        ->assertSessionHas('status', 'Prestation créée avec succès.');
+
+    $service = Service::query()->where('name', 'Résidentiel EC 104')->firstOrFail();
+    $aliases = ExternalServiceAlias::query()
+        ->where('service_id', $service->id)
+        ->orderBy('external_name')
+        ->get();
+
+    expect($aliases)->toHaveCount(3)
+        ->and($aliases->pluck('source')->unique()->all())->toBe([CoffracAppointmentService::SOURCE])
+        ->and($aliases->pluck('normalized_external_name')->all())->toContain('res ec 104 01 01 25')
+        ->and($aliases->pluck('normalized_external_name')->all())->toContain('sav res ec 104');
 });
 
 it('rejects non technician users when assigning a service during creation', function () {

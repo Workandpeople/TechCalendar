@@ -123,16 +123,25 @@
                             <button
                                 @if ($source['key'] === 'coffrac') id="booking-crm-refresh" @endif
                                 type="button"
-                                class="gc-btn-soft px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                class="gc-btn-soft relative overflow-hidden px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                                 style="{{ $sourceButtonStyle }}"
                                 data-external-refresh-source="{{ $source['key'] }}"
+                                data-refresh-label="{{ $source['refresh_label'] }}"
                                 data-api-state="{{ $sourceStatus['state'] ?? 'unavailable' }}"
                                 data-api-label="{{ $sourceStatus['label'] ?? '' }}"
                                 data-api-detail="{{ $sourceStatus['detail'] ?? '' }}"
+                                data-api-progress="{{ $sourceStatus['progress'] ?? (($sourceStatus['state'] ?? '') === 'syncing' ? 5 : 100) }}"
+                                data-api-stage="{{ $sourceStatus['stage'] ?? '' }}"
                                 title="{{ $sourceStatus['detail'] ?? $source['refresh_label'] }}"
                                 @disabled(! $source['enabled'])
                             >
-                                {{ $source['refresh_label'] }}
+                                <span class="relative z-10 inline-flex items-center gap-2">
+                                    <span data-external-refresh-label>{{ $source['refresh_label'] }}</span>
+                                    <span data-external-refresh-progress-label class="{{ ($sourceStatus['state'] ?? '') === 'syncing' ? '' : 'hidden' }} rounded-full px-2 py-0.5 text-xs font-semibold" style="background:rgba(255,255,255,.72);">
+                                        {{ $sourceStatus['progress'] ?? 5 }}%
+                                    </span>
+                                </span>
+                                <span data-external-refresh-progress-bar class="{{ ($sourceStatus['state'] ?? '') === 'syncing' ? '' : 'hidden' }} absolute bottom-0 left-0 h-1 rounded-r-full transition-all duration-300" style="width:{{ $sourceStatus['progress'] ?? 5 }}%;background:rgba(180,83,9,.38);"></span>
                             </button>
                         @endforeach
                     </div>
@@ -482,12 +491,41 @@
                 <button type="button" id="booking-crm-detail-close" class="gc-link">Fermer</button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_460px]">
                 <section>
                     <div id="booking-crm-detail-map" class="h-[420px] overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
+                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Carte libre: tu peux zoomer, dézoomer et te déplacer pour vérifier le point.</p>
                 </section>
 
                 <section class="space-y-4">
+                    <form id="booking-crm-detail-form" class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="grid grid-cols-1 gap-3">
+                            <div>
+                                <label class="gc-label" for="booking_crm_detail_service_id">Prestation</label>
+                                <select id="booking_crm_detail_service_id" class="gc-input">
+                                    <option value="">Prestation non renseignée</option>
+                                    @foreach ($services as $service)
+                                        <option value="{{ $service->id }}">{{ $service->type }} - {{ $service->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="booking_crm_detail_address_input">Adresse</label>
+                                <input id="booking_crm_detail_address_input" type="text" class="gc-input" autocomplete="off" placeholder="Adresse complète du RDV" />
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">La sauvegarde relance le géocodage Mapbox et met à jour le point GPS.</p>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="booking_crm_detail_comment">Commentaires</label>
+                                <textarea id="booking_crm_detail_comment" class="gc-input min-h-[110px]" placeholder="Commentaires du dossier ou notes internes"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <p id="booking_crm_detail_status" class="hidden text-sm"></p>
+                            <button id="booking-crm-detail-save" type="submit" class="gc-btn">Enregistrer et regéocoder</button>
+                        </div>
+                    </form>
+
                     <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <dl id="booking_crm_detail_infos" class="grid grid-cols-1 gap-3 text-sm"></dl>
                     </div>
@@ -622,7 +660,9 @@
 
     <script>
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
+        const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
+        const bookingCrmUpdateUrlTemplate = @json(route('planner.book.crm-appointments.update', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
@@ -640,6 +680,7 @@
         let bookingMapMarkers = [];
         let crmDetailMap = null;
         let crmDetailMapMarkers = [];
+        let currentCrmDetailAppointmentId = null;
         let bookingSuggestionTooltip = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
@@ -730,6 +771,12 @@
         const technicianSelectAllButton = document.getElementById('eligible-technician-select-all');
         const bookingAppointmentModal = document.getElementById('booking-appointment-modal');
         const bookingCrmDetailModal = document.getElementById('booking-crm-detail-modal');
+        const bookingCrmDetailForm = document.getElementById('booking-crm-detail-form');
+        const bookingCrmDetailService = document.getElementById('booking_crm_detail_service_id');
+        const bookingCrmDetailAddress = document.getElementById('booking_crm_detail_address_input');
+        const bookingCrmDetailComment = document.getElementById('booking_crm_detail_comment');
+        const bookingCrmDetailStatus = document.getElementById('booking_crm_detail_status');
+        const bookingCrmDetailSave = document.getElementById('booking-crm-detail-save');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
@@ -751,6 +798,8 @@
         let bookingAnalysisProgressTimer = null;
         let bookingCalendarProgress = 0;
         let bookingCalendarProgressTimer = null;
+        let externalSyncSubscription = null;
+        let externalSyncLocalRefreshTimer = null;
 
         const externalRefreshStatusStyles = {
             available: {
@@ -851,10 +900,37 @@
             button.dataset.apiState = state;
             button.dataset.apiLabel = apiStatus.label || '';
             button.dataset.apiDetail = apiStatus.detail || '';
+            button.dataset.apiProgress = String(apiStatus.progress ?? button.dataset.apiProgress ?? (state === 'syncing' ? 5 : 100));
+            button.dataset.apiStage = apiStatus.stage || apiStatus.message || button.dataset.apiDetail || '';
             button.title = button.dataset.apiDetail || button.textContent.trim();
             button.style.setProperty('background', style.background);
             button.style.setProperty('color', style.color);
             button.style.setProperty('border-color', style.borderColor);
+            renderExternalRefreshButton(button);
+        };
+
+        const renderExternalRefreshButton = (button) => {
+            const state = button.dataset.apiState || 'unavailable';
+            const progress = clampProgress(button.dataset.apiProgress ?? (state === 'syncing' ? 5 : 100));
+            const label = button.dataset.refreshLabel || button.textContent.trim();
+            const labelElement = button.querySelector('[data-external-refresh-label]');
+            const progressLabel = button.querySelector('[data-external-refresh-progress-label]');
+            const progressBar = button.querySelector('[data-external-refresh-progress-bar]');
+            const isSyncing = state === 'syncing';
+
+            if (labelElement) {
+                labelElement.textContent = isSyncing ? 'Synchronisation Coffrac' : label;
+            }
+
+            if (progressLabel) {
+                progressLabel.textContent = `${progress}%`;
+                progressLabel.classList.toggle('hidden', !isSyncing);
+            }
+
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+                progressBar.classList.toggle('hidden', !isSyncing);
+            }
         };
 
         const renderBookingCrmAppointments = (appointments, apiStatus = null) => {
@@ -873,9 +949,14 @@
         const refreshBookingCrmAppointments = async () => {
             if (!bookingCrmRefreshButton || bookingCrmRefreshButton.disabled) return;
 
-            const initialLabel = bookingCrmRefreshButton.textContent.trim();
             bookingCrmRefreshButton.disabled = true;
-            bookingCrmRefreshButton.textContent = 'Synchronisation...';
+            setBookingExternalSourceStatus('coffrac', {
+                state: 'syncing',
+                label: 'Synchronisation Coffrac en cours',
+                detail: 'Synchronisation Coffrac lancée...',
+                progress: 3,
+                stage: 'Synchronisation Coffrac lancée...',
+            });
             setBookingCrmRefreshStatus('Lancement de la synchronisation Coffrac...');
 
             try {
@@ -899,8 +980,81 @@
                 setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');
             } finally {
                 bookingCrmRefreshButton.disabled = false;
-                bookingCrmRefreshButton.textContent = initialLabel;
             }
+        };
+
+        const loadBookingCrmAppointmentsFromLocal = async () => {
+            const response = await fetch(bookingCrmIndexUrl, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(payload.message || 'Rechargement des RDV Coffrac impossible.');
+            }
+
+            renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null);
+            setBookingCrmRefreshStatus(payload.coffrac_api_status?.detail || 'RDV Coffrac rechargés depuis la base locale.');
+        };
+
+        const scheduleBookingCrmLocalRefresh = () => {
+            window.clearTimeout(externalSyncLocalRefreshTimer);
+            externalSyncLocalRefreshTimer = window.setTimeout(async () => {
+                try {
+                    await loadBookingCrmAppointmentsFromLocal();
+                } catch (error) {
+                    setBookingCrmRefreshStatus(error.message || 'Rechargement des RDV Coffrac impossible.', 'error');
+                }
+            }, 500);
+        };
+
+        const handleExternalApiSyncProgress = (payload) => {
+            if (!payload || payload.source !== 'coffrac') return;
+
+            const state = payload.state === 'available'
+                ? 'available'
+                : (payload.state === 'syncing' ? 'syncing' : 'unavailable');
+            const label = state === 'available'
+                ? 'API Coffrac disponible'
+                : (state === 'syncing' ? 'Synchronisation Coffrac en cours' : 'API Coffrac indisponible');
+
+            setBookingExternalSourceStatus('coffrac', {
+                state,
+                label,
+                detail: payload.message || payload.stage || label,
+                progress: payload.progress ?? (state === 'syncing' ? 5 : 100),
+                stage: payload.stage || payload.message || label,
+            });
+            setBookingCrmRefreshStatus(payload.stage || payload.message || label, state === 'unavailable' ? 'error' : 'info');
+
+            if (state !== 'syncing') {
+                scheduleBookingCrmLocalRefresh();
+            }
+        };
+
+        const subscribeToExternalApiSync = () => {
+            bookingExternalRefreshButtons.forEach((button) => renderExternalRefreshButton(button));
+
+            if (!window.TechCalendarReverb?.subscribePrivate) {
+                return;
+            }
+
+            externalSyncSubscription?.unsubscribe?.();
+            externalSyncSubscription = window.TechCalendarReverb.subscribePrivate(
+                'external-api-sync.coffrac',
+                'external-api-sync.progressed',
+                handleExternalApiSyncProgress,
+                {
+                    onError: () => {
+                        if (bookingCrmRefreshButton?.dataset.apiState === 'syncing') {
+                            setBookingCrmRefreshStatus('Reverb indisponible, le statut se mettra à jour au prochain rechargement.', 'error');
+                        }
+                    },
+                },
+            );
         };
 
         const renderBookingCrmPagination = (visibleCount) => {
@@ -1307,6 +1461,37 @@
             </div>
         `;
 
+        const setCrmDetailStatus = (message = '', type = 'info') => {
+            if (!bookingCrmDetailStatus) return;
+
+            bookingCrmDetailStatus.textContent = message;
+            bookingCrmDetailStatus.classList.toggle('hidden', message === '');
+            bookingCrmDetailStatus.style.color = type === 'error' ? '#be123c' : '#0f766e';
+        };
+
+        const setCrmDetailSaving = (isSaving) => {
+            if (!bookingCrmDetailSave) return;
+
+            bookingCrmDetailSave.disabled = isSaving;
+            bookingCrmDetailSave.textContent = isSaving ? 'Géocodage...' : 'Enregistrer et regéocoder';
+        };
+
+        const fillCrmDetailForm = (appointment) => {
+            if (bookingCrmDetailService) {
+                bookingCrmDetailService.value = appointment?.service?.id ? String(appointment.service.id) : '';
+            }
+
+            if (bookingCrmDetailAddress) {
+                bookingCrmDetailAddress.value = appointment?.address || '';
+            }
+
+            if (bookingCrmDetailComment) {
+                bookingCrmDetailComment.value = appointment?.comment || appointment?.external_payload?.comment || '';
+            }
+
+            setCrmDetailStatus();
+        };
+
         const renderCrmDetailDocuments = (documents) => {
             const list = document.getElementById('booking_crm_detail_documents');
             const count = document.getElementById('booking_crm_detail_documents_count');
@@ -1418,6 +1603,7 @@
                 return;
             }
 
+            currentCrmDetailAppointmentId = appointment.id;
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim() || 'Client';
             const serviceLabel = appointment.service
                 ? `${appointment.service.type} - ${appointment.service.name}`
@@ -1437,11 +1623,12 @@
                 crmDetailInfoRow('Téléphone', appointment.phone || '-'),
                 crmDetailInfoRow('Prestation', serviceLabel),
                 crmDetailInfoRow('Département', appointment.department_code || '-'),
-                crmDetailInfoRow('Adresse', addressParts.join(' · ') || '-'),
+                crmDetailInfoRow('Adresse actuelle', addressParts.join(' · ') || '-'),
                 crmDetailInfoRow('GPS', Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude))
                     ? `${Number(appointment.latitude).toFixed(6)}, ${Number(appointment.longitude).toFixed(6)}`
                     : '-'),
             ].join('');
+            fillCrmDetailForm(appointment);
             renderCrmDetailDocuments(appointment.documents || []);
 
             bookingCrmDetailModal.classList.remove('hidden');
@@ -1455,8 +1642,59 @@
 
         const closeCrmAppointmentDetail = () => {
             bookingCrmDetailModal?.classList.add('hidden');
+            currentCrmDetailAppointmentId = null;
+            setCrmDetailStatus();
+            clearCrmDetailMap();
+
             if (bookingAppointmentModal?.classList.contains('hidden')) {
                 document.body.style.overflow = '';
+            }
+        };
+
+        const saveCrmAppointmentDetail = async () => {
+            if (!currentCrmDetailAppointmentId) return;
+
+            const address = bookingCrmDetailAddress?.value.trim() || '';
+
+            if (address === '') {
+                setCrmDetailStatus('Adresse obligatoire pour regéocoder le RDV.', 'error');
+                return;
+            }
+
+            setCrmDetailSaving(true);
+            setCrmDetailStatus('Géocodage Mapbox et sauvegarde en cours...');
+
+            try {
+                const response = await fetch(
+                    bookingCrmUpdateUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(currentCrmDetailAppointmentId)),
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': bookingCsrfToken,
+                        },
+                        body: JSON.stringify({
+                            service_id: bookingCrmDetailService?.value || null,
+                            address,
+                            comment: bookingCrmDetailComment?.value || '',
+                        }),
+                    },
+                );
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Impossible de mettre à jour ce RDV.');
+                }
+
+                renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+                openCrmAppointmentDetail(payload.appointment?.id || currentCrmDetailAppointmentId);
+                setCrmDetailStatus(payload.message || 'RDV externe mis à jour.');
+            } catch (error) {
+                setCrmDetailStatus(error.message || 'Impossible de mettre à jour ce RDV.', 'error');
+            } finally {
+                setCrmDetailSaving(false);
             }
         };
 
@@ -3155,6 +3393,7 @@
         });
 
         bookingCrmRefreshButton?.addEventListener('click', refreshBookingCrmAppointments);
+        subscribeToExternalApiSync();
 
         setBookingSourceMode('crm');
 
@@ -3225,6 +3464,10 @@
         document.getElementById('booking-crm-detail-close')?.addEventListener('click', closeCrmAppointmentDetail);
         bookingCrmDetailModal?.addEventListener('click', (event) => {
             if (event.target === bookingCrmDetailModal) closeCrmAppointmentDetail();
+        });
+        bookingCrmDetailForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await saveCrmAppointmentDetail();
         });
 
         document.getElementById('booking-save-comment-btn').addEventListener('click', async () => {

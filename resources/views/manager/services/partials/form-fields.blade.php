@@ -18,3 +18,14 @@
     <label class="gc-label" for="{{ $prefix }}_name">Nom de la prestation</label>
     <input id="{{ $prefix }}_name" name="name" type="text" class="gc-input" maxlength="190" required />
 </div>
+
+<div>
+    <label class="gc-label" for="{{ $prefix }}_external_aliases">Alias Coffrac</label>
+    <textarea
+        id="{{ $prefix }}_external_aliases"
+        name="external_aliases"
+        class="gc-input min-h-[120px]"
+        placeholder="Un libellé Coffrac par ligne. Exemple: RES EC 104 (01/01/25)"
+    >{{ old('external_aliases') }}</textarea>
+    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ces alias permettent de relier automatiquement les prestations reçues depuis Coffrac à cette prestation interne.</p>
+</div>

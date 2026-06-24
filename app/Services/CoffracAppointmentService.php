@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Events\ExternalApiSyncProgressed;
 use App\Models\Appointment;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\ExternalServiceAlias;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
@@ -111,6 +113,83 @@ class CoffracAppointmentService
     }
 
     /**
+     * Met à jour la copie locale d'une demande Coffrac avant placement dans TechCalendar.
+     *
+     * @param array{service_id?: int|null, address?: string|null, comment?: string|null} $payload
+     * @return array<string, mixed>|null
+     */
+    public function updatePendingAppointment(string $id, array $payload): ?array
+    {
+        if (! str_starts_with($id, self::SOURCE.'-')) {
+            return null;
+        }
+
+        $externalReference = $this->externalReferenceFromCrmId($id);
+
+        if ($externalReference === null) {
+            return null;
+        }
+
+        $storedRequest = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->first();
+
+        if (! $storedRequest) {
+            return null;
+        }
+
+        $updates = [
+            'comment' => trim((string) ($payload['comment'] ?? '')) ?: null,
+            'fetched_at' => now(),
+        ];
+
+        if (array_key_exists('service_id', $payload)) {
+            $service = filled($payload['service_id'])
+                ? Service::query()->find((int) $payload['service_id'])
+                : null;
+
+            $updates['service_type'] = $service?->type;
+            $updates['service_name'] = $service?->name;
+        }
+
+        if (array_key_exists('address', $payload)) {
+            $address = $this->addressCleaner->clean(trim((string) $payload['address']));
+
+            if (! $address) {
+                throw new RuntimeException('Adresse obligatoire pour mettre à jour le RDV Coffrac.');
+            }
+
+            $geocodedAddress = $this->geocodedAddress($address, $storedRequest);
+            $updates = [
+                ...$updates,
+                ...$geocodedAddress,
+            ];
+        }
+
+        $payloadOverrides = [
+            'techcalendar_overrides' => [
+                'service_type' => $updates['service_type'] ?? $storedRequest->service_type,
+                'service_name' => $updates['service_name'] ?? $storedRequest->service_name,
+                'address' => $updates['address'] ?? $storedRequest->address,
+                'comment' => $updates['comment'],
+                'updated_at' => now()->toIso8601String(),
+            ],
+        ];
+
+        $storedRequest->update([
+            ...$updates,
+            'payload' => [
+                ...($storedRequest->payload ?? []),
+                ...$payloadOverrides,
+            ],
+        ]);
+
+        return $this->appointmentFromStoredRequest($storedRequest->refresh());
+    }
+
+    /**
      * Synchronise les demandes Coffrac locales depuis l'API distante.
      *
      * @return array{available: bool, message: string, count: int, pending_count: int, placed_count: int, problem_count: int}
@@ -119,33 +198,10 @@ class CoffracAppointmentService
     {
         if (! $this->isConfigured()) {
             $message = 'COFFRAC_API_URL ou COFFRAC_API_TOKEN est absent.';
-            $this->persistSyncState(ExternalApiSync::STATE_NOT_CONFIGURED, $message, ['appointments_count' => 0]);
-
-            return [
-                'available' => false,
-                'message' => $message,
-                'count' => 0,
-                'pending_count' => 0,
-                'placed_count' => 0,
-                'problem_count' => 0,
-            ];
-        }
-
-        $this->markSyncQueued();
-        $this->skippedRemoteAppointmentCount = 0;
-
-        try {
-            $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize);
-        } catch (Throwable $exception) {
-            report($exception);
-
-            $message = $exception instanceof RuntimeException
-                ? $exception->getMessage()
-                : 'Coffrac ne répond pas pour le moment.';
-            $message = $this->syncMessage($message);
-
-            $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
+            $this->persistSyncState(ExternalApiSync::STATE_NOT_CONFIGURED, $message, [
                 'appointments_count' => 0,
+                'progress' => 100,
+                'stage' => $message,
             ]);
 
             return [
@@ -158,11 +214,73 @@ class CoffracAppointmentService
             ];
         }
 
-        $stored = $remoteAppointments
-            ->map(fn (array $appointment): ?ExternalAppointmentRequest => $this->persistRemoteAppointment($appointment))
-            ->filter()
-            ->values();
+        $this->markSyncQueued();
+        $this->markSyncProgress(5, 'Connexion à Coffrac...');
+        $this->skippedRemoteAppointmentCount = 0;
+
+        try {
+            $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize);
+            $this->markSyncProgress(38, sprintf(
+                'Récupération Coffrac terminée: %d RDV reçu(s).',
+                $remoteAppointments->count(),
+            ), [
+                'total' => $remoteAppointments->count(),
+                'processed' => 0,
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $message = $exception instanceof RuntimeException
+                ? $exception->getMessage()
+                : 'Coffrac ne répond pas pour le moment.';
+            $message = $this->syncMessage($message);
+
+            $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
+                'appointments_count' => 0,
+                'progress' => 100,
+                'stage' => 'Synchronisation Coffrac en erreur.',
+            ]);
+
+            return [
+                'available' => false,
+                'message' => $message,
+                'count' => 0,
+                'pending_count' => 0,
+                'placed_count' => 0,
+                'problem_count' => 0,
+            ];
+        }
+
+        $stored = collect();
+        $totalRemoteAppointments = max(1, $remoteAppointments->count());
+
+        foreach ($remoteAppointments->values() as $index => $appointment) {
+            $storedRequest = $this->persistRemoteAppointment($appointment);
+
+            if ($storedRequest) {
+                $stored->push($storedRequest);
+            }
+
+            $processedAppointments = $index + 1;
+
+            if ($processedAppointments === 1 || $processedAppointments === $totalRemoteAppointments || $processedAppointments % 5 === 0) {
+                $this->markSyncProgress(
+                    40 + (int) floor(($processedAppointments / $totalRemoteAppointments) * 52),
+                    sprintf('Synchronisation locale et géocodage Mapbox %d/%d...', $processedAppointments, $remoteAppointments->count()),
+                    [
+                        'processed' => $processedAppointments,
+                        'total' => $remoteAppointments->count(),
+                    ],
+                );
+            }
+        }
+
         $remoteReferences = $stored->pluck('external_reference')->filter()->values();
+
+        $this->markSyncProgress(96, 'Archivage des RDV absents du flux Coffrac...', [
+            'processed' => $remoteAppointments->count(),
+            'total' => $remoteAppointments->count(),
+        ]);
 
         ExternalAppointmentRequest::query()
             ->where('source', self::SOURCE)
@@ -197,6 +315,10 @@ class CoffracAppointmentService
 
         $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
             'appointments_count' => $stored->count(),
+            'progress' => 100,
+            'stage' => 'Synchronisation Coffrac terminée.',
+            'processed' => $remoteAppointments->count(),
+            'total' => $remoteAppointments->count(),
             ...$counts,
         ]);
 
@@ -315,12 +437,25 @@ class CoffracAppointmentService
         $appointments = collect();
         $offset = 0;
         $safePageSize = max(1, min(500, $pageSize));
+        $pageIndex = 0;
 
         do {
             $page = $this->fetchRemoteAppointmentPage($status, $safePageSize, $offset, $externalReference);
 
             $appointments = $appointments->merge($page['appointments']);
             $offset += $safePageSize;
+            $pageIndex++;
+
+            if (! $externalReference) {
+                $this->markSyncProgress(
+                    min(35, 8 + ($pageIndex * 4)),
+                    sprintf('Récupération Coffrac: %d RDV reçu(s)...', $appointments->count()),
+                    [
+                        'processed' => $appointments->count(),
+                        'total' => 0,
+                    ],
+                );
+            }
         } while (! $externalReference && ! $page['reached_end']);
 
         return $appointments->values();
@@ -590,6 +725,58 @@ class CoffracAppointmentService
         ];
     }
 
+    /**
+     * @return array{address: string, address_line: string|null, postal_code: string|null, city: string|null, department_code: string|null, latitude: float, longitude: float}
+     */
+    private function geocodedAddress(string $address, ExternalAppointmentRequest $storedRequest): array
+    {
+        $geocoding = $this->geocoder->geocode($address);
+        $latitude = $this->coordinate($geocoding['latitude'] ?? null, -90, 90);
+        $longitude = $this->coordinate($geocoding['longitude'] ?? null, -180, 180);
+
+        if ($latitude === null || $longitude === null) {
+            throw new RuntimeException('Adresse introuvable via Mapbox. Vérifie l’adresse puis relance le géocodage.');
+        }
+
+        $formattedAddress = $this->addressCleaner->clean(trim((string) ($geocoding['formatted_address'] ?? ''))) ?: $address;
+        $postalCode = $this->normalizePostalCode($this->postalCodeFromAddress($formattedAddress) ?? $storedRequest->postal_code);
+        $city = $this->cityFromAddress($formattedAddress, $postalCode) ?: $storedRequest->city;
+
+        return [
+            'address' => $formattedAddress,
+            'address_line' => $address,
+            'postal_code' => $postalCode,
+            'city' => $city,
+            'department_code' => $this->normalizeDepartmentCode($storedRequest->department_code, $postalCode),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+        ];
+    }
+
+    private function postalCodeFromAddress(?string $address): ?string
+    {
+        if (! $address || ! preg_match('/\b(\d{5})\b/u', $address, $matches)) {
+            return null;
+        }
+
+        return $matches[1];
+    }
+
+    private function cityFromAddress(?string $address, ?string $postalCode): ?string
+    {
+        if (! $address || ! $postalCode) {
+            return null;
+        }
+
+        $pattern = '/\b'.preg_quote($postalCode, '/').'\s+([^,]+)/u';
+
+        if (! preg_match($pattern, $address, $matches)) {
+            return null;
+        }
+
+        return trim($matches[1]) ?: null;
+    }
+
     private function coordinate(mixed $value, float $min, float $max): ?float
     {
         if ($value === null || $value === '' || ! is_numeric($value)) {
@@ -674,6 +861,7 @@ class CoffracAppointmentService
             'is_manual' => false,
             'is_lot' => false,
             'documents' => $request->documents ?? [],
+            'comment' => $request->comment,
             'service' => $this->matchingService([
                 'service_type' => $request->service_type,
                 'service_name' => $request->service_name,
@@ -693,10 +881,16 @@ class CoffracAppointmentService
             return null;
         }
 
-        $service = Service::query()
+        $service = $this->serviceFromExternalAlias($type, $name)
+            ?? Service::query()
             ->where('type', $type)
             ->where('name', $name)
             ->first(['id', 'type', 'name', 'average_duration_minutes']);
+
+        $service ??= Service::query()
+            ->where('type', $type)
+            ->get(['id', 'type', 'name', 'average_duration_minutes'])
+            ->first(fn (Service $candidate): bool => ExternalServiceAlias::normalizeValue($candidate->name) === ExternalServiceAlias::normalizeValue($name));
 
         return $service ? [
             'id' => $service->id,
@@ -704,6 +898,18 @@ class CoffracAppointmentService
             'name' => $service->name,
             'average_duration_minutes' => $service->average_duration_minutes,
         ] : null;
+    }
+
+    private function serviceFromExternalAlias(string $type, string $name): ?Service
+    {
+        $alias = ExternalServiceAlias::query()
+            ->with('service:id,type,name,average_duration_minutes')
+            ->where('source', self::SOURCE)
+            ->where('normalized_external_type', ExternalServiceAlias::normalizeValue($type))
+            ->where('normalized_external_name', ExternalServiceAlias::normalizeValue($name))
+            ->first();
+
+        return $alias?->service;
     }
 
     private function request(): PendingRequest
@@ -728,7 +934,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @return array{state:string,label:string,detail:string,count:int}
+     * @return array{state:string,label:string,detail:string,count:int,progress:int,stage:string}
      */
     private function statusFromLastSync(int $count): array
     {
@@ -756,21 +962,64 @@ class CoffracAppointmentService
             default => 'API Coffrac indisponible',
         };
         $lastSync = $sync->last_successful_at?->format('d/m/Y H:i');
+        $metadata = $sync->metadata ?? [];
         $detail = trim(($sync->message ?: 'Statut Coffrac inconnu.').($lastSync ? " Dernière synchro: {$lastSync}." : ''));
 
-        return $this->availabilityStatus($state, $label, $detail, $count);
+        return $this->availabilityStatus(
+            $state,
+            $label,
+            $detail,
+            $count,
+            (int) ($metadata['progress'] ?? ($state === 'syncing' ? 5 : 100)),
+            (string) ($metadata['stage'] ?? $sync->message ?? $label),
+        );
     }
 
     public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...'): ExternalApiSync
     {
-        return ExternalApiSync::query()->updateOrCreate(
+        $sync = ExternalApiSync::query()->updateOrCreate(
             ['source' => self::SOURCE],
             [
                 'state' => ExternalApiSync::STATE_SYNCING,
                 'message' => $this->syncMessage($message),
                 'last_started_at' => now(),
+                'metadata' => [
+                    'progress' => 3,
+                    'stage' => $message,
+                    'processed' => 0,
+                    'total' => 0,
+                ],
             ],
         );
+
+        $this->broadcastSync($sync->refresh());
+
+        return $sync;
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     */
+    private function markSyncProgress(int $progress, string $stage, array $metadata = []): ExternalApiSync
+    {
+        $sync = ExternalApiSync::query()->firstOrNew(['source' => self::SOURCE]);
+        $sync->fill([
+            'state' => ExternalApiSync::STATE_SYNCING,
+            'message' => $this->syncMessage($stage),
+            'metadata' => array_merge($sync->metadata ?? [], $metadata, [
+                'progress' => max(0, min(99, $progress)),
+                'stage' => $stage,
+            ]),
+        ]);
+
+        if (! $sync->last_started_at) {
+            $sync->last_started_at = now();
+        }
+
+        $sync->save();
+        $this->broadcastSync($sync->refresh());
+
+        return $sync;
     }
 
     /**
@@ -779,11 +1028,15 @@ class CoffracAppointmentService
     private function persistSyncState(string $state, string $message, array $metadata): ExternalApiSync
     {
         $sync = ExternalApiSync::query()->firstOrNew(['source' => self::SOURCE]);
+        $finalMetadata = array_merge($sync->metadata ?? [], $metadata);
+        $finalMetadata['progress'] = (int) ($finalMetadata['progress'] ?? 100);
+        $finalMetadata['stage'] = (string) ($finalMetadata['stage'] ?? $message);
+
         $sync->fill([
             'state' => $state,
             'message' => $this->syncMessage($message),
             'last_finished_at' => now(),
-            'metadata' => $metadata,
+            'metadata' => $finalMetadata,
         ]);
 
         if ($state === ExternalApiSync::STATE_AVAILABLE) {
@@ -791,8 +1044,22 @@ class CoffracAppointmentService
         }
 
         $sync->save();
+        $this->broadcastSync($sync->refresh());
 
         return $sync;
+    }
+
+    private function broadcastSync(ExternalApiSync $sync): void
+    {
+        try {
+            broadcast(new ExternalApiSyncProgressed($sync));
+        } catch (Throwable $exception) {
+            Log::warning('External API sync progress broadcast failed.', [
+                'source' => $sync->source,
+                'state' => $sync->state,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function syncMessage(string $message): string
@@ -810,15 +1077,17 @@ class CoffracAppointmentService
     }
 
     /**
-     * @return array{state:string,label:string,detail:string,count:int}
+     * @return array{state:string,label:string,detail:string,count:int,progress:int,stage:string}
      */
-    private function availabilityStatus(string $state, string $label, string $detail, int $count): array
+    private function availabilityStatus(string $state, string $label, string $detail, int $count, int $progress = 100, string $stage = ''): array
     {
         return [
             'state' => $state,
             'label' => $label,
             'detail' => $detail,
             'count' => $count,
+            'progress' => max(0, min(100, $progress)),
+            'stage' => $stage !== '' ? $stage : $label,
         ];
     }
 

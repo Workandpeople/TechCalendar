@@ -140,6 +140,59 @@ class PlannerBookingController extends Controller
         ]);
     }
 
+    public function crmAppointments(
+        Request $request,
+        CoffracAppointmentService $coffracAppointments
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $coffracPending = $coffracAppointments->pendingWithStatus(15, shuffle: true);
+
+        return response()->json([
+            'appointments' => $coffracPending['appointments'],
+            'coffrac_api_status' => $coffracPending['status'],
+            'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
+        ]);
+    }
+
+    public function updateCrmAppointment(
+        Request $request,
+        string $crmAppointmentId,
+        CoffracAppointmentService $coffracAppointments
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'service_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('services', 'id'),
+            ],
+            'address' => ['required', 'string', 'max:500'],
+            'comment' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        try {
+            $appointment = $coffracAppointments->updatePendingAppointment($crmAppointmentId, $payload);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'address' => $exception->getMessage(),
+            ]);
+        }
+
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+
+        $coffracPending = $coffracAppointments->pendingWithStatus(15);
+
+        return response()->json([
+            'message' => 'RDV externe mis à jour.',
+            'appointment' => $appointment,
+            'appointments' => $coffracPending['appointments'],
+            'coffrac_api_status' => $coffracPending['status'],
+            'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
+        ]);
+    }
+
     public function searchTechnicians(
         Request $request,
         CoffracAppointmentService $coffracAppointments,

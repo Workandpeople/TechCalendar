@@ -49,6 +49,7 @@
                             <th class="px-4 py-3 font-semibold">Type</th>
                             <th class="px-4 py-3 font-semibold">Nom de la prestation</th>
                             <th class="px-4 py-3 font-semibold">Temps moyen</th>
+                            <th class="px-4 py-3 font-semibold">Alias Coffrac</th>
                             <th class="px-4 py-3 font-semibold">Actions</th>
                         </tr>
                     </thead>
@@ -59,6 +60,20 @@
                                 <td class="px-4 py-3">{{ $service->name }}</td>
                                 <td class="px-4 py-3">{{ $service->average_duration_minutes }} min</td>
                                 <td class="px-4 py-3">
+                                    @if ($service->externalAliases->isNotEmpty())
+                                        <div class="flex max-w-lg flex-wrap gap-1">
+                                            @foreach ($service->externalAliases->take(3) as $alias)
+                                                <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $alias->external_name }}</span>
+                                            @endforeach
+                                            @if ($service->externalAliases->count() > 3)
+                                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#e0f2fe;color:#0369a1;">+{{ $service->externalAliases->count() - 3 }}</span>
+                                            @endif
+                                        </div>
+                                    @else
+                                        <span class="text-sm" style="color:var(--gc-text-soft);">Aucun alias</span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
                                         <button
                                             type="button"
@@ -68,6 +83,7 @@
                                             data-service-type="{{ $service->type }}"
                                             data-service-name="{{ $service->name }}"
                                             data-service-duration="{{ $service->average_duration_minutes }}"
+                                            data-service-aliases='@json($service->externalAliases->map(fn ($alias) => $alias->external_type && $alias->external_type !== \App\Models\Service::TYPE_COFFRAC ? $alias->external_type." | ".$alias->external_name : $alias->external_name)->values())'
                                         >Modifier</button>
 
                                         <button
@@ -82,7 +98,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucune prestation.</td>
+                                <td colspan="5" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucune prestation.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -199,6 +215,7 @@
                     document.getElementById('edit_type').value = button.dataset.serviceType || '';
                     document.getElementById('edit_name').value = button.dataset.serviceName || '';
                     document.getElementById('edit_average_duration_minutes').value = button.dataset.serviceDuration || '';
+                    document.getElementById('edit_external_aliases').value = JSON.parse(button.dataset.serviceAliases || '[]').join('\n');
                     window.TechCalendarForms?.refresh(form);
                 }
 
