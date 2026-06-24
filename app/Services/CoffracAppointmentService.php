@@ -23,6 +23,12 @@ class CoffracAppointmentService
 
     private int $skippedRemoteAppointmentCount = 0;
 
+    public function __construct(
+        private readonly MapboxAddressGeocoder $geocoder,
+        private readonly ImportedAddressCleaner $addressCleaner,
+    ) {
+    }
+
     public function isConfigured(): bool
     {
         return filled(config('services.coffrac.api_url'))
@@ -503,6 +509,17 @@ class CoffracAppointmentService
             return null;
         }
 
+        $addressLine = $this->addressCleaner->clean(trim((string) ($appointment['address_line'] ?? '')) ?: null);
+        $postalCode = $this->normalizePostalCode(trim((string) ($appointment['postal_code'] ?? '')) ?: null);
+        $city = trim((string) ($appointment['city'] ?? '')) ?: null;
+        $address = $this->normalizedAddress(
+            trim((string) ($appointment['address'] ?? '')) ?: null,
+            $addressLine,
+            $postalCode,
+            $city,
+        );
+        $coordinates = $this->coordinatesFromRemoteAppointment($appointment, $address);
+
         return [
             'external_reference' => $externalReference,
             'status' => $this->normalizeRemoteStatus($appointment),
@@ -514,13 +531,13 @@ class CoffracAppointmentService
             'customer_last_name' => trim((string) ($appointment['customer_last_name'] ?? 'Coffrac')),
             'customer_name' => trim((string) ($appointment['customer_name'] ?? '')) ?: trim((string) (($appointment['customer_first_name'] ?? '').' '.($appointment['customer_last_name'] ?? ''))),
             'phone' => trim((string) ($appointment['phone'] ?? '')) ?: null,
-            'address' => trim((string) ($appointment['address'] ?? '')) ?: null,
-            'address_line' => trim((string) ($appointment['address_line'] ?? '')) ?: null,
-            'postal_code' => trim((string) ($appointment['postal_code'] ?? '')) ?: null,
-            'city' => trim((string) ($appointment['city'] ?? '')) ?: null,
-            'department_code' => strtoupper(trim((string) ($appointment['department_code'] ?? ''))) ?: null,
-            'latitude' => ($appointment['latitude'] ?? null) !== null ? (float) $appointment['latitude'] : null,
-            'longitude' => ($appointment['longitude'] ?? null) !== null ? (float) $appointment['longitude'] : null,
+            'address' => $address,
+            'address_line' => $addressLine,
+            'postal_code' => $postalCode,
+            'city' => $city,
+            'department_code' => $this->normalizeDepartmentCode($appointment['department_code'] ?? null, $postalCode),
+            'latitude' => $coordinates['latitude'],
+            'longitude' => $coordinates['longitude'],
             'technician_email' => trim((string) ($appointment['technician_email'] ?? '')) ?: null,
             'starts_at' => ! empty($appointment['starts_at']) ? Carbon::parse($appointment['starts_at']) : null,
             'duration_minutes' => ($appointment['duration_minutes'] ?? null) !== null ? (int) $appointment['duration_minutes'] : null,
@@ -531,6 +548,89 @@ class CoffracAppointmentService
                 ->all(),
             'remote_updated_at' => ! empty($appointment['updated_at']) ? Carbon::parse($appointment['updated_at']) : null,
         ];
+    }
+
+    private function normalizedAddress(?string $address, ?string $addressLine, ?string $postalCode, ?string $city): ?string
+    {
+        $cleanAddress = $this->addressCleaner->clean($address);
+
+        if ($cleanAddress) {
+            return $cleanAddress;
+        }
+
+        $parts = [
+            $addressLine,
+            trim(implode(' ', array_filter([$postalCode, $city]))),
+            'France',
+        ];
+
+        return trim(implode(', ', array_filter($parts))) ?: null;
+    }
+
+    /**
+     * @return array{latitude: float|null, longitude: float|null}
+     */
+    private function coordinatesFromRemoteAppointment(array $appointment, ?string $address): array
+    {
+        $latitude = $this->coordinate($appointment['latitude'] ?? null, -90, 90);
+        $longitude = $this->coordinate($appointment['longitude'] ?? null, -180, 180);
+
+        if ($latitude !== null && $longitude !== null) {
+            return [
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+            ];
+        }
+
+        $geocoding = $this->geocoder->geocode($address);
+
+        return [
+            'latitude' => $this->coordinate($geocoding['latitude'] ?? null, -90, 90),
+            'longitude' => $this->coordinate($geocoding['longitude'] ?? null, -180, 180),
+        ];
+    }
+
+    private function coordinate(mixed $value, float $min, float $max): ?float
+    {
+        if ($value === null || $value === '' || ! is_numeric($value)) {
+            return null;
+        }
+
+        $value = (float) $value;
+
+        return $value >= $min && $value <= $max ? $value : null;
+    }
+
+    private function normalizePostalCode(?string $postalCode): ?string
+    {
+        if ($postalCode === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $postalCode);
+
+        if ($digits === null || $digits === '') {
+            return null;
+        }
+
+        if (strlen($digits) === 4) {
+            $digits = '0'.$digits;
+        }
+
+        return strlen($digits) === 5 ? $digits : $postalCode;
+    }
+
+    private function normalizeDepartmentCode(mixed $departmentCode, ?string $postalCode): ?string
+    {
+        $departmentCode = strtoupper(trim((string) $departmentCode));
+
+        if ($postalCode !== null && preg_match('/^\d{5}$/', $postalCode)) {
+            return str_starts_with($postalCode, '97')
+                ? substr($postalCode, 0, 3)
+                : substr($postalCode, 0, 2);
+        }
+
+        return preg_match('/^\d{2,3}$|^2A$|^2B$/', $departmentCode) ? $departmentCode : null;
     }
 
     private function normalizeRemoteStatus(array $appointment): string

@@ -11,6 +11,7 @@ use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Services\CoffracAppointmentService;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -269,6 +270,62 @@ it('skips a coffrac appointment that crashes remote page serialization', functio
 
     expect(ExternalAppointmentRequest::query()->where('source', 'coffrac')->pluck('external_reference')->all())
         ->toBe(['101', '102', '104']);
+});
+
+it('geocodes coffrac pending appointments without remote coordinates', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('145 RUE DE PARIS, 75019 PARIS, France')
+        ->andReturn([
+            'latitude' => 48.888112,
+            'longitude' => 2.379024,
+            'formatted_address' => '145 Rue de Paris, 75019 Paris, France',
+            'mapbox_id' => 'address.75019',
+            'mapbox_confidence' => 0.92,
+            'warnings' => [],
+        ]);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    Http::fake(fn () => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 4256,
+            'source' => 'Coffrac',
+            'status_name' => 'Prise de RDV',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => 'BAR 145 AUDIT',
+            'customer_first_name' => 'David',
+            'customer_last_name' => 'DHERY',
+            'phone' => '0600004256',
+            'address' => '145 RUE DE PARIS, 75019 PARIS, France',
+            'address_line' => '145 RUE DE PARIS',
+            'postal_code' => '75019',
+            'city' => 'PARIS',
+            'department_code' => '75',
+            'latitude' => null,
+            'longitude' => null,
+        ]],
+    ]));
+
+    app(CoffracAppointmentService::class)->sync();
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4256')
+        ->firstOrFail();
+
+    $appointments = app(CoffracAppointmentService::class)->pending(15);
+
+    expect($stored->latitude)->toBe(48.888112)
+        ->and($stored->longitude)->toBe(2.379024)
+        ->and($appointments)->toHaveCount(1)
+        ->and($appointments->first()['id'])->toBe('coffrac-4256');
 });
 
 it('syncs pending and placed coffrac appointment requests with documents locally', function () {
