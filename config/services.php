@@ -58,6 +58,7 @@ return [
         'api_token' => env('COFFRAC_API_TOKEN'),
         'timeout' => env('COFFRAC_API_TIMEOUT', 15),
         'connect_timeout' => env('COFFRAC_API_CONNECT_TIMEOUT', 5),
+        'incremental_overlap_minutes' => env('COFFRAC_INCREMENTAL_OVERLAP_MINUTES', 10),
     ],
 
 ];

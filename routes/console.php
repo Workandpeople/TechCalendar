@@ -45,8 +45,8 @@ Artisan::command('health:check', function (SystemHealthMonitor $healthMonitor): 
     return $snapshot->overall_status === 'fail' ? 1 : 0;
 })->purpose('Execute les checks de sante applicative et persiste un snapshot.');
 
-Artisan::command('coffrac:sync', function (CoffracAppointmentService $coffracAppointments): int {
-    $result = $coffracAppointments->sync();
+Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.}', function (CoffracAppointmentService $coffracAppointments): int {
+    $result = $coffracAppointments->sync(incremental: (bool) $this->option('incremental'));
 
     $this->info($result['message']);
 

@@ -24,6 +24,10 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
 
     public int $uniqueFor = 1800;
 
+    public function __construct(public bool $incremental = true)
+    {
+    }
+
     public function uniqueId(): string
     {
         return CoffracAppointmentService::SOURCE;
@@ -31,7 +35,7 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
 
     public function handle(CoffracAppointmentService $coffracAppointments): void
     {
-        $coffracAppointments->sync();
+        $coffracAppointments->sync(incremental: $this->incremental);
     }
 
     public function failed(Throwable $exception): void

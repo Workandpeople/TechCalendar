@@ -203,7 +203,7 @@ class CoffracAppointmentService
      *
      * @return array{available: bool, message: string, count: int, pending_count: int, placed_count: int, problem_count: int}
      */
-    public function sync(int $pageSize = 500): array
+    public function sync(int $pageSize = 500, bool $incremental = false): array
     {
         if (! $this->isConfigured()) {
             $message = 'COFFRAC_API_URL ou COFFRAC_API_TOKEN est absent.';
@@ -223,18 +223,28 @@ class CoffracAppointmentService
             ];
         }
 
-        $this->markSyncQueued();
+        $updatedAfter = $incremental ? $this->incrementalUpdatedAfter() : null;
+        $isIncrementalSync = $updatedAfter !== null;
+
+        $this->markSyncQueued($isIncrementalSync
+            ? 'Synchronisation incrémentale Coffrac en cours...'
+            : 'Synchronisation complète Coffrac en cours...'
+        );
         $this->markSyncProgress(5, 'Connexion à Coffrac...');
         $this->skippedRemoteAppointmentCount = 0;
 
         try {
-            $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize);
+            $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize, updatedAfter: $updatedAfter);
             $this->markSyncProgress(38, sprintf(
-                'Récupération Coffrac terminée: %d RDV reçu(s).',
+                $isIncrementalSync
+                    ? 'Récupération Coffrac terminée: %d RDV modifié(s) reçu(s).'
+                    : 'Récupération Coffrac terminée: %d RDV reçu(s).',
                 $remoteAppointments->count(),
             ), [
                 'total' => $remoteAppointments->count(),
                 'processed' => 0,
+                'mode' => $isIncrementalSync ? 'incremental' : 'full',
+                'updated_after' => $updatedAfter?->toIso8601String(),
             ]);
         } catch (Throwable $exception) {
             report($exception);
@@ -275,7 +285,7 @@ class CoffracAppointmentService
             if ($processedAppointments === 1 || $processedAppointments === $totalRemoteAppointments || $processedAppointments % 5 === 0) {
                 $this->markSyncProgress(
                     40 + (int) floor(($processedAppointments / $totalRemoteAppointments) * 52),
-                    sprintf('Synchronisation locale et géocodage Mapbox %d/%d...', $processedAppointments, $remoteAppointments->count()),
+                    sprintf('Synchronisation locale Coffrac %d/%d...', $processedAppointments, $remoteAppointments->count()),
                     [
                         'processed' => $processedAppointments,
                         'total' => $remoteAppointments->count(),
@@ -284,36 +294,40 @@ class CoffracAppointmentService
             }
         }
 
-        $remoteReferences = $stored->pluck('external_reference')->filter()->values();
+        if (! $isIncrementalSync) {
+            $remoteReferences = $stored->pluck('external_reference')->filter()->values();
 
-        $this->markSyncProgress(96, 'Archivage des RDV absents du flux Coffrac...', [
-            'processed' => $remoteAppointments->count(),
-            'total' => $remoteAppointments->count(),
-        ]);
-
-        ExternalAppointmentRequest::query()
-            ->where('source', self::SOURCE)
-            ->when(
-                $remoteReferences->isNotEmpty(),
-                fn ($query) => $query->whereNotIn('external_reference', $remoteReferences->all()),
-            )
-            ->whereIn('status', [
-                ExternalAppointmentRequest::STATUS_PENDING,
-                ExternalAppointmentRequest::STATUS_PLACED,
-                ExternalAppointmentRequest::STATUS_PROBLEM,
-            ])
-            ->update([
-                'status' => ExternalAppointmentRequest::STATUS_ARCHIVED,
-                'fetched_at' => now(),
+            $this->markSyncProgress(96, 'Archivage des RDV absents du flux Coffrac...', [
+                'processed' => $remoteAppointments->count(),
+                'total' => $remoteAppointments->count(),
             ]);
 
-        $counts = [
-            'pending_count' => $stored->where('status', ExternalAppointmentRequest::STATUS_PENDING)->count(),
-            'placed_count' => $stored->where('status', ExternalAppointmentRequest::STATUS_PLACED)->count(),
-            'problem_count' => $stored->where('status', ExternalAppointmentRequest::STATUS_PROBLEM)->count(),
-        ];
+            ExternalAppointmentRequest::query()
+                ->where('source', self::SOURCE)
+                ->when(
+                    $remoteReferences->isNotEmpty(),
+                    fn ($query) => $query->whereNotIn('external_reference', $remoteReferences->all()),
+                )
+                ->whereIn('status', [
+                    ExternalAppointmentRequest::STATUS_PENDING,
+                    ExternalAppointmentRequest::STATUS_PLACED,
+                    ExternalAppointmentRequest::STATUS_PROBLEM,
+                ])
+                ->update([
+                    'status' => ExternalAppointmentRequest::STATUS_ARCHIVED,
+                    'fetched_at' => now(),
+                ]);
+        } else {
+            $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Coffrac...', [
+                'processed' => $remoteAppointments->count(),
+                'total' => $remoteAppointments->count(),
+            ]);
+        }
+
+        $counts = $this->localStatusCounts();
         $message = sprintf(
-            'Synchronisation Coffrac terminée: %d demande(s), %d placée(s), %d en problème.%s',
+            '%s: %d demande(s), %d placée(s), %d en problème.%s',
+            $isIncrementalSync ? 'Synchronisation incrémentale Coffrac terminée' : 'Synchronisation Coffrac terminée',
             $counts['pending_count'],
             $counts['placed_count'],
             $counts['problem_count'],
@@ -323,19 +337,70 @@ class CoffracAppointmentService
         );
 
         $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
-            'appointments_count' => $stored->count(),
+            'appointments_count' => $counts['total_count'],
             'progress' => 100,
             'stage' => 'Synchronisation Coffrac terminée.',
             'processed' => $remoteAppointments->count(),
             'total' => $remoteAppointments->count(),
+            'mode' => $isIncrementalSync ? 'incremental' : 'full',
+            'updated_after' => $updatedAfter?->toIso8601String(),
             ...$counts,
         ]);
 
         return [
             'available' => true,
             'message' => $message,
-            'count' => $stored->count(),
+            'count' => $counts['total_count'],
             ...$counts,
+        ];
+    }
+
+    private function incrementalUpdatedAfter(): ?Carbon
+    {
+        $lastSuccessfulSync = ExternalApiSync::query()
+            ->where('source', self::SOURCE)
+            ->value('last_successful_at');
+
+        $fallbackRemoteUpdate = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->whereNotNull('remote_updated_at')
+            ->max('remote_updated_at');
+
+        $referenceDate = $lastSuccessfulSync ?: $fallbackRemoteUpdate;
+
+        if (! $referenceDate) {
+            return null;
+        }
+
+        return Carbon::parse($referenceDate)
+            ->subMinutes((int) config('services.coffrac.incremental_overlap_minutes', 10));
+    }
+
+    /**
+     * @return array{pending_count: int, placed_count: int, problem_count: int, total_count: int}
+     */
+    private function localStatusCounts(): array
+    {
+        $counts = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->whereIn('status', [
+                ExternalAppointmentRequest::STATUS_PENDING,
+                ExternalAppointmentRequest::STATUS_PLACED,
+                ExternalAppointmentRequest::STATUS_PROBLEM,
+            ])
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $pendingCount = (int) ($counts[ExternalAppointmentRequest::STATUS_PENDING] ?? 0);
+        $placedCount = (int) ($counts[ExternalAppointmentRequest::STATUS_PLACED] ?? 0);
+        $problemCount = (int) ($counts[ExternalAppointmentRequest::STATUS_PROBLEM] ?? 0);
+
+        return [
+            'pending_count' => $pendingCount,
+            'placed_count' => $placedCount,
+            'problem_count' => $problemCount,
+            'total_count' => $pendingCount + $placedCount + $problemCount,
         ];
     }
 
@@ -441,15 +506,19 @@ class CoffracAppointmentService
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function fetchRemoteAppointments(string $status, int $pageSize, ?string $externalReference = null): Collection
-    {
+    private function fetchRemoteAppointments(
+        string $status,
+        int $pageSize,
+        ?string $externalReference = null,
+        ?Carbon $updatedAfter = null
+    ): Collection {
         $appointments = collect();
         $offset = 0;
         $safePageSize = max(1, min(500, $pageSize));
         $pageIndex = 0;
 
         do {
-            $page = $this->fetchRemoteAppointmentPage($status, $safePageSize, $offset, $externalReference);
+            $page = $this->fetchRemoteAppointmentPage($status, $safePageSize, $offset, $externalReference, $updatedAfter);
 
             $appointments = $appointments->merge($page['appointments']);
             $offset += $safePageSize;
@@ -473,13 +542,19 @@ class CoffracAppointmentService
     /**
      * @return array{appointments: Collection<int, array<string, mixed>>, reached_end: bool}
      */
-    private function fetchRemoteAppointmentPage(string $status, int $limit, int $offset, ?string $externalReference = null): array
-    {
+    private function fetchRemoteAppointmentPage(
+        string $status,
+        int $limit,
+        int $offset,
+        ?string $externalReference = null,
+        ?Carbon $updatedAfter = null
+    ): array {
         $response = $this->request()->get($this->endpoint('appointments'), array_filter([
             'status' => $status,
             'limit' => $limit,
             'offset' => $externalReference ? null : $offset,
             'id' => $externalReference,
+            'updated_after' => $externalReference ? null : $updatedAfter?->toIso8601String(),
         ], fn ($value): bool => $value !== null && $value !== ''));
 
         if ($response->failed()) {
@@ -502,13 +577,13 @@ class CoffracAppointmentService
 
                 $firstLimit = max(1, intdiv($limit, 2));
                 $secondLimit = $limit - $firstLimit;
-                $firstPage = $this->fetchRemoteAppointmentPage($status, $firstLimit, $offset);
+                $firstPage = $this->fetchRemoteAppointmentPage($status, $firstLimit, $offset, updatedAfter: $updatedAfter);
 
                 if ($firstPage['reached_end'] || $secondLimit <= 0) {
                     return $firstPage;
                 }
 
-                $secondPage = $this->fetchRemoteAppointmentPage($status, $secondLimit, $offset + $firstLimit);
+                $secondPage = $this->fetchRemoteAppointmentPage($status, $secondLimit, $offset + $firstLimit, updatedAfter: $updatedAfter);
 
                 return [
                     'appointments' => $firstPage['appointments']->merge($secondPage['appointments'])->values(),
@@ -531,7 +606,17 @@ class CoffracAppointmentService
 
     private function persistRemoteAppointment(array $appointment): ?ExternalAppointmentRequest
     {
-        $normalized = $this->normalizeRemoteAppointment($appointment);
+        $externalReference = (string) ($appointment['id'] ?? '');
+
+        if ($externalReference === '') {
+            return null;
+        }
+
+        $existingRequest = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->first();
+        $normalized = $this->normalizeRemoteAppointment($appointment, $existingRequest);
 
         if ($normalized === null) {
             return null;
@@ -645,7 +730,7 @@ class CoffracAppointmentService
     /**
      * @return array<string, mixed>|null
      */
-    private function normalizeRemoteAppointment(array $appointment): ?array
+    private function normalizeRemoteAppointment(array $appointment, ?ExternalAppointmentRequest $existingRequest = null): ?array
     {
         $externalReference = (string) ($appointment['id'] ?? '');
 
@@ -662,7 +747,7 @@ class CoffracAppointmentService
             $postalCode,
             $city,
         );
-        $coordinates = $this->coordinatesFromRemoteAppointment($appointment, $address);
+        $coordinates = $this->coordinatesFromRemoteAppointment($appointment, $address, $existingRequest);
 
         return [
             'external_reference' => $externalReference,
@@ -714,8 +799,11 @@ class CoffracAppointmentService
     /**
      * @return array{latitude: float|null, longitude: float|null}
      */
-    private function coordinatesFromRemoteAppointment(array $appointment, ?string $address): array
-    {
+    private function coordinatesFromRemoteAppointment(
+        array $appointment,
+        ?string $address,
+        ?ExternalAppointmentRequest $existingRequest = null
+    ): array {
         $latitude = $this->coordinate($appointment['latitude'] ?? null, -90, 90);
         $longitude = $this->coordinate($appointment['longitude'] ?? null, -180, 180);
 
@@ -726,12 +814,33 @@ class CoffracAppointmentService
             ];
         }
 
+        if (
+            $existingRequest
+            && $existingRequest->latitude !== null
+            && $existingRequest->longitude !== null
+            && $this->sameNormalizedAddress($address, $existingRequest->address)
+        ) {
+            return [
+                'latitude' => (float) $existingRequest->latitude,
+                'longitude' => (float) $existingRequest->longitude,
+            ];
+        }
+
         $geocoding = $this->geocoder->geocode($address);
 
         return [
             'latitude' => $this->coordinate($geocoding['latitude'] ?? null, -90, 90),
             'longitude' => $this->coordinate($geocoding['longitude'] ?? null, -180, 180),
         ];
+    }
+
+    private function sameNormalizedAddress(?string $left, ?string $right): bool
+    {
+        if (! filled($left) || ! filled($right)) {
+            return false;
+        }
+
+        return ExternalServiceAlias::normalizeValue($left) === ExternalServiceAlias::normalizeValue($right);
     }
 
     /**

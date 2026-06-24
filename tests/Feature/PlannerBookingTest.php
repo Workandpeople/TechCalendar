@@ -390,6 +390,142 @@ it('geocodes coffrac pending appointments without remote coordinates', function 
         ->and($appointments->first()['id'])->toBe('coffrac-4256');
 });
 
+it('does not geocode an unchanged coffrac appointment twice', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('145 RUE DE PARIS, 75019 PARIS, France')
+        ->andReturn([
+            'latitude' => 48.888112,
+            'longitude' => 2.379024,
+            'formatted_address' => '145 Rue de Paris, 75019 Paris, France',
+            'mapbox_id' => 'address.75019',
+            'mapbox_confidence' => 0.92,
+            'warnings' => [],
+        ]);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    Http::fake(fn () => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 4256,
+            'source' => 'Coffrac',
+            'status_name' => 'Prise de RDV',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => 'BAR 145 AUDIT',
+            'customer_first_name' => 'David',
+            'customer_last_name' => 'DHERY',
+            'phone' => '0600004256',
+            'address' => '145 RUE DE PARIS, 75019 PARIS, France',
+            'address_line' => '145 RUE DE PARIS',
+            'postal_code' => '75019',
+            'city' => 'PARIS',
+            'department_code' => '75',
+            'latitude' => null,
+            'longitude' => null,
+        ]],
+    ]));
+
+    app(CoffracAppointmentService::class)->sync();
+    app(CoffracAppointmentService::class)->sync();
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4256')
+        ->firstOrFail();
+
+    expect($stored->latitude)->toBe(48.888112)
+        ->and($stored->longitude)->toBe(2.379024);
+});
+
+it('keeps local coffrac appointments that are absent from an incremental sync delta', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.incremental_overlap_minutes' => 10,
+    ]);
+
+    ExternalApiSync::query()->create([
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_AVAILABLE,
+        'message' => 'Synchronisation Coffrac terminée.',
+        'last_successful_at' => now()->subHour(),
+        'metadata' => ['progress' => 100],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '100',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Delta',
+        'customer_last_name' => 'UPDATE',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'remote_updated_at' => now()->subDay(),
+        'fetched_at' => now()->subDay(),
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '101',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Delta',
+        'customer_last_name' => 'ABSENT',
+        'address' => '8 Place Royale, 44000 Nantes, France',
+        'department_code' => '44',
+        'latitude' => 47.2142,
+        'longitude' => -1.5586,
+        'remote_updated_at' => now()->subDay(),
+        'fetched_at' => now()->subDay(),
+    ]);
+
+    $requestedUpdatedAfter = null;
+    Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedUpdatedAfter) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $requestedUpdatedAfter = $query['updated_after'] ?? null;
+
+        return Http::response([
+            'result' => true,
+            'data' => [[
+                'id' => 100,
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'Inspection',
+                'customer_first_name' => 'Delta',
+                'customer_last_name' => 'UPDATE',
+                'phone' => '0600000100',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'updated_at' => now()->toIso8601String(),
+            ]],
+        ]);
+    });
+
+    $result = app(CoffracAppointmentService::class)->sync(incremental: true);
+
+    expect($requestedUpdatedAfter)->not->toBeNull()
+        ->and($result['pending_count'])->toBe(1)
+        ->and($result['placed_count'])->toBe(1)
+        ->and($result['count'])->toBe(2);
+
+    $keptRequest = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '101')
+        ->firstOrFail();
+
+    expect($keptRequest->status)->toBe(ExternalAppointmentRequest::STATUS_PENDING);
+});
+
 it('updates a local coffrac appointment before booking it', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
