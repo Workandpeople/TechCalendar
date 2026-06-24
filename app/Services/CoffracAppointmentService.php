@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -19,6 +20,8 @@ class CoffracAppointmentService
 {
     public const SOURCE = 'coffrac';
     private const SYNC_MESSAGE_MAX_LENGTH = 240;
+
+    private int $skippedRemoteAppointmentCount = 0;
 
     public function isConfigured(): bool
     {
@@ -123,6 +126,7 @@ class CoffracAppointmentService
         }
 
         $this->markSyncStarted();
+        $this->skippedRemoteAppointmentCount = 0;
 
         try {
             $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize);
@@ -176,10 +180,13 @@ class CoffracAppointmentService
             'problem_count' => $stored->where('status', ExternalAppointmentRequest::STATUS_PROBLEM)->count(),
         ];
         $message = sprintf(
-            'Synchronisation Coffrac terminée: %d demande(s), %d placée(s), %d en problème.',
+            'Synchronisation Coffrac terminée: %d demande(s), %d placée(s), %d en problème.%s',
             $counts['pending_count'],
             $counts['placed_count'],
             $counts['problem_count'],
+            $this->skippedRemoteAppointmentCount > 0
+                ? sprintf(' %d RDV ignoré(s) car Coffrac n’a pas pu les sérialiser.', $this->skippedRemoteAppointmentCount)
+                : '',
         );
 
         $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
@@ -304,28 +311,72 @@ class CoffracAppointmentService
         $safePageSize = max(1, min(500, $pageSize));
 
         do {
-            $response = $this->request()->get($this->endpoint('appointments'), array_filter([
-                'status' => $status,
-                'limit' => $safePageSize,
-                'offset' => $externalReference ? null : $offset,
-                'id' => $externalReference,
-            ], fn ($value): bool => $value !== null && $value !== ''));
+            $page = $this->fetchRemoteAppointmentPage($status, $safePageSize, $offset, $externalReference);
 
-            if ($response->failed()) {
-                $payload = $response->json();
-
-                throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les RDV Coffrac.'));
-            }
-
-            $page = collect($response->json('data', []))
-                ->filter(fn ($appointment): bool => is_array($appointment))
-                ->values();
-
-            $appointments = $appointments->merge($page);
+            $appointments = $appointments->merge($page['appointments']);
             $offset += $safePageSize;
-        } while (! $externalReference && $page->count() === $safePageSize);
+        } while (! $externalReference && ! $page['reached_end']);
 
         return $appointments->values();
+    }
+
+    /**
+     * @return array{appointments: Collection<int, array<string, mixed>>, reached_end: bool}
+     */
+    private function fetchRemoteAppointmentPage(string $status, int $limit, int $offset, ?string $externalReference = null): array
+    {
+        $response = $this->request()->get($this->endpoint('appointments'), array_filter([
+            'status' => $status,
+            'limit' => $limit,
+            'offset' => $externalReference ? null : $offset,
+            'id' => $externalReference,
+        ], fn ($value): bool => $value !== null && $value !== ''));
+
+        if ($response->failed()) {
+            $payload = $response->json();
+            $message = $this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les RDV Coffrac.');
+
+            if (! $externalReference && $this->shouldSplitRemoteError($message)) {
+                if ($limit === 1) {
+                    $this->skippedRemoteAppointmentCount++;
+                    Log::warning('RDV Coffrac ignoré pendant la synchronisation.', [
+                        'offset' => $offset,
+                        'message' => $message,
+                    ]);
+
+                    return [
+                        'appointments' => collect(),
+                        'reached_end' => false,
+                    ];
+                }
+
+                $firstLimit = max(1, intdiv($limit, 2));
+                $secondLimit = $limit - $firstLimit;
+                $firstPage = $this->fetchRemoteAppointmentPage($status, $firstLimit, $offset);
+
+                if ($firstPage['reached_end'] || $secondLimit <= 0) {
+                    return $firstPage;
+                }
+
+                $secondPage = $this->fetchRemoteAppointmentPage($status, $secondLimit, $offset + $firstLimit);
+
+                return [
+                    'appointments' => $firstPage['appointments']->merge($secondPage['appointments'])->values(),
+                    'reached_end' => $secondPage['reached_end'],
+                ];
+            }
+
+            throw new RuntimeException($message);
+        }
+
+        $appointments = collect($response->json('data', []))
+            ->filter(fn ($appointment): bool => is_array($appointment))
+            ->values();
+
+        return [
+            'appointments' => $appointments,
+            'reached_end' => $externalReference !== null || $appointments->count() < $limit,
+        ];
     }
 
     private function persistRemoteAppointment(array $appointment): ?ExternalAppointmentRequest
@@ -647,6 +698,13 @@ class CoffracAppointmentService
         $message = trim((string) preg_replace('/\s+/u', ' ', $message));
 
         return Str::limit($message !== '' ? $message : 'Statut Coffrac indisponible.', self::SYNC_MESSAGE_MAX_LENGTH - 3, '...');
+    }
+
+    private function shouldSplitRemoteError(string $message): bool
+    {
+        $normalized = Str::lower(Str::ascii($message));
+
+        return str_contains($normalized, 'getkey() on array');
     }
 
     /**

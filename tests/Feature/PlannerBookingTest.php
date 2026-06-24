@@ -216,6 +216,61 @@ it('keeps coffrac refresh stable when the remote api returns a long error', func
         ->and($sync->message)->toContain('Erreur SQL Coffrac distante');
 });
 
+it('skips a coffrac appointment that crashes remote page serialization', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $appointmentPayload = fn (int $id): array => [
+        'id' => $id,
+        'source' => 'Coffrac',
+        'status_name' => 'Prise de RDV',
+        'service_type' => Service::TYPE_COFFRAC,
+        'service_name' => null,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => "COFFRAC {$id}",
+        'phone' => "0600000{$id}",
+        'address' => "{$id} Rue de la Paix, 75002 Paris, France",
+        'department_code' => '75',
+        'latitude' => 48.868,
+        'longitude' => 2.331,
+    ];
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) use ($appointmentPayload) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        $limit = (int) ($query['limit'] ?? 0);
+        $offset = (int) ($query['offset'] ?? 0);
+
+        if (($limit === 4 && $offset === 0) || ($limit === 2 && $offset === 2) || ($limit === 1 && $offset === 2)) {
+            return Http::response([
+                'message' => 'Call to a member function getKey() on array',
+            ], 500);
+        }
+
+        $responses = [
+            '2:0' => [$appointmentPayload(101), $appointmentPayload(102)],
+            '1:3' => [$appointmentPayload(104)],
+            '4:4' => [],
+        ];
+
+        return Http::response([
+            'result' => true,
+            'data' => $responses["{$limit}:{$offset}"] ?? [],
+        ]);
+    });
+
+    $result = app(CoffracAppointmentService::class)->sync(4);
+
+    expect($result['available'])->toBeTrue()
+        ->and($result['count'])->toBe(3)
+        ->and($result['message'])->toContain('1 RDV ignoré');
+
+    expect(ExternalAppointmentRequest::query()->where('source', 'coffrac')->pluck('external_reference')->all())
+        ->toBe(['101', '102', '104']);
+});
+
 it('syncs pending and placed coffrac appointment requests with documents locally', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
