@@ -1418,6 +1418,195 @@ it('places a coffrac appointment and moves it to attente visite', function () {
     );
 });
 
+it('places a coffrac appointment locally when the coffrac technician mapping is missing', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+    Mail::fake();
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+        if ($request->method() === 'GET') {
+            return Http::response([
+                'result' => true,
+                'data' => [[
+                    'id' => 46,
+                    'source' => 'Coffrac',
+                    'status_name' => 'Prise de RDV',
+                    'service_type' => Service::TYPE_COFFRAC,
+                    'service_name' => 'Inspection Coffrac',
+                    'customer_first_name' => 'Marc',
+                    'customer_last_name' => 'SANS-TECH',
+                    'phone' => '0600000046',
+                    'address' => '12 Rue Nationale, 37000 Tours, France',
+                    'department_code' => '37',
+                    'latitude' => 47.3941,
+                    'longitude' => 0.6848,
+                ]],
+            ]);
+        }
+
+        if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/46/placed') {
+            return Http::response([
+                'result' => true,
+                'message' => 'Technicien Coffrac introuvable: le dossier reste en prise de RDV.',
+                'data' => [
+                    'id' => 46,
+                    'source' => 'Coffrac',
+                    'status_name' => 'Prise de RDV',
+                    'service_type' => Service::TYPE_COFFRAC,
+                    'service_name' => 'Inspection Coffrac',
+                    'customer_first_name' => 'Marc',
+                    'customer_last_name' => 'SANS-TECH',
+                    'phone' => '0600000046',
+                    'address' => '12 Rue Nationale, 37000 Tours, France',
+                    'department_code' => '37',
+                    'latitude' => 47.3941,
+                    'longitude' => 0.6848,
+                ],
+            ]);
+        }
+
+        return Http::response(['message' => 'Unexpected request'], 500);
+    });
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'first_name' => 'Lucas',
+        'last_name' => 'TESTEUR',
+        'email' => 'lucas.inconnu-coffrac@example.test',
+        'latitude' => 47.39,
+        'longitude' => 0.69,
+    ]);
+    $technician->services()->attach($service);
+    app(CoffracAppointmentService::class)->sync();
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'crm_appointment_id' => 'coffrac-46',
+            'technician_id' => $technician->id,
+            'starts_at' => '2026-06-22 14:00:00',
+            'duration_minutes' => 90,
+            'comment' => 'Placement local malgré mapping Coffrac absent',
+        ])
+        ->assertCreated()
+        ->assertJsonStructure(['appointment_id']);
+
+    $appointment = Appointment::query()->firstOrFail();
+    $externalRequest = ExternalAppointmentRequest::query()
+        ->where('source', CoffracAppointmentService::SOURCE)
+        ->where('external_reference', '46')
+        ->firstOrFail();
+
+    expect($appointment->external_source)->toBe(CoffracAppointmentService::SOURCE)
+        ->and($appointment->external_reference)->toBe('46')
+        ->and($externalRequest->status)->toBe(ExternalAppointmentRequest::STATUS_PENDING)
+        ->and($externalRequest->appointment_id)->toBe($appointment->id)
+        ->and($externalRequest->technician_email)->toBe('lucas.inconnu-coffrac@example.test')
+        ->and(app(CoffracAppointmentService::class)->pending(15)->count())->toBe(0);
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/46/placed'
+        && $request['technician_email'] === 'lucas.inconnu-coffrac@example.test'
+        && $request['technician_name'] === 'Lucas TESTEUR');
+
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'created'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $appointment->id,
+    );
+});
+
+it('does not rollback local coffrac placement when the remote api still rejects an unknown technician', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/47/placed' => Http::response([
+            'message' => 'Les données fournies ne sont pas valides.',
+            'errors' => [
+                'technician_email' => ['Aucun technicien Coffrac actif ne correspond à cet email.'],
+            ],
+        ], 422),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.absent-coffrac@example.test',
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $startsAt = now()->addDay()->setTime(9, 30);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Coffrac',
+        'customer_phone' => '0600000047',
+        'address' => '1 Rue Test, 75001 Paris',
+        'latitude' => 48.86,
+        'longitude' => 2.35,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'external_source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '47',
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '47',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'service_type' => Service::TYPE_COFFRAC,
+        'service_name' => 'Inspection Coffrac',
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Coffrac',
+        'address' => '1 Rue Test, 75001 Paris',
+        'latitude' => 48.86,
+        'longitude' => 2.35,
+        'fetched_at' => now(),
+    ]);
+
+    app(CoffracAppointmentService::class)->markPlaced($appointment, [
+        'external_source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '47',
+    ]);
+
+    $externalRequest = ExternalAppointmentRequest::query()
+        ->where('source', CoffracAppointmentService::SOURCE)
+        ->where('external_reference', '47')
+        ->firstOrFail();
+
+    expect($externalRequest->status)->toBe(ExternalAppointmentRequest::STATUS_PENDING)
+        ->and($externalRequest->appointment_id)->toBe($appointment->id)
+        ->and($externalRequest->technician_email)->toBe('tech.absent-coffrac@example.test')
+        ->and(app(CoffracAppointmentService::class)->pending(15)->count())->toBe(0);
+});
+
 it('links a placed appointment back to its lot appointment', function () {
     config(['services.mapbox.token' => null]);
     Mail::fake();

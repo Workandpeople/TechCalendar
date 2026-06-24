@@ -70,7 +70,8 @@ class CoffracAppointmentService
 
         $baseQuery = ExternalAppointmentRequest::query()
             ->where('source', self::SOURCE)
-            ->where('status', ExternalAppointmentRequest::STATUS_PENDING);
+            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->whereNull('appointment_id');
         $totalPendingAppointments = (clone $baseQuery)->count();
         $missingCoordinatesCount = (clone $baseQuery)
             ->where(fn ($query) => $query->whereNull('latitude')->orWhereNull('longitude'))
@@ -420,10 +421,11 @@ class CoffracAppointmentService
             throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
         }
 
-        $appointment->loadMissing('technician:id,email');
+        $appointment->loadMissing('technician:id,email,first_name,last_name');
 
         $response = $this->request()->post($this->endpoint("appointments/{$externalReference}/placed"), [
             'technician_email' => $appointment->technician?->email,
+            'technician_name' => $appointment->technician?->full_name,
             'starts_at' => $appointment->starts_at?->toIso8601String(),
             'duration_minutes' => $appointment->duration_minutes,
             'comment' => $appointment->comment,
@@ -432,6 +434,18 @@ class CoffracAppointmentService
 
         if ($response->failed()) {
             $payload = $response->json();
+
+            if ($this->isMissingRemoteTechnicianError(is_array($payload) ? $payload : null)) {
+                $this->markStoredRequestAsLocallyPlacedPendingRemote($appointment, $externalReference);
+
+                Log::warning('RDV Coffrac placé localement sans bascule distante: technicien Coffrac introuvable.', [
+                    'external_reference' => $externalReference,
+                    'appointment_id' => $appointment->id,
+                    'technician_email' => $appointment->technician?->email,
+                ]);
+
+                return;
+            }
 
             throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de basculer le RDV Coffrac en attente visite.'));
         }
@@ -442,13 +456,19 @@ class CoffracAppointmentService
             ->first();
 
         $remotePayload = $response->json('data');
+        $remoteStatusWasReturned = is_array($remotePayload);
 
         if (is_array($remotePayload)) {
             $storedRequest = $this->persistRemoteAppointment($remotePayload) ?: $storedRequest;
         }
 
+        $remoteIsPlaced = ! $remoteStatusWasReturned
+            || $storedRequest?->status === ExternalAppointmentRequest::STATUS_PLACED;
+
         $storedRequest?->update([
-            'status' => ExternalAppointmentRequest::STATUS_PLACED,
+            'status' => $remoteIsPlaced
+                ? ExternalAppointmentRequest::STATUS_PLACED
+                : $storedRequest->status,
             'appointment_id' => $appointment->id,
             'technician_email' => $appointment->technician?->email,
             'starts_at' => $appointment->starts_at,
@@ -456,6 +476,48 @@ class CoffracAppointmentService
             'comment' => $appointment->comment,
             'fetched_at' => now(),
         ]);
+    }
+
+    private function markStoredRequestAsLocallyPlacedPendingRemote(Appointment $appointment, string $externalReference): void
+    {
+        ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->update([
+                'appointment_id' => $appointment->id,
+                'technician_email' => $appointment->technician?->email,
+                'starts_at' => $appointment->starts_at,
+                'duration_minutes' => $appointment->duration_minutes,
+                'comment' => $appointment->comment,
+                'fetched_at' => now(),
+            ]);
+    }
+
+    /**
+     * @param array<string, mixed>|null $payload
+     */
+    private function isMissingRemoteTechnicianError(?array $payload): bool
+    {
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        $messages = collect();
+
+        if (isset($payload['message']) && is_string($payload['message'])) {
+            $messages->push($payload['message']);
+        }
+
+        if (isset($payload['errors']) && is_array($payload['errors'])) {
+            $messages = $messages->merge(collect($payload['errors'])->flatten());
+        }
+
+        $normalizedMessage = Str::lower(Str::ascii($messages
+            ->filter(fn (mixed $message): bool => is_string($message))
+            ->implode(' ')));
+
+        return str_contains($normalizedMessage, 'aucun technicien coffrac actif')
+            && str_contains($normalizedMessage, 'email');
     }
 
     public function markProblem(Appointment $appointment, string $comment): void
