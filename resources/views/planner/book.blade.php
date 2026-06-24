@@ -116,6 +116,7 @@
                                 $sourceStatus = $source['status'] ?? ['state' => 'unavailable', 'label' => 'Indisponible', 'detail' => ''];
                                 $sourceButtonStyle = match ($sourceStatus['state'] ?? 'unavailable') {
                                     'available' => 'background:#dcfce7;color:#15803d;border-color:#86efac;',
+                                    'syncing' => 'background:#fef3c7;color:#b45309;border-color:#fcd34d;',
                                     default => 'background:#fee2e2;color:#be123c;border-color:#fecdd3;',
                                 };
                             @endphp
@@ -164,8 +165,9 @@
             <div id="booking-crm-source">
                 <div id="booking-crm-grid" class="space-y-2">
                     @foreach ($crmAppointments as $appointment)
-                        <button
-                            type="button"
+                        <div
+                            role="button"
+                            tabindex="0"
                             class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
                             style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
@@ -184,8 +186,14 @@
                                 @else
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
                                 @endif
+                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </button>
                             </div>
-                        </button>
+                        </div>
                     @endforeach
                 </div>
                 <div id="booking-crm-pagination" class="mt-4 flex flex-wrap items-center justify-center gap-2"></div>
@@ -463,6 +471,39 @@
         </section>
     </div>
 
+    <div id="booking-crm-detail-modal" class="gc-modal hidden">
+        <div class="gc-modal-panel gc-modal-panel-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Demande externe</p>
+                    <h2 id="booking_crm_detail_title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
+                    <p id="booking_crm_detail_subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
+                </div>
+                <button type="button" id="booking-crm-detail-close" class="gc-link">Fermer</button>
+            </div>
+
+            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+                <section>
+                    <div id="booking-crm-detail-map" class="h-[420px] overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
+                </section>
+
+                <section class="space-y-4">
+                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <dl id="booking_crm_detail_infos" class="grid grid-cols-1 gap-3 text-sm"></dl>
+                    </div>
+
+                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <span id="booking_crm_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="booking_crm_detail_documents" class="mt-3 space-y-2"></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
     <div id="booking-appointment-modal" class="gc-modal hidden">
         <div class="gc-modal-panel gc-modal-panel-xl">
             <div class="flex items-start justify-between gap-4">
@@ -592,10 +633,13 @@
         const bookingMapboxToken = @json($mapboxToken);
         const bookingInitialCrmAppointmentId = @json($initialCrmAppointmentId);
         const bookingServices = @json($bookingServices);
+        let bookingCrmAppointments = @json($crmAppointments->values());
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
         let bookingMap = null;
         let bookingCalendar = null;
         let bookingMapMarkers = [];
+        let crmDetailMap = null;
+        let crmDetailMapMarkers = [];
         let bookingSuggestionTooltip = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
@@ -685,6 +729,7 @@
         const technicianSelectionCount = document.getElementById('eligible-technician-selection-count');
         const technicianSelectAllButton = document.getElementById('eligible-technician-select-all');
         const bookingAppointmentModal = document.getElementById('booking-appointment-modal');
+        const bookingCrmDetailModal = document.getElementById('booking-crm-detail-modal');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
@@ -712,6 +757,11 @@
                 background: '#dcfce7',
                 color: '#15803d',
                 borderColor: '#86efac',
+            },
+            syncing: {
+                background: '#fef3c7',
+                color: '#b45309',
+                borderColor: '#fcd34d',
             },
             unavailable: {
                 background: '#fee2e2',
@@ -761,8 +811,9 @@
                 : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
 
             return `
-                <button
-                    type="button"
+                <div
+                    role="button"
+                    tabindex="0"
                     class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
                     style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
@@ -777,8 +828,14 @@
                     <div class="flex flex-wrap items-center gap-2 md:justify-end">
                         <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
                         ${serviceBadge}
+                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
                     </div>
-                </button>
+                </div>
             `;
         };
 
@@ -803,7 +860,8 @@
         const renderBookingCrmAppointments = (appointments, apiStatus = null) => {
             if (!bookingCrmGrid) return;
 
-            bookingCrmGrid.innerHTML = appointments.map(renderBookingCrmCard).join('');
+            bookingCrmAppointments = Array.isArray(appointments) ? appointments : [];
+            bookingCrmGrid.innerHTML = bookingCrmAppointments.map(renderBookingCrmCard).join('');
             bookingCrmCards = Array.from(bookingCrmGrid.querySelectorAll('.crm-appointment-card'));
             setBookingExternalSourceStatus('coffrac', apiStatus);
             bookingCrmSearch.value = '';
@@ -817,8 +875,8 @@
 
             const initialLabel = bookingCrmRefreshButton.textContent.trim();
             bookingCrmRefreshButton.disabled = true;
-            bookingCrmRefreshButton.textContent = 'Actualisation...';
-            setBookingCrmRefreshStatus('Actualisation des RDV Coffrac...');
+            bookingCrmRefreshButton.textContent = 'Synchronisation...';
+            setBookingCrmRefreshStatus('Lancement de la synchronisation Coffrac...');
 
             try {
                 const response = await fetch(bookingCrmRefreshUrl, {
@@ -836,7 +894,7 @@
                 }
 
                 renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null);
-                setBookingCrmRefreshStatus(payload.coffrac_api_status?.detail || `${(payload.appointments || []).length} RDV Coffrac actualisés.`);
+                setBookingCrmRefreshStatus(payload.message || payload.coffrac_api_status?.detail || `${(payload.appointments || []).length} RDV Coffrac disponibles en local.`);
             } catch (error) {
                 setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');
             } finally {
@@ -1231,6 +1289,175 @@
             element.style.color = '#fff';
             element.textContent = label;
             return element;
+        };
+
+        const crmAppointmentById = (crmId) => bookingCrmAppointments
+            .find((appointment) => String(appointment.id) === String(crmId)) || null;
+
+        const safeExternalDocumentUrl = (url) => {
+            const normalizedUrl = String(url || '').trim();
+
+            return /^https?:\/\//i.test(normalizedUrl) ? normalizedUrl : '';
+        };
+
+        const crmDetailInfoRow = (label, value) => `
+            <div>
+                <dt style="color:var(--gc-text-soft);">${escapeHtml(label)}</dt>
+                <dd class="font-medium" style="color:var(--gc-text);">${escapeHtml(value || '-')}</dd>
+            </div>
+        `;
+
+        const renderCrmDetailDocuments = (documents) => {
+            const list = document.getElementById('booking_crm_detail_documents');
+            const count = document.getElementById('booking_crm_detail_documents_count');
+            const safeDocuments = Array.isArray(documents) ? documents : [];
+
+            count.textContent = `${safeDocuments.length} document(s)`;
+
+            if (safeDocuments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun document associé à ce RDV.</p>';
+                return;
+            }
+
+            list.innerHTML = safeDocuments.map((document, index) => {
+                const name = document.name || document.title || document.filename || document.original_name || `Document ${index + 1}`;
+                const scope = document.scope || document.type || '';
+                const url = safeExternalDocumentUrl(document.url || document.download_url || document.href);
+
+                return `
+                    <div class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium" style="color:var(--gc-text);">${escapeHtml(name)}</p>
+                            ${scope ? `<p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(scope)}</p>` : ''}
+                        </div>
+                        ${url
+                            ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gc-link shrink-0">Ouvrir</a>`
+                            : '<span class="shrink-0 text-xs" style="color:var(--gc-text-soft);">Lien absent</span>'}
+                    </div>
+                `;
+            }).join('');
+        };
+
+        const initCrmDetailMap = () => {
+            if (!bookingMapboxToken || !window.mapboxgl) {
+                showMapboxUnavailable('booking-crm-detail-map', !bookingMapboxToken
+                    ? 'Token Mapbox absent côté Laravel.'
+                    : 'La librairie Mapbox GL JS n’est pas chargée.');
+                return null;
+            }
+
+            window.mapboxgl.accessToken = bookingMapboxToken;
+
+            if (crmDetailMap) {
+                crmDetailMap.resize();
+                return crmDetailMap;
+            }
+
+            crmDetailMap = new window.mapboxgl.Map({
+                container: 'booking-crm-detail-map',
+                style: 'mapbox://styles/mapbox/light-v11',
+                center: [2.4, 46.7],
+                zoom: 5,
+            });
+            crmDetailMap.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+
+            return crmDetailMap;
+        };
+
+        const clearCrmDetailMap = () => {
+            crmDetailMapMarkers.forEach((marker) => marker.remove());
+            crmDetailMapMarkers = [];
+        };
+
+        const renderCrmDetailMap = (appointment) => {
+            const latitude = Number(appointment?.latitude);
+            const longitude = Number(appointment?.longitude);
+            const container = document.getElementById('booking-crm-detail-map');
+
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="flex h-full items-center justify-center rounded-2xl border border-dashed px-5 text-center" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text-soft);">
+                            Coordonnées GPS indisponibles pour ce RDV.
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            const map = initCrmDetailMap();
+            if (!map) return;
+
+            const drawPoint = () => {
+                clearCrmDetailMap();
+
+                crmDetailMapMarkers.push(new window.mapboxgl.Marker({ element: markerElement('#31424c', 'R') })
+                    .setLngLat([longitude, latitude])
+                    .setPopup(new window.mapboxgl.Popup().setHTML(`<strong>RDV</strong><br>${escapeHtml(appointment.address || '')}`))
+                    .addTo(map));
+
+                map.flyTo({
+                    center: [longitude, latitude],
+                    zoom: 13,
+                    essential: true,
+                });
+            };
+
+            if (map.loaded()) {
+                drawPoint();
+            } else {
+                map.once('load', drawPoint);
+            }
+        };
+
+        const openCrmAppointmentDetail = (crmId) => {
+            const appointment = crmAppointmentById(crmId);
+
+            if (!appointment || !bookingCrmDetailModal) {
+                showFeedback('Impossible de retrouver ce RDV dans les données locales.', 'error');
+                return;
+            }
+
+            const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim() || 'Client';
+            const serviceLabel = appointment.service
+                ? `${appointment.service.type} - ${appointment.service.name}`
+                : 'Prestation non renseignée';
+            const addressParts = [
+                appointment.address,
+                appointment.postal_code || null,
+                appointment.city || null,
+            ].filter(Boolean);
+
+            document.getElementById('booking_crm_detail_title').textContent = customerName;
+            document.getElementById('booking_crm_detail_subtitle').textContent = `${appointment.source || 'Source externe'} · Réf. ${appointment.external_reference || appointment.id || '-'}`;
+            document.getElementById('booking_crm_detail_infos').innerHTML = [
+                crmDetailInfoRow('Source', appointment.source || '-'),
+                crmDetailInfoRow('Référence', appointment.external_reference || appointment.id || '-'),
+                crmDetailInfoRow('Client', customerName),
+                crmDetailInfoRow('Téléphone', appointment.phone || '-'),
+                crmDetailInfoRow('Prestation', serviceLabel),
+                crmDetailInfoRow('Département', appointment.department_code || '-'),
+                crmDetailInfoRow('Adresse', addressParts.join(' · ') || '-'),
+                crmDetailInfoRow('GPS', Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude))
+                    ? `${Number(appointment.latitude).toFixed(6)}, ${Number(appointment.longitude).toFixed(6)}`
+                    : '-'),
+            ].join('');
+            renderCrmDetailDocuments(appointment.documents || []);
+
+            bookingCrmDetailModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+
+            requestAnimationFrame(() => {
+                renderCrmDetailMap(appointment);
+                window.setTimeout(() => crmDetailMap?.resize?.(), 160);
+            });
+        };
+
+        const closeCrmAppointmentDetail = () => {
+            bookingCrmDetailModal?.classList.add('hidden');
+            if (bookingAppointmentModal?.classList.contains('hidden')) {
+                document.body.style.overflow = '';
+            }
         };
 
         const clearMap = () => {
@@ -2214,6 +2441,9 @@
             detailMapRenderRequestId++;
             bookingAppointmentModal.classList.add('hidden');
             selectedCalendarEvent = null;
+            if (bookingCrmDetailModal?.classList.contains('hidden')) {
+                document.body.style.overflow = '';
+            }
         };
 
         const showDetailStatus = (message, type = 'info') => {
@@ -2338,6 +2568,7 @@
             }
 
             bookingAppointmentModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
             requestAnimationFrame(() => renderDetailMap(event));
         };
 
@@ -2879,7 +3110,27 @@
                 if (card.dataset.bound === '1') return;
 
                 card.dataset.bound = '1';
-                card.addEventListener('click', () => analyzeCrmAppointment(card.dataset.crmId));
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('.crm-appointment-detail-button')) return;
+
+                    analyzeCrmAppointment(card.dataset.crmId);
+                });
+                card.addEventListener('keydown', (event) => {
+                    if (!['Enter', ' '].includes(event.key)) return;
+
+                    event.preventDefault();
+                    analyzeCrmAppointment(card.dataset.crmId);
+                });
+            });
+
+            bookingCrmGrid?.querySelectorAll('.crm-appointment-detail-button').forEach((button) => {
+                if (button.dataset.bound === '1') return;
+
+                button.dataset.bound = '1';
+                button.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    openCrmAppointmentDetail(button.dataset.crmDetailId);
+                });
             });
         };
 
@@ -2970,6 +3221,10 @@
         document.getElementById('booking-modal-close').addEventListener('click', closeBookingAppointmentModal);
         bookingAppointmentModal.addEventListener('click', (event) => {
             if (event.target === bookingAppointmentModal) closeBookingAppointmentModal();
+        });
+        document.getElementById('booking-crm-detail-close')?.addEventListener('click', closeCrmAppointmentDetail);
+        bookingCrmDetailModal?.addEventListener('click', (event) => {
+            if (event.target === bookingCrmDetailModal) closeCrmAppointmentDetail();
         });
 
         document.getElementById('booking-save-comment-btn').addEventListener('click', async () => {

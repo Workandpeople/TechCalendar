@@ -24,6 +24,8 @@ class ExternalApiSync extends Model
 
     public const STATE_NOT_CONFIGURED = 'not_configured';
 
+    public const STATE_SYNCING = 'syncing';
+
     protected function casts(): array
     {
         return [

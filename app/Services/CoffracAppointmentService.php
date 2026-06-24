@@ -131,7 +131,7 @@ class CoffracAppointmentService
             ];
         }
 
-        $this->markSyncStarted();
+        $this->markSyncQueued();
         $this->skippedRemoteAppointmentCount = 0;
 
         try {
@@ -745,11 +745,13 @@ class CoffracAppointmentService
 
         $state = match ($sync->state) {
             ExternalApiSync::STATE_AVAILABLE => 'available',
+            ExternalApiSync::STATE_SYNCING => 'syncing',
             ExternalApiSync::STATE_NOT_CONFIGURED => 'not_configured',
             default => 'unavailable',
         };
         $label = match ($sync->state) {
             ExternalApiSync::STATE_AVAILABLE => 'API Coffrac disponible',
+            ExternalApiSync::STATE_SYNCING => 'Synchronisation Coffrac en cours',
             ExternalApiSync::STATE_NOT_CONFIGURED => 'API Coffrac non configurée',
             default => 'API Coffrac indisponible',
         };
@@ -759,13 +761,13 @@ class CoffracAppointmentService
         return $this->availabilityStatus($state, $label, $detail, $count);
     }
 
-    private function markSyncStarted(): void
+    public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...'): ExternalApiSync
     {
-        ExternalApiSync::query()->updateOrCreate(
+        return ExternalApiSync::query()->updateOrCreate(
             ['source' => self::SOURCE],
             [
-                'state' => ExternalApiSync::STATE_UNAVAILABLE,
-                'message' => 'Synchronisation Coffrac en cours...',
+                'state' => ExternalApiSync::STATE_SYNCING,
+                'message' => $this->syncMessage($message),
                 'last_started_at' => now(),
             ],
         );

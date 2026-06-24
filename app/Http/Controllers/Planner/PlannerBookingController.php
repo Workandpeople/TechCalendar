@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
 use App\Models\Lot;
 use App\Models\LotAppointment;
@@ -120,10 +121,19 @@ class PlannerBookingController extends Controller
         CoffracAppointmentService $coffracAppointments
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
-        $coffracAppointments->sync();
+
+        if ($coffracAppointments->isConfigured()) {
+            $coffracAppointments->markSyncQueued('Synchronisation Coffrac lancée en arrière-plan...');
+            SyncCoffracAppointmentsJob::dispatch();
+        }
+
         $coffracPending = $coffracAppointments->pendingWithStatus(15, shuffle: true);
 
         return response()->json([
+            'sync_queued' => $coffracAppointments->isConfigured(),
+            'message' => $coffracAppointments->isConfigured()
+                ? 'Synchronisation Coffrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
+                : 'API Coffrac non configurée.',
             'appointments' => $coffracPending['appointments'],
             'coffrac_api_status' => $coffracPending['status'],
             'external_sources' => $this->externalAppointmentSources($coffracPending['status']),

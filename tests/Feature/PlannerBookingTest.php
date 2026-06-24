@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\SyncCoffracAppointmentsJob;
+use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Appointment;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
@@ -9,12 +11,12 @@ use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
-use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Services\CoffracAppointmentService;
 use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -123,29 +125,7 @@ it('refreshes coffrac appointment requests on the booking page', function () {
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
     ]);
-
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
-        'result' => true,
-        'data' => [[
-            'id' => 44,
-            'source' => 'Coffrac',
-            'service_type' => Service::TYPE_COFFRAC,
-            'service_name' => null,
-            'customer_first_name' => 'Claire',
-            'customer_last_name' => 'COFFRAC',
-            'phone' => '0600000044',
-            'address' => '20 Place Bellecour, 69002 Lyon, France',
-            'department_code' => '69',
-            'latitude' => 45.7578,
-            'longitude' => 4.832,
-            'documents' => [[
-                'id' => 9,
-                'scope' => 'dossier',
-                'name' => 'Avis de passage',
-                'url' => 'https://coffrac.test/documents/avis.pdf',
-            ]],
-        ]],
-    ]));
+    Queue::fake();
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -155,40 +135,31 @@ it('refreshes coffrac appointment requests on the booking page', function () {
     $this->actingAs($planner)
         ->postJson(route('planner.book.crm-appointments.refresh'))
         ->assertOk()
-        ->assertJsonCount(1, 'appointments')
-        ->assertJsonPath('appointments.0.id', 'coffrac-44')
-        ->assertJsonPath('appointments.0.documents.0.name', 'Avis de passage')
-        ->assertJsonPath('coffrac_api_status.state', 'available')
-        ->assertJsonPath('coffrac_api_status.label', 'API Coffrac disponible')
+        ->assertJsonPath('sync_queued', true)
+        ->assertJsonCount(0, 'appointments')
+        ->assertJsonPath('coffrac_api_status.state', 'syncing')
+        ->assertJsonPath('coffrac_api_status.label', 'Synchronisation Coffrac en cours')
         ->assertJsonPath('external_sources.0.key', 'coffrac')
         ->assertJsonPath('external_sources.1.enabled', false)
         ->assertJsonPath('external_sources.1.status.label', 'Connecteur 2 à connecter')
         ->assertJsonPath('external_sources.2.status.label', 'Connecteur 3 à connecter')
         ->assertJsonStructure([
-            'appointments' => [[
-                'id',
-                'source',
-                'first_name',
-                'last_name',
-                'phone',
-                'address',
-                'department_code',
-                'latitude',
-                'longitude',
-                'documents',
-                'service',
-            ]],
+            'sync_queued',
+            'message',
+            'appointments',
+            'coffrac_api_status',
+            'external_sources',
         ]);
 
-    $this->assertDatabaseHas('external_appointment_requests', [
+    Queue::assertPushed(SyncCoffracAppointmentsJob::class);
+
+    $this->assertDatabaseHas('external_api_syncs', [
         'source' => 'coffrac',
-        'external_reference' => '44',
-        'status' => ExternalAppointmentRequest::STATUS_PENDING,
-        'customer_last_name' => 'COFFRAC',
+        'state' => ExternalApiSync::STATE_SYNCING,
     ]);
 });
 
-it('keeps coffrac refresh stable when the remote api returns a long error', function () {
+it('keeps coffrac sync stable when the remote api returns a long error', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
@@ -198,21 +169,12 @@ it('keeps coffrac refresh stable when the remote api returns a long error', func
         'message' => str_repeat('Erreur SQL Coffrac distante ', 30),
     ], 500));
 
-    $planner = User::factory()->create([
-        'role' => 1,
-        'admin' => false,
-    ]);
-
-    $this->actingAs($planner)
-        ->postJson(route('planner.book.crm-appointments.refresh'))
-        ->assertOk()
-        ->assertJsonCount(0, 'appointments')
-        ->assertJsonPath('coffrac_api_status.state', 'unavailable')
-        ->assertJsonPath('coffrac_api_status.label', 'API Coffrac indisponible');
+    $result = app(CoffracAppointmentService::class)->sync();
 
     $sync = ExternalApiSync::query()->where('source', 'coffrac')->firstOrFail();
 
-    expect($sync->state)->toBe(ExternalApiSync::STATE_UNAVAILABLE)
+    expect($result['available'])->toBeFalse()
+        ->and($sync->state)->toBe(ExternalApiSync::STATE_UNAVAILABLE)
         ->and(mb_strlen((string) $sync->message))->toBeLessThanOrEqual(240)
         ->and($sync->message)->toContain('Erreur SQL Coffrac distante');
 });
