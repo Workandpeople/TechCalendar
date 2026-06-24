@@ -58,7 +58,13 @@ import {
   subscribeToPushTokenRefresh,
 } from './src/notifications/push';
 import colors from './src/theme/colors';
-import { MobileUser, PlanningAppointment, PlanningCacheInfo, PlanningPayload } from './src/types/api';
+import {
+  MobileUser,
+  PlanningAppointment,
+  PlanningAppointmentDocument,
+  PlanningCacheInfo,
+  PlanningPayload,
+} from './src/types/api';
 
 type MenuOption = {
   label: string;
@@ -1110,6 +1116,8 @@ function AppointmentDetailsModal({
     return null;
   }
 
+  const documents = appointment.documents ?? [];
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -1141,6 +1149,41 @@ function AppointmentDetailsModal({
               <View style={styles.modalCommentBox}>
                 <Text style={styles.modalSectionLabel}>Commentaire</Text>
                 <Text style={styles.modalComment}>{appointment.comment}</Text>
+              </View>
+            ) : null}
+
+            {documents.length > 0 ? (
+              <View style={styles.documentsSection}>
+                <Text style={styles.modalSectionLabel}>Documents Coffrac</Text>
+                {documents.map((document, index) => (
+                  <View key={`${document.id ?? document.name}-${index}`} style={styles.documentCard}>
+                    <View style={styles.documentHeader}>
+                      <View style={styles.documentTextBlock}>
+                        <Text style={styles.documentTitle}>{document.name}</Text>
+                        {document.scope ? (
+                          <Text style={styles.documentMeta}>{documentScopeLabel(document.scope)}</Text>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={!document.url}
+                        onPress={() => openDocument(document)}
+                        style={[
+                          styles.documentOpenButton,
+                          !document.url && styles.documentOpenButtonDisabled,
+                        ]}
+                      >
+                        <Text style={[
+                          styles.documentOpenText,
+                          !document.url && styles.documentOpenTextDisabled,
+                        ]}>
+                          {document.url ? 'Ouvrir' : 'Indispo.'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    {document.comment ? <Text style={styles.documentComment}>{document.comment}</Text> : null}
+                  </View>
+                ))}
               </View>
             ) : null}
 
@@ -1465,6 +1508,26 @@ function openNavigationMenu(appointment: PlanningAppointment): void {
     { label: 'Google Maps', action: () => open(googleMapsUrl, webUrl) },
     { label: 'Waze', action: () => open(wazeUrl, webUrl) },
   ]);
+}
+
+function openDocument(document: PlanningAppointmentDocument): void {
+  if (!document.url) {
+    Alert.alert('Document indisponible', 'Coffrac n’a pas fourni de lien consultable pour ce document.');
+    return;
+  }
+
+  Linking.openURL(document.url).catch(() => {
+    Alert.alert('Ouverture impossible', 'Le document n’a pas pu être ouvert depuis ce téléphone.');
+  });
+}
+
+function documentScopeLabel(scope: string): string {
+  const labels: Record<string, string> = {
+    dossier: 'Document dossier',
+    fiche: 'Document fiche',
+  };
+
+  return labels[scope] ?? scope;
 }
 
 async function exportCalendar(appointments: PlanningAppointment[]): Promise<void> {
@@ -2540,6 +2603,66 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  documentsSection: {
+    marginTop: 4,
+  },
+  documentCard: {
+    marginBottom: 10,
+    padding: 13,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FBFDFD',
+  },
+  documentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  documentTextBlock: {
+    flex: 1,
+  },
+  documentTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  documentMeta: {
+    marginTop: 3,
+    color: colors.inkMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  documentComment: {
+    marginTop: 8,
+    color: colors.inkMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  documentOpenButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.ink,
+  },
+  documentOpenButtonDisabled: {
+    backgroundColor: colors.inkSoft,
+  },
+  documentOpenText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  documentOpenTextDisabled: {
+    color: colors.inkMuted,
   },
   preferenceCard: {
     marginTop: 10,

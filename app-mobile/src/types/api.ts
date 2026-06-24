@@ -31,6 +31,17 @@ export type PlanningAppointment = {
   ends_at: string;
   duration_minutes: number;
   comment: string | null;
+  documents: PlanningAppointmentDocument[];
+};
+
+export type PlanningAppointmentDocument = {
+  id: number | string | null;
+  scope: string | null;
+  name: string;
+  comment: string | null;
+  url: string | null;
+  is_private: boolean;
+  is_delegataire: boolean;
 };
 
 export type PlanningWidgets = {

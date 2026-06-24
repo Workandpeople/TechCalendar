@@ -279,6 +279,19 @@ it('returns the authenticated technician planning and cached weekly widgets', fu
         'duration_minutes' => 120,
         'ends_at' => Carbon::parse('2026-06-15 11:30:00', 'Europe/Paris'),
         'comment' => 'Prévoir badge accueil.',
+        'external_payload' => [
+            'documents' => [
+                [
+                    'id' => 42,
+                    'scope' => 'dossier',
+                    'name' => 'Attestation chantier.pdf',
+                    'comment' => 'Document transmis par Coffrac.',
+                    'url' => 'https://cofrac.example.test/documents/attestation.pdf',
+                    'is_private' => false,
+                    'is_delegataire' => false,
+                ],
+            ],
+        ],
     ]);
     Appointment::query()->create([
         'service_id' => $service->id,
@@ -324,6 +337,9 @@ it('returns the authenticated technician planning and cached weekly widgets', fu
         ->assertJsonCount(1, 'appointments')
         ->assertJsonPath('appointments.0.customer_name', 'Camille Martin')
         ->assertJsonPath('appointments.0.postal_code', '69002')
-        ->assertJsonPath('appointments.0.city', 'Lyon');
+        ->assertJsonPath('appointments.0.city', 'Lyon')
+        ->assertJsonPath('appointments.0.documents.0.name', 'Attestation chantier.pdf')
+        ->assertJsonPath('appointments.0.documents.0.scope', 'dossier')
+        ->assertJsonPath('appointments.0.documents.0.url', 'https://cofrac.example.test/documents/attestation.pdf');
 
 });

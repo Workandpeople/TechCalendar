@@ -91,7 +91,49 @@ class MobilePlanningController extends Controller
             'ends_at' => $appointment->ends_at?->toIso8601String(),
             'duration_minutes' => $appointment->duration_minutes,
             'comment' => $appointment->comment,
+            'documents' => $this->serializeDocuments($appointment),
         ];
+    }
+
+    /**
+     * @return array<int, array{
+     *     id: mixed,
+     *     scope: ?string,
+     *     name: string,
+     *     comment: ?string,
+     *     url: ?string,
+     *     is_private: bool,
+     *     is_delegataire: bool
+     * }>
+     */
+    private function serializeDocuments(Appointment $appointment): array
+    {
+        $documents = data_get($appointment->external_payload, 'documents', []);
+
+        if (! is_array($documents)) {
+            return [];
+        }
+
+        return collect($documents)
+            ->filter(fn (mixed $document): bool => is_array($document))
+            ->map(function (array $document): array {
+                $name = trim((string) ($document['name'] ?? $document['filename'] ?? 'Document'));
+                $comment = trim((string) ($document['comment'] ?? ''));
+                $scope = trim((string) ($document['scope'] ?? ''));
+                $url = trim((string) ($document['url'] ?? ''));
+
+                return [
+                    'id' => $document['id'] ?? null,
+                    'scope' => $scope !== '' ? $scope : null,
+                    'name' => $name !== '' ? $name : 'Document',
+                    'comment' => $comment !== '' ? $comment : null,
+                    'url' => $url !== '' ? $url : null,
+                    'is_private' => (bool) ($document['is_private'] ?? false),
+                    'is_delegataire' => (bool) ($document['is_delegataire'] ?? false),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
