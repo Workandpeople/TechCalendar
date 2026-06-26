@@ -294,7 +294,7 @@
                         </div>
                         <div>
                             <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
-                            <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="30" />
+                            <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="255" />
                         </div>
                         <div class="relative md:col-span-2 xl:col-span-3">
                             <label class="gc-label" for="lot_appointment_full_address">Adresse</label>

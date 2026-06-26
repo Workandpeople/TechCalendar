@@ -7,6 +7,7 @@ use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LotImportConfirmationService
 {
@@ -78,7 +79,7 @@ class LotImportConfirmationService
                     'customer_name' => $this->requiredCustomerName($appointmentPayload),
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
-                    'customer_phone' => $this->nullableString($appointmentPayload['customer_phone'] ?? null),
+                    'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
                     'address' => $this->nullableString($appointmentPayload['address'] ?? null),
                     'postal_code' => $this->nullableString($appointmentPayload['postal_code'] ?? null),
                     'city' => $this->nullableString($appointmentPayload['city'] ?? null),
@@ -153,6 +154,13 @@ class LotImportConfirmationService
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function phoneString(mixed $value): ?string
+    {
+        $phone = $this->nullableString($value);
+
+        return $phone === null ? null : Str::limit($phone, 255, '');
     }
 
     private function coordinate(mixed $value, float $min, float $max): ?float

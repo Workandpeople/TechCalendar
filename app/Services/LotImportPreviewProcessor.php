@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class LotImportPreviewProcessor
 {
@@ -74,7 +75,7 @@ class LotImportPreviewProcessor
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_name' => $this->customerName($appointmentPayload),
-                    'customer_phone' => $this->nullableString($appointmentPayload['customer_phone'] ?? null),
+                    'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
                     'address' => $address,
                     'address_line' => $this->nullableString($appointmentPayload['address_line'] ?? null),
                     'postal_code' => $this->nullableString($appointmentPayload['postal_code'] ?? null),
@@ -210,6 +211,13 @@ class LotImportPreviewProcessor
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function phoneString(mixed $value): ?string
+    {
+        $phone = $this->nullableString($value);
+
+        return $phone === null ? null : Str::limit($phone, 255, '');
     }
 
     private function coordinate(mixed $value, float $min, float $max): ?float

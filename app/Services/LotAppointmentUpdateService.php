@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\LotAppointment;
+use Illuminate\Support\Str;
 
 class LotAppointmentUpdateService
 {
@@ -50,7 +51,7 @@ class LotAppointmentUpdateService
             'customer_name' => $this->customerName($attributes),
             'customer_first_name' => $this->nullableString($attributes['customer_first_name'] ?? null),
             'customer_last_name' => $this->nullableString($attributes['customer_last_name'] ?? null),
-            'customer_phone' => $this->nullableString($attributes['customer_phone'] ?? null),
+            'customer_phone' => $this->phoneString($attributes['customer_phone'] ?? null),
             'address' => $cleanAddress,
             'postal_code' => $postalCode,
             'city' => $city,
@@ -105,5 +106,12 @@ class LotAppointmentUpdateService
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function phoneString(mixed $value): ?string
+    {
+        $phone = $this->nullableString($value);
+
+        return $phone === null ? null : Str::limit($phone, 255, '');
     }
 }

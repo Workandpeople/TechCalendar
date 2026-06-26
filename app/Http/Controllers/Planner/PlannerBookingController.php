@@ -133,8 +133,8 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         if ($coffracAppointments->isConfigured()) {
-            $coffracAppointments->markSyncQueued('Synchronisation Coffrac lancée en arrière-plan...');
-            SyncCoffracAppointmentsJob::dispatch();
+            $coffracAppointments->markSyncQueued('Récupération des RDV à placer Coffrac lancée en arrière-plan...');
+            SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PENDING);
         }
 
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT, shuffle: true);
@@ -142,7 +142,7 @@ class PlannerBookingController extends Controller
         return response()->json([
             'sync_queued' => $coffracAppointments->isConfigured(),
             'message' => $coffracAppointments->isConfigured()
-                ? 'Synchronisation Coffrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
+                ? 'Récupération des RDV à placer Coffrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
                 : 'API Coffrac non configurée.',
             'appointments' => $coffracPending['appointments'],
             'coffrac_api_status' => $coffracPending['status'],
@@ -734,7 +734,7 @@ class PlannerBookingController extends Controller
             'manual_appointment' => ['nullable', 'array', 'required_without_all:crm_appointment_id,lot_appointment_id'],
             'manual_appointment.first_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.last_name' => ['required_with:manual_appointment', 'string', 'max:120'],
-            'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:30'],
+            'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:255'],
             'manual_appointment.address' => ['required_with:manual_appointment', 'string', 'max:255'],
             'manual_appointment.department_code' => ['required_with:manual_appointment', 'string', 'max:3'],
             'manual_appointment.latitude' => ['required_with:manual_appointment', 'numeric', 'between:-90,90'],

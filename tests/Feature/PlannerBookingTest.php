@@ -152,7 +152,8 @@ it('refreshes coffrac appointment requests on the booking page', function () {
             'external_sources',
         ]);
 
-    Queue::assertPushed(SyncCoffracAppointmentsJob::class);
+    Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->incremental === false
+        && $job->status === CoffracAppointmentService::REMOTE_STATUS_PENDING);
 
     $this->assertDatabaseHas('external_api_syncs', [
         'source' => 'coffrac',
@@ -526,6 +527,91 @@ it('keeps local coffrac appointments that are absent from an incremental sync de
     expect($keptRequest->status)->toBe(ExternalAppointmentRequest::STATUS_PENDING);
 });
 
+it('syncs only pending coffrac requests for manual booking refreshes', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    $lastFullSyncAt = now()->subHour()->startOfSecond();
+
+    ExternalApiSync::query()->create([
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_AVAILABLE,
+        'message' => 'Synchronisation complète Coffrac terminée.',
+        'last_successful_at' => $lastFullSyncAt,
+        'metadata' => ['progress' => 100, 'mode' => 'full'],
+    ]);
+
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'placed-legacy',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Legacy',
+        'customer_last_name' => 'PLACEE',
+        'address' => '8 Place Royale, 44000 Nantes, France',
+        'department_code' => '44',
+        'latitude' => 47.2142,
+        'longitude' => -1.5586,
+        'fetched_at' => now()->subDay(),
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'pending-stale',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'customer_first_name' => 'Ancienne',
+        'customer_last_name' => 'DEMANDE',
+        'address' => '1 Rue Nationale, 59800 Lille, France',
+        'department_code' => '59',
+        'latitude' => 50.6366,
+        'longitude' => 3.0635,
+        'fetched_at' => now()->subDay(),
+    ]);
+
+    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 44,
+            'source' => 'Coffrac',
+            'status_name' => 'Prise de RDV',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => null,
+            'customer_first_name' => 'Claire',
+            'customer_last_name' => 'COFFRAC',
+            'phone' => '0600000044',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+        ]],
+    ]));
+
+    $result = app(CoffracAppointmentService::class)->sync(status: CoffracAppointmentService::REMOTE_STATUS_PENDING);
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => str_contains($request->url(), 'status=pending')
+        && ! str_contains($request->url(), 'status=all'));
+
+    expect($result['pending_count'])->toBe(1)
+        ->and($result['placed_count'])->toBe(1)
+        ->and($result['count'])->toBe(2);
+
+    expect(ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', 'placed-legacy')
+        ->value('status'))->toBe(ExternalAppointmentRequest::STATUS_PLACED);
+
+    expect(ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', 'pending-stale')
+        ->value('status'))->toBe(ExternalAppointmentRequest::STATUS_ARCHIVED);
+
+    expect(ExternalApiSync::query()
+        ->where('source', 'coffrac')
+        ->value('last_successful_at')
+        ?->format('Y-m-d H:i:s'))->toBe($lastFullSyncAt->format('Y-m-d H:i:s'));
+});
+
 it('updates a local coffrac appointment before booking it', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
@@ -666,6 +752,7 @@ it('syncs pending and placed coffrac appointment requests with documents locally
         'email' => 'tech.coffrac@example.test',
     ]);
     $technician->services()->attach($service);
+    $longCoffracPhone = '06 00 00 00 45 / 07 00 00 00 45 / Standard: +33 1 23 45 67 89';
 
     Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
         'result' => true,
@@ -698,7 +785,7 @@ it('syncs pending and placed coffrac appointment requests with documents locally
                 'service_name' => 'Inspection Coffrac',
                 'customer_first_name' => 'Nora',
                 'customer_last_name' => 'PLACEE',
-                'phone' => '0600000045',
+                'phone' => $longCoffracPhone,
                 'address' => '8 Place Royale, 44000 Nantes, France',
                 'department_code' => '44',
                 'latitude' => 47.2142,
@@ -742,6 +829,7 @@ it('syncs pending and placed coffrac appointment requests with documents locally
 
     expect($appointment->service_id)->toBe($service->id)
         ->and($appointment->technician_id)->toBe($technician->id)
+        ->and($appointment->customer_phone)->toBe($longCoffracPhone)
         ->and($appointment->starts_at->timezone(config('app.timezone'))->format('Y-m-d H:i'))->toBe('2026-06-22 10:30');
 });
 

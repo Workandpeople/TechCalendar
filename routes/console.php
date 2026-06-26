@@ -45,8 +45,24 @@ Artisan::command('health:check', function (SystemHealthMonitor $healthMonitor): 
     return $snapshot->overall_status === 'fail' ? 1 : 0;
 })->purpose('Execute les checks de sante applicative et persiste un snapshot.');
 
-Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.}', function (CoffracAppointmentService $coffracAppointments): int {
-    $result = $coffracAppointments->sync(incremental: (bool) $this->option('incremental'));
+Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.} {--status=all : Statut Coffrac à récupérer: pending, placed, problem ou all.}', function (CoffracAppointmentService $coffracAppointments): int {
+    $status = (string) $this->option('status');
+
+    if (! in_array($status, [
+        CoffracAppointmentService::REMOTE_STATUS_PENDING,
+        CoffracAppointmentService::REMOTE_STATUS_PLACED,
+        CoffracAppointmentService::REMOTE_STATUS_PROBLEM,
+        CoffracAppointmentService::REMOTE_STATUS_ALL,
+    ], true)) {
+        $this->error('Le statut doit être pending, placed, problem ou all.');
+
+        return 1;
+    }
+
+    $result = $coffracAppointments->sync(
+        incremental: (bool) $this->option('incremental'),
+        status: $status,
+    );
 
     $this->info($result['message']);
 
@@ -60,5 +76,5 @@ Schedule::command('route-metrics:compute')
     ->hourly();
 
 Schedule::command('coffrac:sync --incremental')
-    ->everyThirtyMinutes()
+    ->everyTenMinutes()
     ->withoutOverlapping(60);

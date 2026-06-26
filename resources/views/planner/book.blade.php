@@ -383,7 +383,7 @@
                 </div>
                 <div class="xl:col-span-3">
                     <label class="gc-label" for="manual_phone">Téléphone</label>
-                    <input id="manual_phone" type="tel" class="gc-input" maxlength="30" required />
+                    <input id="manual_phone" type="tel" class="gc-input" maxlength="255" required />
                 </div>
                 <div class="xl:col-span-3">
                     <label class="gc-label" for="manual_service_id">Prestation</label>

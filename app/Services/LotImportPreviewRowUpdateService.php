@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\LotImportPreview;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class LotImportPreviewRowUpdateService
@@ -41,7 +42,7 @@ class LotImportPreviewRowUpdateService
             'customer_name' => $this->customerName($attributes),
             'customer_first_name' => $this->nullableString($attributes['customer_first_name'] ?? null),
             'customer_last_name' => $this->nullableString($attributes['customer_last_name'] ?? null),
-            'customer_phone' => $this->nullableString($attributes['customer_phone'] ?? null),
+            'customer_phone' => $this->phoneString($attributes['customer_phone'] ?? null),
             'address' => $cleanAddress,
             'address_line' => $cleanAddress,
             'postal_code' => $postalCode,
@@ -113,5 +114,12 @@ class LotImportPreviewRowUpdateService
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function phoneString(mixed $value): ?string
+    {
+        $phone = $this->nullableString($value);
+
+        return $phone === null ? null : Str::limit($phone, 255, '');
     }
 }

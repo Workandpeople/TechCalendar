@@ -22,6 +22,11 @@ use Throwable;
 class CoffracAppointmentService
 {
     public const SOURCE = 'coffrac';
+    public const REMOTE_STATUS_ALL = 'all';
+    public const REMOTE_STATUS_PENDING = 'pending';
+    public const REMOTE_STATUS_PLACED = 'placed';
+    public const REMOTE_STATUS_PROBLEM = 'problem';
+
     private const SYNC_MESSAGE_MAX_LENGTH = 240;
 
     private int $skippedRemoteAppointmentCount = 0;
@@ -207,8 +212,11 @@ class CoffracAppointmentService
      *
      * @return array{available: bool, message: string, count: int, pending_count: int, placed_count: int, problem_count: int}
      */
-    public function sync(int $pageSize = 500, bool $incremental = false): array
+    public function sync(int $pageSize = 500, bool $incremental = false, string $status = self::REMOTE_STATUS_ALL): array
     {
+        $status = $this->normalizeSyncStatus($status);
+        $isPendingOnlySync = $status === self::REMOTE_STATUS_PENDING;
+
         if (! $this->isConfigured()) {
             $message = 'COFFRAC_API_URL ou COFFRAC_API_TOKEN est absent.';
             $this->persistSyncState(ExternalApiSync::STATE_NOT_CONFIGURED, $message, [
@@ -242,142 +250,171 @@ class CoffracAppointmentService
 
         try {
             $updatedAfter = $incremental ? $this->incrementalUpdatedAfter() : null;
-        $isIncrementalSync = $updatedAfter !== null;
+            $isIncrementalSync = $updatedAfter !== null;
 
-        $this->markSyncQueued($isIncrementalSync
-            ? 'Synchronisation incrémentale Coffrac en cours...'
-            : 'Synchronisation complète Coffrac en cours...'
-        );
-        $this->markSyncProgress(5, 'Connexion à Coffrac...');
-        $this->skippedRemoteAppointmentCount = 0;
+            $this->markSyncQueued($isPendingOnlySync
+                ? 'Récupération des RDV à placer Coffrac en cours...'
+                : ($isIncrementalSync
+                    ? 'Synchronisation incrémentale Coffrac en cours...'
+                    : 'Synchronisation complète Coffrac en cours...')
+            );
+            $this->markSyncProgress(5, 'Connexion à Coffrac...');
+            $this->skippedRemoteAppointmentCount = 0;
 
-        try {
-            $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize, updatedAfter: $updatedAfter);
-            $remoteAppointments = $remoteAppointments
-                ->filter(fn (array $appointment): bool => filled((string) ($appointment['id'] ?? '')))
-                ->unique(fn (array $appointment): string => (string) $appointment['id'])
-                ->values();
-            $this->markSyncProgress(38, sprintf(
-                $isIncrementalSync
-                    ? 'Récupération Coffrac terminée: %d RDV modifié(s) reçu(s).'
-                    : 'Récupération Coffrac terminée: %d RDV reçu(s).',
-                $remoteAppointments->count(),
-            ), [
-                'total' => $remoteAppointments->count(),
-                'processed' => 0,
-                'mode' => $isIncrementalSync ? 'incremental' : 'full',
-                'updated_after' => $updatedAfter?->toIso8601String(),
-            ]);
-        } catch (Throwable $exception) {
-            report($exception);
+            try {
+                $remoteAppointments = $this->fetchRemoteAppointments($status, $pageSize, updatedAfter: $updatedAfter);
+                $remoteAppointments = $remoteAppointments
+                    ->filter(fn (array $appointment): bool => filled((string) ($appointment['id'] ?? '')))
+                    ->unique(fn (array $appointment): string => (string) $appointment['id'])
+                    ->values();
+                $this->markSyncProgress(38, sprintf(
+                    $isPendingOnlySync
+                        ? 'Récupération Coffrac des RDV à placer terminée: %d demande(s) reçue(s).'
+                        : ($isIncrementalSync
+                            ? 'Récupération Coffrac terminée: %d RDV modifié(s) reçu(s).'
+                            : 'Récupération Coffrac terminée: %d RDV reçu(s).'),
+                    $remoteAppointments->count(),
+                ), [
+                    'total' => $remoteAppointments->count(),
+                    'processed' => 0,
+                    'mode' => $this->syncMode($status, $isIncrementalSync),
+                    'updated_after' => $updatedAfter?->toIso8601String(),
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
 
-            $message = $exception instanceof RuntimeException
-                ? $exception->getMessage()
-                : 'Coffrac ne répond pas pour le moment.';
-            $message = $this->syncMessage($message);
+                $message = $exception instanceof RuntimeException
+                    ? $exception->getMessage()
+                    : 'Coffrac ne répond pas pour le moment.';
+                $message = $this->syncMessage($message);
 
-            $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
-                'appointments_count' => 0,
+                $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
+                    'appointments_count' => 0,
+                    'progress' => 100,
+                    'stage' => 'Synchronisation Coffrac en erreur.',
+                ]);
+
+                return [
+                    'available' => false,
+                    'message' => $message,
+                    'count' => 0,
+                    'pending_count' => 0,
+                    'placed_count' => 0,
+                    'problem_count' => 0,
+                ];
+            }
+
+            $stored = collect();
+            $totalRemoteAppointments = max(1, $remoteAppointments->count());
+
+            foreach ($remoteAppointments->values() as $index => $appointment) {
+                $storedRequest = $this->persistRemoteAppointment($appointment);
+
+                if ($storedRequest) {
+                    $stored->push($storedRequest);
+                }
+
+                $processedAppointments = $index + 1;
+
+                if ($processedAppointments === 1 || $processedAppointments === $totalRemoteAppointments || $processedAppointments % 5 === 0) {
+                    $this->markSyncProgress(
+                        40 + (int) floor(($processedAppointments / $totalRemoteAppointments) * 52),
+                        sprintf('Synchronisation locale Coffrac %d/%d...', $processedAppointments, $remoteAppointments->count()),
+                        [
+                            'processed' => $processedAppointments,
+                            'total' => $remoteAppointments->count(),
+                        ],
+                    );
+                }
+            }
+
+            if (! $isIncrementalSync) {
+                $remoteReferences = $stored->pluck('external_reference')->filter()->values();
+
+                $this->markSyncProgress(96, $isPendingOnlySync
+                    ? 'Archivage des demandes absentes du flux Coffrac à placer...'
+                    : 'Archivage des RDV absents du flux Coffrac...', [
+                        'processed' => $remoteAppointments->count(),
+                        'total' => $remoteAppointments->count(),
+                    ]);
+
+                ExternalAppointmentRequest::query()
+                    ->where('source', self::SOURCE)
+                    ->when(
+                        $remoteReferences->isNotEmpty(),
+                        fn ($query) => $query->whereNotIn('external_reference', $remoteReferences->all()),
+                    )
+                    ->whereIn('status', $isPendingOnlySync
+                        ? [ExternalAppointmentRequest::STATUS_PENDING]
+                        : [
+                            ExternalAppointmentRequest::STATUS_PENDING,
+                            ExternalAppointmentRequest::STATUS_PLACED,
+                            ExternalAppointmentRequest::STATUS_PROBLEM,
+                        ])
+                    ->update([
+                        'status' => ExternalAppointmentRequest::STATUS_ARCHIVED,
+                        'fetched_at' => now(),
+                    ]);
+            } else {
+                $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Coffrac...', [
+                    'processed' => $remoteAppointments->count(),
+                    'total' => $remoteAppointments->count(),
+                ]);
+            }
+
+            $counts = $this->localStatusCounts();
+            $message = sprintf(
+                '%s: %d demande(s), %d placée(s), %d en problème.%s',
+                $isPendingOnlySync
+                    ? 'Récupération Coffrac des RDV à placer terminée'
+                    : ($isIncrementalSync ? 'Synchronisation incrémentale Coffrac terminée' : 'Synchronisation Coffrac terminée'),
+                $counts['pending_count'],
+                $counts['placed_count'],
+                $counts['problem_count'],
+                $this->skippedRemoteAppointmentCount > 0
+                    ? sprintf(' %d RDV ignoré(s) car Coffrac n’a pas pu les sérialiser.', $this->skippedRemoteAppointmentCount)
+                    : '',
+            );
+
+            $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
+                'appointments_count' => $counts['total_count'],
                 'progress' => 100,
-                'stage' => 'Synchronisation Coffrac en erreur.',
-            ]);
+                'stage' => $isPendingOnlySync ? 'Récupération des RDV à placer Coffrac terminée.' : 'Synchronisation Coffrac terminée.',
+                'processed' => $remoteAppointments->count(),
+                'total' => $remoteAppointments->count(),
+                'mode' => $this->syncMode($status, $isIncrementalSync),
+                'updated_after' => $updatedAfter?->toIso8601String(),
+                ...$counts,
+            ], touchLastSuccessfulAt: ! $isPendingOnlySync);
 
             return [
-                'available' => false,
+                'available' => true,
                 'message' => $message,
-                'count' => 0,
-                'pending_count' => 0,
-                'placed_count' => 0,
-                'problem_count' => 0,
+                'count' => $counts['total_count'],
+                ...$counts,
             ];
-        }
-
-        $stored = collect();
-        $totalRemoteAppointments = max(1, $remoteAppointments->count());
-
-        foreach ($remoteAppointments->values() as $index => $appointment) {
-            $storedRequest = $this->persistRemoteAppointment($appointment);
-
-            if ($storedRequest) {
-                $stored->push($storedRequest);
-            }
-
-            $processedAppointments = $index + 1;
-
-            if ($processedAppointments === 1 || $processedAppointments === $totalRemoteAppointments || $processedAppointments % 5 === 0) {
-                $this->markSyncProgress(
-                    40 + (int) floor(($processedAppointments / $totalRemoteAppointments) * 52),
-                    sprintf('Synchronisation locale Coffrac %d/%d...', $processedAppointments, $remoteAppointments->count()),
-                    [
-                        'processed' => $processedAppointments,
-                        'total' => $remoteAppointments->count(),
-                    ],
-                );
-            }
-        }
-
-        if (! $isIncrementalSync) {
-            $remoteReferences = $stored->pluck('external_reference')->filter()->values();
-
-            $this->markSyncProgress(96, 'Archivage des RDV absents du flux Coffrac...', [
-                'processed' => $remoteAppointments->count(),
-                'total' => $remoteAppointments->count(),
-            ]);
-
-            ExternalAppointmentRequest::query()
-                ->where('source', self::SOURCE)
-                ->when(
-                    $remoteReferences->isNotEmpty(),
-                    fn ($query) => $query->whereNotIn('external_reference', $remoteReferences->all()),
-                )
-                ->whereIn('status', [
-                    ExternalAppointmentRequest::STATUS_PENDING,
-                    ExternalAppointmentRequest::STATUS_PLACED,
-                    ExternalAppointmentRequest::STATUS_PROBLEM,
-                ])
-                ->update([
-                    'status' => ExternalAppointmentRequest::STATUS_ARCHIVED,
-                    'fetched_at' => now(),
-                ]);
-        } else {
-            $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Coffrac...', [
-                'processed' => $remoteAppointments->count(),
-                'total' => $remoteAppointments->count(),
-            ]);
-        }
-
-        $counts = $this->localStatusCounts();
-        $message = sprintf(
-            '%s: %d demande(s), %d placée(s), %d en problème.%s',
-            $isIncrementalSync ? 'Synchronisation incrémentale Coffrac terminée' : 'Synchronisation Coffrac terminée',
-            $counts['pending_count'],
-            $counts['placed_count'],
-            $counts['problem_count'],
-            $this->skippedRemoteAppointmentCount > 0
-                ? sprintf(' %d RDV ignoré(s) car Coffrac n’a pas pu les sérialiser.', $this->skippedRemoteAppointmentCount)
-                : '',
-        );
-
-        $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
-            'appointments_count' => $counts['total_count'],
-            'progress' => 100,
-            'stage' => 'Synchronisation Coffrac terminée.',
-            'processed' => $remoteAppointments->count(),
-            'total' => $remoteAppointments->count(),
-            'mode' => $isIncrementalSync ? 'incremental' : 'full',
-            'updated_after' => $updatedAfter?->toIso8601String(),
-            ...$counts,
-        ]);
-
-        return [
-            'available' => true,
-            'message' => $message,
-            'count' => $counts['total_count'],
-            ...$counts,
-        ];
         } finally {
             $lock->release();
         }
+    }
+
+    private function normalizeSyncStatus(string $status): string
+    {
+        return in_array($status, [
+            self::REMOTE_STATUS_ALL,
+            self::REMOTE_STATUS_PENDING,
+            self::REMOTE_STATUS_PLACED,
+            self::REMOTE_STATUS_PROBLEM,
+        ], true) ? $status : self::REMOTE_STATUS_ALL;
+    }
+
+    private function syncMode(string $status, bool $isIncrementalSync): string
+    {
+        if ($status !== self::REMOTE_STATUS_ALL) {
+            return $status;
+        }
+
+        return $isIncrementalSync ? 'incremental' : 'full';
     }
 
     private function incrementalUpdatedAfter(): ?Carbon
@@ -795,7 +832,7 @@ class CoffracAppointmentService
                 'created_by' => $creatorId,
                 'customer_first_name' => $request->customer_first_name ?: 'Client',
                 'customer_last_name' => $request->customer_last_name ?: 'Coffrac',
-                'customer_phone' => $request->phone ?: '',
+                'customer_phone' => $this->phoneString($request->phone) ?: '',
                 'address' => $request->address ?: '',
                 'latitude' => (float) $request->latitude,
                 'longitude' => (float) $request->longitude,
@@ -845,7 +882,7 @@ class CoffracAppointmentService
             'customer_first_name' => trim((string) ($appointment['customer_first_name'] ?? 'Client')),
             'customer_last_name' => trim((string) ($appointment['customer_last_name'] ?? 'Coffrac')),
             'customer_name' => trim((string) ($appointment['customer_name'] ?? '')) ?: trim((string) (($appointment['customer_first_name'] ?? '').' '.($appointment['customer_last_name'] ?? ''))),
-            'phone' => trim((string) ($appointment['phone'] ?? '')) ?: null,
+            'phone' => $this->phoneString($appointment['phone'] ?? null),
             'address' => $address,
             'address_line' => $addressLine,
             'postal_code' => $postalCode,
@@ -990,6 +1027,17 @@ class CoffracAppointmentService
         $value = (float) $value;
 
         return $value >= $min && $value <= $max ? $value : null;
+    }
+
+    private function phoneString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $phone = trim((string) $value);
+
+        return $phone === '' ? null : Str::limit($phone, 255, '');
     }
 
     private function normalizePostalCode(?string $postalCode): ?string
@@ -1233,8 +1281,12 @@ class CoffracAppointmentService
     /**
      * @param array<string, mixed> $metadata
      */
-    private function persistSyncState(string $state, string $message, array $metadata): ExternalApiSync
-    {
+    private function persistSyncState(
+        string $state,
+        string $message,
+        array $metadata,
+        bool $touchLastSuccessfulAt = true,
+    ): ExternalApiSync {
         $sync = ExternalApiSync::query()->firstOrNew(['source' => self::SOURCE]);
         $finalMetadata = array_merge($sync->metadata ?? [], $metadata);
         $finalMetadata['progress'] = (int) ($finalMetadata['progress'] ?? 100);
@@ -1247,7 +1299,7 @@ class CoffracAppointmentService
             'metadata' => $finalMetadata,
         ]);
 
-        if ($state === ExternalApiSync::STATE_AVAILABLE) {
+        if ($state === ExternalApiSync::STATE_AVAILABLE && $touchLastSuccessfulAt) {
             $sync->last_successful_at = now();
         }
 
