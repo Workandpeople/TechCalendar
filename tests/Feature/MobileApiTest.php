@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Appointment;
+use App\Models\ExternalAppointmentRequest;
 use App\Models\MobileAccessToken;
 use App\Models\MobilePushToken;
 use App\Models\Service;
@@ -244,6 +245,7 @@ it('updates mobile notification preferences and stores push tokens', function ()
 
 it('returns the authenticated technician planning and cached weekly widgets', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15 08:00:00', 'Europe/Paris'));
+    config(['services.coffrac.api_url' => 'https://cofrac.example.test/api']);
 
     $service = Service::query()->create([
         'type' => Service::TYPE_AUDIT,
@@ -265,7 +267,7 @@ it('returns the authenticated technician planning and cached weekly widgets', fu
         'admin' => false,
     ]);
 
-    Appointment::query()->create([
+    $appointment = Appointment::query()->create([
         'service_id' => $service->id,
         'technician_id' => $technician->id,
         'created_by' => $planner->id,
@@ -279,19 +281,26 @@ it('returns the authenticated technician planning and cached weekly widgets', fu
         'duration_minutes' => 120,
         'ends_at' => Carbon::parse('2026-06-15 11:30:00', 'Europe/Paris'),
         'comment' => 'Prévoir badge accueil.',
-        'external_payload' => [
-            'documents' => [
-                [
-                    'id' => 42,
-                    'scope' => 'dossier',
-                    'name' => 'Attestation chantier.pdf',
-                    'comment' => 'Document transmis par Coffrac.',
-                    'url' => 'https://cofrac.example.test/documents/attestation.pdf',
-                    'is_private' => false,
-                    'is_delegataire' => false,
-                ],
-            ],
-        ],
+        'external_source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'external_payload' => ['id' => 'mobile-42'],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'customer_first_name' => 'Camille',
+        'customer_last_name' => 'Martin',
+        'appointment_id' => $appointment->id,
+        'documents' => [[
+            'id' => 42,
+            'scope' => 'dossier',
+            'name' => 'Attestation chantier.pdf',
+            'comment' => 'Document transmis par Coffrac.',
+            'path' => 'attestation.pdf',
+            'is_private' => false,
+            'is_delegataire' => false,
+        ]],
     ]);
     Appointment::query()->create([
         'service_id' => $service->id,

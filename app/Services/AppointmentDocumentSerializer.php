@@ -36,20 +36,20 @@ class AppointmentDocumentSerializer
      */
     public function forAppointment(Appointment $appointment, array $fallbackDocuments = []): array
     {
-        $documents = data_get($appointment->external_payload, 'documents', []);
+        $documents = $this->documentsFromPayload($appointment->external_payload);
 
         if (! is_array($documents) || $documents === []) {
             $documents = $fallbackDocuments;
         }
 
-        return $this->normalize($documents);
+        return $this->normalize($documents, $appointment->external_source);
     }
 
     /**
      * @param  mixed  $documents
      * @return array<int, array<string, mixed>>
      */
-    public function normalize(mixed $documents): array
+    public function normalize(mixed $documents, ?string $source = null): array
     {
         if (! is_array($documents)) {
             return [];
@@ -57,24 +57,35 @@ class AppointmentDocumentSerializer
 
         return collect($documents)
             ->filter(fn (mixed $document): bool => is_array($document))
-            ->map(function (array $document): array {
+            ->map(function (array $document) use ($source): array {
                 $name = trim((string) ($document['name'] ?? $document['title'] ?? $document['filename'] ?? $document['original_name'] ?? ''));
                 $comment = trim((string) ($document['comment'] ?? ''));
                 $scope = trim((string) ($document['scope'] ?? $document['type'] ?? ''));
-                $url = trim((string) ($document['url'] ?? $document['download_url'] ?? $document['href'] ?? ''));
+                $path = trim((string) ($document['path'] ?? ''));
+                $url = $this->documentUrl($document, $source);
 
                 return [
                     'id' => $document['id'] ?? null,
                     'scope' => $scope !== '' ? $scope : null,
                     'name' => $name !== '' ? $name : 'Document',
                     'comment' => $comment !== '' ? $comment : null,
-                    'url' => $url !== '' ? $url : null,
+                    'path' => $path !== '' ? $path : null,
+                    'url' => $url,
                     'is_private' => (bool) ($document['is_private'] ?? false),
                     'is_delegataire' => (bool) ($document['is_delegataire'] ?? false),
                 ];
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  mixed  $payload
+     * @return array<int, array<string, mixed>>
+     */
+    public function fromPayload(mixed $payload, ?string $source = null): array
+    {
+        return $this->normalize($this->documentsFromPayload($payload), $source);
     }
 
     /**
@@ -111,7 +122,7 @@ class AppointmentDocumentSerializer
 
         return $requests
             ->mapWithKeys(fn (ExternalAppointmentRequest $request): array => [
-                $request->source.'|'.$request->external_reference => $this->normalize($request->documents),
+                $request->source.'|'.$request->external_reference => $this->normalize($request->documents, $request->source),
             ])
             ->all();
     }
@@ -123,5 +134,106 @@ class AppointmentDocumentSerializer
         }
 
         return $appointment->external_source.'|'.$appointment->external_reference;
+    }
+
+    /**
+     * @param  mixed  $payload
+     * @return array<int, array<string, mixed>>
+     */
+    private function documentsFromPayload(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return [];
+        }
+
+        if (array_is_list($payload)) {
+            return $this->normalizeDocumentList($payload);
+        }
+
+        $documents = collect([
+            'documents',
+            'document',
+            'data.documents',
+            'appointment.documents',
+            'dossier.documents',
+            'fiche.documents',
+            'dossier_documents',
+            'fiche_documents',
+            'files',
+            'fichiers',
+            'attachments',
+            'pieces_jointes',
+            'piecesJointes',
+        ])
+            ->flatMap(fn (string $path): array => $this->normalizeDocumentList(data_get($payload, $path)))
+            ->values()
+            ->all();
+
+        return collect($documents)
+            ->unique(fn (array $document): string => implode('|', [
+                (string) ($document['id'] ?? ''),
+                (string) ($document['name'] ?? $document['title'] ?? $document['filename'] ?? ''),
+                (string) ($document['url'] ?? $document['download_url'] ?? $document['href'] ?? $document['path'] ?? ''),
+            ]))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  mixed  $documents
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeDocumentList(mixed $documents): array
+    {
+        if (! is_array($documents) || $documents === []) {
+            return [];
+        }
+
+        if (! array_is_list($documents)) {
+            return [array_filter($documents, fn ($value): bool => $value !== null)];
+        }
+
+        return collect($documents)
+            ->filter(fn (mixed $document): bool => is_array($document))
+            ->values()
+            ->all();
+    }
+
+    private function documentUrl(array $document, ?string $source): ?string
+    {
+        $url = trim((string) ($document['url'] ?? $document['download_url'] ?? $document['href'] ?? ''));
+
+        if ($url !== '') {
+            return $url;
+        }
+
+        $path = trim((string) ($document['path'] ?? ''));
+
+        if ($path === '') {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        if ($source !== 'coffrac') {
+            return null;
+        }
+
+        $coffracBaseUrl = $this->coffracPublicBaseUrl();
+
+        return $coffracBaseUrl ? $coffracBaseUrl.'/documents/'.ltrim($path, '/') : null;
+    }
+
+    private function coffracPublicBaseUrl(): ?string
+    {
+        $baseUrl = trim((string) config('services.coffrac.api_url'));
+
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        return rtrim(preg_replace('#/api/?$#', '', $baseUrl) ?: $baseUrl, '/');
     }
 }

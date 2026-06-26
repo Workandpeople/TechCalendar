@@ -5,13 +5,18 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\TechnicianDailyRouteMetric;
+use App\Services\AppointmentDocumentSerializer;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 
 class MobilePlanningController extends Controller
 {
+    public function __construct(
+        private readonly AppointmentDocumentSerializer $documentSerializer,
+    ) {
+    }
+
     public function __invoke(Request $request): JsonResponse
     {
         $technician = $request->user();
@@ -30,6 +35,7 @@ class MobilePlanningController extends Controller
             ->where('ends_at', '>=', $windowStart)
             ->orderBy('starts_at')
             ->get();
+        $documentsByAppointment = $this->documentSerializer->forAppointments($appointments);
 
         $weekStart = $now->copy()->startOfWeek();
         $weekEnd = $now->copy()->endOfWeek();
@@ -57,10 +63,15 @@ class MobilePlanningController extends Controller
                 'week_drive_km' => round((float) $metrics->sum('drive_distance_km'), 1),
                 'week_drive_hours' => round(((int) $metrics->sum('drive_duration_minutes')) / 60, 1),
                 'week_overtime_hours' => round(((int) $metrics->sum('overtime_minutes')) / 60, 1),
-                'next_appointment' => $nextAppointment ? $this->serializeAppointment($nextAppointment) : null,
+                'next_appointment' => $nextAppointment
+                    ? $this->serializeAppointment($nextAppointment, $documentsByAppointment[$nextAppointment->id] ?? [])
+                    : null,
             ],
             'appointments' => $appointments
-                ->map(fn (Appointment $appointment): array => $this->serializeAppointment($appointment))
+                ->map(fn (Appointment $appointment): array => $this->serializeAppointment(
+                    $appointment,
+                    $documentsByAppointment[$appointment->id] ?? [],
+                ))
                 ->values(),
         ]);
     }
@@ -68,7 +79,7 @@ class MobilePlanningController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function serializeAppointment(Appointment $appointment): array
+    private function serializeAppointment(Appointment $appointment, array $documents): array
     {
         $serviceLabel = $appointment->service
             ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
@@ -91,49 +102,8 @@ class MobilePlanningController extends Controller
             'ends_at' => $appointment->ends_at?->toIso8601String(),
             'duration_minutes' => $appointment->duration_minutes,
             'comment' => $appointment->comment,
-            'documents' => $this->serializeDocuments($appointment),
+            'documents' => $documents,
         ];
-    }
-
-    /**
-     * @return array<int, array{
-     *     id: mixed,
-     *     scope: ?string,
-     *     name: string,
-     *     comment: ?string,
-     *     url: ?string,
-     *     is_private: bool,
-     *     is_delegataire: bool
-     * }>
-     */
-    private function serializeDocuments(Appointment $appointment): array
-    {
-        $documents = data_get($appointment->external_payload, 'documents', []);
-
-        if (! is_array($documents)) {
-            return [];
-        }
-
-        return collect($documents)
-            ->filter(fn (mixed $document): bool => is_array($document))
-            ->map(function (array $document): array {
-                $name = trim((string) ($document['name'] ?? $document['filename'] ?? 'Document'));
-                $comment = trim((string) ($document['comment'] ?? ''));
-                $scope = trim((string) ($document['scope'] ?? ''));
-                $url = trim((string) ($document['url'] ?? ''));
-
-                return [
-                    'id' => $document['id'] ?? null,
-                    'scope' => $scope !== '' ? $scope : null,
-                    'name' => $name !== '' ? $name : 'Document',
-                    'comment' => $comment !== '' ? $comment : null,
-                    'url' => $url !== '' ? $url : null,
-                    'is_private' => (bool) ($document['is_private'] ?? false),
-                    'is_delegataire' => (bool) ($document['is_delegataire'] ?? false),
-                ];
-            })
-            ->values()
-            ->all();
     }
 
     /**

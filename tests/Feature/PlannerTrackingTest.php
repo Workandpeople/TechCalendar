@@ -3,6 +3,7 @@
 use App\Models\Appointment;
 use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Department;
+use App\Models\ExternalAppointmentRequest;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
@@ -491,6 +492,68 @@ it('filters tracking events by appointment soft-delete status', function () {
         ->and($deletedEvents)->toHaveCount(1)
         ->and($deletedEvents[0]['id'])->toBe($deletedAppointment->id)
         ->and($deletedEvents[0]['extendedProps']['deleted_at'])->not->toBeNull();
+});
+
+it('includes coffrac documents from stored external requests in tracking events', function () {
+    config(['services.coffrac.api_url' => 'https://coffrac.test/api']);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+
+    $startsAt = Carbon::parse('2026-06-18 10:00:00');
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Documents',
+        'customer_phone' => '0600000014',
+        'address' => '5 Rue Nationale, 69001 Lyon',
+        'latitude' => 45.767,
+        'longitude' => 4.833,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'external_source' => 'coffrac',
+        'external_reference' => 'doc-44',
+        'external_payload' => ['id' => 'doc-44'],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'doc-44',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'appointment_id' => $appointment->id,
+        'documents' => [[
+            'id' => 9,
+            'scope' => 'dossier',
+            'name' => 'Avis de passage',
+            'path' => 'avis.pdf',
+        ]],
+    ]);
+
+    $events = $this->actingAs($planner)
+        ->postJson(route('planner.tracking.events'), [
+            'technician_ids' => [$technician->id],
+            'start' => '2026-06-18 00:00:00',
+            'end' => '2026-06-19 00:00:00',
+        ])
+        ->assertOk()
+        ->json('events');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]['extendedProps']['documents'][0]['name'])->toBe('Avis de passage')
+        ->and($events[0]['extendedProps']['documents'][0]['url'])->toBe('https://coffrac.test/documents/avis.pdf');
 });
 
 it('requires a changed comment before reporting an appointment problem', function () {

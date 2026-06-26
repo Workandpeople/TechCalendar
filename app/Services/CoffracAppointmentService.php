@@ -34,6 +34,7 @@ class CoffracAppointmentService
     public function __construct(
         private readonly MapboxAddressGeocoder $geocoder,
         private readonly ImportedAddressCleaner $addressCleaner,
+        private readonly AppointmentDocumentSerializer $documentSerializer,
     ) {
     }
 
@@ -894,10 +895,7 @@ class CoffracAppointmentService
             'starts_at' => ! empty($appointment['starts_at']) ? Carbon::parse($appointment['starts_at']) : null,
             'duration_minutes' => ($appointment['duration_minutes'] ?? null) !== null ? (int) $appointment['duration_minutes'] : null,
             'comment' => trim((string) ($appointment['comment'] ?? '')) ?: null,
-            'documents' => collect($appointment['documents'] ?? [])
-                ->filter(fn ($document): bool => is_array($document))
-                ->values()
-                ->all(),
+            'documents' => $this->documentSerializer->fromPayload($appointment, self::SOURCE),
             'remote_updated_at' => ! empty($appointment['updated_at']) ? Carbon::parse($appointment['updated_at']) : null,
         ];
     }
@@ -1089,6 +1087,8 @@ class CoffracAppointmentService
 
     private function appointmentFromStoredRequest(ExternalAppointmentRequest $request): array
     {
+        $documents = $request->documents ?: $this->documentSerializer->fromPayload($request->payload, $request->source);
+
         return [
             'id' => self::SOURCE.'-'.$request->external_reference,
             'external_source' => self::SOURCE,
@@ -1108,7 +1108,7 @@ class CoffracAppointmentService
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => false,
-            'documents' => $request->documents ?? [],
+            'documents' => $documents,
             'comment' => $request->comment,
             'service' => $this->matchingService([
                 'service_type' => $request->service_type,

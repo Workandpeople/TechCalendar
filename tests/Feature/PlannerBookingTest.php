@@ -209,6 +209,13 @@ it('returns a large local coffrac list and keeps appointments without gps visibl
         'department_code' => '69',
         'latitude' => null,
         'longitude' => null,
+        'payload' => [
+            'id' => 9999,
+            'dossier_documents' => [[
+                'name' => 'Fiche ancienne synchro',
+                'path' => 'ancienne-synchro.pdf',
+            ]],
+        ],
         'fetched_at' => now(),
     ]);
 
@@ -222,6 +229,10 @@ it('returns a large local coffrac list and keeps appointments without gps visibl
             'id' => 'coffrac-9999',
             'latitude' => null,
             'longitude' => null,
+        ])
+        ->assertJsonFragment([
+            'name' => 'Fiche ancienne synchro',
+            'url' => 'https://coffrac.test/documents/ancienne-synchro.pdf',
         ]);
 });
 
@@ -793,11 +804,11 @@ it('syncs pending and placed coffrac appointment requests with documents locally
                 'technician_email' => 'tech.coffrac@example.test',
                 'starts_at' => '2026-06-22T10:30:00+02:00',
                 'duration_minutes' => 90,
-                'documents' => [[
+                'fiche_documents' => [[
                     'id' => 10,
                     'scope' => 'fiche',
                     'name' => 'Rapport préparatoire',
-                    'url' => 'https://coffrac.test/documents/rapport.pdf',
+                    'path' => 'rapport.pdf',
                 ]],
             ],
         ],
@@ -819,6 +830,7 @@ it('syncs pending and placed coffrac appointment requests with documents locally
         ->and($pending->documents[0]['name'])->toBe('Avis de passage')
         ->and($placed->status)->toBe(ExternalAppointmentRequest::STATUS_PLACED)
         ->and($placed->documents[0]['name'])->toBe('Rapport préparatoire')
+        ->and($placed->documents[0]['url'])->toBe('https://coffrac.test/documents/rapport.pdf')
         ->and($placed->technician_email)->toBe('tech.coffrac@example.test')
         ->and($placed->duration_minutes)->toBe(90);
 
