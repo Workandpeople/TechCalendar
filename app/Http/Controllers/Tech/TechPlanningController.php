@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Tech;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
+use App\Services\AppointmentDocumentSerializer;
 use App\Services\TechnicianDailyRouteMetricService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -92,9 +93,10 @@ class TechPlanningController extends Controller
             ->where('ends_at', '>', Carbon::parse($payload['start']))
             ->orderBy('starts_at')
             ->get();
+        $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($documentsByAppointment): array {
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
@@ -113,6 +115,7 @@ class TechPlanningController extends Controller
                         'longitude' => $appointment->longitude,
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
+                        'documents' => $documentsByAppointment[$appointment->id] ?? [],
                     ],
                 ];
             })->values(),

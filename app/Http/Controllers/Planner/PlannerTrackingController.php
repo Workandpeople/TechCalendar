@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
+use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use Carbon\Carbon;
@@ -97,9 +98,10 @@ class PlannerTrackingController extends Controller
             ->filter(fn (Appointment $appointment): bool => ! $appointment->trashed())
             ->groupBy('technician_id')
             ->map(fn ($technicianAppointments) => $technicianAppointments->sortBy('starts_at')->values());
+        $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnician): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnician, $documentsByAppointment): array {
                 $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
@@ -151,6 +153,7 @@ class PlannerTrackingController extends Controller
                         'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
                         'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                         'created_by_name' => $appointment->creator?->full_name,
+                        'documents' => $documentsByAppointment[$appointment->id] ?? [],
                     ],
                 ];
             })->values(),

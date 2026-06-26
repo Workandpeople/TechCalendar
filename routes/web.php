@@ -75,6 +75,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/admin/settings', [AdminSettingController::class, 'index'])->name('admin.settings');
     Route::put('/admin/settings', [AdminSettingController::class, 'update'])->name('admin.settings.update');
     Route::delete('/admin/settings', [AdminSettingController::class, 'destroy'])->name('admin.settings.destroy');
+    Route::delete('/admin/settings/external-appointments', [AdminSettingController::class, 'resetExternalAppointments'])->name('admin.settings.external-appointments.reset');
 
     Route::get('/manager/dashboard', ManagerDashboardController::class)->name('manager.dashboard');
     Route::get('/manager/dashboard/data', [ManagerDashboardController::class, 'data'])->name('manager.dashboard.data');

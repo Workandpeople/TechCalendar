@@ -10,9 +10,11 @@ use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
-use App\Services\LotAutoCompletionCalculator;
+use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
+use App\Services\ExternalAppointmentSourceRegistry;
+use App\Services\LotAutoCompletionCalculator;
 use App\Services\MapboxDrivingRouteService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -1056,8 +1058,9 @@ class PlannerBookingController extends Controller
         $activeAppointmentsByTechnicianAndDay = $appointments
             ->filter(fn (Appointment $appointment): bool => $appointment->deleted_at === null)
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at?->toDateString());
+        $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
-        return $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnicianAndDay): array {
+        return $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnicianAndDay, $documentsByAppointment): array {
             $serviceLabel = $appointment->service
                 ? $appointment->service->type.' - '.$appointment->service->name
                 : 'Prestation';
@@ -1107,6 +1110,7 @@ class PlannerBookingController extends Controller
                     'origin_name' => $previousAppointment
                         ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
                         : 'Domicile',
+                    'documents' => $documentsByAppointment[$appointment->id] ?? [],
                 ],
             ];
         })->values();
@@ -1652,6 +1656,7 @@ class PlannerBookingController extends Controller
                 'service_label' => $crmAppointment['service']
                     ? $crmAppointment['service']['type'].' - '.$crmAppointment['service']['name']
                     : 'Prestation non renseignée',
+                'documents' => app(AppointmentDocumentSerializer::class)->normalize($crmAppointment['documents'] ?? []),
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,
@@ -1685,35 +1690,19 @@ class PlannerBookingController extends Controller
             'count' => 0,
         ];
 
-        return [
-            [
-                'key' => CoffracAppointmentService::SOURCE,
-                'label' => 'Coffrac',
-                'refresh_label' => 'Actualiser Coffrac',
-                'enabled' => true,
-                'status' => $coffracStatus,
-            ],
-            [
-                'key' => 'external_app_2',
-                'label' => 'Connecteur 2',
-                'refresh_label' => 'Actualiser connecteur 2',
-                'enabled' => false,
-                'status' => [
-                    ...$reservedStatus,
-                    'label' => 'Connecteur 2 à connecter',
-                ],
-            ],
-            [
-                'key' => 'external_app_3',
-                'label' => 'Connecteur 3',
-                'refresh_label' => 'Actualiser connecteur 3',
-                'enabled' => false,
-                'status' => [
-                    ...$reservedStatus,
-                    'label' => 'Connecteur 3 à connecter',
-                ],
-            ],
-        ];
+        return collect(app(ExternalAppointmentSourceRegistry::class)->all())
+            ->map(function (array $source) use ($coffracStatus, $reservedStatus): array {
+                $source['status'] = $source['key'] === CoffracAppointmentService::SOURCE
+                    ? $coffracStatus
+                    : [
+                        ...$reservedStatus,
+                        'label' => $source['label'].' à connecter',
+                    ];
+
+                return $source;
+            })
+            ->values()
+            ->all();
     }
 
     private function canAccess(Request $request): bool

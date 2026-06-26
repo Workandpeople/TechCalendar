@@ -204,6 +204,14 @@
                 <div id="tech-sheet-route-summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
             </div>
 
+            <section class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
+                <div class="flex items-center justify-between gap-3">
+                    <p class="text-sm font-medium" style="color:var(--gc-text);">Documents</p>
+                    <span id="tech-sheet-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                </div>
+                <div id="tech-sheet-documents" class="mt-3 space-y-2"></div>
+            </section>
+
             <div class="mt-5 grid grid-cols-2 gap-3">
                 <a id="tech-sheet-phone" href="#" class="gc-btn-primary text-center">Appeler</a>
                 <a id="tech-sheet-maps" href="#" target="_blank" rel="noopener" class="rounded-lg border px-4 py-2.5 text-center text-sm font-medium" style="border-color:var(--gc-border);color:var(--gc-text);">
@@ -265,6 +273,7 @@
         let techCalendar = null;
         let techSheetMap = null;
         let techSheetMapMarkers = [];
+        let techSheetMapLayerHandlers = [];
         let techSheetMapRenderRequestId = 0;
 
         const techCalendarToolbar = () => mobileCalendarQuery.matches
@@ -296,6 +305,45 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+
+        const techSafeExternalDocumentUrl = (url) => {
+            const normalizedUrl = String(url || '').trim();
+
+            return /^https?:\/\//i.test(normalizedUrl) ? normalizedUrl : '';
+        };
+
+        const renderTechSheetDocuments = (documents) => {
+            const list = document.getElementById('tech-sheet-documents');
+            const count = document.getElementById('tech-sheet-documents-count');
+            const safeDocuments = Array.isArray(documents) ? documents : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeDocuments.length} document(s)`;
+
+            if (safeDocuments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun document associé à ce RDV.</p>';
+                return;
+            }
+
+            list.innerHTML = safeDocuments.map((document, index) => {
+                const name = document.name || document.title || document.filename || document.original_name || `Document ${index + 1}`;
+                const scope = document.scope || document.type || '';
+                const url = techSafeExternalDocumentUrl(document.url || document.download_url || document.href);
+
+                return `
+                    <div class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium" style="color:var(--gc-text);">${techEscapeHtml(name)}</p>
+                            ${scope ? `<p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${techEscapeHtml(scope)}</p>` : ''}
+                        </div>
+                        ${url
+                            ? `<a href="${techEscapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gc-link shrink-0">Ouvrir</a>`
+                            : '<span class="shrink-0 text-xs" style="color:var(--gc-text-soft);">Lien absent</span>'}
+                    </div>
+                `;
+            }).join('');
+        };
 
         const techRouteDuration = (minutes) => {
             const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
@@ -355,8 +403,8 @@
                     style: 'mapbox://styles/mapbox/light-v11',
                     center: [2.2137, 46.2276],
                     zoom: 5,
-                    interactive: false,
                 });
+                techSheetMap.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
             }
 
             return techSheetMap;
@@ -367,6 +415,13 @@
             techSheetMapMarkers = [];
 
             if (!techSheetMap || !techSheetMap.loaded()) return;
+
+            techSheetMapLayerHandlers.forEach(({ event, layerId, handler }) => {
+                if (techSheetMap.getLayer(layerId)) {
+                    techSheetMap.off(event, layerId, handler);
+                }
+            });
+            techSheetMapLayerHandlers = [];
 
             [...techSheetMap.getStyle().layers]
                 .filter((layer) => layer.id.startsWith('tech-sheet-route'))
@@ -514,6 +569,20 @@
             });
         };
 
+        const techSheetSegmentBounds = (segment) => {
+            const bounds = new window.mapboxgl.LngLatBounds();
+            const coordinates = segment.route?.feature?.geometry?.coordinates || [];
+
+            if (coordinates.length > 0) {
+                coordinates.forEach((coordinate) => bounds.extend(coordinate));
+            } else {
+                bounds.extend([segment.from.lng, segment.from.lat]);
+                bounds.extend([segment.to.lng, segment.to.lat]);
+            }
+
+            return bounds;
+        };
+
         const renderTechSheetMap = async (event) => {
             if (document.getElementById('tech-appointment-sheet')?.classList.contains('hidden')) return;
 
@@ -566,6 +635,7 @@
                 const appointmentMarkerKeys = new Set();
                 const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
                     ...segment,
+                    originalIndex: index,
                     isHighlighted: index === safeActiveIndex,
                 }));
                 const orderedSegments = [
@@ -616,12 +686,25 @@
                             ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
                         },
                     });
+
+                    const clickHandler = () => renderSelectedSegment(segment.originalIndex);
+                    const enterHandler = () => { map.getCanvas().style.cursor = 'pointer'; };
+                    const leaveHandler = () => { map.getCanvas().style.cursor = ''; };
+
+                    map.on('click', sourceId, clickHandler);
+                    map.on('mouseenter', sourceId, enterHandler);
+                    map.on('mouseleave', sourceId, leaveHandler);
+                    techSheetMapLayerHandlers.push(
+                        { event: 'click', layerId: sourceId, handler: clickHandler },
+                        { event: 'mouseenter', layerId: sourceId, handler: enterHandler },
+                        { event: 'mouseleave', layerId: sourceId, handler: leaveHandler },
+                    );
                 });
 
-                map.fitBounds(bounds, {
+                map.fitBounds(techSheetSegmentBounds(enrichedSegments[safeActiveIndex] || enrichedSegments[0]), {
                     padding: 48,
-                    maxZoom: 13,
-                    duration: 0,
+                    maxZoom: 14,
+                    duration: 450,
                 });
                 map.resize();
             };
@@ -641,6 +724,7 @@
             document.getElementById('tech-sheet-time').textContent = `${formatEventDate(event.start)} - ${event.end ? event.end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}`;
             document.getElementById('tech-sheet-address').textContent = props.address || 'Adresse non renseignée';
             document.getElementById('tech-sheet-maps').href = mapsUrlForEvent(event);
+            renderTechSheetDocuments(props.documents || []);
 
             if (phoneHref) {
                 phoneLink.href = phoneHref;

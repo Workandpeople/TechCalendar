@@ -59,6 +59,6 @@ Schedule::command('health:check')
 Schedule::command('route-metrics:compute')
     ->hourly();
 
-Schedule::command('coffrac:sync')
-    ->twiceDaily(7, 18)
-    ->withoutOverlapping();
+Schedule::command('coffrac:sync --incremental')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping(60);

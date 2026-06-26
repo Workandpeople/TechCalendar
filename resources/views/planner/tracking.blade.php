@@ -164,6 +164,14 @@
                         </div>
                     </dl>
 
+                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <span id="tracking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="tracking_detail_documents" class="mt-3 space-y-2"></div>
+                    </section>
+
                     <form id="tracking-details-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);" data-validate-form>
                         <div class="mb-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Modifier le RDV</h3>
@@ -292,6 +300,7 @@
         let trackingInitialComment = '';
         let trackingDetailMap = null;
         let trackingDetailMarkers = [];
+        let trackingDetailMapLayerHandlers = [];
         let trackingDetailMapRenderRequestId = 0;
         let trackingEventsAbortController = null;
         let trackingEventsRequestId = 0;
@@ -338,6 +347,45 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+
+        const trackingSafeExternalDocumentUrl = (url) => {
+            const normalizedUrl = String(url || '').trim();
+
+            return /^https?:\/\//i.test(normalizedUrl) ? normalizedUrl : '';
+        };
+
+        const renderTrackingDetailDocuments = (documents) => {
+            const list = document.getElementById('tracking_detail_documents');
+            const count = document.getElementById('tracking_detail_documents_count');
+            const safeDocuments = Array.isArray(documents) ? documents : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeDocuments.length} document(s)`;
+
+            if (safeDocuments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun document associé à ce RDV.</p>';
+                return;
+            }
+
+            list.innerHTML = safeDocuments.map((document, index) => {
+                const name = document.name || document.title || document.filename || document.original_name || `Document ${index + 1}`;
+                const scope = document.scope || document.type || '';
+                const url = trackingSafeExternalDocumentUrl(document.url || document.download_url || document.href);
+
+                return `
+                    <div class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(name)}</p>
+                            ${scope ? `<p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${trackingEscapeHtml(scope)}</p>` : ''}
+                        </div>
+                        ${url
+                            ? `<a href="${trackingEscapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gc-link shrink-0">Ouvrir</a>`
+                            : '<span class="shrink-0 text-xs" style="color:var(--gc-text-soft);">Lien absent</span>'}
+                    </div>
+                `;
+            }).join('');
+        };
 
         const ensureTrackingAppointmentTooltip = () => {
             if (trackingAppointmentTooltip) {
@@ -563,8 +611,8 @@
                     style: 'mapbox://styles/mapbox/light-v11',
                     center: [2.2137, 46.2276],
                     zoom: 5,
-                    interactive: false,
                 });
+                trackingDetailMap.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
             }
 
             return trackingDetailMap;
@@ -575,6 +623,13 @@
             trackingDetailMarkers = [];
 
             if (!trackingDetailMap || !trackingDetailMap.loaded()) return;
+
+            trackingDetailMapLayerHandlers.forEach(({ event, layerId, handler }) => {
+                if (trackingDetailMap.getLayer(layerId)) {
+                    trackingDetailMap.off(event, layerId, handler);
+                }
+            });
+            trackingDetailMapLayerHandlers = [];
 
             [...trackingDetailMap.getStyle().layers]
                 .filter((layer) => layer.id.startsWith('tracking-detail-route'))
@@ -824,6 +879,20 @@
             return enrichedSegments;
         };
 
+        const trackingSegmentBounds = (segment) => {
+            const bounds = new window.mapboxgl.LngLatBounds();
+            const coordinates = segment.route?.feature?.geometry?.coordinates || [];
+
+            if (coordinates.length > 0) {
+                coordinates.forEach((coordinate) => bounds.extend(coordinate));
+            } else {
+                bounds.extend([segment.from.lng, segment.from.lat]);
+                bounds.extend([segment.to.lng, segment.to.lat]);
+            }
+
+            return bounds;
+        };
+
         const renderTrackingDayRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
             if (isLoading) {
                 setTrackingDayRouteSummary(`
@@ -937,6 +1006,7 @@
                 const appointmentMarkerKeys = new Set();
                 const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
                     ...segment,
+                    originalIndex: index,
                     isHighlighted: index === safeActiveIndex,
                 }));
                 const orderedSegments = [
@@ -969,12 +1039,13 @@
 
                 orderedSegments.forEach((segment, index) => {
                     const sourceId = `tracking-detail-route-${index}`;
+                    const layerId = `tracking-detail-route-${index}`;
 
                     if (!segment.route?.feature) return;
 
                     map.addSource(sourceId, { type: 'geojson', data: segment.route.feature });
                     map.addLayer({
-                        id: sourceId,
+                        id: layerId,
                         type: 'line',
                         source: sourceId,
                         layout: {
@@ -988,12 +1059,25 @@
                             ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
                         },
                     });
+
+                    const clickHandler = () => renderSelectedSegment(segment.originalIndex);
+                    const enterHandler = () => { map.getCanvas().style.cursor = 'pointer'; };
+                    const leaveHandler = () => { map.getCanvas().style.cursor = ''; };
+
+                    map.on('click', layerId, clickHandler);
+                    map.on('mouseenter', layerId, enterHandler);
+                    map.on('mouseleave', layerId, leaveHandler);
+                    trackingDetailMapLayerHandlers.push(
+                        { event: 'click', layerId, handler: clickHandler },
+                        { event: 'mouseenter', layerId, handler: enterHandler },
+                        { event: 'mouseleave', layerId, handler: leaveHandler },
+                    );
                 });
 
-                map.fitBounds(bounds, {
+                map.fitBounds(trackingSegmentBounds(activeSegment), {
                     padding: 64,
-                    maxZoom: 13,
-                    duration: 0,
+                    maxZoom: 14,
+                    duration: 450,
                 });
                 map.resize();
             };
@@ -1019,6 +1103,7 @@
             setText('tracking_detail_end', formatDateTime(event.end));
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
+            renderTrackingDetailDocuments(props.documents || []);
             document.getElementById('tracking_detail_starts_at').value = formatDateTimeLocalInput(event.start);
             document.getElementById('tracking_detail_duration_minutes').value = props.duration_minutes || '';
             document.getElementById('tracking_detail_address_input').value = props.address || '';

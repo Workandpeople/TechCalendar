@@ -2,7 +2,12 @@
 
 use App\Models\ApplicationSetting;
 use App\Models\ApplicationSettingAudit;
+use App\Models\Appointment;
+use App\Models\ExternalApiSync;
+use App\Models\ExternalAppointmentRequest;
+use App\Models\Service;
 use App\Models\User;
+use App\Services\CoffracAppointmentService;
 use App\Services\ApplicationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -241,4 +246,82 @@ it('renders OpenAI model as a select list', function () {
         ->assertSee('GPT-5.4 mini')
         ->assertSee('GPT-4o mini')
         ->assertSee('OpenAI lignes par paquet');
+});
+
+it('resets local external appointment cache from settings without deleting placed appointments', function () {
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'admin-external-reset@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+    $planner = User::query()->create([
+        'first_name' => 'Paul',
+        'last_name' => 'Planning',
+        'email' => 'planner-external-reset@example.test',
+        'password' => bcrypt('password'),
+        'admin' => false,
+        'role' => 1,
+    ]);
+    $technician = User::query()->create([
+        'first_name' => 'Tina',
+        'last_name' => 'TECH',
+        'email' => 'tech-external-reset@example.test',
+        'password' => bcrypt('password'),
+        'admin' => false,
+        'role' => 2,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Coffrac',
+        'customer_phone' => '0600000000',
+        'address' => '1 Rue Test, 75001 Paris',
+        'latitude' => 48.86,
+        'longitude' => 2.35,
+        'starts_at' => now()->addDay(),
+        'duration_minutes' => 90,
+        'ends_at' => now()->addDay()->addMinutes(90),
+        'external_source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => 'reset-1',
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => 'reset-1',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'source_label' => 'Coffrac',
+        'appointment_id' => $appointment->id,
+        'fetched_at' => now(),
+    ]);
+    ExternalApiSync::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'state' => ExternalApiSync::STATE_AVAILABLE,
+        'message' => 'OK',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.settings'))
+        ->assertOk()
+        ->assertSee('Réinitialisation des RDV externes')
+        ->assertSee('Réinitialiser Coffrac')
+        ->assertSee('1 RDV');
+
+    $this->actingAs($admin)
+        ->delete(route('admin.settings.external-appointments.reset'), [
+            'source' => CoffracAppointmentService::SOURCE,
+        ])
+        ->assertRedirect(route('admin.settings'));
+
+    expect(ExternalAppointmentRequest::query()->where('source', CoffracAppointmentService::SOURCE)->count())->toBe(0)
+        ->and(ExternalApiSync::query()->where('source', CoffracAppointmentService::SOURCE)->count())->toBe(0)
+        ->and(Appointment::query()->whereKey($appointment->id)->exists())->toBeTrue();
 });

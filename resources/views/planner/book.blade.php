@@ -607,6 +607,14 @@
                         </dl>
                     </div>
 
+                    <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <span id="booking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="booking_detail_documents" class="mt-3 space-y-2"></div>
+                    </section>
+
                     <form id="booking-detail-form" class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <input id="booking_detail_appointment_id" type="hidden" />
                         <input id="booking_detail_crm_id" type="hidden" />
@@ -705,6 +713,7 @@
         let shouldFetchCalendarWindow = false;
         let detailMap = null;
         let detailMapMarkers = [];
+        let detailMapLayerHandlers = [];
         let detailMapRenderRequestId = 0;
         let selectedCalendarEvent = null;
 
@@ -1611,6 +1620,39 @@
             }).join('');
         };
 
+        const renderBookingDetailDocuments = (documents) => {
+            const list = document.getElementById('booking_detail_documents');
+            const count = document.getElementById('booking_detail_documents_count');
+            const safeDocuments = Array.isArray(documents) ? documents : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeDocuments.length} document(s)`;
+
+            if (safeDocuments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun document associé à ce RDV.</p>';
+                return;
+            }
+
+            list.innerHTML = safeDocuments.map((document, index) => {
+                const name = document.name || document.title || document.filename || document.original_name || `Document ${index + 1}`;
+                const scope = document.scope || document.type || '';
+                const url = safeExternalDocumentUrl(document.url || document.download_url || document.href);
+
+                return `
+                    <div class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium" style="color:var(--gc-text);">${escapeHtml(name)}</p>
+                            ${scope ? `<p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(scope)}</p>` : ''}
+                        </div>
+                        ${url
+                            ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gc-link shrink-0">Ouvrir</a>`
+                            : '<span class="shrink-0 text-xs" style="color:var(--gc-text-soft);">Lien absent</span>'}
+                    </div>
+                `;
+            }).join('');
+        };
+
         const initCrmDetailMap = () => {
             if (!bookingMapboxToken || !window.mapboxgl) {
                 showMapboxUnavailable('booking-crm-detail-map', !bookingMapboxToken
@@ -2221,6 +2263,7 @@
                 crm_appointment_id: currentAppointmentRequest.id,
                 crm_service_id: null,
                 lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
+                documents: currentAppointmentRequest.documents || [],
                 can_validate: Boolean(currentAppointmentRequest.service),
                 duration_minutes: requestDurationMinutes(),
                 comment: '',
@@ -2474,6 +2517,20 @@
             return enrichedSegments;
         };
 
+        const bookingSegmentBounds = (segment) => {
+            const bounds = new window.mapboxgl.LngLatBounds();
+            const coordinates = segment.route?.feature?.geometry?.coordinates || [];
+
+            if (coordinates.length > 0) {
+                coordinates.forEach((coordinate) => bounds.extend(coordinate));
+            } else {
+                bounds.extend([segment.from.lng, segment.from.lat]);
+                bounds.extend([segment.to.lng, segment.to.lat]);
+            }
+
+            return bounds;
+        };
+
         const renderBookingDayRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
             const summary = document.getElementById('booking_day_route_summary');
 
@@ -2558,14 +2615,8 @@
                 style: 'mapbox://styles/mapbox/light-v11',
                 center: [2.4, 46.7],
                 zoom: 5,
-                dragPan: false,
-                scrollZoom: false,
-                boxZoom: false,
-                dragRotate: false,
-                keyboard: false,
-                doubleClickZoom: false,
-                touchZoomRotate: false,
             });
+            detailMap.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
             detailMap.on('load', () => mapboxDebug('detail map load event'));
             mapboxDebug('detail map instance created');
 
@@ -2577,6 +2628,13 @@
             detailMapMarkers = [];
 
             if (!detailMap || !detailMap.loaded()) return;
+
+            detailMapLayerHandlers.forEach(({ event, layerId, handler }) => {
+                if (detailMap.getLayer(layerId)) {
+                    detailMap.off(event, layerId, handler);
+                }
+            });
+            detailMapLayerHandlers = [];
 
             [...detailMap.getStyle().layers]
                 .filter((layer) => layer.id.startsWith('detail-route'))
@@ -2643,6 +2701,7 @@
                 const appointmentMarkerKeys = new Set();
                 const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
                     ...segment,
+                    originalIndex: index,
                     isHighlighted: index === safeActiveIndex,
                 }));
                 const orderedSegments = [
@@ -2694,9 +2753,22 @@
                             ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
                         },
                     });
+
+                    const clickHandler = () => void renderSelectedSegment(segment.originalIndex);
+                    const enterHandler = () => { map.getCanvas().style.cursor = 'pointer'; };
+                    const leaveHandler = () => { map.getCanvas().style.cursor = ''; };
+
+                    map.on('click', layerId, clickHandler);
+                    map.on('mouseenter', layerId, enterHandler);
+                    map.on('mouseleave', layerId, leaveHandler);
+                    detailMapLayerHandlers.push(
+                        { event: 'click', layerId, handler: clickHandler },
+                        { event: 'mouseenter', layerId, handler: enterHandler },
+                        { event: 'mouseleave', layerId, handler: leaveHandler },
+                    );
                 });
 
-                map.fitBounds(bounds, { padding: 70, maxZoom: 12 });
+                map.fitBounds(bookingSegmentBounds(activeSegment), { padding: 70, maxZoom: 14, duration: 450 });
             };
 
             if (map.loaded()) {
@@ -2854,6 +2926,7 @@
             document.getElementById('booking_detail_service').textContent = props.service_label || '-';
             document.getElementById('booking_detail_address').textContent = props.address || '-';
             document.getElementById('booking_detail_origin').textContent = `${props.origin_label || '-'}${props.origin_name ? ` (${props.origin_name})` : ''}`;
+            renderBookingDetailDocuments(props.documents || []);
             document.getElementById('booking_detail_appointment_id').value = isSuggestion ? '' : event.id;
             document.getElementById('booking_detail_crm_id').value = props.crm_appointment_id || '';
             document.getElementById('booking_detail_technician_id').value = props.technician_id || '';

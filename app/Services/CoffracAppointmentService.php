@@ -12,6 +12,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -117,6 +118,7 @@ class CoffracAppointmentService
             ->where('source', self::SOURCE)
             ->where('external_reference', $externalReference)
             ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->whereNull('appointment_id')
             ->first();
 
         return $storedRequest ? $this->appointmentFromStoredRequest($storedRequest) : null;
@@ -144,6 +146,7 @@ class CoffracAppointmentService
             ->where('source', self::SOURCE)
             ->where('external_reference', $externalReference)
             ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->whereNull('appointment_id')
             ->first();
 
         if (! $storedRequest) {
@@ -224,7 +227,21 @@ class CoffracAppointmentService
             ];
         }
 
-        $updatedAfter = $incremental ? $this->incrementalUpdatedAfter() : null;
+        $lock = Cache::lock('external-api-sync:'.self::SOURCE, 1800);
+
+        if (! $lock->get()) {
+            $counts = $this->localStatusCounts();
+
+            return [
+                'available' => true,
+                'message' => 'Synchronisation Coffrac déjà en cours.',
+                'count' => $counts['total_count'],
+                ...$counts,
+            ];
+        }
+
+        try {
+            $updatedAfter = $incremental ? $this->incrementalUpdatedAfter() : null;
         $isIncrementalSync = $updatedAfter !== null;
 
         $this->markSyncQueued($isIncrementalSync
@@ -236,6 +253,10 @@ class CoffracAppointmentService
 
         try {
             $remoteAppointments = $this->fetchRemoteAppointments('all', $pageSize, updatedAfter: $updatedAfter);
+            $remoteAppointments = $remoteAppointments
+                ->filter(fn (array $appointment): bool => filled((string) ($appointment['id'] ?? '')))
+                ->unique(fn (array $appointment): string => (string) $appointment['id'])
+                ->values();
             $this->markSyncProgress(38, sprintf(
                 $isIncrementalSync
                     ? 'Récupération Coffrac terminée: %d RDV modifié(s) reçu(s).'
@@ -354,6 +375,9 @@ class CoffracAppointmentService
             'count' => $counts['total_count'],
             ...$counts,
         ];
+        } finally {
+            $lock->release();
+        }
     }
 
     private function incrementalUpdatedAfter(): ?Carbon
