@@ -309,7 +309,18 @@ class CoffracAppointmentService
             $totalRemoteAppointments = max(1, $remoteAppointments->count());
 
             foreach ($remoteAppointments->values() as $index => $appointment) {
-                $storedRequest = $this->persistRemoteAppointment($appointment);
+                try {
+                    $storedRequest = $this->persistRemoteAppointment($appointment);
+                } catch (Throwable $exception) {
+                    $this->skippedRemoteAppointmentCount++;
+                    Log::warning('RDV Coffrac ignoré pendant la persistance locale.', [
+                        'external_reference' => $appointment['id'] ?? null,
+                        'remote_status_name' => $appointment['status_name'] ?? null,
+                        'message' => $exception->getMessage(),
+                    ]);
+
+                    $storedRequest = null;
+                }
 
                 if ($storedRequest) {
                     $stored->push($storedRequest);
@@ -373,7 +384,7 @@ class CoffracAppointmentService
                 $counts['placed_count'],
                 $counts['problem_count'],
                 $this->skippedRemoteAppointmentCount > 0
-                    ? sprintf(' %d RDV ignoré(s) car Coffrac n’a pas pu les sérialiser.', $this->skippedRemoteAppointmentCount)
+                    ? sprintf(' %d RDV ignoré(s) car une ligne distante était invalide.', $this->skippedRemoteAppointmentCount)
                     : '',
             );
 
@@ -721,10 +732,21 @@ class CoffracAppointmentService
         $appointments = collect($response->json('data', []))
             ->filter(fn ($appointment): bool => is_array($appointment))
             ->values();
+        $fetchedCount = (int) ($response->json('fetched_count') ?? $appointments->count());
+        $skippedCount = max(0, (int) ($response->json('skipped_count') ?? 0));
+
+        if ($skippedCount > 0) {
+            $this->skippedRemoteAppointmentCount += $skippedCount;
+            Log::warning('RDV Coffrac ignoré(s) par l’API distante pendant la synchronisation.', [
+                'offset' => $offset,
+                'limit' => $limit,
+                'skipped_count' => $skippedCount,
+            ]);
+        }
 
         return [
             'appointments' => $appointments,
-            'reached_end' => $externalReference !== null || $appointments->count() < $limit,
+            'reached_end' => $externalReference !== null || $fetchedCount < $limit,
         ];
     }
 
@@ -947,11 +969,35 @@ class CoffracAppointmentService
             ];
         }
 
-        $geocoding = $this->geocoder->geocode($address);
+        try {
+            $geocoding = $this->geocoder->geocode($address);
+        } catch (Throwable $exception) {
+            Log::warning('Géocodage Mapbox ignoré pendant la synchronisation Coffrac.', [
+                'external_reference' => $appointment['id'] ?? null,
+                'address' => $address,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return [
+                'latitude' => null,
+                'longitude' => null,
+            ];
+        }
+
+        $latitude = $this->coordinate($geocoding['latitude'] ?? null, -90, 90);
+        $longitude = $this->coordinate($geocoding['longitude'] ?? null, -180, 180);
+
+        if ($address && ($latitude === null || $longitude === null)) {
+            Log::info('RDV Coffrac conservé sans coordonnées Mapbox.', [
+                'external_reference' => $appointment['id'] ?? null,
+                'address' => $address,
+                'warnings' => $geocoding['warnings'] ?? [],
+            ]);
+        }
 
         return [
-            'latitude' => $this->coordinate($geocoding['latitude'] ?? null, -90, 90),
-            'longitude' => $this->coordinate($geocoding['longitude'] ?? null, -180, 180),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
         ];
     }
 

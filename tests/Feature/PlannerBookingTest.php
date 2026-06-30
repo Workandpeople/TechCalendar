@@ -346,6 +346,62 @@ it('skips a coffrac appointment that crashes remote page serialization', functio
         ->toBe(['101', '102', '104']);
 });
 
+it('continues coffrac pagination when the remote api skips a serialized appointment', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $appointmentPayload = fn (int $id): array => [
+        'id' => $id,
+        'source' => 'Coffrac',
+        'status_name' => 'Prise de RDV',
+        'service_type' => Service::TYPE_COFFRAC,
+        'service_name' => null,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => "COFFRAC {$id}",
+        'phone' => "0600000{$id}",
+        'address' => "{$id} Rue de la Paix, 75002 Paris, France",
+        'department_code' => '75',
+        'latitude' => 48.868,
+        'longitude' => 2.331,
+    ];
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) use ($appointmentPayload) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return match (((int) ($query['offset'] ?? 0)).':'.((int) ($query['limit'] ?? 0))) {
+            '0:2' => Http::response([
+                'result' => true,
+                'data' => [$appointmentPayload(101)],
+                'fetched_count' => 2,
+                'skipped_count' => 1,
+            ]),
+            '2:2' => Http::response([
+                'result' => true,
+                'data' => [$appointmentPayload(103)],
+                'fetched_count' => 1,
+                'skipped_count' => 0,
+            ]),
+            default => Http::response([
+                'result' => true,
+                'data' => [],
+                'fetched_count' => 0,
+                'skipped_count' => 0,
+            ]),
+        };
+    });
+
+    $result = app(CoffracAppointmentService::class)->sync(2);
+
+    expect($result['available'])->toBeTrue()
+        ->and($result['count'])->toBe(2)
+        ->and($result['message'])->toContain('1 RDV ignoré');
+
+    expect(ExternalAppointmentRequest::query()->where('source', 'coffrac')->pluck('external_reference')->all())
+        ->toBe(['101', '103']);
+});
+
 it('geocodes coffrac pending appointments without remote coordinates', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
@@ -400,6 +456,62 @@ it('geocodes coffrac pending appointments without remote coordinates', function 
         ->and($stored->longitude)->toBe(2.379024)
         ->and($appointments)->toHaveCount(1)
         ->and($appointments->first()['id'])->toBe('coffrac-4256');
+});
+
+it('keeps coffrac appointments when mapbox cannot geocode the remote address', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('ADRESSE INTROUVABLE, 99999 VILLE FANTOME, France')
+        ->andReturn([
+            'latitude' => null,
+            'longitude' => null,
+            'formatted_address' => null,
+            'mapbox_id' => null,
+            'mapbox_confidence' => null,
+            'warnings' => ['Aucun résultat Mapbox pour cette adresse.'],
+        ]);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    Http::fake(fn () => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 4257,
+            'source' => 'Coffrac',
+            'status_name' => 'Prise de RDV',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => 'BAR 145 AUDIT',
+            'customer_first_name' => 'Adresse',
+            'customer_last_name' => 'INVALIDE',
+            'phone' => '0600004257',
+            'address' => 'ADRESSE INTROUVABLE, 99999 VILLE FANTOME, France',
+            'address_line' => 'ADRESSE INTROUVABLE',
+            'postal_code' => '99999',
+            'city' => 'VILLE FANTOME',
+            'department_code' => '99',
+            'latitude' => null,
+            'longitude' => null,
+        ]],
+    ]));
+
+    app(CoffracAppointmentService::class)->sync();
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4257')
+        ->firstOrFail();
+    $appointments = app(CoffracAppointmentService::class)->pending(15);
+
+    expect($stored->latitude)->toBeNull()
+        ->and($stored->longitude)->toBeNull()
+        ->and($stored->address)->toBe('ADRESSE INTROUVABLE, 99999 VILLE FANTOME, France')
+        ->and($appointments)->toHaveCount(1)
+        ->and($appointments->first()['id'])->toBe('coffrac-4257');
 });
 
 it('does not geocode an unchanged coffrac appointment twice', function () {
