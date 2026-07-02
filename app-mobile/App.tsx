@@ -20,6 +20,8 @@ import {
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
+import { errorCodes, isErrorWithCode, pick, types as documentPickerTypes } from '@react-native-documents/picker';
+import { Asset, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import Share from 'react-native-share';
 import {
   changeFirstPassword,
@@ -32,13 +34,19 @@ import {
 } from './src/api/auth';
 import { ApiError, isNetworkError } from './src/api/client';
 import { updateNotificationPreferences } from './src/api/preferences';
-import { getPlanning } from './src/api/planning';
+import {
+  getPlanning,
+  MobileUploadFile,
+  refreshAppointmentDocuments,
+  uploadAppointmentDocument,
+} from './src/api/planning';
 import {
   getCachedPlanning,
   getCachedPlanningInfo,
   getCachedUser,
   getPushOnboardingDecision,
   markBiometricOnboardingAsked,
+  setCachedPlanning,
   setPushOnboardingDecision,
   wasBiometricOnboardingAsked,
 } from './src/storage/cache';
@@ -867,6 +875,37 @@ function PlanningScreen({
     [appointmentsByDate, selectedDate],
   );
   const canExport = Boolean(planning?.appointments.length);
+  const appendUploadedDocument = useCallback((appointmentId: number, document: PlanningAppointmentDocument) => {
+    setPlanning(current => {
+      if (!current) {
+        return current;
+      }
+
+      const updatedPlanning = appendDocumentToPlanning(current, appointmentId, document);
+      setCachedPlanning(updatedPlanning).catch(() => undefined);
+
+      return updatedPlanning;
+    });
+    setSelectedAppointment(current => current?.id === appointmentId
+      ? appendDocumentToAppointment(current, document)
+      : current);
+  }, []);
+
+  const replaceAppointmentDocuments = useCallback((appointmentId: number, documents: PlanningAppointmentDocument[]) => {
+    setPlanning(current => {
+      if (!current) {
+        return current;
+      }
+
+      const updatedPlanning = replaceDocumentsInPlanning(current, appointmentId, documents);
+      setCachedPlanning(updatedPlanning).catch(() => undefined);
+
+      return updatedPlanning;
+    });
+    setSelectedAppointment(current => current?.id === appointmentId
+      ? replaceDocumentsInAppointment(current, documents)
+      : current);
+  }, []);
 
   const refreshControl = (
     <RefreshControl
@@ -1002,6 +1041,9 @@ function PlanningScreen({
 
       <AppointmentDetailsModal
         appointment={selectedAppointment}
+        isOnline={netInfo.isConnected !== false && sessionMode === 'online'}
+        onDocumentUploaded={appendUploadedDocument}
+        onDocumentsRefreshed={replaceAppointmentDocuments}
         onClose={() => setSelectedAppointment(null)}
       />
       <ProfileModal
@@ -1107,16 +1149,167 @@ function CalendarWeek({
 
 function AppointmentDetailsModal({
   appointment,
+  isOnline,
+  onDocumentUploaded,
+  onDocumentsRefreshed,
   onClose,
 }: {
   appointment: PlanningAppointment | null;
+  isOnline: boolean;
+  onDocumentUploaded: (appointmentId: number, document: PlanningAppointmentDocument) => void;
+  onDocumentsRefreshed: (appointmentId: number, documents: PlanningAppointmentDocument[]) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [refreshingDocuments, setRefreshingDocuments] = useState(false);
+  const appointmentId = appointment?.id;
+  const appointmentExternalSource = appointment?.external_source;
+
+  useEffect(() => {
+    if (!appointmentId || !isOnline || appointmentExternalSource !== 'coffrac') {
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRefreshingDocuments(true);
+
+    refreshAppointmentDocuments(appointmentId)
+      .then(documents => {
+        if (!cancelled) {
+          onDocumentsRefreshed(appointmentId, documents);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setRefreshingDocuments(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appointmentExternalSource, appointmentId, isOnline, onDocumentsRefreshed]);
+
   if (!appointment) {
     return null;
   }
 
   const documents = appointment.documents ?? [];
+  const canUploadDocument = appointment.external_source === 'coffrac';
+
+  const uploadPickedDocument = async (file: MobileUploadFile) => {
+    if (!isOnline) {
+      Alert.alert('Connexion requise', 'L’ajout de document nécessite une connexion pour envoyer le fichier dans Coffrac.');
+      return;
+    }
+
+    setUploadingDocument(true);
+
+    try {
+      const document = await uploadAppointmentDocument(appointment.id, file);
+      onDocumentUploaded(appointment.id, document);
+      Alert.alert('Document ajouté', 'Le document a bien été envoyé dans le dossier Coffrac.');
+    } catch (exception) {
+      Alert.alert('Ajout impossible', errorMessage(exception));
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const addDocumentFromCamera = async () => {
+    const response = await launchCamera({
+      mediaType: 'photo',
+      quality: 0.8,
+      saveToPhotos: false,
+      presentationStyle: 'fullScreen',
+    });
+
+    if (response.didCancel) {
+      return;
+    }
+
+    if (response.errorCode) {
+      Alert.alert('Photo impossible', response.errorMessage || 'La photo n’a pas pu être prise.');
+      return;
+    }
+
+    const file = uploadFileFromImageAsset(response.assets?.[0], `photo-rdv-${appointment.id}.jpg`);
+
+    if (!file) {
+      Alert.alert('Photo invalide', 'La photo sélectionnée est inutilisable.');
+      return;
+    }
+
+    await uploadPickedDocument(file);
+  };
+
+  const addDocumentFromGallery = async () => {
+    const response = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+      selectionLimit: 1,
+      presentationStyle: 'fullScreen',
+    });
+
+    if (response.didCancel) {
+      return;
+    }
+
+    if (response.errorCode) {
+      Alert.alert('Galerie indisponible', response.errorMessage || 'La photo n’a pas pu être récupérée.');
+      return;
+    }
+
+    const file = uploadFileFromImageAsset(response.assets?.[0], `photo-rdv-${appointment.id}.jpg`);
+
+    if (!file) {
+      Alert.alert('Photo invalide', 'La photo sélectionnée est inutilisable.');
+      return;
+    }
+
+    await uploadPickedDocument(file);
+  };
+
+  const addDocumentFromFile = async () => {
+    try {
+      const [document] = await pick({
+        type: [documentPickerTypes.allFiles],
+        allowMultiSelection: false,
+        mode: 'import',
+        presentationStyle: 'fullScreen',
+      });
+
+      if (!document?.uri) {
+        Alert.alert('Fichier invalide', 'Le fichier sélectionné est inutilisable.');
+        return;
+      }
+
+      await uploadPickedDocument({
+        uri: document.uri,
+        name: document.name || `document-rdv-${appointment.id}`,
+        type: document.type || mimeTypeFromFileName(document.name || ''),
+      });
+    } catch (exception) {
+      if (isErrorWithCode(exception) && exception.code === errorCodes.OPERATION_CANCELED) {
+        return;
+      }
+
+      Alert.alert('Fichier impossible', errorMessage(exception));
+    }
+  };
+
+  const openAddDocumentMenu = () => {
+    if (uploadingDocument) {
+      return;
+    }
+
+    showDocumentSourceMenu({
+      camera: addDocumentFromCamera,
+      gallery: addDocumentFromGallery,
+      file: addDocumentFromFile,
+    });
+  };
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -1152,9 +1345,36 @@ function AppointmentDetailsModal({
               </View>
             ) : null}
 
-            {documents.length > 0 ? (
+            {canUploadDocument || documents.length > 0 ? (
               <View style={styles.documentsSection}>
-                <Text style={styles.modalSectionLabel}>Documents Coffrac</Text>
+                <View style={styles.documentsTitleRow}>
+                  <View>
+                    <Text style={styles.modalSectionLabel}>Documents Coffrac</Text>
+                    {refreshingDocuments ? (
+                      <Text style={styles.documentRefreshText}>Mise à jour du dossier...</Text>
+                    ) : null}
+                  </View>
+                  {canUploadDocument ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={uploadingDocument}
+                      onPress={openAddDocumentMenu}
+                      style={[
+                        styles.documentAddButton,
+                        uploadingDocument && styles.documentAddButtonDisabled,
+                      ]}
+                    >
+                      {uploadingDocument ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                      ) : (
+                        <Text style={styles.documentAddText}>Ajouter</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+                {documents.length === 0 ? (
+                  <Text style={styles.documentEmptyText}>Aucun document associé pour le moment.</Text>
+                ) : null}
                 {documents.map((document, index) => (
                   <View key={`${document.id ?? document.name}-${index}`} style={styles.documentCard}>
                     <View style={styles.documentHeader}>
@@ -1478,6 +1698,97 @@ function showMenu(title: string, options: MenuOption[]): void {
   ]);
 }
 
+function showDocumentSourceMenu(actions: {
+  camera: () => void | Promise<void>;
+  gallery: () => void | Promise<void>;
+  file: () => void | Promise<void>;
+}): void {
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Ajouter un document',
+        options: ['Prendre une photo', 'Choisir une photo', 'Choisir un fichier', 'Annuler'],
+        cancelButtonIndex: 3,
+      },
+      buttonIndex => {
+        if (buttonIndex === 0) {
+          actions.camera();
+        } else if (buttonIndex === 1) {
+          actions.gallery();
+        } else if (buttonIndex === 2) {
+          actions.file();
+        }
+      },
+    );
+    return;
+  }
+
+  Alert.alert(
+    'Ajouter un document',
+    'Choisis la source du fichier à envoyer dans Coffrac.',
+    [
+      { text: 'Photo', onPress: actions.camera },
+      { text: 'Galerie', onPress: actions.gallery },
+      { text: 'Fichier', onPress: actions.file },
+    ],
+    { cancelable: true },
+  );
+}
+
+function uploadFileFromImageAsset(asset: Asset | undefined, fallbackName: string): MobileUploadFile | null {
+  if (!asset?.uri) {
+    return null;
+  }
+
+  const type = asset.type || mimeTypeFromFileName(asset.fileName || fallbackName);
+  const extension = extensionFromMimeType(type);
+  const name = asset.fileName || ensureFileExtension(fallbackName, extension);
+
+  return {
+    uri: asset.uri,
+    name,
+    type,
+  };
+}
+
+function mimeTypeFromFileName(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+
+  const mimeTypes: Record<string, string> = {
+    csv: 'text/csv',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    heic: 'image/heic',
+    heif: 'image/heif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    pdf: 'application/pdf',
+    png: 'image/png',
+    txt: 'text/plain',
+    webp: 'image/webp',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  return extension ? (mimeTypes[extension] ?? 'application/octet-stream') : 'application/octet-stream';
+}
+
+function extensionFromMimeType(mimeType: string): string {
+  const extensions: Record<string, string> = {
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  };
+
+  return extensions[mimeType] ?? 'jpg';
+}
+
+function ensureFileExtension(fileName: string, extension: string): string {
+  return fileName.includes('.') ? fileName : `${fileName}.${extension}`;
+}
+
 function openNavigationMenu(appointment: PlanningAppointment): void {
   const encodedAddress = encodeURIComponent(appointment.address);
   const geoUrl = appointment.latitude && appointment.longitude
@@ -1528,6 +1839,89 @@ function documentScopeLabel(scope: string): string {
   };
 
   return labels[scope] ?? scope;
+}
+
+function appendDocumentToPlanning(
+  planning: PlanningPayload,
+  appointmentId: number,
+  document: PlanningAppointmentDocument,
+): PlanningPayload {
+  const appointments = planning.appointments.map(appointment => appointment.id === appointmentId
+    ? appendDocumentToAppointment(appointment, document)
+    : appointment);
+  const nextAppointment = planning.widgets.next_appointment?.id === appointmentId
+    ? appendDocumentToAppointment(planning.widgets.next_appointment, document)
+    : planning.widgets.next_appointment;
+
+  return {
+    ...planning,
+    widgets: {
+      ...planning.widgets,
+      next_appointment: nextAppointment,
+    },
+    appointments,
+  };
+}
+
+function replaceDocumentsInPlanning(
+  planning: PlanningPayload,
+  appointmentId: number,
+  documents: PlanningAppointmentDocument[],
+): PlanningPayload {
+  const appointments = planning.appointments.map(appointment => appointment.id === appointmentId
+    ? replaceDocumentsInAppointment(appointment, documents)
+    : appointment);
+  const nextAppointment = planning.widgets.next_appointment?.id === appointmentId
+    ? replaceDocumentsInAppointment(planning.widgets.next_appointment, documents)
+    : planning.widgets.next_appointment;
+
+  return {
+    ...planning,
+    widgets: {
+      ...planning.widgets,
+      next_appointment: nextAppointment,
+    },
+    appointments,
+  };
+}
+
+function appendDocumentToAppointment(
+  appointment: PlanningAppointment,
+  document: PlanningAppointmentDocument,
+): PlanningAppointment {
+  return {
+    ...appointment,
+    documents: uniqueDocuments([...(appointment.documents ?? []), document]),
+  };
+}
+
+function replaceDocumentsInAppointment(
+  appointment: PlanningAppointment,
+  documents: PlanningAppointmentDocument[],
+): PlanningAppointment {
+  return {
+    ...appointment,
+    documents: uniqueDocuments(documents),
+  };
+}
+
+function uniqueDocuments(documents: PlanningAppointmentDocument[]): PlanningAppointmentDocument[] {
+  const seen = new Set<string>();
+
+  return documents.filter(document => {
+    const key = [
+      document.id ?? '',
+      document.name,
+      document.url ?? '',
+    ].join('|');
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 async function exportCalendar(appointments: PlanningAppointment[]): Promise<void> {
@@ -2606,6 +3000,48 @@ const styles = StyleSheet.create({
   },
   documentsSection: {
     marginTop: 4,
+  },
+  documentsTitleRow: {
+    marginTop: 14,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  documentAddButton: {
+    minHeight: 34,
+    minWidth: 88,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.ink,
+  },
+  documentAddButtonDisabled: {
+    opacity: 0.62,
+  },
+  documentAddText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  documentRefreshText: {
+    marginTop: -3,
+    color: colors.inkMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  documentEmptyText: {
+    marginBottom: 10,
+    padding: 12,
+    overflow: 'hidden',
+    borderRadius: 16,
+    color: colors.inkMuted,
+    backgroundColor: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
   },
   documentCard: {
     marginBottom: 10,

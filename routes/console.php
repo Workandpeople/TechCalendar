@@ -110,6 +110,10 @@ Artisan::command('coffrac:sync {--incremental : Ne récupère que les changement
 Schedule::command('health:check')
     ->everyFiveMinutes();
 
+Schedule::command('health:check')
+    ->dailyAt('01:57')
+    ->withoutOverlapping();
+
 Schedule::command('system-tests:schedule --suite=all')
     ->dailyAt('02:00')
     ->withoutOverlapping();

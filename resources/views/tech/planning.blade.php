@@ -206,8 +206,16 @@
 
             <section class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
                 <div class="flex items-center justify-between gap-3">
-                    <p class="text-sm font-medium" style="color:var(--gc-text);">Documents</p>
-                    <span id="tech-sheet-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                    <div>
+                        <p class="text-sm font-medium" style="color:var(--gc-text);">Documents</p>
+                        <p id="tech-sheet-documents-status" class="mt-1 hidden text-xs"></p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <button id="tech-sheet-documents-refresh" type="button" class="hidden rounded-full border px-3 py-1 text-xs font-semibold transition hover:bg-[color:var(--gc-accent-soft)]" style="border-color:var(--gc-border);color:var(--gc-text);">
+                            Mettre à jour
+                        </button>
+                        <span id="tech-sheet-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                    </div>
                 </div>
                 <div id="tech-sheet-documents" class="mt-3 space-y-2"></div>
             </section>
@@ -264,6 +272,9 @@
         const calendarEl = document.getElementById('tech-calendar');
         const mobileCalendarQuery = window.matchMedia('(max-width: 767px)');
         const techMapboxToken = @json($mapboxToken ?? null);
+        const techCoffracRefreshUrlTemplate = @json(route('tech.planning.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT_ID__']));
+        const techDocumentsRefreshButton = document.getElementById('tech-sheet-documents-refresh');
+        const techDocumentsStatus = document.getElementById('tech-sheet-documents-status');
         const techRouteNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
         const techHome = {
             lat: techRouteNumber(@json($technician->latitude)),
@@ -275,6 +286,7 @@
         let techSheetMapMarkers = [];
         let techSheetMapLayerHandlers = [];
         let techSheetMapRenderRequestId = 0;
+        let selectedTechSheetEvent = null;
 
         const techCalendarToolbar = () => mobileCalendarQuery.matches
             ? { left: 'prev,next', center: 'title', right: 'today' }
@@ -343,6 +355,27 @@
                     </div>
                 `;
             }).join('');
+        };
+
+        const setTechDocumentsStatus = (message = '', tone = 'muted') => {
+            if (!techDocumentsStatus) return;
+
+            techDocumentsStatus.textContent = message;
+            techDocumentsStatus.classList.toggle('hidden', !message);
+            techDocumentsStatus.style.color = tone === 'error'
+                ? '#b91c1c'
+                : tone === 'success'
+                    ? '#15803d'
+                    : 'var(--gc-text-soft)';
+        };
+
+        const setTechDocumentsRefreshVisible = (event) => {
+            if (!techDocumentsRefreshButton) return;
+
+            const isCoffrac = event?.extendedProps?.external_source === 'coffrac';
+            techDocumentsRefreshButton.classList.toggle('hidden', !isCoffrac);
+            techDocumentsRefreshButton.disabled = false;
+            techDocumentsRefreshButton.textContent = 'Mettre à jour';
         };
 
         const techRouteDuration = (minutes) => {
@@ -719,6 +752,9 @@
             const commentWrap = document.getElementById('tech-sheet-comment-wrap');
             const phoneHref = props.customer_phone ? `tel:${String(props.customer_phone).replace(/[^\d+]/g, '')}` : '';
 
+            selectedTechSheetEvent = event;
+            setTechDocumentsStatus();
+            setTechDocumentsRefreshVisible(event);
             document.getElementById('tech-sheet-service').textContent = props.service_label || 'Prestation';
             document.getElementById('tech-sheet-customer').textContent = props.customer_name || event.title;
             document.getElementById('tech-sheet-time').textContent = `${formatEventDate(event.start)} - ${event.end ? event.end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}`;
@@ -749,6 +785,8 @@
         const closeTechAppointmentSheet = () => {
             const sheet = document.getElementById('tech-appointment-sheet');
             techSheetMapRenderRequestId++;
+            selectedTechSheetEvent = null;
+            setTechDocumentsStatus();
             sheet.classList.add('hidden');
             sheet.classList.remove('flex');
         };
@@ -855,6 +893,39 @@
 
         window.addEventListener('techcalendar:layout-resized', refreshTechCalendarViewport);
         window.addEventListener('resize', () => window.setTimeout(refreshTechCalendarViewport, 120));
+
+        techDocumentsRefreshButton?.addEventListener('click', async () => {
+            if (!selectedTechSheetEvent) return;
+
+            techDocumentsRefreshButton.disabled = true;
+            techDocumentsRefreshButton.textContent = 'Mise à jour...';
+            setTechDocumentsStatus('Vérification du dossier Coffrac en cours...');
+
+            try {
+                const response = await fetch(techCoffracRefreshUrlTemplate.replace('__APPOINTMENT_ID__', encodeURIComponent(selectedTechSheetEvent.id)), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(payload?.message || 'Mise à jour impossible.');
+                }
+
+                const documents = Array.isArray(payload.documents) ? payload.documents : [];
+                selectedTechSheetEvent.setExtendedProp('documents', documents);
+                renderTechSheetDocuments(documents);
+                setTechDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
+            } catch (error) {
+                setTechDocumentsStatus(error.message || 'Mise à jour impossible.', 'error');
+            } finally {
+                techDocumentsRefreshButton.disabled = false;
+                techDocumentsRefreshButton.textContent = 'Mettre à jour';
+            }
+        });
 
         document.getElementById('tech-sheet-close')?.addEventListener('click', closeTechAppointmentSheet);
         document.getElementById('tech-appointment-sheet')?.addEventListener('click', (event) => {

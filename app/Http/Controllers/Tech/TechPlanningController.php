@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tech;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\AppointmentDocumentSerializer;
+use App\Services\CoffracAppointmentService;
 use App\Services\TechnicianDailyRouteMetricService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -116,9 +117,33 @@ class TechPlanningController extends Controller
                         'duration_minutes' => $appointment->duration_minutes,
                         'comment' => $appointment->comment,
                         'documents' => $documentsByAppointment[$appointment->id] ?? [],
+                        'external_source' => $appointment->external_source,
+                        'external_reference' => $appointment->external_reference,
                     ],
                 ];
             })->values(),
+        ]);
+    }
+
+    public function refreshCoffracAppointment(
+        Request $request,
+        Appointment $appointment,
+        CoffracAppointmentService $coffracAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $user = $request->user();
+
+        abort_unless($user?->admin || (int) $appointment->technician_id === (int) $user?->id, 404);
+
+        $refresh = $coffracAppointments->refreshAppointment($appointment);
+
+        return response()->json([
+            'message' => 'Documents Coffrac mis à jour.',
+            'documents' => $refresh['documents'],
+            'status' => $refresh['status'],
+            'remote_status_name' => $refresh['remote_status_name'],
+            'fetched_at' => $refresh['fetched_at'],
         ]);
     }
 

@@ -617,6 +617,93 @@ it('includes coffrac documents from stored external requests in tracking events'
         ->and($events[0]['extendedProps']['documents'][0]['url'])->toBe('https://coffrac.test/documents/avis.pdf');
 });
 
+it('refreshes documents for a placed coffrac appointment from tracking detail', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments*' => Http::response([
+            'result' => true,
+            'data' => [[
+                'id' => 'doc-44',
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'Inspection Coffrac',
+                'customer_first_name' => 'Client',
+                'customer_last_name' => 'Documents',
+                'phone' => '0600000014',
+                'address' => '5 Rue Nationale, 69001 Lyon, France',
+                'department_code' => '69',
+                'latitude' => 45.767,
+                'longitude' => 4.833,
+                'technician_email' => 'tech-docs@example.test',
+                'starts_at' => '2026-06-18T10:00:00+02:00',
+                'duration_minutes' => 90,
+                'documents' => [[
+                    'id' => 19,
+                    'scope' => 'dossier',
+                    'name' => 'Nouveau document Coffrac',
+                    'url' => 'https://coffrac.test/documents/nouveau.pdf',
+                ]],
+            ]],
+            'fetched_count' => 1,
+        ]),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech-docs@example.test',
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician->services()->attach($service);
+
+    $startsAt = Carbon::parse('2026-06-18 10:00:00');
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Documents',
+        'customer_phone' => '0600000014',
+        'address' => '5 Rue Nationale, 69001 Lyon',
+        'latitude' => 45.767,
+        'longitude' => 4.833,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'external_source' => 'coffrac',
+        'external_reference' => 'doc-44',
+        'external_payload' => ['id' => 'doc-44', 'documents' => [['name' => 'Ancien document']]],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'doc-44',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'appointment_id' => $appointment->id,
+        'documents' => [['name' => 'Ancien document']],
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.appointments.coffrac.refresh', $appointment))
+        ->assertOk()
+        ->assertJsonPath('documents.0.name', 'Nouveau document Coffrac')
+        ->assertJsonPath('documents.0.url', 'https://coffrac.test/documents/nouveau.pdf');
+
+    expect($appointment->refresh()->external_payload['documents'][0]['name'])->toBe('Nouveau document Coffrac');
+});
+
 it('requires a changed comment before reporting an appointment problem', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',

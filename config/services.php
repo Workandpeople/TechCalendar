@@ -57,6 +57,7 @@ return [
         'api_url' => env('COFFRAC_API_URL'),
         'api_token' => env('COFFRAC_API_TOKEN'),
         'timeout' => env('COFFRAC_API_TIMEOUT', 15),
+        'upload_timeout' => env('COFFRAC_API_UPLOAD_TIMEOUT', 60),
         'connect_timeout' => env('COFFRAC_API_CONNECT_TIMEOUT', 5),
         'incremental_overlap_minutes' => env('COFFRAC_INCREMENTAL_OVERLAP_MINUTES', 10),
         'ignored_references' => array_values(array_filter(array_map(

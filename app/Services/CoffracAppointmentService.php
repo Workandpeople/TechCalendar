@@ -11,6 +11,7 @@ use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -649,6 +650,174 @@ class CoffracAppointmentService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function uploadDocument(Appointment $appointment, UploadedFile $file, ?string $name = null, ?string $comment = null): array
+    {
+        if ($appointment->external_source !== self::SOURCE) {
+            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
+        }
+
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée, impossible d’ajouter le document.');
+        }
+
+        $externalReference = trim((string) $appointment->external_reference);
+
+        if ($externalReference === '') {
+            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+        }
+
+        $originalName = $file->getClientOriginalName() ?: 'document';
+        $stream = fopen($file->getRealPath(), 'r');
+
+        if (! is_resource($stream)) {
+            throw new RuntimeException('Impossible de lire le document à envoyer.');
+        }
+
+        try {
+            $response = $this->uploadRequest()
+                ->attach(
+                    'document',
+                    $stream,
+                    $originalName,
+                    ['Content-Type' => $file->getMimeType() ?: 'application/octet-stream'],
+                )
+                ->post($this->endpoint("appointments/{$externalReference}/documents"), [
+                    'name' => trim((string) $name) ?: $originalName,
+                    'comment' => trim((string) $comment) ?: null,
+                    'techcalendar_appointment_id' => $appointment->id,
+                ]);
+        } finally {
+            fclose($stream);
+        }
+
+        if ($response->failed()) {
+            $payload = $response->json();
+
+            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible d’ajouter le document dans Coffrac.'));
+        }
+
+        $remoteDocument = $response->json('data');
+
+        if (! is_array($remoteDocument)) {
+            throw new RuntimeException('Coffrac n’a pas retourné le document ajouté.');
+        }
+
+        $document = $this->documentSerializer->normalize([$remoteDocument], self::SOURCE)[0] ?? $remoteDocument;
+
+        $this->syncUploadedDocumentLocally($appointment, $externalReference, $remoteDocument);
+
+        return $document;
+    }
+
+    /**
+     * Recharge un dossier Coffrac précis et renvoie les documents fraîchement synchronisés.
+     *
+     * @return array{documents: array<int, array<string, mixed>>, status: string|null, remote_status_name: string|null, fetched_at: string|null}
+     */
+    public function refreshAppointment(Appointment $appointment): array
+    {
+        if ($appointment->external_source !== self::SOURCE) {
+            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
+        }
+
+        $externalReference = trim((string) $appointment->external_reference);
+
+        if ($externalReference === '') {
+            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+        }
+
+        $storedRequest = $this->refreshStoredRequest($externalReference);
+
+        if (! $storedRequest) {
+            throw new RuntimeException('Dossier Coffrac introuvable.');
+        }
+
+        $this->syncRemoteDocumentsIntoAppointment($appointment, $storedRequest);
+
+        return [
+            'documents' => $this->documentsFromStoredRequest($storedRequest),
+            'status' => $storedRequest->status,
+            'remote_status_name' => $storedRequest->remote_status_name,
+            'fetched_at' => $storedRequest->fetched_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Recharge une demande Coffrac à placer et renvoie la version locale à afficher.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function refreshPendingAppointment(string $id): ?array
+    {
+        if (! str_starts_with($id, self::SOURCE.'-')) {
+            return null;
+        }
+
+        $externalReference = $this->externalReferenceFromCrmId($id);
+
+        if ($externalReference === null || $this->isIgnoredExternalReference($externalReference)) {
+            return null;
+        }
+
+        $storedRequest = $this->refreshStoredRequest($externalReference);
+
+        return $storedRequest ? $this->appointmentFromStoredRequest($storedRequest) : null;
+    }
+
+    private function refreshStoredRequest(string $externalReference): ?ExternalAppointmentRequest
+    {
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée.');
+        }
+
+        if ($this->isIgnoredExternalReference($externalReference)) {
+            return null;
+        }
+
+        $remoteAppointment = $this->fetchRemoteAppointments(
+            self::REMOTE_STATUS_ALL,
+            1,
+            externalReference: $externalReference,
+        )->first();
+
+        if (! is_array($remoteAppointment)) {
+            return null;
+        }
+
+        return $this->persistRemoteAppointment($remoteAppointment);
+    }
+
+    private function syncRemoteDocumentsIntoAppointment(Appointment $appointment, ExternalAppointmentRequest $storedRequest): void
+    {
+        if (! filled($appointment->external_source) || ! filled($appointment->external_reference)) {
+            return;
+        }
+
+        if ($appointment->external_source !== $storedRequest->source
+            || (string) $appointment->external_reference !== (string) $storedRequest->external_reference) {
+            return;
+        }
+
+        $payload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+        $payload['documents'] = $storedRequest->documents ?: $this->documentSerializer->fromPayload($storedRequest->payload, $storedRequest->source);
+
+        $appointment->forceFill([
+            'external_payload' => $payload,
+        ])->save();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function documentsFromStoredRequest(ExternalAppointmentRequest $storedRequest): array
+    {
+        return $storedRequest->documents
+            ?: $this->documentSerializer->fromPayload($storedRequest->payload, $storedRequest->source);
+    }
+
+    /**
      * @return Collection<int, array<string, mixed>>
      */
     private function fetchRemoteAppointments(
@@ -682,6 +851,51 @@ class CoffracAppointmentService
         } while (! $externalReference && ! $page['reached_end']);
 
         return $appointments->values();
+    }
+
+    /**
+     * @param array<string, mixed> $remoteDocument
+     */
+    private function syncUploadedDocumentLocally(Appointment $appointment, string $externalReference, array $remoteDocument): void
+    {
+        $storedRequest = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->first();
+
+        $existingDocuments = $storedRequest?->documents
+            ?: $this->documentSerializer->fromPayload($storedRequest?->payload ?? $appointment->external_payload, self::SOURCE);
+
+        $documents = collect($existingDocuments)
+            ->push($remoteDocument)
+            ->filter(fn (mixed $document): bool => is_array($document))
+            ->unique(fn (array $document): string => implode('|', [
+                (string) ($document['id'] ?? ''),
+                (string) ($document['name'] ?? $document['title'] ?? $document['filename'] ?? ''),
+                (string) ($document['url'] ?? $document['download_url'] ?? $document['href'] ?? $document['path'] ?? ''),
+            ]))
+            ->values()
+            ->all();
+
+        $normalizedDocuments = $this->documentSerializer->normalize($documents, self::SOURCE);
+
+        if ($storedRequest) {
+            $payload = is_array($storedRequest->payload) ? $storedRequest->payload : [];
+            $payload['documents'] = $documents;
+
+            $storedRequest->update([
+                'documents' => $normalizedDocuments,
+                'payload' => $payload,
+                'fetched_at' => now(),
+            ]);
+        }
+
+        $appointmentPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+        $appointmentPayload['documents'] = $documents;
+
+        $appointment->forceFill([
+            'external_payload' => $appointmentPayload,
+        ])->save();
     }
 
     /**
@@ -1150,6 +1364,8 @@ class CoffracAppointmentService
             'external_source' => self::SOURCE,
             'external_reference' => $request->external_reference,
             'external_payload' => $request->payload,
+            'status' => $request->status,
+            'remote_status_name' => $request->remote_status_name,
             'source' => $request->source_label ?: 'Coffrac',
             'first_name' => $request->customer_first_name ?: 'Client',
             'last_name' => $request->customer_last_name ?: 'Coffrac',
@@ -1223,6 +1439,14 @@ class CoffracAppointmentService
             ->timeout((int) config('services.coffrac.timeout', 15))
             ->connectTimeout((int) config('services.coffrac.connect_timeout', 5))
             ->retry(2, 250, throw: false);
+    }
+
+    private function uploadRequest(): PendingRequest
+    {
+        return Http::acceptJson()
+            ->withToken((string) config('services.coffrac.api_token'))
+            ->timeout((int) config('services.coffrac.upload_timeout', 60))
+            ->connectTimeout((int) config('services.coffrac.connect_timeout', 5));
     }
 
     private function endpoint(string $path): string

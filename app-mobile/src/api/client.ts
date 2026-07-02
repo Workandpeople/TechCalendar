@@ -25,11 +25,15 @@ type ApiOptions = Omit<RequestInit, 'headers'> & {
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { auth = false, headers, ...rest } = options;
+  const isMultipart = rest.body instanceof FormData;
   const mergedHeaders: Record<string, string> = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
     ...headers,
   };
+
+  if (!isMultipart) {
+    mergedHeaders['Content-Type'] = 'application/json';
+  }
 
   if (auth) {
     const token = await getToken();

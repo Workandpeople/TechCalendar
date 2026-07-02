@@ -88,6 +88,8 @@ class MobilePlanningController extends Controller
 
         return [
             'id' => $appointment->id,
+            'external_source' => $appointment->external_source,
+            'external_reference' => $appointment->external_reference,
             'service_label' => $serviceLabel,
             'service_type' => $appointment->service?->type,
             'service_name' => $appointment->service?->name,

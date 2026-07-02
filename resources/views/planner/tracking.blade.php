@@ -181,8 +181,12 @@
                     <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
-                            <span id="tracking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            <div class="flex items-center gap-2">
+                                <button id="tracking-refresh-documents-btn" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                <span id="tracking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            </div>
                         </div>
+                        <p id="tracking_detail_documents_status" class="mt-2 hidden text-xs"></p>
                         <div id="tracking_detail_documents" class="mt-3 space-y-2"></div>
                     </section>
 
@@ -280,6 +284,8 @@
         const trackingReassignSelect = document.getElementById('tracking_reassign_technician_id');
         const trackingReassignStatus = document.getElementById('tracking_reassign_status');
         const trackingReassignButton = document.getElementById('tracking-reassign-btn');
+        const trackingRefreshDocumentsButton = document.getElementById('tracking-refresh-documents-btn');
+        const trackingRefreshDocumentsStatus = document.getElementById('tracking_detail_documents_status');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
@@ -287,6 +293,7 @@
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
         const trackingRestoreUrlTemplate = @json(route('planner.tracking.appointments.restore', ['appointment' => '__APPOINTMENT__']));
+        const trackingCoffracRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const trackingMapboxToken = @json($mapboxToken ?? null);
@@ -401,6 +408,24 @@
                     </div>
                 `;
             }).join('');
+        };
+
+        const setTrackingDocumentsStatus = (message = '', color = 'var(--gc-text-soft)') => {
+            if (!trackingRefreshDocumentsStatus) return;
+
+            trackingRefreshDocumentsStatus.textContent = message;
+            trackingRefreshDocumentsStatus.style.color = color;
+            trackingRefreshDocumentsStatus.classList.toggle('hidden', message === '');
+        };
+
+        const setTrackingDocumentsRefreshVisible = (event) => {
+            if (!trackingRefreshDocumentsButton) return;
+
+            const props = event?.extendedProps || {};
+            trackingRefreshDocumentsButton.classList.toggle('hidden', props.external_source !== 'coffrac' || !event?.id);
+            trackingRefreshDocumentsButton.disabled = false;
+            trackingRefreshDocumentsButton.textContent = 'Mettre à jour';
+            setTrackingDocumentsStatus('');
         };
 
         const ensureTrackingAppointmentTooltip = () => {
@@ -1128,6 +1153,7 @@
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
             renderTrackingDetailDocuments(props.documents || []);
+            setTrackingDocumentsRefreshVisible(event);
             document.getElementById('tracking_detail_starts_at').value = formatDateTimeLocalInput(event.start);
             document.getElementById('tracking_detail_duration_minutes').value = props.duration_minutes || '';
             document.getElementById('tracking_detail_address_input').value = props.address || '';
@@ -1629,6 +1655,48 @@
         document.getElementById('tracking-detail-close').addEventListener('click', closeTrackingAppointmentModal);
         trackingAppointmentModal.addEventListener('click', (event) => {
             if (event.target.id === 'tracking-appointment-modal') closeTrackingAppointmentModal();
+        });
+
+        trackingRefreshDocumentsButton?.addEventListener('click', async () => {
+            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
+
+            if (!appointmentId || trackingRefreshDocumentsButton.disabled) return;
+
+            trackingRefreshDocumentsButton.disabled = true;
+            trackingRefreshDocumentsButton.textContent = 'Mise à jour...';
+            setTrackingDocumentsStatus('Vérification du dossier Coffrac en cours...');
+
+            try {
+                const response = await fetch(trackingCoffracRefreshUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                }
+
+                const documents = payload.documents || [];
+                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+
+                if (calendarEvent) {
+                    calendarEvent.setExtendedProp('documents', documents);
+                }
+
+                renderTrackingDetailDocuments(documents);
+                setTrackingDocumentsStatus(payload.message || 'Documents mis à jour.', '#0f766e');
+            } catch (error) {
+                setTrackingDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', '#9f1239');
+            } finally {
+                trackingRefreshDocumentsButton.disabled = false;
+                trackingRefreshDocumentsButton.textContent = 'Mettre à jour';
+            }
         });
 
         trackingDetailsForm?.addEventListener('submit', async (event) => {

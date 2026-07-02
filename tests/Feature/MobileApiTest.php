@@ -10,7 +10,9 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 
 uses(RefreshDatabase::class);
@@ -351,4 +353,204 @@ it('returns the authenticated technician planning and cached weekly widgets', fu
         ->assertJsonPath('appointments.0.documents.0.scope', 'dossier')
         ->assertJsonPath('appointments.0.documents.0.url', 'https://cofrac.example.test/documents/attestation.pdf');
 
+});
+
+it('uploads a Coffrac document from the authenticated technician planning', function () {
+    config([
+        'services.coffrac.api_url' => 'https://cofrac.example.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake([
+        'https://cofrac.example.test/api/techcalendar/appointments/mobile-42/documents' => Http::response([
+            'result' => true,
+            'message' => 'Document ajouté au dossier.',
+            'data' => [
+                'id' => 984,
+                'scope' => 'dossier',
+                'name' => 'preuve.pdf',
+                'comment' => 'Photo ajoutée depuis le mobile.',
+                'path' => '20260702_preuve.pdf',
+                'url' => 'https://cofrac.example.test/documents/20260702_preuve.pdf',
+                'is_private' => false,
+                'is_delegataire' => false,
+            ],
+        ]),
+    ]);
+
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+        'password' => Hash::make('secret-password'),
+    ]);
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Camille',
+        'customer_last_name' => 'Martin',
+        'customer_phone' => '0612345678',
+        'address' => '20 Rue Bellecordière, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8422,
+        'starts_at' => Carbon::parse('2026-06-15 09:30:00', 'Europe/Paris'),
+        'duration_minutes' => 90,
+        'ends_at' => Carbon::parse('2026-06-15 11:00:00', 'Europe/Paris'),
+        'external_source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'external_payload' => ['id' => 'mobile-42'],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'customer_first_name' => 'Camille',
+        'customer_last_name' => 'Martin',
+        'appointment_id' => $appointment->id,
+    ]);
+
+    $token = $this->postJson(route('api.mobile.login'), [
+        'email' => 'tech@example.test',
+        'password' => 'secret-password',
+    ])->json('token');
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->post(route('api.mobile.appointments.documents.store', $appointment), [
+            'document' => UploadedFile::fake()->create('preuve.pdf', 12, 'application/pdf'),
+            'comment' => 'Photo ajoutée depuis le mobile.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('document.id', 984)
+        ->assertJsonPath('document.name', 'preuve.pdf')
+        ->assertJsonPath('document.url', 'https://cofrac.example.test/documents/20260702_preuve.pdf');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://cofrac.example.test/api/techcalendar/appointments/mobile-42/documents'
+        && $request->hasHeader('Authorization', 'Bearer secret-token'));
+
+    $storedRequest = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', 'mobile-42')
+        ->firstOrFail();
+
+    expect($storedRequest->documents[0]['name'])->toBe('preuve.pdf')
+        ->and($appointment->refresh()->external_payload['documents'][0]['name'])->toBe('preuve.pdf');
+});
+
+it('refreshes Coffrac documents when opening a mobile appointment detail', function () {
+    config([
+        'services.coffrac.api_url' => 'https://cofrac.example.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake([
+        'https://cofrac.example.test/api/techcalendar/appointments*' => Http::response([
+            'result' => true,
+            'data' => [[
+                'id' => 'mobile-42',
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'BAR EN 101',
+                'customer_first_name' => 'Camille',
+                'customer_last_name' => 'Martin',
+                'phone' => '0612345678',
+                'address' => '20 Rue Bellecordière, 69002 Lyon, France',
+                'department_code' => '69',
+                'latitude' => 45.7597,
+                'longitude' => 4.8422,
+                'technician_email' => 'tech@example.test',
+                'starts_at' => '2026-06-15T09:30:00+02:00',
+                'duration_minutes' => 90,
+                'documents' => [[
+                    'id' => 985,
+                    'scope' => 'dossier',
+                    'name' => 'nouveau-document.pdf',
+                    'url' => 'https://cofrac.example.test/documents/nouveau-document.pdf',
+                    'is_private' => false,
+                    'is_delegataire' => false,
+                ]],
+            ]],
+            'fetched_count' => 1,
+        ]),
+    ]);
+
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech@example.test',
+        'password' => Hash::make('secret-password'),
+    ]);
+    $technician->services()->attach($service);
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Camille',
+        'customer_last_name' => 'Martin',
+        'customer_phone' => '0612345678',
+        'address' => '20 Rue Bellecordière, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8422,
+        'starts_at' => Carbon::parse('2026-06-15 09:30:00', 'Europe/Paris'),
+        'duration_minutes' => 90,
+        'ends_at' => Carbon::parse('2026-06-15 11:00:00', 'Europe/Paris'),
+        'external_source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'external_payload' => ['id' => 'mobile-42', 'documents' => [['name' => 'ancien.pdf']]],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => 'mobile-42',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'customer_first_name' => 'Camille',
+        'customer_last_name' => 'Martin',
+        'appointment_id' => $appointment->id,
+        'documents' => [['name' => 'ancien.pdf']],
+    ]);
+
+    $token = $this->postJson(route('api.mobile.login'), [
+        'email' => 'tech@example.test',
+        'password' => 'secret-password',
+    ])->json('token');
+
+    $this
+        ->withHeader('Authorization', 'Bearer '.$token)
+        ->postJson(route('api.mobile.appointments.refresh', $appointment))
+        ->assertOk()
+        ->assertJsonPath('documents.0.name', 'nouveau-document.pdf')
+        ->assertJsonPath('documents.0.url', 'https://cofrac.example.test/documents/nouveau-document.pdf');
+
+    $storedRequest = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', 'mobile-42')
+        ->firstOrFail();
+
+    expect($storedRequest->documents[0]['name'])->toBe('nouveau-document.pdf')
+        ->and($appointment->refresh()->external_payload['documents'][0]['name'])->toBe('nouveau-document.pdf');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/techcalendar/appointments')
+        && str_contains($request->url(), 'id=mobile-42')
+        && str_contains($request->url(), 'status=all'));
 });

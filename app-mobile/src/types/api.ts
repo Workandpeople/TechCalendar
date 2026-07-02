@@ -17,6 +17,8 @@ export type MobileUser = {
 
 export type PlanningAppointment = {
   id: number;
+  external_source: string | null;
+  external_reference: string | null;
   service_label: string;
   service_type: string | null;
   service_name: string | null;

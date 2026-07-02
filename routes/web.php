@@ -110,6 +110,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
     Route::get('/planner/book/crm-appointments', [PlannerBookingController::class, 'crmAppointments'])->name('planner.book.crm-appointments.index');
     Route::post('/planner/book/crm-appointments/refresh', [PlannerBookingController::class, 'refreshCrmAppointments'])->name('planner.book.crm-appointments.refresh');
+    Route::post('/planner/book/crm-appointments/{crmAppointmentId}/refresh', [PlannerBookingController::class, 'refreshCrmAppointment'])->name('planner.book.crm-appointments.refresh-one');
     Route::patch('/planner/book/crm-appointments/{crmAppointmentId}', [PlannerBookingController::class, 'updateCrmAppointment'])->name('planner.book.crm-appointments.update');
     Route::post('/planner/book/analyze', [PlannerBookingController::class, 'analyze'])->name('planner.book.analyze');
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
@@ -122,6 +123,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('planner.tracking.appointments.comment');
     Route::post('/planner/tracking/appointments/{appointment}/problem', [PlannerTrackingController::class, 'markProblem'])
         ->name('planner.tracking.appointments.problem');
+    Route::post('/planner/tracking/appointments/{appointment}/coffrac/refresh', [PlannerTrackingController::class, 'refreshCoffracAppointment'])
+        ->name('planner.tracking.appointments.coffrac.refresh');
     Route::patch('/planner/tracking/appointments/{appointment}/details', [PlannerTrackingController::class, 'updateDetails'])
         ->name('planner.tracking.appointments.details');
     Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])
@@ -133,6 +136,8 @@ Route::middleware('auth')->group(function (): void {
 
     Route::get('/tech/planning', [TechPlanningController::class, 'index'])->name('tech.planning');
     Route::post('/tech/planning/events', [TechPlanningController::class, 'events'])->name('tech.planning.events');
+    Route::post('/tech/planning/appointments/{appointment}/coffrac/refresh', [TechPlanningController::class, 'refreshCoffracAppointment'])
+        ->name('tech.planning.appointments.coffrac.refresh');
 
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');

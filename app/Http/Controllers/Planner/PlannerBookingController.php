@@ -203,6 +203,34 @@ class PlannerBookingController extends Controller
         ]);
     }
 
+    public function refreshCrmAppointment(
+        Request $request,
+        string $crmAppointmentId,
+        CoffracAppointmentService $coffracAppointments
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        try {
+            $appointment = $coffracAppointments->refreshPendingAppointment($crmAppointmentId);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'crm_appointment_id' => $exception->getMessage(),
+            ]);
+        }
+
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
+
+        return response()->json([
+            'message' => 'Dossier Coffrac mis à jour.',
+            'appointment' => $appointment,
+            'appointments' => $coffracPending['appointments'],
+            'coffrac_api_status' => $coffracPending['status'],
+            'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
+        ]);
+    }
+
     public function searchTechnicians(
         Request $request,
         CoffracAppointmentService $coffracAppointments,
@@ -1094,6 +1122,8 @@ class PlannerBookingController extends Controller
                     'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                     'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
                     'service_label' => $serviceLabel,
+                    'external_source' => $appointment->external_source,
+                    'external_reference' => $appointment->external_reference,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                     'customer_phone' => $appointment->customer_phone,
                     'address' => $appointment->address,

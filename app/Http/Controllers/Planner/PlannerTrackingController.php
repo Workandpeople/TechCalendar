@@ -72,6 +72,32 @@ class PlannerTrackingController extends Controller
         ]);
     }
 
+    public function refreshCoffracAppointment(
+        Request $request,
+        int $appointment,
+        CoffracAppointmentService $coffracAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $appointment = Appointment::withTrashed()->findOrFail($appointment);
+
+        try {
+            $refresh = $coffracAppointments->refreshAppointment($appointment);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'appointment' => $exception->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Dossier Coffrac mis à jour.',
+            'documents' => $refresh['documents'],
+            'status' => $refresh['status'],
+            'remote_status_name' => $refresh['remote_status_name'],
+            'fetched_at' => $refresh['fetched_at'],
+        ]);
+    }
+
     public function events(Request $request): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
@@ -161,6 +187,8 @@ class PlannerTrackingController extends Controller
                         'service_id' => $appointment->service_id,
                         'service_type' => $appointment->service?->type,
                         'service_label' => $serviceLabel,
+                        'external_source' => $appointment->external_source,
+                        'external_reference' => $appointment->external_reference,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,

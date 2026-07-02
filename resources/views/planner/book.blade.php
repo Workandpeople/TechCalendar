@@ -537,8 +537,12 @@
                     <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
-                            <span id="booking_crm_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            <div class="flex items-center gap-2">
+                                <button id="booking-crm-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                <span id="booking_crm_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            </div>
                         </div>
+                        <p id="booking_crm_detail_documents_status" class="mt-2 hidden text-xs"></p>
                         <div id="booking_crm_detail_documents" class="mt-3 space-y-2"></div>
                     </div>
                 </section>
@@ -610,8 +614,12 @@
                     <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
-                            <span id="booking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            <div class="flex items-center gap-2">
+                                <button id="booking-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                <span id="booking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            </div>
                         </div>
+                        <p id="booking_detail_documents_status" class="mt-2 hidden text-xs"></p>
                         <div id="booking_detail_documents" class="mt-3 space-y-2"></div>
                     </section>
 
@@ -674,12 +682,14 @@
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
         const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
+        const bookingCrmRefreshOneUrlTemplate = @json(route('planner.book.crm-appointments.refresh-one', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingCrmUpdateUrlTemplate = @json(route('planner.book.crm-appointments.update', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const bookingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
+        const bookingAppointmentRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
         const bookingTrackingUrl = @json(route('planner.tracking'));
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
@@ -790,6 +800,10 @@
         const bookingCrmDetailComment = document.getElementById('booking_crm_detail_comment');
         const bookingCrmDetailStatus = document.getElementById('booking_crm_detail_status');
         const bookingCrmDetailSave = document.getElementById('booking-crm-detail-save');
+        const bookingCrmDetailRefreshDocuments = document.getElementById('booking-crm-detail-refresh-documents');
+        const bookingCrmDetailDocumentsStatus = document.getElementById('booking_crm_detail_documents_status');
+        const bookingDetailRefreshDocuments = document.getElementById('booking-detail-refresh-documents');
+        const bookingDetailDocumentsStatus = document.getElementById('booking_detail_documents_status');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
@@ -1657,6 +1671,34 @@
             }).join('');
         };
 
+        const setBookingCrmDetailDocumentsStatus = (message = '', type = 'info') => {
+            if (!bookingCrmDetailDocumentsStatus) return;
+
+            bookingCrmDetailDocumentsStatus.textContent = message;
+            bookingCrmDetailDocumentsStatus.style.color = type === 'error' ? '#9f1239' : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+            bookingCrmDetailDocumentsStatus.classList.toggle('hidden', message === '');
+        };
+
+        const setBookingDetailDocumentsStatus = (message = '', type = 'info') => {
+            if (!bookingDetailDocumentsStatus) return;
+
+            bookingDetailDocumentsStatus.textContent = message;
+            bookingDetailDocumentsStatus.style.color = type === 'error' ? '#9f1239' : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+            bookingDetailDocumentsStatus.classList.toggle('hidden', message === '');
+        };
+
+        const setBookingDetailDocumentsRefreshVisible = (event) => {
+            if (!bookingDetailRefreshDocuments) return;
+
+            const props = event?.extendedProps || {};
+            const isRefreshable = Boolean(event?.id) && !props.is_suggestion && props.external_source === 'coffrac';
+
+            bookingDetailRefreshDocuments.classList.toggle('hidden', !isRefreshable);
+            bookingDetailRefreshDocuments.disabled = false;
+            bookingDetailRefreshDocuments.textContent = 'Mettre à jour';
+            setBookingDetailDocumentsStatus();
+        };
+
         const initCrmDetailMap = () => {
             if (!bookingMapboxToken || !window.mapboxgl) {
                 showMapboxUnavailable('booking-crm-detail-map', !bookingMapboxToken
@@ -1764,6 +1806,7 @@
             ].join('');
             fillCrmDetailForm(appointment);
             renderCrmDetailDocuments(appointment.documents || []);
+            setBookingCrmDetailDocumentsStatus();
 
             bookingCrmDetailModal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
@@ -2931,6 +2974,7 @@
             document.getElementById('booking_detail_address').textContent = props.address || '-';
             document.getElementById('booking_detail_origin').textContent = `${props.origin_label || '-'}${props.origin_name ? ` (${props.origin_name})` : ''}`;
             renderBookingDetailDocuments(props.documents || []);
+            setBookingDetailDocumentsRefreshVisible(event);
             document.getElementById('booking_detail_appointment_id').value = isSuggestion ? '' : event.id;
             document.getElementById('booking_detail_crm_id').value = props.crm_appointment_id || '';
             document.getElementById('booking_detail_technician_id').value = props.technician_id || '';
@@ -3649,6 +3693,81 @@
         bookingCrmDetailForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
             await saveCrmAppointmentDetail();
+        });
+
+        bookingCrmDetailRefreshDocuments?.addEventListener('click', async () => {
+            if (!currentCrmDetailAppointmentId || bookingCrmDetailRefreshDocuments.disabled) return;
+
+            bookingCrmDetailRefreshDocuments.disabled = true;
+            bookingCrmDetailRefreshDocuments.textContent = 'Mise à jour...';
+            setBookingCrmDetailDocumentsStatus('Vérification du dossier Coffrac en cours...');
+
+            try {
+                const response = await fetch(
+                    bookingCrmRefreshOneUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(currentCrmDetailAppointmentId)),
+                    {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': bookingCsrfToken,
+                        },
+                    },
+                );
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                }
+
+                renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+                currentCrmDetailAppointmentId = payload.appointment?.id || currentCrmDetailAppointmentId;
+                renderCrmDetailDocuments(payload.appointment?.documents || []);
+                setBookingCrmDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
+            } catch (error) {
+                setBookingCrmDetailDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', 'error');
+            } finally {
+                bookingCrmDetailRefreshDocuments.disabled = false;
+                bookingCrmDetailRefreshDocuments.textContent = 'Mettre à jour';
+            }
+        });
+
+        bookingDetailRefreshDocuments?.addEventListener('click', async () => {
+            const appointmentId = document.getElementById('booking_detail_appointment_id').value;
+
+            if (!appointmentId || bookingDetailRefreshDocuments.disabled) return;
+
+            bookingDetailRefreshDocuments.disabled = true;
+            bookingDetailRefreshDocuments.textContent = 'Mise à jour...';
+            setBookingDetailDocumentsStatus('Vérification du dossier Coffrac en cours...');
+
+            try {
+                const response = await fetch(bookingAppointmentRefreshUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                }
+
+                const documents = payload.documents || [];
+                selectedCalendarEvent?.setExtendedProp('documents', documents);
+                renderBookingDetailDocuments(documents);
+                setBookingDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
+            } catch (error) {
+                setBookingDetailDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', 'error');
+            } finally {
+                bookingDetailRefreshDocuments.disabled = false;
+                bookingDetailRefreshDocuments.textContent = 'Mettre à jour';
+            }
         });
 
         document.getElementById('booking-save-comment-btn').addEventListener('click', async () => {

@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\MobileAuthController;
+use App\Http\Controllers\Api\MobileAppointmentDocumentController;
+use App\Http\Controllers\Api\MobileAppointmentRefreshController;
 use App\Http\Controllers\Api\MobilePlanningController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,5 +27,9 @@ Route::prefix('mobile')->group(function (): void {
             ->name('api.mobile.push-tokens.store');
         Route::get('/planning', MobilePlanningController::class)
             ->name('api.mobile.planning');
+        Route::post('/appointments/{appointment}/refresh', MobileAppointmentRefreshController::class)
+            ->name('api.mobile.appointments.refresh');
+        Route::post('/appointments/{appointment}/documents', [MobileAppointmentDocumentController::class, 'store'])
+            ->name('api.mobile.appointments.documents.store');
     });
 });

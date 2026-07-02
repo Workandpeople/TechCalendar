@@ -30,6 +30,22 @@ jest.mock('react-native-share', () => ({
   open: jest.fn().mockResolvedValue({ success: true }),
 }));
 
+jest.mock('@react-native-documents/picker', () => ({
+  errorCodes: {
+    OPERATION_CANCELED: 'OPERATION_CANCELED',
+  },
+  isErrorWithCode: jest.fn((error: unknown) => Boolean(error && typeof error === 'object' && 'code' in error)),
+  pick: jest.fn(),
+  types: {
+    allFiles: '*/*',
+  },
+}));
+
+jest.mock('react-native-image-picker', () => ({
+  launchCamera: jest.fn(),
+  launchImageLibrary: jest.fn(),
+}));
+
 jest.mock('@react-native-firebase/app', () => ({
   getApp: jest.fn(() => ({})),
 }));

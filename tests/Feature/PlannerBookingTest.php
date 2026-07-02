@@ -39,6 +39,7 @@ it('uses coffrac appointment requests on the planning dashboard when configured'
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
@@ -83,6 +84,7 @@ it('exposes the initial coffrac appointment id on the booking page', function ()
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
@@ -125,6 +127,7 @@ it('refreshes coffrac appointment requests on the booking page', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
     Queue::fake();
 
@@ -189,6 +192,7 @@ it('returns a large local coffrac list and keeps appointments without gps visibl
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $planner = User::factory()->create([
@@ -264,6 +268,7 @@ it('rejects coffrac analysis when the local appointment has no gps coordinates',
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $planner = User::factory()->create([
@@ -299,6 +304,7 @@ it('keeps coffrac sync stable when the remote api returns a long error', functio
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     Http::fake(fn () => Http::response([
@@ -319,6 +325,7 @@ it('skips a coffrac appointment that crashes remote page serialization', functio
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $appointmentPayload = fn (int $id): array => [
@@ -430,6 +437,7 @@ it('geocodes coffrac pending appointments without remote coordinates', function 
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
@@ -486,6 +494,7 @@ it('keeps coffrac appointments when mapbox cannot geocode the remote address', f
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
@@ -542,6 +551,7 @@ it('does not geocode an unchanged coffrac appointment twice', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
@@ -833,6 +843,7 @@ it('updates a local coffrac appointment before booking it', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
     ]);
 
     $planner = User::factory()->create([
@@ -947,6 +958,76 @@ it('matches a coffrac appointment service through an external alias', function (
     expect($appointment['service']['id'])->toBe($service->id)
         ->and($appointment['service']['name'])->toBe('Résidentiel EC 104')
         ->and($appointment['service']['average_duration_minutes'])->toBe(90);
+});
+
+it('refreshes a pending coffrac appointment documents from booking detail', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments*' => Http::response([
+            'result' => true,
+            'data' => [[
+                'id' => '9901',
+                'source' => 'Coffrac',
+                'status_name' => 'Prise de RDV',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'BAR EN 101',
+                'customer_first_name' => 'Nina',
+                'customer_last_name' => 'Martin',
+                'phone' => '0600009901',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'documents' => [[
+                    'id' => 991,
+                    'scope' => 'dossier',
+                    'name' => 'Document ajouté côté Coffrac',
+                    'url' => 'https://coffrac.test/documents/9901-new.pdf',
+                ]],
+            ]],
+            'fetched_count' => 1,
+        ]),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '9901',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'service_type' => Service::TYPE_COFFRAC,
+        'service_name' => 'BAR EN 101',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'Martin',
+        'phone' => '0600009901',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'documents' => [['name' => 'Ancien document']],
+        'payload' => ['id' => '9901', 'documents' => [['name' => 'Ancien document']]],
+        'fetched_at' => now(),
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.refresh-one', ['crmAppointmentId' => 'coffrac-9901']))
+        ->assertOk()
+        ->assertJsonPath('appointment.id', 'coffrac-9901')
+        ->assertJsonPath('appointment.documents.0.name', 'Document ajouté côté Coffrac')
+        ->assertJsonPath('appointment.documents.0.url', 'https://coffrac.test/documents/9901-new.pdf');
 });
 
 it('syncs pending and placed coffrac appointment requests with documents locally', function () {
