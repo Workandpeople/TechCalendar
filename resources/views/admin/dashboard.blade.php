@@ -6,8 +6,14 @@
                 <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Santé du site</h1>
                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Monitoring applicatif, erreurs, jobs, disque, storage et configuration.</p>
             </div>
-            <div class="rounded-xl px-4 py-3 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
-                Statut: {{ strtoupper($latestSnapshot->overall_status) }}
+            <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <form method="POST" action="{{ route('admin.dashboard.health.run') }}">
+                    @csrf
+                    <button type="submit" class="gc-btn-primary">Relancer les checks</button>
+                </form>
+                <div class="rounded-xl px-4 py-3 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
+                    Statut: {{ strtoupper($latestSnapshot->overall_status) }}
+                </div>
             </div>
         </div>
 

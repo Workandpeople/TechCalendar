@@ -25,7 +25,7 @@ class AdminDashboardController extends Controller
             ->latest('checked_at')
             ->first();
 
-        if (! $latestSnapshot) {
+        if (! $latestSnapshot || $latestSnapshot->checked_at?->lt(now()->subMinutes(5))) {
             $latestSnapshot = $healthMonitor->run();
         }
 
@@ -120,7 +120,22 @@ class AdminDashboardController extends Controller
 
         SystemErrorEvent::query()->delete();
 
+        app(SystemHealthMonitor::class)->run();
+
         return back()->with('status', sprintf('%d fichier(s) de log vidé(s).', $clearedFiles));
+    }
+
+    public function runHealthCheck(Request $request, SystemHealthMonitor $healthMonitor): RedirectResponse
+    {
+        abort_unless((bool) $request->user()?->admin, 403);
+
+        $snapshot = $healthMonitor->run();
+
+        return back()->with('status', sprintf(
+            'Checks relancés: statut %s, score %d/100.',
+            strtoupper($snapshot->overall_status),
+            $snapshot->score,
+        ));
     }
 
     public function runTests(Request $request): RedirectResponse

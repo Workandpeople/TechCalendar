@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function (): void {
         ->name('account.first-password.update');
 
     Route::get('/admin/dashboard', AdminDashboardController::class)->name('admin.dashboard');
+    Route::post('/admin/dashboard/health/run', [AdminDashboardController::class, 'runHealthCheck'])->name('admin.dashboard.health.run');
     Route::post('/admin/dashboard/logs/clear', [AdminDashboardController::class, 'clearLogs'])->name('admin.dashboard.logs.clear');
     Route::post('/admin/dashboard/tests/run', [AdminDashboardController::class, 'runTests'])->name('admin.dashboard.tests.run');
 

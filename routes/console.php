@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use App\Jobs\RunSystemTestsJob;
+use App\Models\SystemTestRun;
 use App\Services\CoffracAppointmentService;
 use App\Services\SystemHealthMonitor;
 use App\Services\TechnicianDailyRouteMetricService;
@@ -45,6 +47,42 @@ Artisan::command('health:check', function (SystemHealthMonitor $healthMonitor): 
     return $snapshot->overall_status === 'fail' ? 1 : 0;
 })->purpose('Execute les checks de sante applicative et persiste un snapshot.');
 
+Artisan::command('system-tests:schedule {--suite=all : Suite à lancer: all, feature ou unit.}', function (): int {
+    $suite = (string) $this->option('suite');
+
+    if (! in_array($suite, [
+        SystemTestRun::SUITE_ALL,
+        SystemTestRun::SUITE_UNIT,
+        SystemTestRun::SUITE_FEATURE,
+    ], true)) {
+        $this->error('La suite doit être all, feature ou unit.');
+
+        return 1;
+    }
+
+    $activeRunExists = SystemTestRun::query()
+        ->whereIn('status', [SystemTestRun::STATUS_QUEUED, SystemTestRun::STATUS_RUNNING])
+        ->exists();
+
+    if ($activeRunExists) {
+        $this->warn('Une exécution de tests est déjà en cours ou en attente.');
+
+        return 0;
+    }
+
+    $run = SystemTestRun::query()->create([
+        'triggered_by' => null,
+        'suite' => $suite,
+        'status' => SystemTestRun::STATUS_QUEUED,
+    ]);
+
+    RunSystemTestsJob::dispatch($run->id);
+
+    $this->info(sprintf('Suite de tests #%d planifiée (%s).', $run->id, $suite));
+
+    return 0;
+})->purpose('Planifie une execution asynchrone des tests visibles dans le dashboard admin.');
+
 Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.} {--status=all : Statut Coffrac à récupérer: pending, placed, problem ou all.}', function (CoffracAppointmentService $coffracAppointments): int {
     $status = (string) $this->option('status');
 
@@ -71,6 +109,10 @@ Artisan::command('coffrac:sync {--incremental : Ne récupère que les changement
 
 Schedule::command('health:check')
     ->everyFiveMinutes();
+
+Schedule::command('system-tests:schedule --suite=all')
+    ->dailyAt('02:00')
+    ->withoutOverlapping();
 
 Schedule::command('route-metrics:compute')
     ->hourly();

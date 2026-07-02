@@ -132,7 +132,28 @@ it('clears application logs and aggregated system errors from the admin dashboar
         ->assertRedirect();
 
     expect(File::get($logPath))->toBe('')
-        ->and(SystemErrorEvent::query()->count())->toBe(0);
+        ->and(SystemErrorEvent::query()->count())->toBe(0)
+        ->and(SystemHealthSnapshot::query()->count())->toBe(1);
+});
+
+it('can run a fresh health check from the admin dashboard', function () {
+    fakeHealthLog();
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'health-run@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.dashboard.health.run'))
+        ->assertRedirect()
+        ->assertSessionHas('status');
+
+    expect(SystemHealthSnapshot::query()->count())->toBe(1)
+        ->and(SystemHealthSnapshot::query()->first()->overall_status)->toBe('ok');
 });
 
 it('queues a system test run from the admin dashboard', function () {
@@ -190,6 +211,51 @@ it('does not queue parallel system test runs', function () {
         ->assertSessionHasErrors('tests');
 
     expect(SystemTestRun::query()->count())->toBe(1);
+    Queue::assertNotPushed(RunSystemTestsJob::class);
+});
+
+it('queues a scheduled system test run', function () {
+    Queue::fake();
+    fakeHealthLog();
+
+    $this->artisan('system-tests:schedule --suite=all')
+        ->assertExitCode(0);
+
+    $run = SystemTestRun::query()->first();
+
+    expect($run)->not->toBeNull()
+        ->and($run->triggered_by)->toBeNull()
+        ->and($run->suite)->toBe(SystemTestRun::SUITE_ALL)
+        ->and($run->status)->toBe(SystemTestRun::STATUS_QUEUED);
+
+    Queue::assertPushed(RunSystemTestsJob::class, fn (RunSystemTestsJob $job): bool => true);
+});
+
+it('does not queue scheduled system tests when a run is active', function () {
+    Queue::fake();
+    fakeHealthLog();
+    SystemTestRun::query()->create([
+        'triggered_by' => null,
+        'suite' => SystemTestRun::SUITE_ALL,
+        'status' => SystemTestRun::STATUS_RUNNING,
+        'started_at' => now(),
+    ]);
+
+    $this->artisan('system-tests:schedule --suite=all')
+        ->assertExitCode(0);
+
+    expect(SystemTestRun::query()->count())->toBe(1);
+    Queue::assertNotPushed(RunSystemTestsJob::class);
+});
+
+it('rejects invalid scheduled system test suites', function () {
+    Queue::fake();
+    fakeHealthLog();
+
+    $this->artisan('system-tests:schedule --suite=browser')
+        ->assertExitCode(1);
+
+    expect(SystemTestRun::query()->count())->toBe(0);
     Queue::assertNotPushed(RunSystemTestsJob::class);
 });
 
