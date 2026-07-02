@@ -137,14 +137,14 @@ class PlannerBookingController extends Controller
             SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PENDING);
         }
 
-        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT, shuffle: true);
+        $coffracPending = $coffracAppointments->pendingWithStatus(0);
 
         return response()->json([
             'sync_queued' => $coffracAppointments->isConfigured(),
             'message' => $coffracAppointments->isConfigured()
                 ? 'Récupération des RDV à placer Coffrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
                 : 'API Coffrac non configurée.',
-            'appointments' => $coffracPending['appointments'],
+            'appointments' => [],
             'coffrac_api_status' => $coffracPending['status'],
             'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
         ]);

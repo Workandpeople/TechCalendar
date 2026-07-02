@@ -75,10 +75,12 @@ class CoffracAppointmentService
             ];
         }
 
+        $ignoredReferences = $this->ignoredExternalReferences();
         $baseQuery = ExternalAppointmentRequest::query()
             ->where('source', self::SOURCE)
             ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
-            ->whereNull('appointment_id');
+            ->whereNull('appointment_id')
+            ->when($ignoredReferences->isNotEmpty(), fn ($query) => $query->whereNotIn('external_reference', $ignoredReferences->all()));
         $totalPendingAppointments = (clone $baseQuery)->count();
         $missingCoordinatesCount = (clone $baseQuery)
             ->where(fn ($query) => $query->whereNull('latitude')->orWhereNull('longitude'))
@@ -116,7 +118,7 @@ class CoffracAppointmentService
 
         $externalReference = $this->externalReferenceFromCrmId($id);
 
-        if ($externalReference === null) {
+        if ($externalReference === null || $this->isIgnoredExternalReference($externalReference)) {
             return null;
         }
 
@@ -144,7 +146,7 @@ class CoffracAppointmentService
 
         $externalReference = $this->externalReferenceFromCrmId($id);
 
-        if ($externalReference === null) {
+        if ($externalReference === null || $this->isIgnoredExternalReference($externalReference)) {
             return null;
         }
 
@@ -266,6 +268,7 @@ class CoffracAppointmentService
                 $remoteAppointments = $this->fetchRemoteAppointments($status, $pageSize, updatedAfter: $updatedAfter);
                 $remoteAppointments = $remoteAppointments
                     ->filter(fn (array $appointment): bool => filled((string) ($appointment['id'] ?? '')))
+                    ->reject(fn (array $appointment): bool => $this->isIgnoredExternalReference((string) ($appointment['id'] ?? '')))
                     ->unique(fn (array $appointment): string => (string) $appointment['id'])
                     ->values();
                 $this->markSyncProgress(38, sprintf(
@@ -344,13 +347,13 @@ class CoffracAppointmentService
                 $remoteReferences = $stored->pluck('external_reference')->filter()->values();
 
                 $this->markSyncProgress(96, $isPendingOnlySync
-                    ? 'Archivage des demandes absentes du flux Coffrac à placer...'
+                    ? 'Suppression des demandes absentes du flux Coffrac à placer...'
                     : 'Archivage des RDV absents du flux Coffrac...', [
                         'processed' => $remoteAppointments->count(),
                         'total' => $remoteAppointments->count(),
                     ]);
 
-                ExternalAppointmentRequest::query()
+                $absentRequestsQuery = ExternalAppointmentRequest::query()
                     ->where('source', self::SOURCE)
                     ->when(
                         $remoteReferences->isNotEmpty(),
@@ -362,11 +365,16 @@ class CoffracAppointmentService
                             ExternalAppointmentRequest::STATUS_PENDING,
                             ExternalAppointmentRequest::STATUS_PLACED,
                             ExternalAppointmentRequest::STATUS_PROBLEM,
-                        ])
-                    ->update([
+                        ]);
+
+                if ($isPendingOnlySync) {
+                    $absentRequestsQuery->delete();
+                } else {
+                    $absentRequestsQuery->update([
                         'status' => ExternalAppointmentRequest::STATUS_ARCHIVED,
                         'fetched_at' => now(),
                     ]);
+                }
             } else {
                 $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Coffrac...', [
                     'processed' => $remoteAppointments->count(),
@@ -455,8 +463,10 @@ class CoffracAppointmentService
      */
     private function localStatusCounts(): array
     {
+        $ignoredReferences = $this->ignoredExternalReferences();
         $counts = ExternalAppointmentRequest::query()
             ->where('source', self::SOURCE)
+            ->when($ignoredReferences->isNotEmpty(), fn ($query) => $query->whereNotIn('external_reference', $ignoredReferences->all()))
             ->whereIn('status', [
                 ExternalAppointmentRequest::STATUS_PENDING,
                 ExternalAppointmentRequest::STATUS_PLACED,
@@ -754,7 +764,7 @@ class CoffracAppointmentService
     {
         $externalReference = (string) ($appointment['id'] ?? '');
 
-        if ($externalReference === '') {
+        if ($externalReference === '' || $this->isIgnoredExternalReference($externalReference)) {
             return null;
         }
 
@@ -1225,6 +1235,26 @@ class CoffracAppointmentService
         $reference = substr($id, strlen(self::SOURCE.'-'));
 
         return $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function ignoredExternalReferences(): Collection
+    {
+        return collect(config('services.coffrac.ignored_references', []))
+            ->map(fn (mixed $reference): string => trim((string) $reference))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function isIgnoredExternalReference(string $externalReference): bool
+    {
+        $externalReference = trim($externalReference);
+
+        return $externalReference !== ''
+            && $this->ignoredExternalReferences()->contains($externalReference);
     }
 
     /**

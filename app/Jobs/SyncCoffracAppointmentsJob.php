@@ -33,7 +33,11 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
 
     public function uniqueId(): string
     {
-        return CoffracAppointmentService::SOURCE;
+        return implode(':', [
+            CoffracAppointmentService::SOURCE,
+            $this->status,
+            $this->incremental ? 'incremental' : 'full',
+        ]);
     }
 
     public function handle(CoffracAppointmentService $coffracAppointments): void

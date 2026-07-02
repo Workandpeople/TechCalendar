@@ -59,6 +59,10 @@ return [
         'timeout' => env('COFFRAC_API_TIMEOUT', 15),
         'connect_timeout' => env('COFFRAC_API_CONNECT_TIMEOUT', 5),
         'incremental_overlap_minutes' => env('COFFRAC_INCREMENTAL_OVERLAP_MINUTES', 10),
+        'ignored_references' => array_values(array_filter(array_map(
+            static fn (string $reference): string => trim($reference),
+            explode(',', (string) env('COFFRAC_IGNORED_REFERENCES', '')),
+        ))),
     ],
 
 ];

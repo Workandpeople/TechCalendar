@@ -103,6 +103,7 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
+    Route::post('/manager/appointments/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('manager.appointments.coffrac.placed.refresh');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
@@ -114,6 +115,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
+    Route::post('/planner/tracking/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('planner.tracking.coffrac.placed.refresh');
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
     Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])
         ->name('planner.tracking.appointments.comment');

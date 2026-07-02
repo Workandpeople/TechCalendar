@@ -1030,7 +1030,11 @@
                     throw new Error(payload.message || 'Actualisation Coffrac impossible.');
                 }
 
-                renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null, { preserveUi: true });
+                if (!payload.sync_queued || (payload.appointments || []).length > 0) {
+                    renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null, { preserveUi: true });
+                } else {
+                    setBookingExternalSourceStatus('coffrac', payload.coffrac_api_status || null);
+                }
                 setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || payload.message || `${(payload.appointments || []).length} RDV Coffrac disponibles en local.`);
             } catch (error) {
                 setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');

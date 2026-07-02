@@ -1,8 +1,10 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">{{ $section ?? 'Planning' }}</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">{{ $title ?? 'Suivi des RDV' }}</h1>
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <p class="text-sm" style="color: var(--gc-text-soft);">{{ $section ?? 'Planning' }}</p>
+                <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">{{ $title ?? 'Suivi des RDV' }}</h1>
+            </div>
         </div>
 
         <section class="gc-card p-5">
@@ -54,13 +56,25 @@
         </section>
 
         <section class="gc-card p-5">
-            <div class="mb-4">
+            <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Rendez-vous des techniciens sélectionnés</h2>
                     <p id="calendar-helper" class="text-sm" style="color:var(--gc-text-soft);">Coche au moins un technicien pour afficher ses rendez-vous.</p>
                 </div>
-                <div id="calendar-legend" class="mt-3 flex flex-wrap gap-2"></div>
+                <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center lg:justify-end">
+                    <button
+                        id="tracking-coffrac-placed-refresh"
+                        type="button"
+                        class="gc-btn-primary whitespace-nowrap"
+                        data-refresh-url="{{ $refreshPlacedCoffracUrl }}"
+                    >
+                        Récupérer les RDV Coffrac placés
+                    </button>
+                    <span id="tracking-coffrac-placed-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
+                </div>
             </div>
+
+            <div id="calendar-legend" class="mb-4 flex flex-wrap gap-2"></div>
 
             <div class="mb-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
                 <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_auto] lg:items-end">
@@ -257,6 +271,8 @@
         const trackingServiceFilter = document.getElementById('tracking_service_filter');
         const trackingStatusFilter = document.getElementById('tracking_status_filter');
         const trackingResetFilters = document.getElementById('tracking-reset-filters');
+        const trackingCoffracPlacedRefreshButton = document.getElementById('tracking-coffrac-placed-refresh');
+        const trackingCoffracPlacedRefreshStatus = document.getElementById('tracking-coffrac-placed-refresh-status');
         const trackingAppointmentModal = document.getElementById('tracking-appointment-modal');
         const trackingDetailsForm = document.getElementById('tracking-details-form');
         const trackingCommentForm = document.getElementById('tracking-comment-form');
@@ -506,6 +522,14 @@
             status.style.color = color;
             status.textContent = message;
             status.classList.toggle('hidden', !message);
+        };
+
+        const setTrackingCoffracPlacedRefreshStatus = (message, color = 'var(--gc-text-soft)') => {
+            if (!trackingCoffracPlacedRefreshStatus) return;
+
+            trackingCoffracPlacedRefreshStatus.textContent = message || '';
+            trackingCoffracPlacedRefreshStatus.style.color = color;
+            trackingCoffracPlacedRefreshStatus.classList.toggle('hidden', !message);
         };
 
         const initTrackingDetailAddressAutocomplete = () => {
@@ -1550,6 +1574,40 @@
             refetchCalendar();
         });
         trackingReassignSelect?.addEventListener('change', updateTrackingReassignButtonState);
+
+        trackingCoffracPlacedRefreshButton?.addEventListener('click', async () => {
+            const url = trackingCoffracPlacedRefreshButton.dataset.refreshUrl;
+
+            if (!url || trackingCoffracPlacedRefreshButton.disabled) return;
+
+            trackingCoffracPlacedRefreshButton.disabled = true;
+            trackingCoffracPlacedRefreshButton.textContent = 'Récupération...';
+            setTrackingCoffracPlacedRefreshStatus('Synchro Coffrac lancée...', 'var(--gc-text-soft)');
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Récupération Coffrac impossible.');
+                }
+
+                setTrackingCoffracPlacedRefreshStatus(payload.message || 'Récupération lancée.', '#0f766e');
+                window.setTimeout(refetchCalendar, 1200);
+            } catch (error) {
+                setTrackingCoffracPlacedRefreshStatus(error.message || 'Récupération Coffrac impossible.', '#9f1239');
+            } finally {
+                trackingCoffracPlacedRefreshButton.disabled = false;
+                trackingCoffracPlacedRefreshButton.textContent = 'Récupérer les RDV Coffrac placés';
+            }
+        });
 
         document.getElementById('select-visible-techs').addEventListener('click', () => {
             technicianCards

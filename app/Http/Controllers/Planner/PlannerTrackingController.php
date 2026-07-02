@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
@@ -43,6 +44,31 @@ class PlannerTrackingController extends Controller
             'section' => $request->routeIs('manager.appointments') ? 'Gérant' : 'Planning',
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
             'mapboxToken' => config('services.mapbox.token'),
+            'refreshPlacedCoffracUrl' => route($request->routeIs('manager.appointments')
+                ? 'manager.appointments.coffrac.placed.refresh'
+                : 'planner.tracking.coffrac.placed.refresh'),
+        ]);
+    }
+
+    public function refreshPlacedCoffracAppointments(
+        Request $request,
+        CoffracAppointmentService $coffracAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        if (! $coffracAppointments->isConfigured()) {
+            return response()->json([
+                'sync_queued' => false,
+                'message' => 'API Coffrac non configurée.',
+            ], 422);
+        }
+
+        $coffracAppointments->markSyncQueued('Récupération des RDV Coffrac déjà placés lancée en arrière-plan...');
+        SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PLACED);
+
+        return response()->json([
+            'sync_queued' => true,
+            'message' => 'Récupération des RDV Coffrac déjà placés lancée. Le calendrier va se mettre à jour avec les données locales.',
         ]);
     }
 

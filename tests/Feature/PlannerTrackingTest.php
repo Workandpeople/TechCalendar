@@ -1,8 +1,10 @@
 <?php
 
+use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
 use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Department;
+use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
@@ -11,8 +13,67 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
+
+it('refreshes placed coffrac appointments from the tracking page', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Queue::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.tracking'))
+        ->assertOk()
+        ->assertSee('tracking-coffrac-placed-refresh')
+        ->assertSee(route('planner.tracking.coffrac.placed.refresh'), false);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.coffrac.placed.refresh'))
+        ->assertOk()
+        ->assertJsonPath('sync_queued', true);
+
+    Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->incremental === false
+        && $job->status === \App\Services\CoffracAppointmentService::REMOTE_STATUS_PLACED);
+
+    $this->assertDatabaseHas('external_api_syncs', [
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_SYNCING,
+    ]);
+});
+
+it('shows the placed coffrac refresh action on the manager appointments page', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Queue::fake();
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+
+    $this->actingAs($manager)
+        ->get(route('manager.appointments'))
+        ->assertOk()
+        ->assertSee('tracking-coffrac-placed-refresh')
+        ->assertSee(route('manager.appointments.coffrac.placed.refresh'), false);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.appointments.coffrac.placed.refresh'))
+        ->assertOk()
+        ->assertJsonPath('sync_queued', true);
+
+    Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->status === \App\Services\CoffracAppointmentService::REMOTE_STATUS_PLACED);
+});
 
 it('reassigns a tracking appointment to another compatible technician', function () {
     Mail::fake();
