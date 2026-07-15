@@ -129,6 +129,10 @@ Tu nettoies des lignes Excel/CSV issues d'un fichier d'import pour créer un lot
 Tu dois retourner uniquement un JSON respectant le schéma.
 Ne devine pas les informations absentes: utilise null ou une chaîne vide selon le schéma.
 Normalise les téléphones français au mieux, conserve les adresses complètes.
+Il existe deux types de lignes: particuliers et entreprises.
+Pour un particulier, renseigne customer_first_name/customer_last_name/customer_name, et laisse company_name/site_name à null.
+Pour une entreprise, renseigne company_name avec la raison sociale ou société, site_name avec le nom du site/établissement/agence si présent, et utilise company_name comme customer_name si aucun contact nominatif n'existe.
+Ne crée pas de faux nom complet: les colonnes "raison sociale", "société", "entreprise" vont dans company_name, les colonnes "nom du site", "site", "établissement" vont dans site_name.
 Si l'adresse est séparée en plusieurs colonnes, conserve aussi adresse, code postal et ville dans address_line, postal_code et city.
 Nettoie les adresses avant de les retourner: retire les références cadastrales, codes parcelle, suffixes techniques et morceaux non postaux.
 Exemple: "1 LES PETITES GRANGES - 000 0E 0369 - 000 0E 0370 - 000 0Z 0172" doit devenir "1 LES PETITES GRANGES".
@@ -188,6 +192,8 @@ PROMPT;
                             'row_number',
                             'external_reference',
                             'customer_name',
+                            'company_name',
+                            'site_name',
                             'customer_first_name',
                             'customer_last_name',
                             'customer_phone',
@@ -207,6 +213,8 @@ PROMPT;
                             'row_number' => ['type' => 'integer'],
                             'external_reference' => $this->nullableString(),
                             'customer_name' => ['type' => 'string'],
+                            'company_name' => $this->nullableString(),
+                            'site_name' => $this->nullableString(),
                             'customer_first_name' => $this->nullableString(),
                             'customer_last_name' => $this->nullableString(),
                             'customer_phone' => $this->nullableString(),

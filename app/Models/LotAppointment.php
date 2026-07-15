@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'row_number',
     'source',
     'customer_name',
+    'company_name',
+    'site_name',
     'customer_first_name',
     'customer_last_name',
     'customer_phone',

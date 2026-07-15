@@ -174,25 +174,30 @@
             <div id="booking-crm-source">
                 <div id="booking-crm-grid" class="space-y-2">
                     @foreach ($crmAppointments as $appointment)
+                        @php
+                            $companyName = trim((string) ($appointment['company_name'] ?? ''));
+                            $serviceDisplayName = trim((string) ($appointment['service']['name'] ?? $appointment['service_display_name'] ?? $appointment['service_name'] ?? ''));
+                            $searchHaystack = trim(($appointment['last_name'] ?? '').' '.($appointment['first_name'] ?? '').' '.$companyName.' '.$serviceDisplayName);
+                        @endphp
                         <div
                             role="button"
                             tabindex="0"
-                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
+                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1.1fr)_140px_minmax(220px,1.4fr)_auto]"
                             style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
-                            data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
+                            data-client="{{ str($searchHaystack)->lower() }}"
                             data-has-coordinates="{{ is_numeric($appointment['latitude'] ?? null) && is_numeric($appointment['longitude'] ?? null) ? '1' : '0' }}"
                         >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
-                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">{{ $appointment['source'] }}</p>
+                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
                             </div>
                             <p class="truncate text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
                             <p class="truncate text-sm" style="color:var(--gc-text);">{{ $appointment['address'] }}</p>
                             <div class="flex flex-wrap items-center gap-2 md:justify-end">
                                 <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
-                                @if ($appointment['service'])
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
+                                @if ($serviceDisplayName !== '')
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $serviceDisplayName }}</span>
                                 @else
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
                                 @endif
@@ -282,7 +287,16 @@
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A vérifier</span>
                                             @endif
                                         </div>
-                                        <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h4>
+                                        @php
+                                            $lotAppointmentBusiness = trim(implode(' · ', array_filter([
+                                                ! empty($appointment['company_name']) ? 'Raison sociale : '.$appointment['company_name'] : null,
+                                                ! empty($appointment['site_name']) ? 'Site : '.$appointment['site_name'] : null,
+                                            ])));
+                                        @endphp
+                                        <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h4>
+                                        @if ($lotAppointmentBusiness !== '')
+                                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lotAppointmentBusiness }}</p>
+                                        @endif
                                         <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
                                     </div>
 
@@ -536,6 +550,14 @@
 
                     <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
+                            <h3 class="font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <span id="booking_crm_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="booking_crm_detail_comments" class="mt-3 space-y-2"></div>
+                    </div>
+
+                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
                             <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
                             <div class="flex items-center gap-2">
                                 <button id="booking-crm-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
@@ -610,6 +632,14 @@
                             </div>
                         </dl>
                     </div>
+
+                    <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <span id="booking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="booking_detail_comments" class="mt-3 space-y-2"></div>
+                    </section>
 
                     <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
@@ -884,9 +914,12 @@
 
         const renderBookingCrmCard = (appointment) => {
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
+            const companyName = (appointment.company_name || '').trim();
+            const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
+            const searchHaystack = `${customerName} ${companyName} ${serviceDisplayName}`.trim().toLowerCase();
             const hasCoordinates = Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
-            const serviceBadge = appointment.service
-                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(appointment.service.type)}</span>`
+            const serviceBadge = serviceDisplayName
+                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(serviceDisplayName)}</span>`
                 : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
             const gpsBadge = hasCoordinates
                 ? ''
@@ -896,15 +929,15 @@
                 <div
                     role="button"
                     tabindex="0"
-                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(160px,1fr)_140px_minmax(220px,1.4fr)_auto]"
+                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1.1fr)_140px_minmax(220px,1.4fr)_auto]"
                     style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
-                    data-client="${escapeHtml(customerName.toLowerCase())}"
+                    data-client="${escapeHtml(searchHaystack)}"
                     data-has-coordinates="${hasCoordinates ? '1' : '0'}"
                 >
                     <div class="min-w-0">
                         <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</p>
-                        <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(appointment.source)}</p>
+                        <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(companyName || appointment.source || '')}</p>
                     </div>
                     <p class="truncate text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
                     <p class="truncate text-sm" style="color:var(--gc-text);">${escapeHtml(appointment.address)}</p>
@@ -1607,6 +1640,59 @@
             setCrmDetailStatus();
         };
 
+        const formatExternalCommentDate = (value) => {
+            if (!value) return '';
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return String(value);
+            }
+
+            return date.toLocaleString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        };
+
+        const renderExternalComments = (comments, listId, countId) => {
+            const list = document.getElementById(listId);
+            const count = document.getElementById(countId);
+            const safeComments = Array.isArray(comments) ? comments : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeComments.length} commentaire(s)`;
+
+            if (safeComments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire existant récupéré depuis Coffrac.</p>';
+                return;
+            }
+
+            list.innerHTML = safeComments.map((comment) => {
+                const authorName = comment.author_name || 'Coffrac';
+                const createdAt = formatExternalCommentDate(comment.created_at);
+                const text = comment.text || comment.comment || '';
+                const privateBadge = comment.is_private
+                    ? '<span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:#fee2e2;color:#be123c;">Privé</span>'
+                    : '';
+
+                return `
+                    <article class="rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="mb-1 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
+                            <span class="font-semibold" style="color:var(--gc-text);">${escapeHtml(authorName)}</span>
+                            ${createdAt ? `<span>${escapeHtml(createdAt)}</span>` : ''}
+                            ${privateBadge}
+                        </div>
+                        <p class="whitespace-pre-line text-sm" style="color:var(--gc-text);">${escapeHtml(text)}</p>
+                    </article>
+                `;
+            }).join('');
+        };
+
         const renderCrmDetailDocuments = (documents) => {
             const list = document.getElementById('booking_crm_detail_documents');
             const count = document.getElementById('booking_crm_detail_documents_count');
@@ -1781,9 +1867,8 @@
 
             currentCrmDetailAppointmentId = appointment.id;
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim() || 'Client';
-            const serviceLabel = appointment.service
-                ? `${appointment.service.type} - ${appointment.service.name}`
-                : 'Prestation non renseignée';
+            const companyName = (appointment.company_name || '').trim();
+            const serviceLabel = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim() || 'Prestation non renseignée';
             const addressParts = [
                 appointment.address,
                 appointment.postal_code || null,
@@ -1796,6 +1881,7 @@
                 crmDetailInfoRow('Source', appointment.source || '-'),
                 crmDetailInfoRow('Référence', appointment.external_reference || appointment.id || '-'),
                 crmDetailInfoRow('Client', customerName),
+                crmDetailInfoRow('Société', companyName || '-'),
                 crmDetailInfoRow('Téléphone', appointment.phone || '-'),
                 crmDetailInfoRow('Prestation', serviceLabel),
                 crmDetailInfoRow('Département', appointment.department_code || '-'),
@@ -1805,6 +1891,7 @@
                     : '-'),
             ].join('');
             fillCrmDetailForm(appointment);
+            renderExternalComments(appointment.comments || appointment.external_payload?.comments || [], 'booking_crm_detail_comments', 'booking_crm_detail_comments_count');
             renderCrmDetailDocuments(appointment.documents || []);
             setBookingCrmDetailDocumentsStatus();
 
@@ -2304,13 +2391,20 @@
                 latitude: Number(currentAppointmentRequest.latitude),
                 longitude: Number(currentAppointmentRequest.longitude),
                 address: currentAppointmentRequest.address,
-                customer_name: `${currentAppointmentRequest.first_name || ''} ${currentAppointmentRequest.last_name || ''}`.trim(),
+                customer_name: currentAppointmentRequest.customer_name
+                    || `${currentAppointmentRequest.first_name || ''} ${currentAppointmentRequest.last_name || ''}`.trim()
+                    || currentAppointmentRequest.company_name
+                    || currentAppointmentRequest.site_name
+                    || 'Client à qualifier',
+                company_name: currentAppointmentRequest.company_name || null,
+                site_name: currentAppointmentRequest.site_name || null,
                 customer_phone: currentAppointmentRequest.phone,
                 service_label: serviceLabelForRequest(),
                 crm_appointment_id: currentAppointmentRequest.id,
                 crm_service_id: null,
                 lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
                 documents: currentAppointmentRequest.documents || [],
+                comments: currentAppointmentRequest.comments || currentAppointmentRequest.external_payload?.comments || [],
                 can_validate: Boolean(currentAppointmentRequest.service),
                 duration_minutes: requestDurationMinutes(),
                 comment: '',
@@ -2973,6 +3067,7 @@
             document.getElementById('booking_detail_service').textContent = props.service_label || '-';
             document.getElementById('booking_detail_address').textContent = props.address || '-';
             document.getElementById('booking_detail_origin').textContent = `${props.origin_label || '-'}${props.origin_name ? ` (${props.origin_name})` : ''}`;
+            renderExternalComments(props.comments || props.external_payload?.comments || [], 'booking_detail_comments', 'booking_detail_comments_count');
             renderBookingDetailDocuments(props.documents || []);
             setBookingDetailDocumentsRefreshVisible(event);
             document.getElementById('booking_detail_appointment_id').value = isSuggestion ? '' : event.id;
@@ -3723,6 +3818,7 @@
 
                 renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
                 currentCrmDetailAppointmentId = payload.appointment?.id || currentCrmDetailAppointmentId;
+                renderExternalComments(payload.appointment?.comments || [], 'booking_crm_detail_comments', 'booking_crm_detail_comments_count');
                 renderCrmDetailDocuments(payload.appointment?.documents || []);
                 setBookingCrmDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
             } catch (error) {
@@ -3759,7 +3855,10 @@
                 }
 
                 const documents = payload.documents || [];
+                const comments = payload.comments || [];
                 selectedCalendarEvent?.setExtendedProp('documents', documents);
+                selectedCalendarEvent?.setExtendedProp('comments', comments);
+                renderExternalComments(comments, 'booking_detail_comments', 'booking_detail_comments_count');
                 renderBookingDetailDocuments(documents);
                 setBookingDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
             } catch (error) {

@@ -17,6 +17,7 @@ class LotImportPreviewService
         string $lotType,
         ?float $samplingPercentage = null,
         ?string $requestedLotName = null,
+        ?string $delegataire = null,
     ): LotImportPreview {
         $storedFile = $this->storeOriginalFile($file);
 
@@ -28,6 +29,7 @@ class LotImportPreviewService
             'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : null,
             'type' => $lotType,
             'sampling_percentage' => $samplingPercentage,
+            'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
             'original_filename' => $file->getClientOriginalName(),
             'original_file_disk' => $storedFile['disk'],
             'original_file_path' => $storedFile['path'],

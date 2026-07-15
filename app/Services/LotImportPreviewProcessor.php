@@ -72,6 +72,8 @@ class LotImportPreviewProcessor
                     'selected' => true,
                     'row_number' => $rowNumber > 0 ? $rowNumber : null,
                     'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
+                    'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
+                    'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_name' => $this->customerName($appointmentPayload),
@@ -179,16 +181,28 @@ class LotImportPreviewProcessor
      */
     private function customerName(array $payload): string
     {
+        $companyName = $this->nullableString($payload['company_name'] ?? null);
+
+        if ($companyName) {
+            return $companyName;
+        }
+
         $customerName = $this->nullableString($payload['customer_name'] ?? null);
 
         if ($customerName) {
             return $customerName;
         }
 
-        return trim(implode(' ', array_filter([
+        $individualName = trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client à qualifier';
+        ])));
+
+        if ($individualName !== '') {
+            return $individualName;
+        }
+
+        return $this->nullableString($payload['site_name'] ?? null) ?: 'Client à qualifier';
     }
 
     private function departmentFromPostalCode(mixed $postalCode): ?string

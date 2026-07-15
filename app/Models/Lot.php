@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'status',
     'sampling_percentage',
     'source',
+    'delegataire',
     'original_filename',
     'original_file_disk',
     'original_file_path',

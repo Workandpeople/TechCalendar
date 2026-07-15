@@ -93,7 +93,8 @@ it('exposes the initial coffrac appointment id on the booking page', function ()
             'id' => 44,
             'source' => 'Coffrac',
             'service_type' => Service::TYPE_COFFRAC,
-            'service_name' => null,
+            'service_name' => 'BAR EN 101 Isolation en combles perdus',
+            'company_name' => 'ACME Energie',
             'customer_first_name' => 'Claire',
             'customer_last_name' => 'COFFRAC',
             'phone' => '0600000044',
@@ -101,9 +102,33 @@ it('exposes the initial coffrac appointment id on the booking page', function ()
             'department_code' => '69',
             'latitude' => 45.7578,
             'longitude' => 4.832,
+            'comments' => [[
+                'id' => 12,
+                'text' => 'Commentaire préexistant Coffrac',
+                'author_name' => 'Assistante Coffrac',
+                'is_private' => false,
+                'created_at' => '2026-07-14T09:10:00+02:00',
+            ]],
         ]],
     ]));
     app(CoffracAppointmentService::class)->sync();
+
+    $storedRequest = ExternalAppointmentRequest::query()
+        ->where('source', CoffracAppointmentService::SOURCE)
+        ->where('external_reference', '44')
+        ->firstOrFail();
+
+    expect($storedRequest->company_name)->toBe('ACME Energie')
+        ->and($storedRequest->comments)->toHaveCount(1)
+        ->and($storedRequest->comments[0]['text'])->toBe('Commentaire préexistant Coffrac');
+    $pendingAppointment = app(CoffracAppointmentService::class)->pendingWithStatus(300)['appointments']->first();
+    expect($pendingAppointment)->toMatchArray([
+        'company_name' => 'ACME Energie',
+        'service_display_name' => 'BAR EN 101 Isolation en combles perdus',
+    ])
+        ->and($pendingAppointment['comments'])->toHaveCount(1)
+        ->and($pendingAppointment['comments'][0]['text'])->toBe('Commentaire préexistant Coffrac')
+        ->and($pendingAppointment['comments'][0]['author_name'])->toBe('Assistante Coffrac');
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -120,6 +145,9 @@ it('exposes the initial coffrac appointment id on the booking page', function ()
         ->assertSee('Connecteur 3 à connecter')
         ->assertSee('const bookingCrmPageSize = 10;', false)
         ->assertSee('window.requestAnimationFrame(scrollToBookingResults);', false)
+        ->assertSee('ACME Energie')
+        ->assertSee('BAR EN 101 Isolation en combles perdus')
+        ->assertSee('Commentaire pr\u00e9existant Coffrac', false)
         ->assertSee('const bookingInitialCrmAppointmentId = "coffrac-44";', false);
 });
 
@@ -545,6 +573,59 @@ it('keeps coffrac appointments when mapbox cannot geocode the remote address', f
         ->and($stored->address)->toBe('ADRESSE INTROUVABLE, 99999 VILLE FANTOME, France')
         ->and($appointments)->toHaveCount(1)
         ->and($appointments->first()['id'])->toBe('coffrac-4257');
+});
+
+it('keeps coffrac appointments when mapbox throws during remote geocoding', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
+    ]);
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')
+        ->once()
+        ->with('10 RUE MAPBOX KO, 69003 LYON, France')
+        ->andThrow(new RuntimeException('Timeout Mapbox'));
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    Http::fake(fn () => Http::response([
+        'result' => true,
+        'data' => [[
+            'id' => 4258,
+            'source' => 'Coffrac',
+            'status_name' => 'Prise de RDV',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => 'BAR 145 AUDIT',
+            'customer_first_name' => 'Mapbox',
+            'customer_last_name' => 'TIMEOUT',
+            'phone' => '0600004258',
+            'address' => '10 RUE MAPBOX KO, 69003 LYON, France',
+            'address_line' => '10 RUE MAPBOX KO',
+            'postal_code' => '69003',
+            'city' => 'LYON',
+            'department_code' => '69',
+            'latitude' => null,
+            'longitude' => null,
+        ]],
+    ]));
+
+    $result = app(CoffracAppointmentService::class)->sync();
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4258')
+        ->firstOrFail();
+    $appointments = app(CoffracAppointmentService::class)->pending(15);
+
+    expect($result['available'])->toBeTrue()
+        ->and($result['pending_count'])->toBe(1)
+        ->and($result['message'])->not->toContain('ignoré')
+        ->and($stored->latitude)->toBeNull()
+        ->and($stored->longitude)->toBeNull()
+        ->and($stored->address)->toBe('10 RUE MAPBOX KO, 69003 LYON, France')
+        ->and($appointments)->toHaveCount(1)
+        ->and($appointments->first()['id'])->toBe('coffrac-4258');
 });
 
 it('does not geocode an unchanged coffrac appointment twice', function () {
@@ -1091,9 +1172,9 @@ it('syncs pending and placed coffrac appointment requests with documents locally
                 'technician_email' => 'tech.coffrac@example.test',
                 'starts_at' => '2026-06-22T10:30:00+02:00',
                 'duration_minutes' => 90,
-                'fiche_documents' => [[
+                'documents' => [[
                     'id' => 10,
-                    'scope' => 'fiche',
+                    'scope' => 'dossier',
                     'name' => 'Rapport préparatoire',
                     'path' => 'rapport.pdf',
                 ]],
@@ -1333,6 +1414,8 @@ it('analyzes a lot appointment request with a selected service', function () {
     $lotAppointment = LotAppointment::query()->create([
         'lot_id' => $lot->id,
         'customer_name' => 'Client Lot',
+        'company_name' => 'ACME Industrie',
+        'site_name' => 'Site de Lyon',
         'customer_phone' => '0600000003',
         'address' => '20 Place Bellecour, 69002 Lyon',
         'department_code' => '69',
@@ -1349,6 +1432,9 @@ it('analyzes a lot appointment request with a selected service', function () {
         ->assertOk()
         ->assertJsonPath('crm_appointment.id', 'lot-'.$lotAppointment->id)
         ->assertJsonPath('crm_appointment.is_lot', true)
+        ->assertJsonPath('crm_appointment.customer_name', 'ACME Industrie')
+        ->assertJsonPath('crm_appointment.company_name', 'ACME Industrie')
+        ->assertJsonPath('crm_appointment.site_name', 'Site de Lyon')
         ->assertJsonPath('crm_appointment.service.id', $service->id)
         ->assertJsonPath('filters.is_lot', true)
         ->assertJsonCount(1, 'technicians')

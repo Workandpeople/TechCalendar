@@ -34,6 +34,14 @@
         </svg>
         @break
 
+    @case('delegataires')
+        <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 20V8l8-4 8 4v12" />
+            <path d="M8 20v-6h8v6" />
+            <path d="M8 10h.01M12 10h.01M16 10h.01" />
+        </svg>
+        @break
+
     @case('lots')
         <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
             <path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" />

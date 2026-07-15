@@ -893,6 +893,8 @@ class PlannerBookingController extends Controller
                     'appointments' => $lot->appointments->map(fn (LotAppointment $appointment): array => [
                         'id' => $appointment->id,
                         'customer_name' => $appointment->customer_name,
+                        'company_name' => $appointment->company_name,
+                        'site_name' => $appointment->site_name,
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
                         'postal_code' => $appointment->postal_code ?: ($appointment->raw_payload['postal_code'] ?? null),
@@ -964,6 +966,15 @@ class PlannerBookingController extends Controller
             'source' => $lotAppointment->lot ? 'Lot - '.$lotAppointment->lot->name : 'Lot',
             'first_name' => $firstName,
             'last_name' => $lastName,
+            'customer_name' => $this->appointmentRequestDisplayName([
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'company_name' => $lotAppointment->company_name,
+                'site_name' => $lotAppointment->site_name,
+                'is_lot' => true,
+            ]),
+            'company_name' => $lotAppointment->company_name,
+            'site_name' => $lotAppointment->site_name,
             'phone' => $lotAppointment->customer_phone,
             'address' => $lotAppointment->address,
             'department_code' => strtoupper((string) $lotAppointment->department_code),
@@ -972,6 +983,14 @@ class PlannerBookingController extends Controller
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => true,
+            'external_payload' => [
+                'source_type' => 'lot',
+                'lot_id' => $lotAppointment->lot_id,
+                'lot_appointment_id' => $lotAppointment->id,
+                'company_name' => $lotAppointment->company_name,
+                'site_name' => $lotAppointment->site_name,
+                'raw_payload' => $lotAppointment->raw_payload,
+            ],
             'service' => $service ? [
                 'id' => $service->id,
                 'type' => $service->type,
@@ -993,12 +1012,52 @@ class PlannerBookingController extends Controller
             return [$firstName, $lastName];
         }
 
+        $companyName = trim((string) $lotAppointment->company_name);
+        $siteName = trim((string) $lotAppointment->site_name);
+
+        if ($companyName !== '') {
+            return [$companyName, $siteName];
+        }
+
+        if ($siteName !== '') {
+            return [$siteName, ''];
+        }
+
         $parts = preg_split('/\s+/', trim($lotAppointment->customer_name), 2) ?: [];
 
         return [
             $parts[0] ?? 'Client',
             $parts[1] ?? 'Lot',
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $appointment
+     */
+    private function appointmentRequestDisplayName(array $appointment): string
+    {
+        $companyName = trim((string) ($appointment['company_name'] ?? ''));
+
+        if (($appointment['is_lot'] ?? false) && $companyName !== '') {
+            return $companyName;
+        }
+
+        $individualName = trim(implode(' ', array_filter([
+            trim((string) ($appointment['first_name'] ?? '')),
+            trim((string) ($appointment['last_name'] ?? '')),
+        ])));
+
+        if ($individualName !== '') {
+            return $individualName;
+        }
+
+        if ($companyName !== '') {
+            return $companyName;
+        }
+
+        $siteName = trim((string) ($appointment['site_name'] ?? ''));
+
+        return $siteName !== '' ? $siteName : 'Client à qualifier';
     }
 
     private function refreshLotStatus(?Lot $lot): void
@@ -1140,10 +1199,21 @@ class PlannerBookingController extends Controller
                     'origin_name' => $previousAppointment
                         ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
                         : 'Domicile',
+                    'comments' => $this->externalComments($appointment),
                     'documents' => $documentsByAppointment[$appointment->id] ?? [],
                 ],
             ];
         })->values();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function externalComments(Appointment $appointment): array
+    {
+        $comments = data_get($appointment->external_payload, 'comments', []);
+
+        return is_array($comments) ? array_values($comments) : [];
     }
 
     /**
@@ -1313,7 +1383,7 @@ class PlannerBookingController extends Controller
         $destination = [
             'lat' => (float) $crmAppointment['latitude'],
             'lng' => (float) $crmAppointment['longitude'],
-            'label' => trim($crmAppointment['first_name'].' '.$crmAppointment['last_name']),
+            'label' => $this->appointmentRequestDisplayName($crmAppointment),
         ];
         $home = [
             'lat' => (float) $technician->latitude,
@@ -1681,12 +1751,15 @@ class PlannerBookingController extends Controller
                 'latitude' => (float) $crmAppointment['latitude'],
                 'longitude' => (float) $crmAppointment['longitude'],
                 'address' => $crmAppointment['address'],
-                'customer_name' => trim($crmAppointment['first_name'].' '.$crmAppointment['last_name']),
+                'customer_name' => $this->appointmentRequestDisplayName($crmAppointment),
+                'company_name' => $crmAppointment['company_name'] ?? null,
+                'site_name' => $crmAppointment['site_name'] ?? null,
                 'customer_phone' => $crmAppointment['phone'],
                 'service_label' => $crmAppointment['service']
-                    ? $crmAppointment['service']['type'].' - '.$crmAppointment['service']['name']
-                    : 'Prestation non renseignée',
+                    ? $crmAppointment['service']['name']
+                    : ($crmAppointment['service_display_name'] ?? $crmAppointment['service_name'] ?? 'Prestation non renseignée'),
                 'documents' => app(AppointmentDocumentSerializer::class)->normalize($crmAppointment['documents'] ?? []),
+                'comments' => $crmAppointment['comments'] ?? [],
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,

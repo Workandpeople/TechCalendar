@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'name',
     'type',
     'sampling_percentage',
+    'delegataire',
     'original_filename',
     'original_file_disk',
     'original_file_path',

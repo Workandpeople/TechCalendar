@@ -386,6 +386,8 @@ it('uploads a Coffrac document from the authenticated technician planning', func
     $technician = User::factory()->create([
         'role' => 2,
         'admin' => false,
+        'first_name' => 'Lucie',
+        'last_name' => 'Tech',
         'email' => 'tech@example.test',
         'password' => Hash::make('secret-password'),
     ]);
@@ -435,9 +437,19 @@ it('uploads a Coffrac document from the authenticated technician planning', func
         ->assertJsonPath('document.name', 'preuve.pdf')
         ->assertJsonPath('document.url', 'https://cofrac.example.test/documents/20260702_preuve.pdf');
 
-    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
-        && $request->url() === 'https://cofrac.example.test/api/techcalendar/appointments/mobile-42/documents'
-        && $request->hasHeader('Authorization', 'Bearer secret-token'));
+    Http::assertSent(function ($request): bool {
+        $multipartField = fn (string $name, mixed $expected): bool => collect($request->data())
+            ->contains(fn (array $part): bool => ($part['name'] ?? null) === $name
+                && ($part['contents'] ?? null) === $expected);
+
+        return $request->method() === 'POST'
+            && $request->url() === 'https://cofrac.example.test/api/techcalendar/appointments/mobile-42/documents'
+            && $request->hasHeader('Authorization', 'Bearer secret-token')
+            && $multipartField('uploaded_from', 'techcalendar_mobile')
+            && $multipartField('uploaded_by_name', 'Lucie Tech')
+            && $multipartField('uploaded_by_email', 'tech@example.test')
+            && $multipartField('uploaded_by_role', 'technician');
+    });
 
     $storedRequest = ExternalAppointmentRequest::query()
         ->where('source', 'coffrac')

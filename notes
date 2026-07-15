@@ -1,42 +1,17 @@
+dans la liste des rdv a placer, ajouter la presta et le nom de la societe (a recup)
+il faut recup les commentaires pre existants lors de la prise
+voir comment accelerer la recup des rdv dans prise de rdv
+quand meme recup les rdv qui ont des erreurs nottement les addresses impossibles
+trouver d'ou vient les docs phantomes
+pouvoir supprimer les lots
 
-lots ca vient pas d'un crm
-c'est que du coffrac
+recup le numero du lot
+la raison social du demandeur = le delegataire
+lors du matching du excel il faut lier la presta a "la ref de la fiche"
 
-
-
-liste des lots: 100% controle contact / echantillonage controle contact / 100% controle / echantillonage controle
-
-si echantillonage -> saisir le %
-
-nouvelle page de prise de rdv -> rdv lots
-
-saisir un nom de lot au moment du televersement
-
-sur les rdv et dans les lots il faut une gestion de probleme rdv
-
-pour les lots contact -> pas d'api de crea dans le crm
-
--------------
-
-ajouter un systeme d'heure supp (temps de trajet compte)
-
-ajouter les % de completion des lots
-
-afficher les rdv placés dans les lots
-
-afficher tooltip dans calendrier sur les proposition
-
-mettre jusqua 21h et ajouter le samedi
-
-pouvoir reaffecter un tech
-
-ajouter une gestion d'absence dans la gestions user
-
-ajouter des filtres dans la gestion de rdv, sur crm ...
-
-vider la bdd
-
--------------- pour plus tard pour l'appli
-
-coupler avec ical, enlever le widget km semaine et temps de route
-
+dans la recup des lots, nom complet existe pas on remplace par "raison sociale"
+ajouter nom du site
+nom prenom se recupere que quand ils sont definis
+en fait si particuler: nom prenom adresse et si pro ce sera raison sociale et nom du site
+ajouter dans le premier form lors de l'upload un champ delegataire
+creer une gestion des delegataires en recuperant les delegataires depuis l'api et afficher sous forme de liste

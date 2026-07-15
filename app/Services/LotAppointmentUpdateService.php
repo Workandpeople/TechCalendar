@@ -32,6 +32,8 @@ class LotAppointmentUpdateService
             : null;
 
         $rawPayload = array_merge($rawPayload, [
+            'company_name' => $this->nullableString($attributes['company_name'] ?? null),
+            'site_name' => $this->nullableString($attributes['site_name'] ?? null),
             'postal_code' => $postalCode,
             'city' => $city,
             'edited_manually' => true,
@@ -49,6 +51,8 @@ class LotAppointmentUpdateService
         $appointment->update([
             'external_reference' => $this->nullableString($attributes['external_reference'] ?? null),
             'customer_name' => $this->customerName($attributes),
+            'company_name' => $this->nullableString($attributes['company_name'] ?? null),
+            'site_name' => $this->nullableString($attributes['site_name'] ?? null),
             'customer_first_name' => $this->nullableString($attributes['customer_first_name'] ?? null),
             'customer_last_name' => $this->nullableString($attributes['customer_last_name'] ?? null),
             'customer_phone' => $this->phoneString($attributes['customer_phone'] ?? null),
@@ -71,16 +75,28 @@ class LotAppointmentUpdateService
      */
     private function customerName(array $payload): string
     {
+        $companyName = $this->nullableString($payload['company_name'] ?? null);
+
+        if ($companyName) {
+            return $companyName;
+        }
+
         $customerName = $this->nullableString($payload['customer_name'] ?? null);
 
         if ($customerName) {
             return $customerName;
         }
 
-        return trim(implode(' ', array_filter([
+        $individualName = trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client à qualifier';
+        ])));
+
+        if ($individualName !== '') {
+            return $individualName;
+        }
+
+        return $this->nullableString($payload['site_name'] ?? null) ?: 'Client à qualifier';
     }
 
     private function fullAddress(?string $address, ?string $postalCode, ?string $city): ?string

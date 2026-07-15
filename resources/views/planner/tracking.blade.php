@@ -180,6 +180,14 @@
 
                     <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <span id="tracking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                        </div>
+                        <div id="tracking_detail_comments" class="mt-3 space-y-2"></div>
+                    </section>
+
+                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
                             <div class="flex items-center gap-2">
                                 <button id="tracking-refresh-documents-btn" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
@@ -375,6 +383,59 @@
             const normalizedUrl = String(url || '').trim();
 
             return /^https?:\/\//i.test(normalizedUrl) ? normalizedUrl : '';
+        };
+
+        const trackingFormatExternalCommentDate = (value) => {
+            if (!value) return '';
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return String(value);
+            }
+
+            return date.toLocaleString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        };
+
+        const renderTrackingDetailComments = (comments) => {
+            const list = document.getElementById('tracking_detail_comments');
+            const count = document.getElementById('tracking_detail_comments_count');
+            const safeComments = Array.isArray(comments) ? comments : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeComments.length} commentaire(s)`;
+
+            if (safeComments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire existant récupéré depuis Coffrac.</p>';
+                return;
+            }
+
+            list.innerHTML = safeComments.map((comment) => {
+                const authorName = comment.author_name || 'Coffrac';
+                const createdAt = trackingFormatExternalCommentDate(comment.created_at);
+                const text = comment.text || comment.comment || '';
+                const privateBadge = comment.is_private
+                    ? '<span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:#fee2e2;color:#be123c;">Privé</span>'
+                    : '';
+
+                return `
+                    <article class="rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="mb-1 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
+                            <span class="font-semibold" style="color:var(--gc-text);">${trackingEscapeHtml(authorName)}</span>
+                            ${createdAt ? `<span>${trackingEscapeHtml(createdAt)}</span>` : ''}
+                            ${privateBadge}
+                        </div>
+                        <p class="whitespace-pre-line text-sm" style="color:var(--gc-text);">${trackingEscapeHtml(text)}</p>
+                    </article>
+                `;
+            }).join('');
         };
 
         const renderTrackingDetailDocuments = (documents) => {
@@ -1152,6 +1213,7 @@
             setText('tracking_detail_end', formatDateTime(event.end));
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
+            renderTrackingDetailComments(props.comments || []);
             renderTrackingDetailDocuments(props.documents || []);
             setTrackingDocumentsRefreshVisible(event);
             document.getElementById('tracking_detail_starts_at').value = formatDateTimeLocalInput(event.start);
@@ -1683,12 +1745,15 @@
                 }
 
                 const documents = payload.documents || [];
+                const comments = payload.comments || [];
                 const calendarEvent = trackingCalendar?.getEventById(appointmentId);
 
                 if (calendarEvent) {
                     calendarEvent.setExtendedProp('documents', documents);
+                    calendarEvent.setExtendedProp('comments', comments);
                 }
 
+                renderTrackingDetailComments(comments);
                 renderTrackingDetailDocuments(documents);
                 setTrackingDocumentsStatus(payload.message || 'Documents mis à jour.', '#0f766e');
             } catch (error) {

@@ -57,12 +57,16 @@ class AppointmentDocumentSerializer
 
         return collect($documents)
             ->filter(fn (mixed $document): bool => is_array($document))
-            ->map(function (array $document) use ($source): array {
+            ->map(function (array $document) use ($source): ?array {
                 $name = trim((string) ($document['name'] ?? $document['title'] ?? $document['filename'] ?? $document['original_name'] ?? ''));
                 $comment = trim((string) ($document['comment'] ?? ''));
                 $scope = trim((string) ($document['scope'] ?? $document['type'] ?? ''));
                 $path = trim((string) ($document['path'] ?? ''));
                 $url = $this->documentUrl($document, $source);
+
+                if (($document['id'] ?? null) === null && $name === '' && $path === '' && $url === null) {
+                    return null;
+                }
 
                 return [
                     'id' => $document['id'] ?? null,
@@ -75,6 +79,7 @@ class AppointmentDocumentSerializer
                     'is_delegataire' => (bool) ($document['is_delegataire'] ?? false),
                 ];
             })
+            ->filter()
             ->values()
             ->all();
     }
@@ -156,9 +161,7 @@ class AppointmentDocumentSerializer
             'data.documents',
             'appointment.documents',
             'dossier.documents',
-            'fiche.documents',
             'dossier_documents',
-            'fiche_documents',
             'files',
             'fichiers',
             'attachments',

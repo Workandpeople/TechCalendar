@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
+use App\Services\CoffracAppointmentService;
 use App\Services\LotExcelImportService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotAppointmentUpdateService;
@@ -50,6 +52,11 @@ class ManagerLotController extends Controller
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
             'mapboxToken' => config('services.mapbox.token'),
+            'delegataires' => ExternalDelegataire::query()
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'company_name', 'email']),
         ]);
     }
 
@@ -59,6 +66,14 @@ class ManagerLotController extends Controller
 
         $payload = $request->validate([
             'name' => ['nullable', 'string', 'max:190'],
+            'delegataire_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_delegataires', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)
+                    ->where('is_active', true)),
+            ],
+            'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
@@ -69,6 +84,7 @@ class ManagerLotController extends Controller
             ],
             'file' => ['required', 'file', 'max:5120', 'extensions:xlsx,csv,txt'],
         ]);
+        $delegataireName = $this->delegataireNameFromPayload($payload);
 
         try {
             $lot = $importer->import(
@@ -78,6 +94,7 @@ class ManagerLotController extends Controller
                 lotType: $payload['type'],
                 samplingPercentage: isset($payload['sampling_percentage']) ? (float) $payload['sampling_percentage'] : null,
                 source: null,
+                delegataire: $delegataireName,
             );
         } catch (Throwable $exception) {
             return back()
@@ -90,12 +107,74 @@ class ManagerLotController extends Controller
             ->with('status', sprintf('Lot "%s" importé : %d RDV créé(s), %d ligne(s) rejetée(s).', $lot->name, $lot->imported_rows, $lot->rejected_rows));
     }
 
+    public function update(Request $request, Lot $lot): RedirectResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $this->validatedLotPayload($request);
+        $requiresSampling = Lot::requiresSamplingPercentageFor($payload['type']);
+
+        $lot->fill([
+            'name' => trim((string) $payload['name']),
+            'type' => $payload['type'],
+            'status' => $payload['status'],
+            'sampling_percentage' => $requiresSampling ? (float) $payload['sampling_percentage'] : null,
+            'delegataire' => filled($payload['delegataire'] ?? null) ? trim((string) $payload['delegataire']) : null,
+        ])->save();
+
+        return back()->with('status', sprintf('Lot "%s" mis à jour.', $lot->name));
+    }
+
+    public function destroy(Request $request, Lot $lot): RedirectResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $placedAppointmentsCount = $lot->appointments()
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNotNull('appointment_id')
+                    ->orWhere('status', LotAppointment::STATUS_PLACED);
+            })
+            ->count();
+
+        if ($placedAppointmentsCount > 0) {
+            return back()->withErrors([
+                'lot' => sprintf(
+                    'Impossible de supprimer ce lot: %d RDV est/sont déjà placé(s).',
+                    $placedAppointmentsCount,
+                ),
+            ]);
+        }
+
+        $lotName = $lot->name;
+        $originalFileDisk = $lot->original_file_disk;
+        $originalFilePath = $lot->original_file_path;
+
+        $lot->delete();
+
+        if (filled($originalFileDisk) && filled($originalFilePath)) {
+            Storage::disk($originalFileDisk)->delete($originalFilePath);
+        }
+
+        return redirect()
+            ->route('manager.lots')
+            ->with('status', sprintf('Lot "%s" supprimé.', $lotName));
+    }
+
     public function startImport(Request $request, LotImportPreviewService $imports): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate([
             'name' => ['nullable', 'string', 'max:190'],
+            'delegataire_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_delegataires', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)
+                    ->where('is_active', true)),
+            ],
+            'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
@@ -106,6 +185,7 @@ class ManagerLotController extends Controller
             ],
             'file' => ['required', 'file', 'max:5120', 'extensions:xlsx,csv,txt'],
         ]);
+        $delegataireName = $this->delegataireNameFromPayload($payload);
 
         $preview = $imports->createFromUpload(
             file: $payload['file'],
@@ -113,6 +193,7 @@ class ManagerLotController extends Controller
             lotType: $payload['type'],
             samplingPercentage: isset($payload['sampling_percentage']) ? (float) $payload['sampling_percentage'] : null,
             requestedLotName: $payload['name'] ?? null,
+            delegataire: $delegataireName,
         );
 
         return response()->json([
@@ -176,6 +257,8 @@ class ManagerLotController extends Controller
 
         $payload = $request->validate([
             'customer_name' => ['nullable', 'string', 'max:190'],
+            'company_name' => ['nullable', 'string', 'max:190'],
+            'site_name' => ['nullable', 'string', 'max:190'],
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
@@ -222,6 +305,8 @@ class ManagerLotController extends Controller
         $payload = $request->validate([
             'external_reference' => ['nullable', 'string', 'max:120'],
             'customer_name' => ['nullable', 'string', 'max:190'],
+            'company_name' => ['nullable', 'string', 'max:190'],
+            'site_name' => ['nullable', 'string', 'max:190'],
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
@@ -261,6 +346,43 @@ class ManagerLotController extends Controller
     }
 
     /**
+     * @return array{name:string,delegataire?:string|null,type:string,status:string,sampling_percentage?:numeric-string|float|int|null}
+     */
+    private function validatedLotPayload(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:190'],
+            'delegataire' => ['nullable', 'string', 'max:190'],
+            'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
+            'status' => ['required', 'string', Rule::in(array_keys(Lot::statuses()))],
+            'sampling_percentage' => [
+                Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
+                'nullable',
+                'numeric',
+                'min:0.01',
+                'max:100',
+            ],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function delegataireNameFromPayload(array $payload): string
+    {
+        if (filled($payload['delegataire_id'] ?? null)) {
+            $delegataire = ExternalDelegataire::query()
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->where('is_active', true)
+                ->findOrFail((int) $payload['delegataire_id']);
+
+            return $delegataire->name;
+        }
+
+        return trim((string) ($payload['delegataire'] ?? ''));
+    }
+
+    /**
      * @param array<string, mixed> $filters
      * @return Builder<Lot>
      */
@@ -292,6 +414,7 @@ class ManagerLotController extends Controller
                         ->orWhere('type', 'like', "%{$search}%")
                         ->orWhere('status', 'like', "%{$search}%")
                         ->orWhere('source', 'like', "%{$search}%")
+                        ->orWhere('delegataire', 'like', "%{$search}%")
                         ->orWhere('original_filename', 'like', "%{$search}%")
                         ->orWhereHas('appointments', fn (Builder $query) => $this->applySearchFilter($query, $search));
                 });
@@ -304,6 +427,8 @@ class ManagerLotController extends Controller
             $query
                 ->where('external_reference', 'like', "%{$search}%")
                 ->orWhere('customer_name', 'like', "%{$search}%")
+                ->orWhere('company_name', 'like', "%{$search}%")
+                ->orWhere('site_name', 'like', "%{$search}%")
                 ->orWhere('customer_first_name', 'like', "%{$search}%")
                 ->orWhere('customer_last_name', 'like', "%{$search}%")
                 ->orWhere('customer_phone', 'like', "%{$search}%")
@@ -328,6 +453,8 @@ class ManagerLotController extends Controller
 
         return [
             'id' => $lot->id,
+            'update_url' => route('manager.lots.update', $lot),
+            'delete_url' => route('manager.lots.destroy', $lot),
             'title' => $lot->name,
             'type' => $lot->type,
             'type_label' => $lot->typeLabel(),
@@ -336,6 +463,7 @@ class ManagerLotController extends Controller
             'status_color' => $statusMeta['color'],
             'status_background' => $statusMeta['background'],
             'sampling_percentage' => $lot->sampling_percentage,
+            'delegataire' => $lot->delegataire,
             'source' => $lot->source,
             'original_filename' => $lot->original_filename,
             'original_file_size' => $lot->original_file_size,
@@ -366,6 +494,8 @@ class ManagerLotController extends Controller
             'row_number' => $appointment->row_number,
             'source' => $appointment->source ?: $lot->source,
             'customer_name' => $appointment->customer_name,
+            'company_name' => $appointment->company_name,
+            'site_name' => $appointment->site_name,
             'customer_first_name' => $appointment->customer_first_name,
             'customer_last_name' => $appointment->customer_last_name,
             'customer_phone' => $appointment->customer_phone,
@@ -465,6 +595,7 @@ class ManagerLotController extends Controller
             'type' => $preview->type,
             'type_label' => Lot::types()[$preview->type] ?? $preview->type,
             'sampling_percentage' => $preview->sampling_percentage,
+            'delegataire' => $preview->delegataire,
             'total_rows' => $preview->total_rows,
             'normalized_rows' => $preview->normalized_rows,
             'rejected_rows' => $preview->rejected_rows,

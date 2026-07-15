@@ -27,7 +27,7 @@
                 </div>
             </div>
 
-            <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px_300px_180px_auto] lg:items-end">
+            <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_220px_280px_180px_auto] xl:items-end">
                 @csrf
                 <div id="lot-file-field">
                     <label class="gc-label" for="lot_file">Fichier du lot</label>
@@ -37,6 +37,20 @@
                 <div>
                     <label class="gc-label" for="lot_name">Nom du lot</label>
                     <input id="lot_name" name="name" type="text" value="{{ old('name') }}" class="gc-input" placeholder="Optionnel" />
+                </div>
+                <div>
+                    <label class="gc-label" for="lot_delegataire">Délégataire</label>
+                    <select id="lot_delegataire" name="delegataire_id" class="gc-input" required>
+                        <option value="">Sélectionner</option>
+                        @foreach ($delegataires as $delegataire)
+                            <option value="{{ $delegataire->id }}" @selected((string) old('delegataire_id') === (string) $delegataire->id)>
+                                {{ $delegataire->name }}{{ $delegataire->email ? ' · '.$delegataire->email : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @if ($delegataires->isEmpty())
+                        <p class="mt-1 text-xs" style="color:#9f1239;">Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.</p>
+                    @endif
                 </div>
                 <div>
                     <label class="gc-label" for="lot_type">Type de lot</label>
@@ -78,7 +92,7 @@
             <form id="manager-lot-filters-form" method="GET" action="{{ route('manager.lots') }}" class="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                     <label class="gc-label" for="q">Recherche</label>
-                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Client, adresse, téléphone, référence" autocomplete="off" />
+                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Client, délégataire, adresse, téléphone, référence" autocomplete="off" />
                 </div>
 
                 <div>
@@ -126,6 +140,9 @@
                             </div>
                             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                                 {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à placer · {{ $lot['placed_count'] }} placés
+                                @if ($lot['delegataire'])
+                                    · Délégataire : {{ $lot['delegataire'] }}
+                                @endif
                                 @if ($lot['imported_at'])
                                     · Importé {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                 @endif
@@ -143,11 +160,35 @@
                                 </div>
                                 <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lot['auto_completion']['detail'] }}</p>
                             </div>
+                            <button
+                                type="button"
+                                class="gc-btn-soft whitespace-nowrap lot-action-trigger"
+                                data-lot-id="{{ $lot['id'] }}"
+                            >
+                                Actions
+                            </button>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
                                 <path d="m6 9 6 6 6-6" />
                             </svg>
                         </div>
                     </summary>
+                    @php
+                        $lotActionPayload = [
+                            'id' => $lot['id'],
+                            'title' => $lot['title'],
+                            'type' => $lot['type'],
+                            'status' => $lot['status'],
+                            'sampling_percentage' => $lot['sampling_percentage'],
+                            'delegataire' => $lot['delegataire'],
+                            'appointments_count' => $lot['appointments_count'],
+                            'placed_count' => $lot['placed_count'],
+                            'update_url' => $lot['update_url'],
+                            'delete_url' => $lot['delete_url'],
+                        ];
+                    @endphp
+                    <script type="application/json" data-lot-json="{{ $lot['id'] }}">
+                        @json($lotActionPayload)
+                    </script>
 
                     <div class="border-t" style="border-color:var(--gc-border);">
                         @if ($lot['type_label'] || $lot['original_filename'])
@@ -200,7 +241,14 @@
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">À vérifier</span>
                                             @endif
                                         </div>
-                                        <h3 data-lot-appointment-customer class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['customer_name'] }}</h3>
+                                        @php
+                                            $appointmentBusiness = trim(implode(' · ', array_filter([
+                                                ! empty($appointment['company_name']) ? 'Raison sociale : '.$appointment['company_name'] : null,
+                                                ! empty($appointment['site_name']) ? 'Site : '.$appointment['site_name'] : null,
+                                            ])));
+                                        @endphp
+                                        <h3 data-lot-appointment-customer class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h3>
+                                        <p data-lot-appointment-business class="{{ $appointmentBusiness === '' ? 'hidden ' : '' }}mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $appointmentBusiness }}</p>
                                         <p data-lot-appointment-phone class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
                                     </div>
 
@@ -263,6 +311,76 @@
             @endforelse
         </section>
 
+        <div id="lot-action-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Lot</p>
+                        <h2 id="lot-action-title" class="text-xl font-semibold" style="color:var(--gc-text);">Actions du lot</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Modifie les informations du lot ou supprime-le si aucun RDV n’a encore été placé.</p>
+                    </div>
+                    <button id="lot-action-close" type="button" class="gc-link">Fermer</button>
+                </div>
+
+                <div class="space-y-5 overflow-y-auto p-5">
+                    <form id="lot-action-edit-form" method="POST" class="space-y-4">
+                        @csrf
+                        @method('PATCH')
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="md:col-span-2">
+                                <label class="gc-label" for="lot_action_name">Nom du lot</label>
+                                <input id="lot_action_name" name="name" type="text" class="gc-input" maxlength="190" required />
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="gc-label" for="lot_action_delegataire">Délégataire</label>
+                                <input id="lot_action_delegataire" name="delegataire" type="text" class="gc-input" maxlength="190" />
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_action_type">Type de lot</label>
+                                <select id="lot_action_type" name="type" class="gc-input" required>
+                                    @foreach ($lotTypes as $typeValue => $typeLabel)
+                                        <option value="{{ $typeValue }}">{{ $typeLabel }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_action_status">Statut du lot</label>
+                                <select id="lot_action_status" name="status" class="gc-input" required>
+                                    @foreach ($lotStatuses as $statusValue => $statusLabel)
+                                        <option value="{{ $statusValue }}">{{ $statusLabel }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="gc-label" for="lot_action_sampling_percentage">% d'échantillonnage</label>
+                                <input id="lot_action_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Uniquement pour les lots échantillonnés" />
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                            <button id="lot-action-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                            <button type="submit" class="gc-btn-primary">Enregistrer</button>
+                        </div>
+                    </form>
+
+                    <div class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff7f8;">
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <h3 class="font-semibold" style="color:#9f1239;">Suppression du lot</h3>
+                                <p id="lot-action-delete-note" class="mt-1 text-sm" style="color:#9f1239;"></p>
+                            </div>
+                            <form id="lot-action-delete-form" method="POST">
+                                @csrf
+                                @method('DELETE')
+                                <button id="lot-action-delete-submit" type="submit" class="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50" style="background:#dc2626;">
+                                    Supprimer le lot
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="lot-appointment-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
             <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
@@ -288,9 +406,14 @@
                             <label class="gc-label" for="lot_appointment_customer_last_name">Nom</label>
                             <input id="lot_appointment_customer_last_name" class="gc-input" data-lot-appointment-field="customer_last_name" type="text" maxlength="120" />
                         </div>
-                        <div class="md:col-span-2">
-                            <label class="gc-label" for="lot_appointment_customer_name">Nom complet client</label>
-                            <input id="lot_appointment_customer_name" class="gc-input" data-lot-appointment-field="customer_name" type="text" maxlength="190" />
+                        <input id="lot_appointment_customer_name" data-lot-appointment-field="customer_name" type="hidden" />
+                        <div>
+                            <label class="gc-label" for="lot_appointment_company_name">Raison sociale</label>
+                            <input id="lot_appointment_company_name" class="gc-input" data-lot-appointment-field="company_name" type="text" maxlength="190" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_appointment_site_name">Nom du site</label>
+                            <input id="lot_appointment_site_name" class="gc-input" data-lot-appointment-field="site_name" type="text" maxlength="190" />
                         </div>
                         <div>
                             <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
@@ -432,10 +555,26 @@
         const sampleLotTypes = @json(\App\Models\Lot::samplingTypes());
         const resumedLotImport = @json($activeImportPreview);
         const lockedLotImportStatuses = ['pending', 'processing'];
+        const lotData = new Map();
+        const lotActionModal = document.getElementById('lot-action-modal');
+        const lotActionTitle = document.getElementById('lot-action-title');
+        const lotActionClose = document.getElementById('lot-action-close');
+        const lotActionCancel = document.getElementById('lot-action-cancel');
+        const lotActionEditForm = document.getElementById('lot-action-edit-form');
+        const lotActionDeleteForm = document.getElementById('lot-action-delete-form');
+        const lotActionDeleteSubmit = document.getElementById('lot-action-delete-submit');
+        const lotActionDeleteNote = document.getElementById('lot-action-delete-note');
+        const lotActionName = document.getElementById('lot_action_name');
+        const lotActionType = document.getElementById('lot_action_type');
+        const lotActionStatus = document.getElementById('lot_action_status');
+        const lotActionSamplingPercentage = document.getElementById('lot_action_sampling_percentage');
+        const lotActionDelegataire = document.getElementById('lot_action_delegataire');
+        let currentLotAction = null;
 
         const lotImportForm = document.getElementById('lot-import-form');
         const lotImportFile = document.getElementById('lot_file');
         const lotFileSelected = document.getElementById('lot-file-selected');
+        const lotImportDelegataire = document.getElementById('lot_delegataire');
         const lotImportType = document.getElementById('lot_type');
         const lotSamplingPercentage = document.getElementById('lot_sampling_percentage');
         const lotImportSubmit = document.getElementById('lot-import-submit');
@@ -483,6 +622,18 @@
         let lotAppointmentAddressTimer = null;
         let lotAppointmentAddressAbortController = null;
 
+        document.querySelectorAll('[data-lot-json]').forEach((script) => {
+            try {
+                const lot = JSON.parse(script.textContent || '{}');
+
+                if (lot.id) {
+                    lotData.set(String(lot.id), lot);
+                }
+            } catch (error) {
+                // Données invalides ignorées : le lot reste consultable, seul le modal d’action ne s’ouvrira pas.
+            }
+        });
+
         document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
             try {
                 const appointment = JSON.parse(script.textContent || '{}');
@@ -506,12 +657,81 @@
             });
         }
 
+        document.querySelectorAll('.lot-action-trigger').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openLotActionModal(button.dataset.lotId);
+            });
+        });
+
+        lotActionClose?.addEventListener('click', closeLotActionModal);
+        lotActionCancel?.addEventListener('click', closeLotActionModal);
+        lotActionType?.addEventListener('change', updateLotActionSamplingState);
+        lotActionDeleteForm?.addEventListener('submit', (event) => {
+            if (lotActionDeleteSubmit?.disabled) {
+                event.preventDefault();
+                return;
+            }
+
+            if (!window.confirm(`Supprimer définitivement le lot "${currentLotAction?.title || ''}" ?`)) {
+                event.preventDefault();
+            }
+        });
+
         function csrfToken() {
             return lotImportForm?.querySelector('input[name="_token"]')?.value || '';
         }
 
         function isSamplingType(type) {
             return sampleLotTypes.includes(type);
+        }
+
+        function updateLotActionSamplingState() {
+            if (!lotActionSamplingPercentage) return;
+
+            const needsSampling = isSamplingType(lotActionType?.value);
+            lotActionSamplingPercentage.disabled = !needsSampling;
+            lotActionSamplingPercentage.required = needsSampling;
+
+            if (!needsSampling) {
+                lotActionSamplingPercentage.value = '';
+            }
+        }
+
+        function openLotActionModal(lotId) {
+            const lot = lotData.get(String(lotId));
+
+            if (!lot?.update_url || !lot?.delete_url) {
+                return;
+            }
+
+            currentLotAction = lot;
+            lotActionTitle.textContent = `Actions du lot ${lot.title || `#${lot.id}`}`;
+            lotActionEditForm.action = lot.update_url;
+            lotActionDeleteForm.action = lot.delete_url;
+            lotActionName.value = lot.title || '';
+            lotActionType.value = lot.type || '';
+            lotActionStatus.value = lot.status || '';
+            lotActionSamplingPercentage.value = lot.sampling_percentage ?? '';
+            lotActionDelegataire.value = lot.delegataire || '';
+            updateLotActionSamplingState();
+
+            const placedCount = Number(lot.placed_count || 0);
+            const appointmentsCount = Number(lot.appointments_count || 0);
+            lotActionDeleteSubmit.disabled = placedCount > 0;
+            lotActionDeleteNote.textContent = placedCount > 0
+                ? `${placedCount} RDV placé(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`
+                : `${appointmentsCount} RDV non placé(s) seront supprimés avec ce lot.`;
+
+            lotActionModal?.classList.remove('hidden');
+            lotActionModal?.classList.add('flex');
+        }
+
+        function closeLotActionModal() {
+            lotActionModal?.classList.add('hidden');
+            lotActionModal?.classList.remove('flex');
+            currentLotAction = null;
         }
 
         function updateLotImportState() {
@@ -527,6 +747,7 @@
 
             const hasFile = lotImportFile?.files?.length > 0;
             const selectedFile = hasFile ? lotImportFile.files[0] : null;
+            const hasDelegataire = Boolean(lotImportDelegataire?.value?.trim());
             const hasType = Boolean(lotImportType?.value);
             const hasSampling = !needsSampling || Number(lotSamplingPercentage?.value || 0) > 0;
 
@@ -539,7 +760,7 @@
             }
 
             if (lotImportSubmit) {
-                lotImportSubmit.disabled = !(hasFile && hasType && hasSampling);
+                lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasType && hasSampling);
             }
         }
 
@@ -735,13 +956,16 @@
                 const gps = appointment.latitude && appointment.longitude
                     ? `${Number(appointment.latitude).toFixed(5)}, ${Number(appointment.longitude).toFixed(5)}`
                     : '--';
+                const displayName = lotImportDisplayName(appointment);
+                const businessLabel = lotAppointmentBusinessLabel(appointment);
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="px-3 py-3 align-top">
                         <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowNumber)}" ${rowChecked}>
                     </td>
                     <td class="px-3 py-3 align-top">
-                        <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(appointment.customer_name || 'Client à qualifier')}</div>
+                        <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(displayName)}</div>
+                        ${businessLabel ? `<div class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(businessLabel)}</div>` : ''}
                         <div class="text-xs" style="color:var(--gc-text-soft);">Ligne ${escapeHtml(appointment.row_number || '--')}</div>
                     </td>
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.customer_phone || '--')}</td>
@@ -763,9 +987,14 @@
                     editRow.innerHTML = `
                         <td colspan="8" class="bg-slate-50 px-4 py-4">
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <input type="hidden" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
                                 <div>
-                                    <label class="gc-label">Nom complet</label>
-                                    <input class="gc-input" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
+                                    <label class="gc-label">Raison sociale</label>
+                                    <input class="gc-input" data-field="company_name" value="${escapeHtml(appointment.company_name || '')}">
+                                </div>
+                                <div>
+                                    <label class="gc-label">Nom du site</label>
+                                    <input class="gc-input" data-field="site_name" value="${escapeHtml(appointment.site_name || '')}">
                                 </div>
                                 <div>
                                     <label class="gc-label">Prénom</label>
@@ -940,6 +1169,20 @@
                 .replaceAll('>', '&gt;')
                 .replaceAll('"', '&quot;')
                 .replaceAll("'", '&#039;');
+        }
+
+        function lotImportDisplayName(appointment) {
+            return (appointment?.company_name || appointment?.customer_name || [
+                appointment?.customer_first_name,
+                appointment?.customer_last_name,
+            ].filter(Boolean).join(' ') || appointment?.site_name || 'Client à qualifier').trim();
+        }
+
+        function lotAppointmentBusinessLabel(appointment) {
+            return [
+                appointment?.company_name ? `Raison sociale : ${appointment.company_name}` : null,
+                appointment?.site_name ? `Site : ${appointment.site_name}` : null,
+            ].filter(Boolean).join(' · ');
         }
 
         function lotAppointmentLocation(appointment) {
@@ -1336,12 +1579,17 @@
 
             const location = lotAppointmentLocation(appointment);
             const warnings = Array.isArray(appointment.ai_warnings) ? appointment.ai_warnings.filter(Boolean) : [];
+            const businessLabel = lotAppointmentBusinessLabel(appointment);
 
             row.querySelector('[data-lot-appointment-department]').textContent = `Dept. ${appointment.department_code || '--'}`;
-            row.querySelector('[data-lot-appointment-customer]').textContent = appointment.customer_name || 'Client à qualifier';
+            row.querySelector('[data-lot-appointment-customer]').textContent = lotImportDisplayName(appointment);
             row.querySelector('[data-lot-appointment-phone]').textContent = appointment.customer_phone || 'Téléphone non renseigné';
             row.querySelector('[data-lot-appointment-address]').textContent = appointment.address || 'Adresse à qualifier';
             row.querySelector('[data-lot-appointment-reference]').textContent = lotAppointmentReference(appointment);
+
+            const businessElement = row.querySelector('[data-lot-appointment-business]');
+            businessElement.textContent = businessLabel;
+            businessElement.classList.toggle('hidden', businessLabel === '');
 
             const locationElement = row.querySelector('[data-lot-appointment-location]');
             locationElement.textContent = location;
@@ -1506,6 +1754,7 @@
         }
 
         lotImportFile?.addEventListener('change', updateLotImportState);
+        lotImportDelegataire?.addEventListener('change', updateLotImportState);
         lotImportType?.addEventListener('change', updateLotImportState);
         lotSamplingPercentage?.addEventListener('input', updateLotImportState);
         updateLotImportState();

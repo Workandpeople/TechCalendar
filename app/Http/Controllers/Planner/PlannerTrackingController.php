@@ -92,6 +92,7 @@ class PlannerTrackingController extends Controller
         return response()->json([
             'message' => 'Dossier Coffrac mis à jour.',
             'documents' => $refresh['documents'],
+            'comments' => $refresh['comments'],
             'status' => $refresh['status'],
             'remote_status_name' => $refresh['remote_status_name'],
             'fetched_at' => $refresh['fetched_at'],
@@ -207,11 +208,22 @@ class PlannerTrackingController extends Controller
                         'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
                         'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                         'created_by_name' => $appointment->creator?->full_name,
+                        'comments' => $this->externalComments($appointment),
                         'documents' => $documentsByAppointment[$appointment->id] ?? [],
                     ],
                 ];
             })->values(),
         ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function externalComments(Appointment $appointment): array
+    {
+        $comments = data_get($appointment->external_payload, 'comments', []);
+
+        return is_array($comments) ? array_values($comments) : [];
     }
 
     public function updateDetails(

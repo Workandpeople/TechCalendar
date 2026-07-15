@@ -19,7 +19,7 @@ class LotExcelImportService
     ) {
     }
 
-    public function import(UploadedFile $file, int $userId, ?string $requestedLotName = null, ?string $lotType = null, ?float $samplingPercentage = null, ?string $source = null): Lot
+    public function import(UploadedFile $file, int $userId, ?string $requestedLotName = null, ?string $lotType = null, ?float $samplingPercentage = null, ?string $source = null, ?string $delegataire = null): Lot
     {
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
@@ -27,13 +27,14 @@ class LotExcelImportService
         $storedFile = $this->storeOriginalFile($file);
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $rows, $normalized, $rawRowsByNumber, $storedFile): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $rows, $normalized, $rawRowsByNumber, $storedFile): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
                     'status' => Lot::STATUS_NOT_STARTED,
                     'sampling_percentage' => $samplingPercentage,
                     'source' => filled($source) ? trim((string) $source) : null,
+                    'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
                     'original_filename' => $file->getClientOriginalName(),
                     'original_file_disk' => $storedFile['disk'],
                     'original_file_path' => $storedFile['path'],
@@ -67,6 +68,8 @@ class LotExcelImportService
                         'row_number' => $rowNumber > 0 ? $rowNumber : null,
                         'source' => $lot->source,
                         'customer_name' => $this->requiredCustomerName($appointmentPayload),
+                        'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
+                        'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
                         'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                         'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                         'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
@@ -127,7 +130,7 @@ class LotExcelImportService
      */
     private function statusForPayload(array $payload, Collection $warnings): string
     {
-        if (! filled($payload['customer_name'] ?? null) || ! filled($payload['address'] ?? null)) {
+        if (! $this->hasCustomerIdentity($payload) || ! filled($payload['address'] ?? null)) {
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
@@ -147,16 +150,40 @@ class LotExcelImportService
      */
     private function requiredCustomerName(array $payload): string
     {
+        $companyName = $this->nullableString($payload['company_name'] ?? null);
+
+        if ($companyName) {
+            return $companyName;
+        }
+
         $customerName = $this->nullableString($payload['customer_name'] ?? null);
 
         if ($customerName) {
             return $customerName;
         }
 
-        return trim(implode(' ', array_filter([
+        $individualName = trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client à qualifier';
+        ])));
+
+        if ($individualName !== '') {
+            return $individualName;
+        }
+
+        return $this->nullableString($payload['site_name'] ?? null) ?: 'Client à qualifier';
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function hasCustomerIdentity(array $payload): bool
+    {
+        return filled($this->nullableString($payload['customer_name'] ?? null))
+            || filled($this->nullableString($payload['company_name'] ?? null))
+            || filled($this->nullableString($payload['site_name'] ?? null))
+            || filled($this->nullableString($payload['customer_first_name'] ?? null))
+            || filled($this->nullableString($payload['customer_last_name'] ?? null));
     }
 
     private function nullableString(mixed $value): ?string

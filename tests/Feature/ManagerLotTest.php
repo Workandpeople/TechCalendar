@@ -2,6 +2,7 @@
 
 use App\Jobs\ProcessLotImportPreviewJob;
 use App\Models\Appointment;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
@@ -109,8 +110,114 @@ it('renders manager lots from database', function () {
         ->assertSee('lot-appointment-address-suggestions')
         ->assertSee('lot-appointment-edit-map')
         ->assertSee('Recalculer')
+        ->assertSee('Actions du lot')
+        ->assertSee('Supprimer le lot')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
         ->assertSee('RDV à placer');
+});
+
+it('updates a lot from the manager lot action modal', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot initial',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    $this->actingAs($manager)
+        ->from(route('manager.lots'))
+        ->patch(route('manager.lots.update', $lot), [
+            'name' => 'Lot corrigé',
+            'delegataire' => 'Oblige Test',
+            'type' => Lot::TYPE_SAMPLE_CONTROL,
+            'status' => Lot::STATUS_IN_PROGRESS,
+            'sampling_percentage' => 35,
+        ])
+        ->assertRedirect(route('manager.lots'))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('status', 'Lot "Lot corrigé" mis à jour.');
+
+    $this->assertDatabaseHas('lots', [
+        'id' => $lot->id,
+        'name' => 'Lot corrigé',
+        'delegataire' => 'Oblige Test',
+        'type' => Lot::TYPE_SAMPLE_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'sampling_percentage' => 35,
+    ]);
+});
+
+it('deletes an unplaced lot and its original file', function () {
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $path = 'lot-imports/delete-me.xlsx';
+    Storage::disk('local')->put($path, 'spreadsheet-content');
+
+    $lot = Lot::query()->create([
+        'name' => 'Lot à supprimer',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'original_filename' => 'delete-me.xlsx',
+        'original_file_disk' => 'local',
+        'original_file_path' => $path,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client non placé',
+        'address' => '1 Rue de Test',
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($manager)
+        ->from(route('manager.lots'))
+        ->delete(route('manager.lots.destroy', $lot))
+        ->assertRedirect(route('manager.lots'))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('status', 'Lot "Lot à supprimer" supprimé.');
+
+    $this->assertDatabaseMissing('lots', ['id' => $lot->id]);
+    $this->assertDatabaseMissing('lot_appointments', ['id' => $lotAppointment->id]);
+    Storage::disk('local')->assertMissing($path);
+});
+
+it('blocks lot deletion when at least one appointment is already placed', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot avec RDV placé',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client placé',
+        'address' => '1 Rue de Test',
+        'status' => LotAppointment::STATUS_PLACED,
+    ]);
+
+    $this->actingAs($manager)
+        ->from(route('manager.lots'))
+        ->delete(route('manager.lots.destroy', $lot))
+        ->assertRedirect(route('manager.lots'))
+        ->assertSessionHasErrors('lot');
+
+    $this->assertDatabaseHas('lots', [
+        'id' => $lot->id,
+        'name' => 'Lot avec RDV placé',
+    ]);
 });
 
 it('updates a persisted lot appointment and refreshes geocoding data', function () {
@@ -305,11 +412,21 @@ it('renders lot type select in the import form', function () {
         'role' => 0,
         'admin' => false,
     ]);
+    ExternalDelegataire::query()->create([
+        'source' => 'coffrac',
+        'external_id' => 'sync-7',
+        'name' => 'Délégataire synchronisé',
+        'email' => 'delegataire-sync@example.test',
+        'is_active' => true,
+    ]);
 
     $this->actingAs($manager)
         ->get(route('manager.lots'))
         ->assertOk()
         ->assertSee('Type de lot')
+        ->assertSee('Délégataire')
+        ->assertSee('Délégataire synchronisé')
+        ->assertSee('name="delegataire_id"', false)
         ->assertSee('Statut du lot')
         ->assertSee("% d'échantillonnage", false)
         ->assertSee('Échantillonnage contrôle contact')
@@ -327,10 +444,18 @@ it('starts a manager lot import preview through the upload endpoint', function (
         'role' => 0,
         'admin' => false,
     ]);
+    $delegataire = ExternalDelegataire::query()->create([
+        'source' => 'coffrac',
+        'external_id' => '7',
+        'name' => 'Délégataire A',
+        'is_active' => true,
+        'last_synced_at' => now(),
+    ]);
 
     $this->actingAs($manager)
         ->post(route('manager.lots.imports.store'), [
             'name' => 'Lot importe',
+            'delegataire_id' => $delegataire->id,
             'type' => Lot::TYPE_FULL_CONTROL,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
         ], ['Accept' => 'application/json'])
@@ -342,6 +467,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
     Queue::assertPushed(ProcessLotImportPreviewJob::class);
     $this->assertDatabaseHas('lot_import_previews', [
         'name' => 'Lot importe',
+        'delegataire' => 'Délégataire A',
         'type' => Lot::TYPE_FULL_CONTROL,
         'stage' => 'Import en attente dans la file.',
         'created_by' => $manager->id,
@@ -431,6 +557,7 @@ it('serializes completed import preview appointments as a list', function () {
         'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'delegataire' => 'Délégataire Preview',
         'original_filename' => 'preview.xlsx',
         'original_file_disk' => 'local',
         'original_file_path' => 'lot-import-previews/preview.xlsx',
@@ -483,6 +610,7 @@ it('updates one import preview row and geocodes only that row', function () {
         'progress' => 100,
         'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
         'name' => 'Lot preview',
+        'delegataire' => 'Délégataire Preview',
         'type' => Lot::TYPE_FULL_CONTROL,
         'original_filename' => 'preview.xlsx',
         'original_file_disk' => 'local',
@@ -731,6 +859,7 @@ it('requires sampling percentage for sampling lot types', function () {
     $this->actingAs($manager)
         ->post(route('manager.lots.imports.store'), [
             'name' => 'Lot échantillon',
+            'delegataire' => 'Délégataire A',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
         ], ['Accept' => 'application/json'])
@@ -900,6 +1029,64 @@ it('confirms selected preview rows and creates a lot', function () {
     ]);
     $this->assertDatabaseMissing('lot_appointments', [
         'customer_name' => 'Julien Bernard',
+    ]);
+});
+
+it('keeps company and site names when confirming a business lot preview', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $preview = LotImportPreview::query()->create([
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'status' => LotImportPreview::STATUS_COMPLETED,
+        'progress' => 100,
+        'name' => 'Lot entreprises',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'delegataire' => 'Délégataire Entreprise',
+        'original_filename' => 'preview.xlsx',
+        'original_file_disk' => 'local',
+        'original_file_path' => 'lot-import-previews/preview.xlsx',
+        'total_rows' => 1,
+        'normalized_rows' => 1,
+        'rejected_rows' => 0,
+        'created_by' => $manager->id,
+        'payload' => [
+            'summary' => 'Preview OK',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 2,
+                    'customer_name' => 'Ancien libellé',
+                    'company_name' => 'ACME Industrie',
+                    'site_name' => 'Site de Lyon',
+                    'customer_phone' => '0612345678',
+                    'address' => '20 Rue Bellecordière',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'ai_confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.imports.confirm', $preview), [
+            'selected_rows' => [2],
+        ])
+        ->assertOk();
+
+    $this->assertDatabaseHas('lot_appointments', [
+        'customer_name' => 'ACME Industrie',
+        'company_name' => 'ACME Industrie',
+        'site_name' => 'Site de Lyon',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PENDING,
     ]);
 });
 

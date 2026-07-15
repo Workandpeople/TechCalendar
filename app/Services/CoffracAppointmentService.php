@@ -652,7 +652,7 @@ class CoffracAppointmentService
     /**
      * @return array<string, mixed>
      */
-    public function uploadDocument(Appointment $appointment, UploadedFile $file, ?string $name = null, ?string $comment = null): array
+    public function uploadDocument(Appointment $appointment, UploadedFile $file, ?string $name = null, ?string $comment = null, ?User $uploadedBy = null): array
     {
         if ($appointment->external_source !== self::SOURCE) {
             throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
@@ -687,6 +687,11 @@ class CoffracAppointmentService
                     'name' => trim((string) $name) ?: $originalName,
                     'comment' => trim((string) $comment) ?: null,
                     'techcalendar_appointment_id' => $appointment->id,
+                    'uploaded_from' => $uploadedBy ? 'techcalendar_mobile' : 'techcalendar',
+                    'uploaded_by_techcalendar_user_id' => $uploadedBy?->id,
+                    'uploaded_by_name' => $uploadedBy?->full_name,
+                    'uploaded_by_email' => $uploadedBy?->email,
+                    'uploaded_by_role' => $uploadedBy && (int) $uploadedBy->role === 2 ? 'technician' : null,
                 ]);
         } finally {
             fclose($stream);
@@ -712,9 +717,9 @@ class CoffracAppointmentService
     }
 
     /**
-     * Recharge un dossier Coffrac précis et renvoie les documents fraîchement synchronisés.
+     * Recharge un dossier Coffrac précis et renvoie les documents/commentaires fraîchement synchronisés.
      *
-     * @return array{documents: array<int, array<string, mixed>>, status: string|null, remote_status_name: string|null, fetched_at: string|null}
+     * @return array{documents: array<int, array<string, mixed>>, comments: array<int, array<string, mixed>>, status: string|null, remote_status_name: string|null, fetched_at: string|null}
      */
     public function refreshAppointment(Appointment $appointment): array
     {
@@ -738,6 +743,7 @@ class CoffracAppointmentService
 
         return [
             'documents' => $this->documentsFromStoredRequest($storedRequest),
+            'comments' => $this->commentsFromStoredRequest($storedRequest),
             'status' => $storedRequest->status,
             'remote_status_name' => $storedRequest->remote_status_name,
             'fetched_at' => $storedRequest->fetched_at?->toIso8601String(),
@@ -802,6 +808,7 @@ class CoffracAppointmentService
 
         $payload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
         $payload['documents'] = $storedRequest->documents ?: $this->documentSerializer->fromPayload($storedRequest->payload, $storedRequest->source);
+        $payload['comments'] = $this->commentsFromStoredRequest($storedRequest);
 
         $appointment->forceFill([
             'external_payload' => $payload,
@@ -815,6 +822,15 @@ class CoffracAppointmentService
     {
         return $storedRequest->documents
             ?: $this->documentSerializer->fromPayload($storedRequest->payload, $storedRequest->source);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function commentsFromStoredRequest(ExternalAppointmentRequest $storedRequest): array
+    {
+        return $storedRequest->comments
+            ?: $this->normalizeRemoteComments(data_get($storedRequest->payload, 'comments', []));
     }
 
     /**
@@ -1011,6 +1027,7 @@ class CoffracAppointmentService
                 'customer_first_name' => $normalized['customer_first_name'],
                 'customer_last_name' => $normalized['customer_last_name'],
                 'customer_name' => $normalized['customer_name'],
+                'company_name' => $normalized['company_name'],
                 'phone' => $normalized['phone'],
                 'address' => $normalized['address'],
                 'address_line' => $normalized['address_line'],
@@ -1023,6 +1040,7 @@ class CoffracAppointmentService
                 'starts_at' => $normalized['starts_at'],
                 'duration_minutes' => $normalized['duration_minutes'],
                 'comment' => $normalized['comment'],
+                'comments' => $normalized['comments'],
                 'documents' => $normalized['documents'],
                 'payload' => $appointment,
                 'appointment_id' => $existingAppointment?->id,
@@ -1129,6 +1147,7 @@ class CoffracAppointmentService
             'customer_first_name' => trim((string) ($appointment['customer_first_name'] ?? 'Client')),
             'customer_last_name' => trim((string) ($appointment['customer_last_name'] ?? 'Coffrac')),
             'customer_name' => trim((string) ($appointment['customer_name'] ?? '')) ?: trim((string) (($appointment['customer_first_name'] ?? '').' '.($appointment['customer_last_name'] ?? ''))),
+            'company_name' => $this->normalizedCompanyName($appointment),
             'phone' => $this->phoneString($appointment['phone'] ?? null),
             'address' => $address,
             'address_line' => $addressLine,
@@ -1141,6 +1160,7 @@ class CoffracAppointmentService
             'starts_at' => ! empty($appointment['starts_at']) ? Carbon::parse($appointment['starts_at']) : null,
             'duration_minutes' => ($appointment['duration_minutes'] ?? null) !== null ? (int) $appointment['duration_minutes'] : null,
             'comment' => trim((string) ($appointment['comment'] ?? '')) ?: null,
+            'comments' => $this->normalizeRemoteComments($appointment['comments'] ?? []),
             'documents' => $this->documentSerializer->fromPayload($appointment, self::SOURCE),
             'remote_updated_at' => ! empty($appointment['updated_at']) ? Carbon::parse($appointment['updated_at']) : null,
         ];
@@ -1161,6 +1181,63 @@ class CoffracAppointmentService
         ];
 
         return trim(implode(', ', array_filter($parts))) ?: null;
+    }
+
+    /**
+     * @param array<string, mixed> $appointment
+     */
+    private function normalizedCompanyName(array $appointment): ?string
+    {
+        foreach ([
+            'company_name',
+            'customer_company_name',
+            'society_name',
+            'societe',
+            'entreprise_name',
+            'business_name',
+        ] as $key) {
+            $companyName = trim((string) ($appointment[$key] ?? ''));
+
+            if ($companyName !== '') {
+                return $companyName;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param mixed $comments
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeRemoteComments(mixed $comments): array
+    {
+        if (! is_array($comments)) {
+            return [];
+        }
+
+        return collect($comments)
+            ->filter(fn (mixed $comment): bool => is_array($comment))
+            ->map(function (array $comment): ?array {
+                $text = trim((string) ($comment['text'] ?? $comment['comment'] ?? ''));
+
+                if ($text === '') {
+                    return null;
+                }
+
+                return [
+                    'id' => isset($comment['id']) ? (string) $comment['id'] : null,
+                    'text' => $text,
+                    'author_id' => isset($comment['author_id']) ? (string) $comment['author_id'] : null,
+                    'author_name' => trim((string) ($comment['author_name'] ?? '')) ?: null,
+                    'is_private' => (bool) ($comment['is_private'] ?? false),
+                    'created_at' => trim((string) ($comment['created_at'] ?? '')) ?: null,
+                    'updated_at' => trim((string) ($comment['updated_at'] ?? '')) ?: null,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**
@@ -1190,6 +1267,17 @@ class CoffracAppointmentService
             return [
                 'latitude' => (float) $existingRequest->latitude,
                 'longitude' => (float) $existingRequest->longitude,
+            ];
+        }
+
+        if (! filled($address)) {
+            Log::info('RDV Coffrac conservé sans géocodage Mapbox: adresse absente.', [
+                'external_reference' => $appointment['id'] ?? null,
+            ]);
+
+            return [
+                'latitude' => null,
+                'longitude' => null,
             ];
         }
 
@@ -1357,7 +1445,13 @@ class CoffracAppointmentService
 
     private function appointmentFromStoredRequest(ExternalAppointmentRequest $request): array
     {
+        $comments = $request->comments ?: $this->normalizeRemoteComments(data_get($request->payload, 'comments', []));
         $documents = $request->documents ?: $this->documentSerializer->fromPayload($request->payload, $request->source);
+        $service = $this->matchingService([
+            'service_type' => $request->service_type,
+            'service_name' => $request->service_name,
+        ]);
+        $rawServiceName = trim((string) $request->service_name);
 
         return [
             'id' => self::SOURCE.'-'.$request->external_reference,
@@ -1369,6 +1463,7 @@ class CoffracAppointmentService
             'source' => $request->source_label ?: 'Coffrac',
             'first_name' => $request->customer_first_name ?: 'Client',
             'last_name' => $request->customer_last_name ?: 'Coffrac',
+            'company_name' => $request->company_name ?: trim((string) data_get($request->payload, 'company_name')) ?: null,
             'phone' => $request->phone ?: '',
             'address' => $request->address ?: '',
             'address_line' => $request->address_line,
@@ -1382,10 +1477,10 @@ class CoffracAppointmentService
             'is_lot' => false,
             'documents' => $documents,
             'comment' => $request->comment,
-            'service' => $this->matchingService([
-                'service_type' => $request->service_type,
-                'service_name' => $request->service_name,
-            ]),
+            'comments' => $comments,
+            'service_name' => $rawServiceName !== '' ? $rawServiceName : null,
+            'service_display_name' => $service['name'] ?? ($rawServiceName !== '' ? $rawServiceName : null),
+            'service' => $service,
         ];
     }
 

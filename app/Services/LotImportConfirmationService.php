@@ -46,6 +46,7 @@ class LotImportConfirmationService
                 'type' => $preview->type,
                 'status' => Lot::STATUS_NOT_STARTED,
                 'sampling_percentage' => $preview->sampling_percentage,
+                'delegataire' => $preview->delegataire,
                 'original_filename' => $preview->original_filename,
                 'original_file_disk' => $preview->original_file_disk,
                 'original_file_path' => $preview->original_file_path,
@@ -77,6 +78,8 @@ class LotImportConfirmationService
                     'row_number' => (int) ($appointmentPayload['row_number'] ?? 0) ?: null,
                     'source' => null,
                     'customer_name' => $this->requiredCustomerName($appointmentPayload),
+                    'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
+                    'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
@@ -113,7 +116,7 @@ class LotImportConfirmationService
      */
     private function statusForPayload(array $payload, Collection $warnings): string
     {
-        if (! filled($payload['customer_name'] ?? null) || ! filled($payload['address'] ?? null)) {
+        if (! $this->hasCustomerIdentity($payload) || ! filled($payload['address'] ?? null)) {
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
@@ -133,16 +136,40 @@ class LotImportConfirmationService
      */
     private function requiredCustomerName(array $payload): string
     {
+        $companyName = $this->nullableString($payload['company_name'] ?? null);
+
+        if ($companyName) {
+            return $companyName;
+        }
+
         $customerName = $this->nullableString($payload['customer_name'] ?? null);
 
         if ($customerName) {
             return $customerName;
         }
 
-        return trim(implode(' ', array_filter([
+        $individualName = trim(implode(' ', array_filter([
             $this->nullableString($payload['customer_first_name'] ?? null),
             $this->nullableString($payload['customer_last_name'] ?? null),
-        ]))) ?: 'Client à qualifier';
+        ])));
+
+        if ($individualName !== '') {
+            return $individualName;
+        }
+
+        return $this->nullableString($payload['site_name'] ?? null) ?: 'Client à qualifier';
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function hasCustomerIdentity(array $payload): bool
+    {
+        return filled($this->nullableString($payload['customer_name'] ?? null))
+            || filled($this->nullableString($payload['company_name'] ?? null))
+            || filled($this->nullableString($payload['site_name'] ?? null))
+            || filled($this->nullableString($payload['customer_first_name'] ?? null))
+            || filled($this->nullableString($payload['customer_last_name'] ?? null));
     }
 
     private function nullableString(mixed $value): ?string

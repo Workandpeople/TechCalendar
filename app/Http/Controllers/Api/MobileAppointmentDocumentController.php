@@ -55,6 +55,7 @@ class MobileAppointmentDocumentController extends Controller
                 $payload['document'],
                 $payload['name'] ?? null,
                 $payload['comment'] ?? null,
+                $technician,
             );
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([

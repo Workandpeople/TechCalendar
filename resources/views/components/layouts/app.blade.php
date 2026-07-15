@@ -47,6 +47,7 @@
                     'items' => [
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
+                        ['route' => 'manager.delegataires', 'label' => 'Gestion des délégataires', 'icon' => 'delegataires'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
                         ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
                         ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
@@ -67,6 +68,7 @@
                     'items' => [
                         ['route' => 'manager.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'manager.users', 'label' => 'Gestion des users', 'icon' => 'users'],
+                        ['route' => 'manager.delegataires', 'label' => 'Gestion des délégataires', 'icon' => 'delegataires'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
                         ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
                         ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
