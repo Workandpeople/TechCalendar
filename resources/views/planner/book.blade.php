@@ -865,6 +865,88 @@
         .booking-lot-details[open] .booking-lot-chevron {
             transform: rotate(180deg);
         }
+
+        #booking-calendar .fc-timegrid-event,
+        #booking-calendar .fc-v-event .fc-event-main {
+            overflow: visible;
+        }
+
+        #booking-calendar .booking-calendar-event-content {
+            position: relative;
+            min-height: 100%;
+            padding: 2px 4px;
+            overflow: hidden;
+        }
+
+        #booking-calendar .booking-calendar-event-content.has-travel-badges {
+            padding-top: 21px;
+        }
+
+        #booking-calendar .booking-calendar-event-main {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        #booking-calendar .booking-calendar-event-time,
+        #booking-calendar .booking-calendar-event-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #booking-calendar .booking-calendar-event-time {
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.1;
+            opacity: .92;
+        }
+
+        #booking-calendar .booking-calendar-event-title {
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        #booking-calendar .booking-calendar-event-badges {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            left: 2px;
+            z-index: 4;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 2px;
+            pointer-events: none;
+        }
+
+        #booking-calendar .booking-calendar-travel-badge {
+            max-width: 100%;
+            overflow: hidden;
+            border: 1px solid rgba(15, 23, 42, .14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .94);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, .16);
+            color: #1f2937;
+            font-size: 10px;
+            font-weight: 900;
+            line-height: 1.1;
+            padding: 2px 6px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #booking-calendar .booking-calendar-travel-badge.is-before {
+            background: #ecfeff;
+            color: #155e75;
+        }
+
+        #booking-calendar .booking-calendar-travel-badge.is-after {
+            background: #fef3c7;
+            color: #92400e;
+        }
     </style>
 
     <script>
@@ -2844,6 +2926,121 @@
         const visibleCalendarItems = (items) => (items || [])
             .filter((item) => selectedTechnicianIds.has(String(item.extendedProps?.technician_id || '')));
 
+        const parseCalendarDate = (value) => {
+            if (!value) return null;
+
+            const date = value instanceof Date ? value : new Date(value);
+
+            return Number.isNaN(date.getTime()) ? null : date;
+        };
+
+        const calendarDayKey = (value) => {
+            const date = parseCalendarDate(value);
+
+            if (!date) return '';
+
+            return [
+                date.getFullYear(),
+                String(date.getMonth() + 1).padStart(2, '0'),
+                String(date.getDate()).padStart(2, '0'),
+            ].join('-');
+        };
+
+        const calendarTimeLabel = (value) => {
+            const date = parseCalendarDate(value);
+
+            if (!date) return '-';
+
+            return date.toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        };
+
+        const calendarEventId = (event) => String(event?.id ?? '');
+
+        const calendarEventTechnicianId = (event) => String(event?.extendedProps?.technician_id || '');
+
+        const sameTechnicianAndDay = (event, suggestion) => calendarEventTechnicianId(event) === calendarEventTechnicianId(suggestion)
+            && calendarDayKey(event?.start) === calendarDayKey(suggestion?.start);
+
+        const findNeighborCalendarEvent = (events, suggestion, direction) => {
+            const suggestionStart = parseCalendarDate(suggestion?.start);
+            const suggestionEnd = parseCalendarDate(suggestion?.end);
+
+            if (!suggestionStart || !suggestionEnd) return null;
+
+            const candidates = events
+                .filter((event) => sameTechnicianAndDay(event, suggestion))
+                .filter((event) => {
+                    const eventStart = parseCalendarDate(event.start);
+                    const eventEnd = parseCalendarDate(event.end);
+
+                    if (!eventStart || !eventEnd) return false;
+
+                    return direction === 'previous'
+                        ? eventEnd <= suggestionStart
+                        : eventStart >= suggestionEnd;
+                });
+
+            return candidates
+                .sort((left, right) => {
+                    const leftTime = parseCalendarDate(direction === 'previous' ? left.end : left.start)?.getTime() || 0;
+                    const rightTime = parseCalendarDate(direction === 'previous' ? right.end : right.start)?.getTime() || 0;
+
+                    return direction === 'previous' ? rightTime - leftTime : leftTime - rightTime;
+                })
+                .at(0) || null;
+        };
+
+        const pushTravelBadge = (badgesByAppointmentId, appointmentId, badge) => {
+            if (!appointmentId) return;
+
+            const key = String(appointmentId);
+            const currentBadges = badgesByAppointmentId.get(key) || [];
+            const duplicate = currentBadges.some((currentBadge) => currentBadge.key === badge.key);
+
+            if (!duplicate) {
+                badgesByAppointmentId.set(key, [...currentBadges, badge].slice(0, 3));
+            }
+        };
+
+        const travelBadgesByAppointment = (events, suggestions) => {
+            const badgesByAppointmentId = new Map();
+            const eventById = new Map(events.map((event) => [calendarEventId(event), event]));
+
+            suggestions.forEach((suggestion) => {
+                const props = suggestion.extendedProps || {};
+                const suggestionTime = calendarTimeLabel(suggestion.start);
+                const previousAppointment = props.previous_appointment_id
+                    ? eventById.get(String(props.previous_appointment_id))
+                    : findNeighborCalendarEvent(events, suggestion, 'previous');
+                const nextAppointment = props.next_appointment_id
+                    ? eventById.get(String(props.next_appointment_id))
+                    : findNeighborCalendarEvent(events, suggestion, 'next');
+
+                if (previousAppointment && Number(props.travel_to_minutes || 0) > 0) {
+                    pushTravelBadge(badgesByAppointmentId, calendarEventId(previousAppointment), {
+                        key: `${suggestion.id}-previous`,
+                        kind: 'before',
+                        label: `→ Prop. ${formatRouteDuration(props.travel_to_minutes)}`,
+                        title: `RDV → proposition de ${suggestionTime} · ${formatRouteDistance(props.travel_to_distance_km)} · ${formatRouteDuration(props.travel_to_minutes)}`,
+                    });
+                }
+
+                if (nextAppointment && Number(props.travel_after_minutes || 0) > 0) {
+                    pushTravelBadge(badgesByAppointmentId, calendarEventId(nextAppointment), {
+                        key: `${suggestion.id}-next`,
+                        kind: 'after',
+                        label: `Prop. → ${formatRouteDuration(props.travel_after_minutes)}`,
+                        title: `Proposition de ${suggestionTime} → RDV · ${formatRouteDistance(props.travel_after_distance_km)} · ${formatRouteDuration(props.travel_after_minutes)}`,
+                    });
+                }
+            });
+
+            return badgesByAppointmentId;
+        };
+
         const refreshTechnicianColors = () => {
             const existingColors = currentTechnicianColors;
 
@@ -4000,21 +4197,57 @@
             });
         };
 
-        const colorizedEvents = (events, suggestions = []) => [...visibleCalendarItems(events), ...visibleCalendarItems(suggestions)].map((event) => {
-            const technicianId = String(event.extendedProps?.technician_id || '');
-            const color = currentTechnicianColors[technicianId] || '#31424c';
-            const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
+        const bookingCalendarEventContent = (info) => {
+            const props = info.event.extendedProps || {};
+            const badges = Array.isArray(props.booking_travel_badges) ? props.booking_travel_badges : [];
+            const isSuggestion = Boolean(props.is_suggestion);
+            const badgesHtml = !isSuggestion && badges.length > 0
+                ? `<div class="booking-calendar-event-badges">${badges.map((badge) => `
+                    <span class="booking-calendar-travel-badge is-${escapeHtml(badge.kind)}" title="${escapeHtml(badge.title)}">${escapeHtml(badge.label)}</span>
+                `).join('')}</div>`
+                : '';
 
             return {
-                ...event,
-                backgroundColor: isSuggestion ? `${color}26` : color,
-                borderColor: color,
-                textColor: isSuggestion ? color : '#ffffff',
-                classNames: [
-                    ...(isSuggestion ? ['appointment-suggestion'] : []),
-                ],
+                html: `
+                    <div class="booking-calendar-event-content ${badges.length > 0 ? 'has-travel-badges' : ''}">
+                        ${badgesHtml}
+                        <div class="booking-calendar-event-main">
+                            ${info.timeText ? `<span class="booking-calendar-event-time">${escapeHtml(info.timeText)}</span>` : ''}
+                            <span class="booking-calendar-event-title" title="${escapeHtml(info.event.title)}">${escapeHtml(info.event.title)}</span>
+                        </div>
+                    </div>
+                `,
             };
-        });
+        };
+
+        const colorizedEvents = (events, suggestions = []) => {
+            const visibleEvents = visibleCalendarItems(events);
+            const visibleSuggestions = visibleCalendarItems(suggestions);
+            const badgesByAppointmentId = travelBadgesByAppointment(visibleEvents, visibleSuggestions);
+
+            return [...visibleEvents, ...visibleSuggestions].map((event) => {
+                const technicianId = String(event.extendedProps?.technician_id || '');
+                const color = currentTechnicianColors[technicianId] || '#31424c';
+                const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
+                const travelBadges = isSuggestion ? [] : (badgesByAppointmentId.get(calendarEventId(event)) || []);
+
+                return {
+                    ...event,
+                    extendedProps: {
+                        ...(event.extendedProps || {}),
+                        booking_travel_badges: travelBadges,
+                    },
+                    backgroundColor: isSuggestion ? `${color}26` : color,
+                    borderColor: color,
+                    textColor: isSuggestion ? color : '#ffffff',
+                    classNames: [
+                        ...(Array.isArray(event.classNames) ? event.classNames : []),
+                        ...(isSuggestion ? ['appointment-suggestion'] : ['appointment-placed']),
+                        ...(!isSuggestion && travelBadges.length > 0 ? ['appointment-has-travel-badges'] : []),
+                    ],
+                };
+            });
+        };
 
         const refreshCalendarWindow = async (dateInfo, options = {}) => {
             lastCalendarDateInfo = dateInfo;
@@ -4120,6 +4353,7 @@
                     hideSuggestionTooltip();
                     openBookingAppointmentModal(info.event);
                 },
+                eventContent: bookingCalendarEventContent,
                 eventMouseEnter: (info) => {
                     if (!info.event.extendedProps?.is_suggestion) return;
 
