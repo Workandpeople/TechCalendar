@@ -874,12 +874,20 @@
         #booking-calendar .booking-calendar-event-content {
             position: relative;
             min-height: 100%;
-            padding: 2px 4px;
+            padding: 3px 5px;
             overflow: hidden;
         }
 
         #booking-calendar .booking-calendar-event-content.has-travel-badges {
-            padding-top: 21px;
+            padding-top: 3px;
+        }
+
+        #booking-calendar .booking-calendar-event-header {
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            gap: 4px;
+            line-height: 1;
         }
 
         #booking-calendar .booking-calendar-event-main {
@@ -897,6 +905,7 @@
         }
 
         #booking-calendar .booking-calendar-event-time {
+            flex: 0 0 auto;
             font-size: 10px;
             font-weight: 800;
             line-height: 1.1;
@@ -907,16 +916,16 @@
             font-size: 11px;
             font-weight: 700;
             line-height: 1.2;
+            margin-top: 2px;
         }
 
         #booking-calendar .booking-calendar-event-badges {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            left: 2px;
+            position: static;
             z-index: 4;
             display: flex;
-            flex-wrap: wrap;
+            min-width: 0;
+            flex: 1 1 auto;
+            flex-wrap: nowrap;
             justify-content: flex-end;
             gap: 2px;
             pointer-events: none;
@@ -931,17 +940,17 @@
         }
 
         #booking-calendar .booking-calendar-travel-badge {
-            max-width: 100%;
+            max-width: 62px;
             overflow: hidden;
             border: 1px solid rgba(15, 23, 42, .14);
             border-radius: 999px;
             background: rgba(255, 255, 255, .94);
             box-shadow: 0 4px 12px rgba(15, 23, 42, .16);
             color: #1f2937;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 900;
             line-height: 1.1;
-            padding: 2px 6px;
+            padding: 2px 5px;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -4147,9 +4156,11 @@
             return {
                 html: `
                     <div class="booking-calendar-event-content ${badges.length > 0 ? 'has-travel-badges' : ''}">
-                        ${badgesHtml}
-                        <div class="booking-calendar-event-main">
+                        <div class="booking-calendar-event-header">
                             ${info.timeText ? `<span class="booking-calendar-event-time">${escapeHtml(info.timeText)}</span>` : ''}
+                            ${badgesHtml}
+                        </div>
+                        <div class="booking-calendar-event-main">
                             <span class="booking-calendar-event-title" title="${escapeHtml(info.event.title)}">${escapeHtml(info.event.title)}</span>
                         </div>
                     </div>
