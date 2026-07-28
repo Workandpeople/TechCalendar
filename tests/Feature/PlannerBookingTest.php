@@ -1748,7 +1748,9 @@ it('adds home previous and next route metrics to booking suggestions', function 
             ->assertOk();
 
         $suggestion = collect($response->json('suggestions'))
-            ->first(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11'));
+            ->first(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11')
+                && $suggestion['extendedProps']['has_previous_appointment']
+                && $suggestion['extendedProps']['has_next_appointment']);
 
         expect($suggestion)->not->toBeNull();
 
@@ -1761,6 +1763,85 @@ it('adds home previous and next route metrics to booking suggestions', function 
             ->and($props['travel_to_distance_km'])->toBeGreaterThanOrEqual(0)
             ->and($props['travel_after_distance_km'])->toBeGreaterThanOrEqual(0)
             ->and($props['return_home_distance_km'])->toBeGreaterThanOrEqual(0);
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
+});
+
+it('suggests appointments before and after an existing booking while preserving the lunch break', function () {
+    config(['services.mapbox.token' => null]);
+    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+
+    try {
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_AUDIT,
+            'name' => 'Audit pause',
+            'average_duration_minutes' => 60,
+        ]);
+
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
+
+        $technician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'address' => '1 Rue de la République, Lyon',
+            'department_code' => '69',
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+            'day_start_time' => '08:00',
+            'day_end_time' => '18:00',
+            'break_duration_minutes' => 45,
+        ]);
+        $technician->services()->attach($service);
+        $technician->departments()->attach('69');
+
+        $existingAppointment = Appointment::query()->create([
+            'service_id' => $service->id,
+            'technician_id' => $technician->id,
+            'created_by' => $planner->id,
+            'customer_first_name' => 'Client',
+            'customer_last_name' => 'Quatorze',
+            'customer_phone' => '0600000001',
+            'address' => '20 Place Bellecour, 69002 Lyon',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+            'starts_at' => \Carbon\Carbon::parse('2026-06-11 14:00:00'),
+            'duration_minutes' => 60,
+            'ends_at' => \Carbon\Carbon::parse('2026-06-11 15:00:00'),
+        ]);
+
+        $response = $this->actingAs($planner)
+            ->postJson(route('planner.book.analyze'), [
+                'manual_appointment' => [
+                    'first_name' => 'Nouveau',
+                    'last_name' => 'Client',
+                    'phone' => '0700000000',
+                    'address' => '20 Place Bellecour, 69002 Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'service_id' => $service->id,
+                ],
+            ])
+            ->assertOk();
+
+        $daySuggestions = collect($response->json('suggestions'))
+            ->filter(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11'))
+            ->values();
+
+        $beforeExisting = $daySuggestions->first(fn (array $suggestion): bool => $suggestion['extendedProps']['next_appointment_id'] === $existingAppointment->id);
+        $afterExisting = $daySuggestions->first(fn (array $suggestion): bool => $suggestion['extendedProps']['previous_appointment_id'] === $existingAppointment->id);
+
+        expect($beforeExisting)->not->toBeNull()
+            ->and($afterExisting)->not->toBeNull()
+            ->and(\Carbon\Carbon::parse($beforeExisting['end'])->lte($existingAppointment->starts_at))->toBeTrue()
+            ->and(\Carbon\Carbon::parse($afterExisting['start'])->gte($existingAppointment->ends_at))->toBeTrue()
+            ->and($beforeExisting['extendedProps']['has_next_appointment'])->toBeTrue()
+            ->and($afterExisting['extendedProps']['has_previous_appointment'])->toBeTrue();
     } finally {
         \Carbon\Carbon::setTestNow();
     }

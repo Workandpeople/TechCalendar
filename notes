@@ -21,3 +21,6 @@ creer une gestion des delegataires en recuperant les delegataires depuis l'api e
 
 ajouter les probleme rdv
 
+changer la methode de placement des propositions pour les rapprocher le + possible d'un rdv existant le meme jour (label a placer sur les propo et pas sur le rdv deja placé du coup)
+
+pouvoir replacer un rdv methodiquement depuis la recherche rdv 

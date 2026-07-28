@@ -922,6 +922,14 @@
             pointer-events: none;
         }
 
+        #booking-calendar .appointment-has-travel-badges {
+            z-index: 5;
+        }
+
+        #booking-calendar .appointment-has-travel-badges:hover {
+            z-index: 20;
+        }
+
         #booking-calendar .booking-calendar-travel-badge {
             max-width: 100%;
             overflow: hidden;
@@ -2934,18 +2942,6 @@
             return Number.isNaN(date.getTime()) ? null : date;
         };
 
-        const calendarDayKey = (value) => {
-            const date = parseCalendarDate(value);
-
-            if (!date) return '';
-
-            return [
-                date.getFullYear(),
-                String(date.getMonth() + 1).padStart(2, '0'),
-                String(date.getDate()).padStart(2, '0'),
-            ].join('-');
-        };
-
         const calendarTimeLabel = (value) => {
             const date = parseCalendarDate(value);
 
@@ -2957,88 +2953,30 @@
             });
         };
 
-        const calendarEventId = (event) => String(event?.id ?? '');
+        const travelBadgesForSuggestion = (suggestion) => {
+            const props = suggestion.extendedProps || {};
+            const suggestionTime = calendarTimeLabel(suggestion.start);
+            const badges = [];
 
-        const calendarEventTechnicianId = (event) => String(event?.extendedProps?.technician_id || '');
-
-        const sameTechnicianAndDay = (event, suggestion) => calendarEventTechnicianId(event) === calendarEventTechnicianId(suggestion)
-            && calendarDayKey(event?.start) === calendarDayKey(suggestion?.start);
-
-        const findNeighborCalendarEvent = (events, suggestion, direction) => {
-            const suggestionStart = parseCalendarDate(suggestion?.start);
-            const suggestionEnd = parseCalendarDate(suggestion?.end);
-
-            if (!suggestionStart || !suggestionEnd) return null;
-
-            const candidates = events
-                .filter((event) => sameTechnicianAndDay(event, suggestion))
-                .filter((event) => {
-                    const eventStart = parseCalendarDate(event.start);
-                    const eventEnd = parseCalendarDate(event.end);
-
-                    if (!eventStart || !eventEnd) return false;
-
-                    return direction === 'previous'
-                        ? eventEnd <= suggestionStart
-                        : eventStart >= suggestionEnd;
+            if (props.has_previous_appointment && Number(props.travel_to_minutes || 0) > 0) {
+                badges.push({
+                    key: `${suggestion.id}-previous`,
+                    kind: 'before',
+                    label: `← ${formatRouteDuration(props.travel_to_minutes)}`,
+                    title: `RDV précédent → proposition de ${suggestionTime} · ${formatRouteDistance(props.travel_to_distance_km)} · ${formatRouteDuration(props.travel_to_minutes)}`,
                 });
-
-            return candidates
-                .sort((left, right) => {
-                    const leftTime = parseCalendarDate(direction === 'previous' ? left.end : left.start)?.getTime() || 0;
-                    const rightTime = parseCalendarDate(direction === 'previous' ? right.end : right.start)?.getTime() || 0;
-
-                    return direction === 'previous' ? rightTime - leftTime : leftTime - rightTime;
-                })
-                .at(0) || null;
-        };
-
-        const pushTravelBadge = (badgesByAppointmentId, appointmentId, badge) => {
-            if (!appointmentId) return;
-
-            const key = String(appointmentId);
-            const currentBadges = badgesByAppointmentId.get(key) || [];
-            const duplicate = currentBadges.some((currentBadge) => currentBadge.key === badge.key);
-
-            if (!duplicate) {
-                badgesByAppointmentId.set(key, [...currentBadges, badge].slice(0, 3));
             }
-        };
 
-        const travelBadgesByAppointment = (events, suggestions) => {
-            const badgesByAppointmentId = new Map();
-            const eventById = new Map(events.map((event) => [calendarEventId(event), event]));
+            if (props.has_next_appointment && Number(props.travel_after_minutes || 0) > 0) {
+                badges.push({
+                    key: `${suggestion.id}-next`,
+                    kind: 'after',
+                    label: `${formatRouteDuration(props.travel_after_minutes)} →`,
+                    title: `Proposition de ${suggestionTime} → RDV suivant · ${formatRouteDistance(props.travel_after_distance_km)} · ${formatRouteDuration(props.travel_after_minutes)}`,
+                });
+            }
 
-            suggestions.forEach((suggestion) => {
-                const props = suggestion.extendedProps || {};
-                const suggestionTime = calendarTimeLabel(suggestion.start);
-                const previousAppointment = props.previous_appointment_id
-                    ? eventById.get(String(props.previous_appointment_id))
-                    : findNeighborCalendarEvent(events, suggestion, 'previous');
-                const nextAppointment = props.next_appointment_id
-                    ? eventById.get(String(props.next_appointment_id))
-                    : findNeighborCalendarEvent(events, suggestion, 'next');
-
-                if (previousAppointment && Number(props.travel_to_minutes || 0) > 0) {
-                    pushTravelBadge(badgesByAppointmentId, calendarEventId(previousAppointment), {
-                        key: `${suggestion.id}-previous`,
-                        kind: 'before',
-                        label: `→ Prop. ${formatRouteDuration(props.travel_to_minutes)}`,
-                        title: `RDV → proposition de ${suggestionTime} · ${formatRouteDistance(props.travel_to_distance_km)} · ${formatRouteDuration(props.travel_to_minutes)}`,
-                    });
-                }
-
-                if (nextAppointment && Number(props.travel_after_minutes || 0) > 0) {
-                    pushTravelBadge(badgesByAppointmentId, calendarEventId(nextAppointment), {
-                        key: `${suggestion.id}-next`,
-                        kind: 'after',
-                        label: `Prop. → ${formatRouteDuration(props.travel_after_minutes)}`,
-                        title: `Proposition de ${suggestionTime} → RDV · ${formatRouteDistance(props.travel_after_distance_km)} · ${formatRouteDuration(props.travel_after_minutes)}`,
-                    });
-                }
-            });
-
-            return badgesByAppointmentId;
+            return badges;
         };
 
         const refreshTechnicianColors = () => {
@@ -4200,8 +4138,7 @@
         const bookingCalendarEventContent = (info) => {
             const props = info.event.extendedProps || {};
             const badges = Array.isArray(props.booking_travel_badges) ? props.booking_travel_badges : [];
-            const isSuggestion = Boolean(props.is_suggestion);
-            const badgesHtml = !isSuggestion && badges.length > 0
+            const badgesHtml = badges.length > 0
                 ? `<div class="booking-calendar-event-badges">${badges.map((badge) => `
                     <span class="booking-calendar-travel-badge is-${escapeHtml(badge.kind)}" title="${escapeHtml(badge.title)}">${escapeHtml(badge.label)}</span>
                 `).join('')}</div>`
@@ -4223,13 +4160,12 @@
         const colorizedEvents = (events, suggestions = []) => {
             const visibleEvents = visibleCalendarItems(events);
             const visibleSuggestions = visibleCalendarItems(suggestions);
-            const badgesByAppointmentId = travelBadgesByAppointment(visibleEvents, visibleSuggestions);
 
             return [...visibleEvents, ...visibleSuggestions].map((event) => {
                 const technicianId = String(event.extendedProps?.technician_id || '');
                 const color = currentTechnicianColors[technicianId] || '#31424c';
                 const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
-                const travelBadges = isSuggestion ? [] : (badgesByAppointmentId.get(calendarEventId(event)) || []);
+                const travelBadges = isSuggestion ? travelBadgesForSuggestion(event) : [];
 
                 return {
                     ...event,
@@ -4243,7 +4179,7 @@
                     classNames: [
                         ...(Array.isArray(event.classNames) ? event.classNames : []),
                         ...(isSuggestion ? ['appointment-suggestion'] : ['appointment-placed']),
-                        ...(!isSuggestion && travelBadges.length > 0 ? ['appointment-has-travel-badges'] : []),
+                        ...(isSuggestion && travelBadges.length > 0 ? ['appointment-has-travel-badges'] : []),
                     ],
                 };
             });

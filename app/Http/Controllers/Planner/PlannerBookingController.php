@@ -32,6 +32,12 @@ class PlannerBookingController extends Controller
 {
     private const CRM_APPOINTMENT_LIST_LIMIT = 300;
 
+    private const APPOINTMENT_TRANSITION_MARGIN_MINUTES = 10;
+
+    private const BREAK_WINDOW_START = '11:00';
+
+    private const BREAK_WINDOW_END = '14:00';
+
     public function index(
         Request $request,
         CoffracAppointmentService $coffracAppointments,
@@ -1342,7 +1348,7 @@ class PlannerBookingController extends Controller
                         ->filter(fn (Appointment $appointment): bool => $appointment->starts_at?->isSameDay($date))
                         ->sortBy('starts_at')
                         ->values();
-                    $suggestion = $this->suggestSlotForDay(
+                    $suggestions = $this->suggestSlotsForDay(
                         $technician,
                         $dayAppointments,
                         $crmAppointment,
@@ -1351,9 +1357,7 @@ class PlannerBookingController extends Controller
                         $drivingRoutes
                     );
 
-                    if ($suggestion !== null) {
-                        $dailySuggestions[] = $suggestion;
-                    }
+                    array_push($dailySuggestions, ...$suggestions);
                 }
 
                 return $dailySuggestions;
@@ -1416,21 +1420,21 @@ class PlannerBookingController extends Controller
     /**
      * @param  Collection<int, Appointment>  $dayAppointments
      * @param  array<string, mixed>  $crmAppointment
-     * @return array<string, mixed>|null
+     * @return array<int, array<string, mixed>>
      */
-    private function suggestSlotForDay(
+    private function suggestSlotsForDay(
         User $technician,
         Collection $dayAppointments,
         array $crmAppointment,
         int $durationMinutes,
         Carbon $date,
         MapboxDrivingRouteService $drivingRoutes
-    ): ?array {
+    ): array {
         $dayStart = Carbon::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
         $dayEnd = Carbon::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
 
         if ($this->technicianHasLoadedAbsenceOverlap($technician, $dayStart, $dayEnd)) {
-            return null;
+            return [];
         }
 
         if ($date->isSameDay(now()) && $dayStart->lt(now())) {
@@ -1438,7 +1442,7 @@ class PlannerBookingController extends Controller
         }
 
         if ($dayStart->gte($dayEnd)) {
-            return null;
+            return [];
         }
 
         $destination = [
@@ -1453,66 +1457,329 @@ class PlannerBookingController extends Controller
         ];
 
         if ($dayAppointments->isEmpty()) {
-            return $this->buildSuggestionIfFits(
+            $suggestion = $this->buildEarliestSuggestionInGap(
                 technician: $technician,
+                dayAppointments: $dayAppointments,
                 crmAppointment: $crmAppointment,
                 date: $date,
-                availableAt: $dayStart,
+                originAvailableAt: $dayStart,
                 origin: $home,
                 previousAppointment: null,
                 nextAppointment: null,
+                dayStart: $dayStart,
                 dayEnd: $dayEnd,
+                destination: $destination,
                 durationMinutes: $durationMinutes,
                 drivingRoutes: $drivingRoutes,
                 originLabel: 'domicile',
             );
+
+            return $suggestion ? [$suggestion] : [];
         }
 
-        $beforeFirst = $this->buildSuggestionIfFits(
-            technician: $technician,
-            crmAppointment: $crmAppointment,
-            date: $date,
-            availableAt: $dayStart,
-            origin: $home,
-            previousAppointment: null,
-            nextAppointment: $dayAppointments->first(),
-            dayEnd: $dayEnd,
-            durationMinutes: $durationMinutes,
-            drivingRoutes: $drivingRoutes,
-            originLabel: 'domicile',
-        );
+        $suggestions = [];
 
-        if ($beforeFirst !== null) {
-            return $beforeFirst;
-        }
-
-        foreach ($dayAppointments as $index => $appointment) {
-            $nextAppointment = $dayAppointments->get($index + 1);
-            $origin = [
-                'lat' => (float) $appointment->latitude,
-                'lng' => (float) $appointment->longitude,
-                'label' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
-            ];
-            $suggestion = $this->buildSuggestionIfFits(
+        foreach ($dayAppointments as $index => $nextAppointment) {
+            $previousAppointment = $index > 0 ? $dayAppointments->get($index - 1) : null;
+            $origin = $previousAppointment ? $this->appointmentRoutePoint($previousAppointment) : $home;
+            $suggestion = $this->buildLatestSuggestionInGap(
                 technician: $technician,
+                dayAppointments: $dayAppointments,
                 crmAppointment: $crmAppointment,
                 date: $date,
-                availableAt: $appointment->ends_at,
+                originAvailableAt: $previousAppointment?->ends_at ?: $dayStart,
                 origin: $origin,
-                previousAppointment: $appointment,
+                previousAppointment: $previousAppointment,
                 nextAppointment: $nextAppointment,
+                dayStart: $dayStart,
                 dayEnd: $dayEnd,
+                destination: $destination,
+                durationMinutes: $durationMinutes,
+                drivingRoutes: $drivingRoutes,
+                originLabel: $previousAppointment ? 'rdv précédent' : 'domicile',
+            );
+
+            if ($suggestion) {
+                $suggestions[] = $suggestion;
+            }
+        }
+
+        foreach ($dayAppointments as $index => $previousAppointment) {
+            $nextAppointment = $dayAppointments->get($index + 1);
+            $suggestion = $this->buildEarliestSuggestionInGap(
+                technician: $technician,
+                dayAppointments: $dayAppointments,
+                crmAppointment: $crmAppointment,
+                date: $date,
+                originAvailableAt: $previousAppointment->ends_at,
+                origin: $this->appointmentRoutePoint($previousAppointment),
+                previousAppointment: $previousAppointment,
+                nextAppointment: $nextAppointment,
+                dayStart: $dayStart,
+                dayEnd: $dayEnd,
+                destination: $destination,
                 durationMinutes: $durationMinutes,
                 drivingRoutes: $drivingRoutes,
                 originLabel: 'rdv précédent',
             );
 
-            if ($suggestion !== null) {
+            if ($suggestion) {
+                $suggestions[] = $suggestion;
+            }
+        }
+
+        return collect($suggestions)
+            ->unique(fn (array $suggestion): string => $suggestion['id'])
+            ->sortBy('start')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{lat: float, lng: float, label: string}
+     */
+    private function appointmentRoutePoint(Appointment $appointment): array
+    {
+        return [
+            'lat' => (float) $appointment->latitude,
+            'lng' => (float) $appointment->longitude,
+            'label' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array<string, mixed>  $crmAppointment
+     * @param  array{lat: float, lng: float, label: string}  $origin
+     * @param  array{lat: float, lng: float, label: string}  $destination
+     * @return array<string, mixed>|null
+     */
+    private function buildEarliestSuggestionInGap(
+        User $technician,
+        Collection $dayAppointments,
+        array $crmAppointment,
+        Carbon $date,
+        Carbon $originAvailableAt,
+        array $origin,
+        ?Appointment $previousAppointment,
+        ?Appointment $nextAppointment,
+        Carbon $dayStart,
+        Carbon $dayEnd,
+        array $destination,
+        int $durationMinutes,
+        MapboxDrivingRouteService $drivingRoutes,
+        string $originLabel,
+    ): ?array {
+        $travelTo = $drivingRoutes->estimate($origin['lat'], $origin['lng'], $destination['lat'], $destination['lng']);
+        $travelAfter = $this->travelAfterSuggestion($technician, $destination, $nextAppointment, $drivingRoutes);
+        $earliestStart = $this->roundUpToNextHalfHour(
+            $originAvailableAt->copy()
+                ->addMinutes((int) $travelTo['duration_minutes'])
+                ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES)
+        );
+        $latestEnd = $this->latestSuggestionEnd($dayEnd, $nextAppointment, $travelAfter);
+        $latestStart = $this->roundDownToPreviousHalfHour($latestEnd->copy()->subMinutes($durationMinutes));
+
+        for ($startsAt = $earliestStart->copy(); $startsAt->lte($latestStart); $startsAt->addMinutes(30)) {
+            $suggestion = $this->buildSuggestionAt(
+                technician: $technician,
+                dayAppointments: $dayAppointments,
+                crmAppointment: $crmAppointment,
+                date: $date,
+                startsAt: $startsAt,
+                originAvailableAt: $originAvailableAt,
+                origin: $origin,
+                previousAppointment: $previousAppointment,
+                nextAppointment: $nextAppointment,
+                dayStart: $dayStart,
+                dayEnd: $dayEnd,
+                destination: $destination,
+                durationMinutes: $durationMinutes,
+                drivingRoutes: $drivingRoutes,
+                originLabel: $originLabel,
+                travelTo: $travelTo,
+                travelAfter: $travelAfter,
+            );
+
+            if ($suggestion) {
                 return $suggestion;
             }
         }
 
         return null;
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array<string, mixed>  $crmAppointment
+     * @param  array{lat: float, lng: float, label: string}  $origin
+     * @param  array{lat: float, lng: float, label: string}  $destination
+     * @return array<string, mixed>|null
+     */
+    private function buildLatestSuggestionInGap(
+        User $technician,
+        Collection $dayAppointments,
+        array $crmAppointment,
+        Carbon $date,
+        Carbon $originAvailableAt,
+        array $origin,
+        ?Appointment $previousAppointment,
+        ?Appointment $nextAppointment,
+        Carbon $dayStart,
+        Carbon $dayEnd,
+        array $destination,
+        int $durationMinutes,
+        MapboxDrivingRouteService $drivingRoutes,
+        string $originLabel,
+    ): ?array {
+        $travelTo = $drivingRoutes->estimate($origin['lat'], $origin['lng'], $destination['lat'], $destination['lng']);
+        $travelAfter = $this->travelAfterSuggestion($technician, $destination, $nextAppointment, $drivingRoutes);
+        $earliestStart = $this->roundUpToNextHalfHour(
+            $originAvailableAt->copy()
+                ->addMinutes((int) $travelTo['duration_minutes'])
+                ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES)
+        );
+        $latestEnd = $this->latestSuggestionEnd($dayEnd, $nextAppointment, $travelAfter);
+        $latestStart = $this->roundDownToPreviousHalfHour($latestEnd->copy()->subMinutes($durationMinutes));
+
+        for ($startsAt = $latestStart->copy(); $startsAt->gte($earliestStart); $startsAt->subMinutes(30)) {
+            $suggestion = $this->buildSuggestionAt(
+                technician: $technician,
+                dayAppointments: $dayAppointments,
+                crmAppointment: $crmAppointment,
+                date: $date,
+                startsAt: $startsAt,
+                originAvailableAt: $originAvailableAt,
+                origin: $origin,
+                previousAppointment: $previousAppointment,
+                nextAppointment: $nextAppointment,
+                dayStart: $dayStart,
+                dayEnd: $dayEnd,
+                destination: $destination,
+                durationMinutes: $durationMinutes,
+                drivingRoutes: $drivingRoutes,
+                originLabel: $originLabel,
+                travelTo: $travelTo,
+                travelAfter: $travelAfter,
+            );
+
+            if ($suggestion) {
+                return $suggestion;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $travelAfter
+     */
+    private function latestSuggestionEnd(Carbon $dayEnd, ?Appointment $nextAppointment, array $travelAfter): Carbon
+    {
+        $boundary = $nextAppointment?->starts_at ?: $dayEnd;
+
+        return $boundary->copy()
+            ->subMinutes((int) $travelAfter['duration_minutes'])
+            ->subMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES);
+    }
+
+    /**
+     * @param  array{lat: float, lng: float, label: string}  $destination
+     * @return array<string, mixed>
+     */
+    private function travelAfterSuggestion(
+        User $technician,
+        array $destination,
+        ?Appointment $nextAppointment,
+        MapboxDrivingRouteService $drivingRoutes
+    ): array {
+        if ($nextAppointment) {
+            return $drivingRoutes->estimate(
+                $destination['lat'],
+                $destination['lng'],
+                (float) $nextAppointment->latitude,
+                (float) $nextAppointment->longitude
+            );
+        }
+
+        return $drivingRoutes->estimate(
+            $destination['lat'],
+            $destination['lng'],
+            (float) $technician->latitude,
+            (float) $technician->longitude
+        );
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array<string, mixed>  $crmAppointment
+     * @param  array{lat: float, lng: float, label: string}  $origin
+     * @param  array{lat: float, lng: float, label: string}  $destination
+     * @param  array<string, mixed>  $travelTo
+     * @param  array<string, mixed>  $travelAfter
+     * @return array<string, mixed>|null
+     */
+    private function buildSuggestionAt(
+        User $technician,
+        Collection $dayAppointments,
+        array $crmAppointment,
+        Carbon $date,
+        Carbon $startsAt,
+        Carbon $originAvailableAt,
+        array $origin,
+        ?Appointment $previousAppointment,
+        ?Appointment $nextAppointment,
+        Carbon $dayStart,
+        Carbon $dayEnd,
+        array $destination,
+        int $durationMinutes,
+        MapboxDrivingRouteService $drivingRoutes,
+        string $originLabel,
+        array $travelTo,
+        array $travelAfter,
+    ): ?array {
+        $startsAt = $startsAt->copy();
+        $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
+        $earliestStart = $originAvailableAt->copy()
+            ->addMinutes((int) $travelTo['duration_minutes'])
+            ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES);
+        $latestEnd = $this->latestSuggestionEnd($dayEnd, $nextAppointment, $travelAfter);
+
+        if ($startsAt->lt($dayStart) || $startsAt->lt($earliestStart) || $endsAt->gt($latestEnd)) {
+            return null;
+        }
+
+        if ($this->technicianHasLoadedAbsenceOverlap($technician, $startsAt, $endsAt)) {
+            return null;
+        }
+
+        if (! $this->technicianKeepsLunchBreak(
+            $technician,
+            $dayAppointments,
+            $dayStart,
+            $dayEnd,
+            $startsAt,
+            $endsAt,
+            $destination,
+            $drivingRoutes
+        )) {
+            return null;
+        }
+
+        return $this->suggestionPayload(
+            technician: $technician,
+            crmAppointment: $crmAppointment,
+            date: $date,
+            startsAt: $startsAt,
+            durationMinutes: $durationMinutes,
+            origin: $origin,
+            originLabel: $originLabel,
+            travelTo: $travelTo,
+            travelAfter: $travelAfter,
+            previousAppointment: $previousAppointment,
+            nextAppointment: $nextAppointment,
+            drivingRoutes: $drivingRoutes,
+        );
     }
 
     /**
@@ -1573,7 +1840,11 @@ class PlannerBookingController extends Controller
         ];
         $travelTo = $drivingRoutes->estimate($origin['lat'], $origin['lng'], $destination['lat'], $destination['lng']);
 
-        if ($originAvailableAt->copy()->addMinutes((int) $travelTo['duration_minutes'])->gt($startsAt)) {
+        if ($originAvailableAt->copy()
+            ->addMinutes((int) $travelTo['duration_minutes'])
+            ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES)
+            ->gt($startsAt)
+        ) {
             return null;
         }
 
@@ -1585,7 +1856,11 @@ class PlannerBookingController extends Controller
                 (float) $nextAppointment->longitude
             );
 
-            if ($endsAt->copy()->addMinutes((int) $travelAfter['duration_minutes'])->gt($nextAppointment->starts_at)) {
+            if ($endsAt->copy()
+                ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES)
+                ->addMinutes((int) $travelAfter['duration_minutes'])
+                ->gt($nextAppointment->starts_at)
+            ) {
                 return null;
             }
         } else {
@@ -1596,9 +1871,30 @@ class PlannerBookingController extends Controller
                 (float) $technician->longitude
             );
 
-            if ($endsAt->copy()->addMinutes((int) $travelAfter['duration_minutes'])->gt($dayEnd)) {
+            if ($endsAt->copy()
+                ->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES)
+                ->addMinutes((int) $travelAfter['duration_minutes'])
+                ->gt($dayEnd)
+            ) {
                 return null;
             }
+        }
+
+        if (! $this->technicianKeepsLunchBreak(
+            $technician,
+            $dayAppointments,
+            $dayStart,
+            $dayEnd,
+            $startsAt,
+            $endsAt,
+            [
+                'lat' => (float) $crmAppointment['latitude'],
+                'lng' => (float) $crmAppointment['longitude'],
+                'label' => $this->appointmentRequestDisplayName($crmAppointment),
+            ],
+            $drivingRoutes
+        )) {
+            return null;
         }
 
         return $this->suggestionPayload(
@@ -1618,76 +1914,6 @@ class PlannerBookingController extends Controller
         );
     }
 
-    /**
-     * @param  array{lat: float, lng: float, label: string}  $origin
-     * @param  array<string, mixed>  $crmAppointment
-     * @return array<string, mixed>|null
-     */
-    private function buildSuggestionIfFits(
-        User $technician,
-        array $crmAppointment,
-        Carbon $date,
-        Carbon $availableAt,
-        array $origin,
-        ?Appointment $previousAppointment,
-        ?Appointment $nextAppointment,
-        Carbon $dayEnd,
-        int $durationMinutes,
-        MapboxDrivingRouteService $drivingRoutes,
-        string $originLabel,
-    ): ?array {
-        $destination = [
-            'lat' => (float) $crmAppointment['latitude'],
-            'lng' => (float) $crmAppointment['longitude'],
-        ];
-        $travelTo = $drivingRoutes->estimate($origin['lat'], $origin['lng'], $destination['lat'], $destination['lng']);
-        $startsAt = $this->roundUpToNextHalfHour(
-            (clone $availableAt)->addMinutes((int) $travelTo['duration_minutes'])
-        );
-        $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
-
-        if ($this->technicianHasLoadedAbsenceOverlap($technician, $startsAt, $endsAt)) {
-            return null;
-        }
-
-        if ($nextAppointment) {
-            $travelAfter = $drivingRoutes->estimate(
-                $destination['lat'],
-                $destination['lng'],
-                (float) $nextAppointment->latitude,
-                (float) $nextAppointment->longitude
-            );
-            $latestEnd = $nextAppointment->starts_at?->copy()->subMinutes((int) $travelAfter['duration_minutes']);
-        } else {
-            $travelAfter = $drivingRoutes->estimate(
-                $destination['lat'],
-                $destination['lng'],
-                (float) $technician->latitude,
-                (float) $technician->longitude
-            );
-            $latestEnd = (clone $dayEnd)->subMinutes((int) $travelAfter['duration_minutes']);
-        }
-
-        if (! $latestEnd || $endsAt->gt($latestEnd)) {
-            return null;
-        }
-
-        return $this->suggestionPayload(
-            technician: $technician,
-            crmAppointment: $crmAppointment,
-            date: $date,
-            startsAt: $startsAt,
-            durationMinutes: $durationMinutes,
-            origin: $origin,
-            originLabel: $originLabel,
-            travelTo: $travelTo,
-            travelAfter: $travelAfter,
-            previousAppointment: $previousAppointment,
-            nextAppointment: $nextAppointment,
-            drivingRoutes: $drivingRoutes,
-        );
-    }
-
     private function roundUpToNextHalfHour(Carbon $date): Carbon
     {
         $intervalSeconds = 30 * 60;
@@ -1695,6 +1921,114 @@ class PlannerBookingController extends Controller
         $roundedTimestamp = intdiv($timestamp + $intervalSeconds - 1, $intervalSeconds) * $intervalSeconds;
 
         return Carbon::createFromTimestamp($roundedTimestamp, $date->getTimezone());
+    }
+
+    private function roundDownToPreviousHalfHour(Carbon $date): Carbon
+    {
+        $intervalSeconds = 30 * 60;
+        $timestamp = $date->getTimestamp();
+        $roundedTimestamp = intdiv($timestamp, $intervalSeconds) * $intervalSeconds;
+
+        return Carbon::createFromTimestamp($roundedTimestamp, $date->getTimezone());
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array{lat: float, lng: float, label: string}  $proposalDestination
+     */
+    private function technicianKeepsLunchBreak(
+        User $technician,
+        Collection $dayAppointments,
+        Carbon $dayStart,
+        Carbon $dayEnd,
+        Carbon $proposalStartsAt,
+        Carbon $proposalEndsAt,
+        array $proposalDestination,
+        MapboxDrivingRouteService $drivingRoutes
+    ): bool {
+        $breakDurationMinutes = max(0, (int) ($technician->break_duration_minutes ?? 0));
+
+        if ($breakDurationMinutes === 0) {
+            return true;
+        }
+
+        $breakWindowStart = Carbon::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_START);
+        $breakWindowEnd = Carbon::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_END);
+
+        if ($breakWindowEnd->lte($dayStart) || $breakWindowStart->gte($dayEnd)) {
+            return true;
+        }
+
+        $visits = $dayAppointments
+            ->map(fn (Appointment $appointment): array => [
+                'starts_at' => $appointment->starts_at,
+                'ends_at' => $appointment->ends_at,
+                'lat' => (float) $appointment->latitude,
+                'lng' => (float) $appointment->longitude,
+            ])
+            ->push([
+                'starts_at' => $proposalStartsAt->copy(),
+                'ends_at' => $proposalEndsAt->copy(),
+                'lat' => $proposalDestination['lat'],
+                'lng' => $proposalDestination['lng'],
+            ])
+            ->filter(fn (array $visit): bool => $visit['starts_at'] instanceof Carbon && $visit['ends_at'] instanceof Carbon)
+            ->sortBy('starts_at')
+            ->values();
+
+        $home = [
+            'lat' => (float) $technician->latitude,
+            'lng' => (float) $technician->longitude,
+        ];
+        $previousPoint = $home;
+        $availableFrom = $dayStart->copy();
+
+        foreach ($visits as $visit) {
+            $routeToVisit = $drivingRoutes->estimate(
+                $previousPoint['lat'],
+                $previousPoint['lng'],
+                (float) $visit['lat'],
+                (float) $visit['lng']
+            );
+            $availableUntil = $visit['starts_at']->copy()
+                ->subMinutes((int) $routeToVisit['duration_minutes'])
+                ->subMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES);
+
+            if ($this->breakFitsInInterval($availableFrom, $availableUntil, $breakWindowStart, $breakWindowEnd, $breakDurationMinutes)) {
+                return true;
+            }
+
+            $availableFrom = $visit['ends_at']->copy()->addMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES);
+            $previousPoint = [
+                'lat' => (float) $visit['lat'],
+                'lng' => (float) $visit['lng'],
+            ];
+        }
+
+        $routeHome = $drivingRoutes->estimate(
+            $previousPoint['lat'],
+            $previousPoint['lng'],
+            $home['lat'],
+            $home['lng']
+        );
+        $availableUntil = $dayEnd->copy()
+            ->subMinutes((int) $routeHome['duration_minutes'])
+            ->subMinutes(self::APPOINTMENT_TRANSITION_MARGIN_MINUTES);
+
+        return $this->breakFitsInInterval($availableFrom, $availableUntil, $breakWindowStart, $breakWindowEnd, $breakDurationMinutes);
+    }
+
+    private function breakFitsInInterval(
+        Carbon $availableFrom,
+        Carbon $availableUntil,
+        Carbon $breakWindowStart,
+        Carbon $breakWindowEnd,
+        int $breakDurationMinutes
+    ): bool {
+        $startsAt = $availableFrom->greaterThan($breakWindowStart) ? $availableFrom : $breakWindowStart;
+        $endsAt = $availableUntil->lessThan($breakWindowEnd) ? $availableUntil : $breakWindowEnd;
+
+        return $startsAt->lt($endsAt) && $endsAt->diffInMinutes($startsAt, true) >= $breakDurationMinutes;
     }
 
     private function isBookableDay(Carbon $date): bool
