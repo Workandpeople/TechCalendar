@@ -546,20 +546,23 @@
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_address_input">Adresse</label>
                                 <input id="booking_crm_detail_address_input" type="text" class="gc-input" autocomplete="off" placeholder="Adresse complète du RDV" />
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">La sauvegarde relance le géocodage Mapbox et met à jour le point GPS.</p>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <button id="booking-crm-detail-save" type="submit" class="gc-btn-primary">Enregistrer et regéocoder</button>
+                                    <span class="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-sm font-semibold" style="border-color:var(--gc-border);background:#fff;color:var(--gc-text-soft);" title="Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.">?</span>
+                                </div>
                             </div>
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_comment">Commentaires</label>
                                 <textarea id="booking_crm_detail_comment" class="gc-input min-h-[110px]" placeholder="Commentaires du dossier ou notes internes"></textarea>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <button id="booking-crm-detail-problem" type="button" class="gc-btn-danger">Problème RDV</button>
+                                    <button id="booking-crm-detail-save-comment" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div class="mt-4">
                             <p id="booking_crm_detail_status" class="hidden text-sm"></p>
-                            <div class="flex flex-wrap justify-end gap-2">
-                                <button id="booking-crm-detail-problem" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
-                                <button id="booking-crm-detail-save" type="submit" class="gc-btn">Enregistrer et regéocoder</button>
-                            </div>
                         </div>
                     </form>
 
@@ -701,8 +704,8 @@
                         <div id="booking_detail_status" class="mt-3 hidden text-sm"></div>
 
                         <div class="mt-4 flex flex-wrap justify-end gap-2">
-                            <button id="booking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
-                            <button id="booking-save-comment-btn" type="button" class="gc-btn-soft">Enregistrer commentaire</button>
+                            <button id="booking-problem-appointment-btn" type="button" class="gc-btn-danger">Problème RDV</button>
+                            <button id="booking-save-comment-btn" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                             <button id="booking-confirm-suggestion-btn" type="button" class="gc-btn-primary">Valider la prise du RDV</button>
                         </div>
                     </form>
@@ -853,11 +856,14 @@
         const bookingCrmDetailStatus = document.getElementById('booking_crm_detail_status');
         const bookingCrmDetailSave = document.getElementById('booking-crm-detail-save');
         const bookingCrmDetailProblem = document.getElementById('booking-crm-detail-problem');
+        const bookingCrmDetailSaveComment = document.getElementById('booking-crm-detail-save-comment');
         const bookingCrmDetailRefreshDocuments = document.getElementById('booking-crm-detail-refresh-documents');
         const bookingCrmDetailDocumentsStatus = document.getElementById('booking_crm_detail_documents_status');
         const bookingDetailRefreshDocuments = document.getElementById('booking-detail-refresh-documents');
         const bookingDetailDocumentsStatus = document.getElementById('booking_detail_documents_status');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
+        const bookingDetailComment = document.getElementById('booking_detail_comment');
+        const bookingSaveComment = document.getElementById('booking-save-comment-btn');
         const manualBookingSection = document.getElementById('manual-booking-section');
         const manualBookingStatus = document.getElementById('manual-booking-status');
         const manualBookingToggle = document.getElementById('manual-booking-toggle');
@@ -1676,6 +1682,38 @@
             bookingCrmDetailProblem.textContent = isSaving ? 'Signalement...' : 'Problème RDV';
         };
 
+        const updateCrmDetailCommentButtonVisibility = () => {
+            if (!bookingCrmDetailSaveComment || !bookingCrmDetailComment) return;
+
+            const hasChanged = bookingCrmDetailComment.value.trim() !== bookingInitialCrmDetailComment.trim();
+            bookingCrmDetailSaveComment.classList.toggle('hidden', !currentCrmDetailAppointmentId || !hasChanged);
+        };
+
+        const setCrmDetailCommentSaving = (isSaving) => {
+            if (!bookingCrmDetailSaveComment) return;
+
+            bookingCrmDetailSaveComment.disabled = isSaving;
+            bookingCrmDetailSaveComment.textContent = isSaving ? 'Enregistrement...' : 'Enregistrer mon commentaire';
+        };
+
+        const updateBookingDetailCommentButtonVisibility = () => {
+            if (!bookingSaveComment || !bookingDetailComment) return;
+
+            const appointmentId = document.getElementById('booking_detail_appointment_id')?.value || '';
+            const crmAppointmentId = document.getElementById('booking_detail_crm_id')?.value || '';
+            const canSaveComment = Boolean(appointmentId) || isCoffracCrmId(crmAppointmentId);
+            const hasChanged = bookingDetailComment.value.trim() !== bookingInitialDetailComment.trim();
+
+            bookingSaveComment.classList.toggle('hidden', !canSaveComment || !hasChanged);
+        };
+
+        const setBookingDetailCommentSaving = (isSaving) => {
+            if (!bookingSaveComment) return;
+
+            bookingSaveComment.disabled = isSaving;
+            bookingSaveComment.textContent = isSaving ? 'Enregistrement...' : 'Enregistrer mon commentaire';
+        };
+
         const fillCrmDetailForm = (appointment) => {
             if (bookingCrmDetailService) {
                 bookingCrmDetailService.value = appointment?.service?.id ? String(appointment.service.id) : '';
@@ -1691,6 +1729,7 @@
 
             bookingInitialCrmDetailComment = bookingCrmDetailComment?.value || '';
             setCrmDetailStatus();
+            updateCrmDetailCommentButtonVisibility();
         };
 
         const formatExternalCommentDate = (value) => {
@@ -2133,6 +2172,50 @@
             }
         };
 
+        const saveCrmAppointmentComment = async () => {
+            if (!currentCrmDetailAppointmentId || bookingCrmDetailSaveComment?.disabled) return;
+
+            const comment = bookingCrmDetailComment?.value || '';
+
+            setCrmDetailCommentSaving(true);
+            setCrmDetailStatus('Enregistrement du commentaire...');
+
+            try {
+                const response = await fetch(
+                    bookingCrmUpdateUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(currentCrmDetailAppointmentId)),
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': bookingCsrfToken,
+                        },
+                        body: JSON.stringify({ comment }),
+                    },
+                );
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Impossible d’enregistrer le commentaire.');
+                }
+
+                renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+
+                if (currentAppointmentRequest?.id === currentCrmDetailAppointmentId) {
+                    currentAppointmentRequest.comment = payload.appointment?.comment || comment;
+                }
+
+                bookingInitialCrmDetailComment = payload.appointment?.comment || comment;
+                updateCrmDetailCommentButtonVisibility();
+                setCrmDetailStatus('Commentaire enregistré.', 'success');
+            } catch (error) {
+                setCrmDetailStatus(error.message || 'Impossible d’enregistrer le commentaire.', 'error');
+            } finally {
+                setCrmDetailCommentSaving(false);
+            }
+        };
+
         const clearMap = () => {
             bookingMapMarkers.forEach((marker) => marker.remove());
             bookingMapMarkers = [];
@@ -2508,7 +2591,6 @@
 
                     return String(props.technician_id || '') === String(technicianId)
                         && !props.is_suggestion
-                        && !props.deleted_at
                         && event.end
                         && event.end <= startsAt
                         && sameLocalDay(event.start, startsAt);
@@ -2701,6 +2783,8 @@
 
         const routeNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
 
+        const isCoffracCrmId = (value) => String(value || '').startsWith('coffrac-');
+
         const validRoutePoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
 
         const sameEventIdentity = (left, right) => {
@@ -2747,7 +2831,6 @@
                 return String(eventProps.technician_id || '') === String(props.technician_id || '')
                     && sameLocalDay(event.start, currentEvent.start)
                     && !eventProps.is_suggestion
-                    && (!eventProps.deleted_at || sameEventIdentity(event, currentEvent))
                     && Number.isFinite(routeNumber(eventProps.latitude))
                     && Number.isFinite(routeNumber(eventProps.longitude));
             });
@@ -3156,6 +3239,27 @@
             }
         };
 
+        const clearBookingAnalysisContext = () => {
+            calendarWindowAbortController?.abort();
+            technicianSearchAbortController?.abort();
+            shouldFetchCalendarWindow = false;
+            currentAnalysisPayload = null;
+            currentAppointmentRequest = null;
+            currentCrmAppointmentId = null;
+            currentTechnicians = [];
+            selectedTechnicianIds = new Set();
+            currentFilters = null;
+            currentCalendarEvents = [];
+            currentCalendarSuggestions = [];
+            selectedCalendarEvent = null;
+
+            hideCalendarLoader(true);
+            analysisSection?.classList.add('hidden');
+            techniciansList.innerHTML = '';
+            clearMap();
+            bookingCalendar?.removeAllEvents();
+        };
+
         const showDetailStatus = (message, type = 'info') => {
             bookingDetailStatus.textContent = message;
             bookingDetailStatus.style.color = type === 'error' ? '#be123c' : '#0f766e';
@@ -3221,6 +3325,7 @@
             const startsAtInput = document.getElementById('booking_detail_starts_at');
             const durationInput = document.getElementById('booking_detail_duration');
             const shouldSelectCrmService = requiresCrmServiceSelection(props);
+            const canReportProblem = !isSuggestion || isCoffracCrmId(props.crm_appointment_id);
 
             hideDetailStatus();
             document.getElementById('booking_modal_kind').textContent = props.is_calendar_click
@@ -3269,8 +3374,8 @@
 
             startsAtInput.disabled = !isSuggestion;
             durationInput.disabled = !isSuggestion;
-            document.getElementById('booking-problem-appointment-btn').classList.toggle('hidden', isSuggestion || Boolean(props.deleted_at));
-            document.getElementById('booking-save-comment-btn').classList.toggle('hidden', isSuggestion);
+            document.getElementById('booking-problem-appointment-btn').classList.toggle('hidden', !canReportProblem);
+            updateBookingDetailCommentButtonVisibility();
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
 
@@ -3440,16 +3545,14 @@
         const colorizedEvents = (events, suggestions = []) => [...visibleCalendarItems(events), ...visibleCalendarItems(suggestions)].map((event) => {
             const technicianId = String(event.extendedProps?.technician_id || '');
             const color = currentTechnicianColors[technicianId] || '#31424c';
-            const isDeleted = Boolean(event.extendedProps?.deleted_at);
             const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
 
             return {
                 ...event,
-                backgroundColor: isSuggestion || isDeleted ? `${color}26` : color,
-                borderColor: isDeleted ? '#be123c' : color,
+                backgroundColor: isSuggestion ? `${color}26` : color,
+                borderColor: color,
                 textColor: isSuggestion ? color : '#ffffff',
                 classNames: [
-                    ...(isDeleted ? ['appointment-soft-deleted'] : []),
                     ...(isSuggestion ? ['appointment-suggestion'] : []),
                 ],
             };
@@ -3973,6 +4076,8 @@
             event.preventDefault();
             await saveCrmAppointmentDetail();
         });
+        bookingCrmDetailComment?.addEventListener('input', updateCrmDetailCommentButtonVisibility);
+        bookingCrmDetailSaveComment?.addEventListener('click', saveCrmAppointmentComment);
 
         bookingCrmDetailProblem?.addEventListener('click', async () => {
             if (!currentCrmDetailAppointmentId || bookingCrmDetailProblem.disabled) return;
@@ -4013,7 +4118,11 @@
                 }
 
                 renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+                if (currentAppointmentRequest?.id === currentCrmDetailAppointmentId) {
+                    clearBookingAnalysisContext();
+                }
                 bookingInitialCrmDetailComment = comment;
+                updateCrmDetailCommentButtonVisibility();
                 setCrmDetailStatus(payload.message || 'Problème RDV déclaré.', 'success');
                 window.setTimeout(() => closeCrmAppointmentDetail(), 650);
             } catch (error) {
@@ -4102,18 +4211,23 @@
             }
         });
 
-        document.getElementById('booking-save-comment-btn').addEventListener('click', async () => {
+        bookingDetailComment?.addEventListener('input', updateBookingDetailCommentButtonVisibility);
+
+        bookingSaveComment?.addEventListener('click', async () => {
             const appointmentId = document.getElementById('booking_detail_appointment_id').value;
+            const crmAppointmentId = document.getElementById('booking_detail_crm_id').value;
             const comment = document.getElementById('booking_detail_comment').value;
-            const button = document.getElementById('booking-save-comment-btn');
+            const isPendingCoffracComment = !appointmentId && isCoffracCrmId(crmAppointmentId);
 
-            if (!appointmentId) return;
+            if (!appointmentId && !isPendingCoffracComment) return;
 
-            button.disabled = true;
-            button.textContent = 'Enregistrement...';
+            setBookingDetailCommentSaving(true);
 
             try {
-                const response = await fetch(bookingCommentUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                const commentUrl = isPendingCoffracComment
+                    ? bookingCrmUpdateUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(crmAppointmentId))
+                    : bookingCommentUrlTemplate.replace('__APPOINTMENT__', appointmentId);
+                const response = await fetch(commentUrl, {
                     method: 'PATCH',
                     headers: {
                         Accept: 'application/json',
@@ -4129,23 +4243,36 @@
                     throw new Error(firstError);
                 }
 
-                selectedCalendarEvent?.setExtendedProp('comment', payload.comment || comment);
-                bookingInitialDetailComment = payload.comment || comment;
-                showDetailStatus('Commentaire enregistre.');
+                const savedComment = payload.comment || payload.appointment?.comment || comment;
+
+                selectedCalendarEvent?.setExtendedProp('comment', savedComment);
+                bookingInitialDetailComment = savedComment;
+
+                if (isPendingCoffracComment) {
+                    renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+
+                    if (currentAppointmentRequest?.id === crmAppointmentId) {
+                        currentAppointmentRequest.comment = savedComment;
+                    }
+                }
+
+                updateBookingDetailCommentButtonVisibility();
+                showDetailStatus('Commentaire enregistré.');
             } catch (error) {
                 showDetailStatus(error.message || 'Enregistrement impossible.', 'error');
             } finally {
-                button.disabled = false;
-                button.textContent = 'Enregistrer commentaire';
+                setBookingDetailCommentSaving(false);
             }
         });
 
         document.getElementById('booking-problem-appointment-btn').addEventListener('click', async () => {
             const appointmentId = document.getElementById('booking_detail_appointment_id').value;
+            const crmAppointmentId = document.getElementById('booking_detail_crm_id').value;
             const comment = document.getElementById('booking_detail_comment').value.trim();
             const button = document.getElementById('booking-problem-appointment-btn');
+            const isPendingCoffracProblem = !appointmentId && isCoffracCrmId(crmAppointmentId);
 
-            if (!appointmentId) return;
+            if (!appointmentId && !isPendingCoffracProblem) return;
 
             if (!comment) {
                 showDetailStatus('Un commentaire est obligatoire avant de déclarer un problème RDV.', 'error');
@@ -4161,7 +4288,10 @@
             button.textContent = 'Signalement...';
 
             try {
-                const response = await fetch(bookingProblemUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                const problemUrl = isPendingCoffracProblem
+                    ? bookingCrmProblemUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(crmAppointmentId))
+                    : bookingProblemUrlTemplate.replace('__APPOINTMENT__', appointmentId);
+                const response = await fetch(problemUrl, {
                     method: 'POST',
                     headers: {
                         Accept: 'application/json',
@@ -4177,16 +4307,29 @@
                     throw new Error(firstError);
                 }
 
+                if (isPendingCoffracProblem) {
+                    renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+
+                    if (currentAppointmentRequest?.id === crmAppointmentId) {
+                        clearBookingAnalysisContext();
+                    }
+
+                    closeBookingAppointmentModal();
+                    showFeedback(payload.message || 'Problème RDV déclaré dans Coffrac.');
+                    return;
+                }
+
                 if (selectedCalendarEvent) {
                     selectedCalendarEvent.setExtendedProp('comment', payload.comment || comment);
                     selectedCalendarEvent.setExtendedProp('status', payload.status || 'problem');
                     selectedCalendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
-                    selectedCalendarEvent.setProp('backgroundColor', '#fef3c7');
-                    selectedCalendarEvent.setProp('borderColor', '#d97706');
-                    selectedCalendarEvent.setProp('textColor', '#713f12');
+                    selectedCalendarEvent.setProp('backgroundColor', '#fff7ed');
+                    selectedCalendarEvent.setProp('borderColor', '#f97316');
+                    selectedCalendarEvent.setProp('textColor', '#9a3412');
                 }
 
                 bookingInitialDetailComment = payload.comment || comment;
+                updateBookingDetailCommentButtonVisibility();
                 showDetailStatus('Problème RDV déclaré.');
             } catch (error) {
                 showDetailStatus(error.message || 'Signalement impossible.', 'error');

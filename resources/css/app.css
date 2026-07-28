@@ -316,7 +316,7 @@
         gap: 1rem;
         overflow: hidden;
         padding: 1rem;
-        background: linear-gradient(180deg, #fff 0%, var(--gc-accent-soft) 100%);
+        background: #fff;
     }
 
     .gc-appointment-modal-map-pane,
@@ -399,12 +399,6 @@
 
     .gc-mapbox-item:hover {
         background-color: var(--gc-accent-soft);
-    }
-
-    .appointment-soft-deleted {
-        opacity: 0.55;
-        outline: 2px solid #be123c;
-        outline-offset: -2px;
     }
 
     .appointment-suggestion {

@@ -178,7 +178,7 @@ class PlannerBookingController extends Controller
                 'integer',
                 Rule::exists('services', 'id'),
             ],
-            'address' => ['required', 'string', 'max:500'],
+            'address' => ['sometimes', 'required', 'string', 'max:500'],
             'comment' => ['nullable', 'string', 'max:5000'],
         ]);
 
@@ -754,7 +754,7 @@ class PlannerBookingController extends Controller
             return collect();
         }
 
-        return Appointment::withTrashed()
+        return Appointment::query()
             ->with([
                 'service:id,type,name',
                 'technician:id,first_name,last_name,department_code,role,latitude,longitude,address',
@@ -1174,17 +1174,15 @@ class PlannerBookingController extends Controller
      */
     private function calendarEvents(Collection $appointments): Collection
     {
-        $activeAppointmentsByTechnicianAndDay = $appointments
-            ->filter(fn (Appointment $appointment): bool => $appointment->deleted_at === null)
+        $appointmentsByTechnicianAndDay = $appointments
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at?->toDateString());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
-        return $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnicianAndDay, $documentsByAppointment): array {
+        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment): array {
             $serviceLabel = $appointment->service
                 ? $appointment->service->type.' - '.$appointment->service->name
                 : 'Prestation';
-            $isDeleted = $appointment->trashed();
-            $sameDayAppointments = $activeAppointmentsByTechnicianAndDay
+            $sameDayAppointments = $appointmentsByTechnicianAndDay
                 ->get($appointment->technician_id.'|'.$appointment->starts_at?->toDateString(), collect())
                 ->sortBy('starts_at')
                 ->values();
@@ -1199,13 +1197,9 @@ class PlannerBookingController extends Controller
                 'title' => $appointment->technician?->full_name_with_departments.' | '.$serviceLabel,
                 'start' => $appointment->starts_at?->toIso8601String(),
                 'end' => $appointment->ends_at?->toIso8601String(),
-                'backgroundColor' => $isDeleted
-                    ? 'rgba(190,18,60,0.22)'
-                    : ($appointment->status === Appointment::STATUS_PROBLEM ? '#fef3c7' : '#9ccfe3'),
-                'borderColor' => $isDeleted
-                    ? '#be123c'
-                    : ($appointment->status === Appointment::STATUS_PROBLEM ? '#d97706' : '#31424c'),
-                'textColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#713f12' : '#31424c',
+                'backgroundColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#fff7ed' : '#9ccfe3',
+                'borderColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#f97316' : '#31424c',
+                'textColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#9a3412' : '#31424c',
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $appointment->technician?->full_name_with_departments,
@@ -1224,7 +1218,6 @@ class PlannerBookingController extends Controller
                     'comment' => $appointment->comment,
                     'status' => $appointment->status,
                     'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
-                    'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                     'origin_label' => $previousAppointment ? 'rdv précédent' : 'domicile',
                     'origin_latitude' => $originLat,
                     'origin_longitude' => $originLng,
@@ -1298,7 +1291,6 @@ class PlannerBookingController extends Controller
         }
 
         $appointmentsByTechnician = $appointments
-            ->filter(fn (Appointment $appointment): bool => $appointment->deleted_at === null)
             ->filter(fn (Appointment $appointment): bool => $appointment->starts_at?->betweenIncluded($startDate, $endDate))
             ->groupBy('technician_id');
 
@@ -1363,7 +1355,6 @@ class PlannerBookingController extends Controller
         }
 
         $appointmentsByTechnician = $appointments
-            ->filter(fn (Appointment $appointment): bool => $appointment->deleted_at === null)
             ->filter(fn (Appointment $appointment): bool => (bool) $appointment->starts_at?->isSameDay($preferredStartsAt))
             ->groupBy('technician_id');
 

@@ -9,6 +9,7 @@ use App\Models\ExternalAppointmentRequest;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
+use App\Services\CoffracAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -168,6 +169,17 @@ it('reassigns a tracking appointment to another compatible technician', function
 
 it('updates tracking appointment date duration and address', function () {
     Mail::fake();
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
+    ]);
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/4257/address' => Http::response([
+            'result' => true,
+            'message' => 'Adresse corrigée.',
+        ]),
+    ]);
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -197,6 +209,29 @@ it('updates tracking appointment date duration and address', function () {
         'starts_at' => $startsAt,
         'duration_minutes' => 90,
         'ends_at' => $startsAt->copy()->addMinutes(90),
+        'external_source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '4257',
+        'external_payload' => ['id' => 4257],
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '4257',
+        'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        'appointment_id' => $appointment->id,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'RDV attente visite',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'Modif',
+        'phone' => '0600000020',
+        'address' => '1 Rue Ancienne, 69001 Lyon',
+        'address_line' => '1 Rue Ancienne',
+        'postal_code' => '69001',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.767,
+        'longitude' => 4.833,
+        'payload' => ['id' => 4257],
+        'fetched_at' => now(),
     ]);
 
     TechnicianDailyRouteMetric::query()->create([
@@ -234,6 +269,28 @@ it('updates tracking appointment date duration and address', function () {
             ->where('technician_id', $technician->id)
             ->whereDate('service_date', '2026-06-18')
             ->exists())->toBeFalse();
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', CoffracAppointmentService::SOURCE)
+        ->where('external_reference', '4257')
+        ->firstOrFail();
+
+    expect($stored->address)->toBe('20 Place Bellecour, 69002 Lyon, France')
+        ->and($stored->address_line)->toBe('20 Place Bellecour')
+        ->and($stored->latitude)->toBe(45.7578)
+        ->and($stored->longitude)->toBe(4.832);
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'PATCH'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4257/address'
+        && $request->hasHeader('Authorization', 'Bearer secret-token')
+        && $request['address'] === '20 Place Bellecour, 69002 Lyon, France'
+        && $request['address_line'] === '20 Place Bellecour'
+        && $request['postal_code'] === '69002'
+        && $request['city'] === 'Lyon'
+        && $request['latitude'] === 45.7578
+        && $request['longitude'] === 4.832
+        && $request['techcalendar_appointment_id'] === $appointment->id);
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,
@@ -302,7 +359,7 @@ it('rejects tracking appointment update that overlaps another appointment', func
     expect($appointment->refresh()->starts_at->format('H:i:s'))->toBe('09:00:00');
 });
 
-it('notifies the technician when a tracking appointment comment is updated cancelled and restored', function () {
+it('notifies the technician when a tracking appointment comment is updated', function () {
     Mail::fake();
 
     $planner = User::factory()->create([
@@ -342,26 +399,12 @@ it('notifies the technician when a tracking appointment comment is updated cance
         ])
         ->assertOk();
 
-    $this->actingAs($planner)
-        ->deleteJson(route('planner.tracking.appointments.destroy', $appointment), [
-            'comment' => 'Annulation client',
-        ])
-        ->assertOk();
-
-    $this->actingAs($planner)
-        ->postJson(route('planner.tracking.appointments.restore', $appointment), [
-            'comment' => 'Réactivation confirmée',
-        ])
-        ->assertOk();
-
-    foreach (['comment_updated', 'cancelled', 'restored'] as $eventType) {
-        Mail::assertQueued(
-            TechnicianAppointmentNotificationMail::class,
-            fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === $eventType
-                && $mail->hasTo($technician->email)
-                && $mail->appointment->id === $appointment->id,
-        );
-    }
+    Mail::assertQueued(
+        TechnicianAppointmentNotificationMail::class,
+        fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'comment_updated'
+            && $mail->hasTo($technician->email)
+            && $mail->appointment->id === $appointment->id,
+    );
 });
 
 it('rejects reassignment to a technician that does not cover the appointment service', function () {
@@ -481,7 +524,7 @@ it('filters tracking events by service', function () {
         ->and($events[0]['extendedProps']['service_id'])->toBe($targetService->id);
 });
 
-it('filters tracking events by appointment soft-delete status', function () {
+it('filters tracking events by appointment status', function () {
     $planner = User::factory()->create([
         'role' => 1,
         'admin' => false,
@@ -511,12 +554,12 @@ it('filters tracking events by appointment soft-delete status', function () {
         'duration_minutes' => 60,
         'ends_at' => $startsAt->copy()->addMinutes(60),
     ]);
-    $deletedAppointment = Appointment::query()->create([
+    $problemAppointment = Appointment::query()->create([
         'service_id' => $service->id,
         'technician_id' => $technician->id,
         'created_by' => $planner->id,
         'customer_first_name' => 'Client',
-        'customer_last_name' => 'Supprimé',
+        'customer_last_name' => 'Problème',
         'customer_phone' => '0600000013',
         'address' => '4 Rue Nationale, Lyon',
         'latitude' => 45.765,
@@ -524,8 +567,9 @@ it('filters tracking events by appointment soft-delete status', function () {
         'starts_at' => $startsAt->copy()->addHours(2),
         'duration_minutes' => 60,
         'ends_at' => $startsAt->copy()->addHours(3),
+        'status' => Appointment::STATUS_PROBLEM,
+        'problem_reported_at' => now(),
     ]);
-    $deletedAppointment->delete();
 
     $activeEvents = $this->actingAs($planner)
         ->postJson(route('planner.tracking.events'), [
@@ -537,22 +581,22 @@ it('filters tracking events by appointment soft-delete status', function () {
         ->assertOk()
         ->json('events');
 
-    $deletedEvents = $this->actingAs($planner)
+    $problemEvents = $this->actingAs($planner)
         ->postJson(route('planner.tracking.events'), [
             'technician_ids' => [$technician->id],
             'start' => '2026-06-16 00:00:00',
             'end' => '2026-06-17 00:00:00',
-            'appointment_status' => 'deleted',
+            'appointment_status' => 'problem',
         ])
         ->assertOk()
         ->json('events');
 
     expect($activeEvents)->toHaveCount(1)
         ->and($activeEvents[0]['id'])->toBe($activeAppointment->id)
-        ->and($activeEvents[0]['extendedProps']['deleted_at'])->toBeNull()
-        ->and($deletedEvents)->toHaveCount(1)
-        ->and($deletedEvents[0]['id'])->toBe($deletedAppointment->id)
-        ->and($deletedEvents[0]['extendedProps']['deleted_at'])->not->toBeNull();
+        ->and($activeEvents[0]['extendedProps']['status'])->toBe(Appointment::STATUS_SCHEDULED)
+        ->and($problemEvents)->toHaveCount(1)
+        ->and($problemEvents[0]['id'])->toBe($problemAppointment->id)
+        ->and($problemEvents[0]['extendedProps']['status'])->toBe(Appointment::STATUS_PROBLEM);
 });
 
 it('includes coffrac documents from stored external requests in tracking events', function () {

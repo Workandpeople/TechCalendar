@@ -79,7 +79,7 @@ class PlannerTrackingController extends Controller
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
-        $appointment = Appointment::withTrashed()->findOrFail($appointment);
+        $appointment = Appointment::query()->findOrFail($appointment);
 
         try {
             $refresh = $coffracAppointments->refreshAppointment($appointment);
@@ -113,7 +113,7 @@ class PlannerTrackingController extends Controller
             'start' => ['required', 'date'],
             'end' => ['required', 'date', 'after:start'],
             'service_id' => ['nullable', 'integer', Rule::exists('services', 'id')],
-            'appointment_status' => ['nullable', Rule::in(['all', 'active', 'deleted'])],
+            'appointment_status' => ['nullable', Rule::in(['all', 'active', 'problem'])],
         ]);
 
         $technicianIds = collect($payload['technician_ids'] ?? [])
@@ -125,7 +125,7 @@ class PlannerTrackingController extends Controller
             return response()->json(['events' => []]);
         }
 
-        $appointmentsQuery = Appointment::withTrashed()
+        $appointmentsQuery = Appointment::query()
             ->with([
                 'service:id,type,name',
                 'technician:id,first_name,last_name,address,department_code,latitude,longitude,role',
@@ -138,8 +138,8 @@ class PlannerTrackingController extends Controller
             ->when(! empty($payload['service_id']), fn ($query) => $query->where('service_id', (int) $payload['service_id']));
 
         match ($payload['appointment_status'] ?? 'all') {
-            'active' => $appointmentsQuery->whereNull('deleted_at'),
-            'deleted' => $appointmentsQuery->onlyTrashed(),
+            'active' => $appointmentsQuery->where('status', Appointment::STATUS_SCHEDULED),
+            'problem' => $appointmentsQuery->where('status', Appointment::STATUS_PROBLEM),
             default => null,
         };
 
@@ -147,20 +147,19 @@ class PlannerTrackingController extends Controller
             ->orderBy('starts_at')
             ->get();
 
-        $activeAppointmentsByTechnician = $appointments
-            ->filter(fn (Appointment $appointment): bool => ! $appointment->trashed())
+        $appointmentsByTechnician = $appointments
             ->groupBy('technician_id')
             ->map(fn ($technicianAppointments) => $technicianAppointments->sortBy('starts_at')->values());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment) use ($activeAppointmentsByTechnician, $documentsByAppointment): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment): array {
                 $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
                 $location = $this->extractLocationFromAddress($appointment->address);
-                $previousAppointment = $activeAppointmentsByTechnician
+                $previousAppointment = $appointmentsByTechnician
                     ->get($appointment->technician_id, collect())
                     ->filter(fn (Appointment $candidate): bool => $candidate->id !== $appointment->id)
                     ->filter(fn (Appointment $candidate): bool => (bool) $candidate->starts_at?->isSameDay($appointment->starts_at))
@@ -206,7 +205,6 @@ class PlannerTrackingController extends Controller
                         'comment' => $appointment->comment,
                         'status' => $appointment->status,
                         'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
-                        'deleted_at' => $appointment->deleted_at?->toIso8601String(),
                         'created_by_name' => $appointment->creator?->full_name,
                         'comments' => $this->externalComments($appointment),
                         'documents' => $documentsByAppointment[$appointment->id] ?? [],
@@ -230,11 +228,12 @@ class PlannerTrackingController extends Controller
         Request $request,
         int $appointment,
         AppointmentTechnicianMailService $appointmentMails,
+        CoffracAppointmentService $coffracAppointments,
     ): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
-        $appointment = Appointment::withTrashed()
+        $appointment = Appointment::query()
             ->with('service:id,type,name')
             ->findOrFail($appointment);
 
@@ -264,6 +263,14 @@ class PlannerTrackingController extends Controller
         }
 
         $previousDate = $appointment->starts_at?->toDateString();
+
+        try {
+            $coffracAppointments->updateAppointmentAddress($appointment, $payload);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'address' => $exception->getMessage(),
+            ]);
+        }
 
         $appointment->update([
             'starts_at' => $startsAt,
@@ -308,7 +315,7 @@ class PlannerTrackingController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
-        $appointment = Appointment::withTrashed()
+        $appointment = Appointment::query()
             ->with('service:id,type,name')
             ->findOrFail($appointment);
 
@@ -387,74 +394,6 @@ class PlannerTrackingController extends Controller
         ]);
     }
 
-    public function destroy(
-        Request $request,
-        Appointment $appointment,
-        AppointmentTechnicianMailService $appointmentMails,
-    ): JsonResponse
-    {
-        abort_unless($this->canAccess($request), 403);
-
-        $payload = $request->validate([
-            'comment' => ['required', 'string', 'max:2000'],
-        ]);
-
-        if (trim($payload['comment']) === trim((string) $appointment->comment)) {
-            throw ValidationException::withMessages([
-                'comment' => 'Le commentaire doit être modifié avant de soft delete le RDV.',
-            ]);
-        }
-
-        $appointment->update([
-            'comment' => $payload['comment'],
-        ]);
-        $appointment->delete();
-        $appointmentMails->cancelled($appointment);
-
-        return response()->json([
-            'message' => 'Rendez-vous désactivé.',
-            'deleted_at' => $appointment->deleted_at?->toIso8601String(),
-            'comment' => $appointment->comment,
-        ]);
-    }
-
-    public function restore(
-        Request $request,
-        int $appointment,
-        AppointmentTechnicianMailService $appointmentMails,
-    ): JsonResponse
-    {
-        abort_unless($this->canAccess($request), 403);
-
-        $appointment = Appointment::withTrashed()->findOrFail($appointment);
-
-        $payload = $request->validate([
-            'comment' => ['required', 'string', 'max:2000'],
-        ]);
-
-        if (trim($payload['comment']) === trim((string) $appointment->comment)) {
-            throw ValidationException::withMessages([
-                'comment' => 'Le commentaire doit être modifié avant de réactiver le RDV.',
-            ]);
-        }
-
-        $appointment->update([
-            'comment' => $payload['comment'],
-        ]);
-
-        if ($appointment->trashed()) {
-            $appointment->restore();
-        }
-
-        $appointmentMails->restored($appointment);
-
-        return response()->json([
-            'message' => 'Rendez-vous réactivé.',
-            'comment' => $appointment->comment,
-            'deleted_at' => null,
-        ]);
-    }
-
     public function updateComment(
         Request $request,
         int $appointment,
@@ -463,7 +402,7 @@ class PlannerTrackingController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
-        $appointment = Appointment::withTrashed()->findOrFail($appointment);
+        $appointment = Appointment::query()->findOrFail($appointment);
 
         $payload = $request->validate([
             'comment' => ['nullable', 'string', 'max:2000'],
@@ -490,13 +429,7 @@ class PlannerTrackingController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
-        $appointment = Appointment::withTrashed()->findOrFail($appointment);
-
-        if ($appointment->trashed()) {
-            throw ValidationException::withMessages([
-                'comment' => 'Réactive le RDV avant de le déclarer en problème.',
-            ]);
-        }
+        $appointment = Appointment::query()->findOrFail($appointment);
 
         $payload = $request->validate([
             'comment' => ['required', 'string', 'max:2000'],
@@ -516,7 +449,7 @@ class PlannerTrackingController extends Controller
                     'problem_reported_at' => now(),
                 ]);
 
-                $appointment = Appointment::withTrashed()
+                $appointment = Appointment::query()
                     ->with(['technician:id,email', 'service:id,type,name'])
                     ->findOrFail($appointment->id);
 

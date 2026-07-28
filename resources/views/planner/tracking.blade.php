@@ -91,8 +91,8 @@
                             <label class="gc-label" for="tracking_status_filter">État du RDV</label>
                         <select id="tracking_status_filter" class="gc-input">
                             <option value="all">Tous les RDV</option>
-                            <option value="active">Actifs uniquement</option>
-                            <option value="deleted">Soft-deleted uniquement</option>
+                            <option value="active">RDV planifiés uniquement</option>
+                            <option value="problem">Problèmes uniquement</option>
                         </select>
                     </div>
                     <button id="tracking-reset-filters" type="button" class="gc-btn-soft">Réinitialiser</button>
@@ -220,12 +220,13 @@
                             <input id="tracking_detail_address_input" type="text" maxlength="255" class="gc-input" required autocomplete="off" />
                             <input id="tracking_detail_latitude" type="hidden" />
                             <input id="tracking_detail_longitude" type="hidden" />
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer et regéocoder</button>
+                                <span class="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-sm font-semibold" style="border-color:var(--gc-border);background:#fff;color:var(--gc-text-soft);" title="Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.">?</span>
+                            </div>
                         </div>
 
                         <div id="tracking_details_status" class="mt-2 hidden text-sm"></div>
-                        <div class="mt-3 flex justify-end">
-                            <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer les modifications</button>
-                        </div>
                     </form>
 
                     <form id="tracking-reassign-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
@@ -257,10 +258,8 @@
                         <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
                         <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
                         <div class="mt-3 flex flex-wrap justify-end gap-2">
-                            <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
-                            <button id="tracking-delete-appointment-btn" type="button" class="gc-btn-danger">Soft delete le RDV</button>
-                            <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Réactiver le RDV</button>
-                            <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary">Enregistrer le commentaire</button>
+                            <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-danger">Problème RDV</button>
+                            <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
                         </div>
                     </form>
                 </section>
@@ -294,13 +293,13 @@
         const trackingReassignButton = document.getElementById('tracking-reassign-btn');
         const trackingRefreshDocumentsButton = document.getElementById('tracking-refresh-documents-btn');
         const trackingRefreshDocumentsStatus = document.getElementById('tracking_detail_documents_status');
+        const trackingCommentInput = document.getElementById('tracking_detail_comment');
+        const trackingSaveCommentButton = document.getElementById('tracking-save-comment-btn');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const trackingDetailsUrlTemplate = @json(route('planner.tracking.appointments.details', ['appointment' => '__APPOINTMENT__']));
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
-        const trackingDestroyUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
-        const trackingRestoreUrlTemplate = @json(route('planner.tracking.appointments.restore', ['appointment' => '__APPOINTMENT__']));
         const trackingCoffracRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -370,6 +369,15 @@
             trackingReassignStatus.style.color = color;
             trackingReassignStatus.textContent = message;
             trackingReassignStatus.classList.toggle('hidden', !message);
+        };
+
+        const updateTrackingCommentButtonVisibility = () => {
+            if (!trackingSaveCommentButton || !trackingCommentInput) return;
+
+            trackingSaveCommentButton.classList.toggle(
+                'hidden',
+                trackingCommentInput.value.trim() === trackingInitialComment.trim(),
+            );
         };
 
         const trackingEscapeHtml = (value) => String(value ?? '')
@@ -580,7 +588,7 @@
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                         <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
-                        ${props.deleted_at ? '<span style="border-radius:9999px;background:rgba(254,226,226,.18);color:#fecdd3;padding:3px 8px;font-size:11px;font-weight:700;">Désactivé</span>' : ''}
+                        ${props.status === 'problem' ? '<span style="border-radius:9999px;background:rgba(255,247,237,.2);color:#fed7aa;padding:3px 8px;font-size:11px;font-weight:700;">Problème RDV</span>' : ''}
                     </div>
                     ${tooltipRow('RDV', serviceLabel || serviceType)}
                     ${tooltipRow('Adresse', fullAddress)}
@@ -907,7 +915,6 @@
 
                 return String(eventProps.technician_id || '') === String(props.technician_id || '')
                     && sameTrackingDay(event.start, currentEvent.start)
-                    && (!eventProps.deleted_at || sameTrackingEvent(event, currentEvent))
                     && Number.isFinite(trackingRouteNumber(eventProps.latitude))
                     && Number.isFinite(trackingRouteNumber(eventProps.longitude));
             });
@@ -1227,9 +1234,7 @@
             trackingInitialComment = props.comment || '';
             document.getElementById('tracking_detail_comment').value = trackingInitialComment;
             document.getElementById('tracking_comment_status').classList.add('hidden');
-            document.getElementById('tracking-delete-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
-            document.getElementById('tracking-restore-appointment-btn').classList.toggle('hidden', !props.deleted_at);
-            document.getElementById('tracking-problem-appointment-btn').classList.toggle('hidden', Boolean(props.deleted_at));
+            updateTrackingCommentButtonVisibility();
             trackingAppointmentModal.classList.remove('hidden');
             initTrackingDetailAddressAutocomplete();
             window.TechCalendarForms?.refresh(trackingDetailsForm);
@@ -1445,7 +1450,6 @@
         };
 
         const styleTrackingEvent = (event) => {
-            const isDeleted = Boolean(event.extendedProps?.deleted_at);
             const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
@@ -1456,18 +1460,16 @@
 
             return {
                 ...event,
-                backgroundColor: isDeleted ? 'rgba(190,18,60,0.14)' : (isProblem ? '#fef3c7' : theme.backgroundColor),
-                borderColor: isDeleted ? '#be123c' : (isProblem ? '#d97706' : theme.borderColor),
-                textColor: isDeleted ? '#7f1d1d' : (isProblem ? '#713f12' : theme.textColor),
+                backgroundColor: isProblem ? '#fff7ed' : theme.backgroundColor,
+                borderColor: isProblem ? '#f97316' : theme.borderColor,
+                textColor: isProblem ? '#9a3412' : theme.textColor,
                 classNames: [
-                    ...(isDeleted ? ['appointment-soft-deleted'] : []),
                     ...(isProblem ? ['appointment-problem'] : []),
                 ],
             };
         };
 
         const applyTrackingEventStyle = (event) => {
-            const isDeleted = Boolean(event.extendedProps?.deleted_at);
             const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
@@ -1476,11 +1478,10 @@
                 textColor: '#ffffff',
             };
 
-            event.setProp('backgroundColor', isDeleted ? 'rgba(190,18,60,0.14)' : (isProblem ? '#fef3c7' : theme.backgroundColor));
-            event.setProp('borderColor', isDeleted ? '#be123c' : (isProblem ? '#d97706' : theme.borderColor));
-            event.setProp('textColor', isDeleted ? '#7f1d1d' : (isProblem ? '#713f12' : theme.textColor));
+            event.setProp('backgroundColor', isProblem ? '#fff7ed' : theme.backgroundColor);
+            event.setProp('borderColor', isProblem ? '#f97316' : theme.borderColor);
+            event.setProp('textColor', isProblem ? '#9a3412' : theme.textColor);
             event.setProp('classNames', [
-                ...(isDeleted ? ['appointment-soft-deleted'] : []),
                 ...(isProblem ? ['appointment-problem'] : []),
             ]);
         };
@@ -1602,10 +1603,7 @@
                 },
                 eventDidMount: (info) => {
 	                    const props = info.event.extendedProps;
-                    if (props.deleted_at) {
-                        info.el.style.opacity = '0.72';
-                        info.el.style.borderWidth = '2px';
-                    } else if (props.status === 'problem') {
+                    if (props.status === 'problem') {
                         info.el.style.borderWidth = '2px';
                     }
 
@@ -1613,7 +1611,6 @@
                     const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
 
                     info.el.setAttribute('aria-label', [
-                        props.deleted_at ? 'RDV désactivé' : null,
                         props.status === 'problem' ? 'Problème RDV' : null,
                         props.technician_name ? `Technicien: ${props.technician_name}` : null,
                         serviceLabel ? `Type de RDV: ${serviceLabel}` : null,
@@ -1830,9 +1827,11 @@
                 setTrackingDetailsStatus(error.message || 'Impossible de modifier le RDV.', '#9f1239');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Enregistrer les modifications';
+                button.textContent = 'Enregistrer et regéocoder';
             }
         });
+
+        trackingCommentInput?.addEventListener('input', updateTrackingCommentButtonVisibility);
 
         trackingCommentForm.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -1840,9 +1839,9 @@
             const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
             const comment = document.getElementById('tracking_detail_comment').value;
             const status = document.getElementById('tracking_comment_status');
-            const button = document.getElementById('tracking-save-comment-btn');
+            const button = trackingSaveCommentButton;
 
-            if (!appointmentId) return;
+            if (!appointmentId || !button) return;
 
             button.disabled = true;
             button.textContent = 'Enregistrement...';
@@ -1865,17 +1864,18 @@
                 const calendarEvent = trackingCalendar?.getEventById(appointmentId);
                 if (calendarEvent) calendarEvent.setExtendedProp('comment', payload.comment || '');
                 trackingInitialComment = payload.comment || '';
+                updateTrackingCommentButtonVisibility();
 
                 status.style.color = '#0f766e';
-                status.textContent = 'Commentaire enregistre.';
+                status.textContent = 'Commentaire enregistré.';
                 status.classList.remove('hidden');
             } catch (error) {
                 status.style.color = '#9f1239';
-                status.textContent = 'Impossible d enregistrer le commentaire.';
+                status.textContent = 'Impossible d’enregistrer le commentaire.';
                 status.classList.remove('hidden');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Enregistrer le commentaire';
+                button.textContent = 'Enregistrer mon commentaire';
             }
         });
 
@@ -1999,6 +1999,7 @@
                 }
 
                 trackingInitialComment = payload.comment || comment;
+                updateTrackingCommentButtonVisibility();
                 status.style.color = '#92400e';
                 status.textContent = 'Problème RDV déclaré.';
                 status.classList.remove('hidden');
@@ -2009,138 +2010,6 @@
             } finally {
                 button.disabled = false;
                 button.textContent = 'Problème RDV';
-            }
-        });
-
-        document.getElementById('tracking-delete-appointment-btn').addEventListener('click', async () => {
-            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
-            const comment = document.getElementById('tracking_detail_comment').value.trim();
-            const status = document.getElementById('tracking_comment_status');
-            const button = document.getElementById('tracking-delete-appointment-btn');
-
-            if (!appointmentId) return;
-
-            if (!comment) {
-                status.style.color = '#9f1239';
-                status.textContent = 'Un commentaire est obligatoire avant de soft delete le RDV.';
-                status.classList.remove('hidden');
-                return;
-            }
-
-            if (comment === trackingInitialComment.trim()) {
-                status.style.color = '#9f1239';
-                status.textContent = 'Le commentaire doit être modifié avant de soft delete le RDV.';
-                status.classList.remove('hidden');
-                return;
-            }
-
-            button.disabled = true;
-            button.textContent = 'Desactivation...';
-            status.classList.add('hidden');
-
-            try {
-                const response = await fetch(trackingDestroyUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({ comment }),
-                });
-                const payload = await response.json();
-
-                if (!response.ok) {
-                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : 'Impossible de soft delete le RDV.';
-                    throw new Error(firstError);
-                }
-
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
-                if (calendarEvent) {
-                    calendarEvent.setExtendedProp('comment', payload.comment || comment);
-                    calendarEvent.setExtendedProp('deleted_at', payload.deleted_at || new Date().toISOString());
-                    applyTrackingEventStyle(calendarEvent);
-                }
-
-                document.getElementById('tracking-delete-appointment-btn').classList.add('hidden');
-                document.getElementById('tracking-restore-appointment-btn').classList.remove('hidden');
-                trackingInitialComment = payload.comment || comment;
-                status.style.color = '#9f1239';
-                status.textContent = 'Rendez-vous soft-deleted.';
-                status.classList.remove('hidden');
-            } catch (error) {
-                status.style.color = '#9f1239';
-                status.textContent = error.message || 'Impossible de soft delete le RDV.';
-                status.classList.remove('hidden');
-            } finally {
-                button.disabled = false;
-                button.textContent = 'Soft delete le RDV';
-            }
-        });
-
-        document.getElementById('tracking-restore-appointment-btn').addEventListener('click', async () => {
-            const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
-            const comment = document.getElementById('tracking_detail_comment').value.trim();
-            const status = document.getElementById('tracking_comment_status');
-            const button = document.getElementById('tracking-restore-appointment-btn');
-
-            if (!appointmentId) return;
-
-            if (!comment) {
-                status.style.color = '#9f1239';
-                status.textContent = 'Un commentaire est obligatoire avant de réactiver le RDV.';
-                status.classList.remove('hidden');
-                return;
-            }
-
-            if (comment === trackingInitialComment.trim()) {
-                status.style.color = '#9f1239';
-                status.textContent = 'Le commentaire doit être modifié avant de réactiver le RDV.';
-                status.classList.remove('hidden');
-                return;
-            }
-
-            button.disabled = true;
-            button.textContent = 'Reactivation...';
-            status.classList.add('hidden');
-
-            try {
-                const response = await fetch(trackingRestoreUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({ comment }),
-                });
-                const payload = await response.json();
-
-                if (!response.ok) {
-                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : 'Impossible de réactiver le RDV.';
-                    throw new Error(firstError);
-                }
-
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
-                if (calendarEvent) {
-                    calendarEvent.setExtendedProp('comment', payload.comment || comment);
-                    calendarEvent.setExtendedProp('deleted_at', null);
-                    applyTrackingEventStyle(calendarEvent);
-                }
-
-                document.getElementById('tracking-delete-appointment-btn').classList.remove('hidden');
-                document.getElementById('tracking-restore-appointment-btn').classList.add('hidden');
-                trackingInitialComment = payload.comment || comment;
-                status.style.color = '#0f766e';
-                status.textContent = 'Rendez-vous réactivé.';
-                status.classList.remove('hidden');
-            } catch (error) {
-                status.style.color = '#9f1239';
-                status.textContent = error.message || 'Impossible de réactiver le RDV.';
-                status.classList.remove('hidden');
-            } finally {
-                button.disabled = false;
-                button.textContent = 'Reactiver le RDV';
             }
         });
 

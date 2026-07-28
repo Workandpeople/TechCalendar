@@ -163,9 +163,12 @@ class CoffracAppointmentService
         }
 
         $updates = [
-            'comment' => trim((string) ($payload['comment'] ?? '')) ?: null,
             'fetched_at' => now(),
         ];
+
+        if (array_key_exists('comment', $payload)) {
+            $updates['comment'] = trim((string) $payload['comment']) ?: null;
+        }
 
         if (array_key_exists('service_id', $payload)) {
             $service = filled($payload['service_id'])
@@ -176,7 +179,9 @@ class CoffracAppointmentService
             $updates['service_name'] = $service?->name;
         }
 
-        if (array_key_exists('address', $payload)) {
+        $addressWasSubmitted = array_key_exists('address', $payload);
+
+        if ($addressWasSubmitted) {
             $address = $this->addressCleaner->clean(trim((string) $payload['address']));
 
             if (! $address) {
@@ -190,12 +195,34 @@ class CoffracAppointmentService
             ];
         }
 
+        if ($addressWasSubmitted && $this->addressCorrectionChanged($storedRequest, $updates)) {
+            $persistedRequest = $this->pushAddressCorrection($externalReference, [
+                'address' => $updates['address'] ?? $storedRequest->address,
+                'address_line' => $updates['address_line'] ?? $storedRequest->address_line,
+                'postal_code' => $updates['postal_code'] ?? $storedRequest->postal_code,
+                'city' => $updates['city'] ?? $storedRequest->city,
+                'latitude' => $updates['latitude'] ?? $storedRequest->latitude,
+                'longitude' => $updates['longitude'] ?? $storedRequest->longitude,
+                'comment' => $updates['comment'] ?? $storedRequest->comment,
+                'techcalendar_external_request_id' => $storedRequest->id,
+            ]);
+
+            if ($persistedRequest) {
+                $storedRequest = $persistedRequest;
+            }
+        }
+
         $payloadOverrides = [
             'techcalendar_overrides' => [
                 'service_type' => $updates['service_type'] ?? $storedRequest->service_type,
                 'service_name' => $updates['service_name'] ?? $storedRequest->service_name,
                 'address' => $updates['address'] ?? $storedRequest->address,
-                'comment' => $updates['comment'],
+                'address_line' => $updates['address_line'] ?? $storedRequest->address_line,
+                'postal_code' => $updates['postal_code'] ?? $storedRequest->postal_code,
+                'city' => $updates['city'] ?? $storedRequest->city,
+                'latitude' => $updates['latitude'] ?? $storedRequest->latitude,
+                'longitude' => $updates['longitude'] ?? $storedRequest->longitude,
+                'comment' => $updates['comment'] ?? $storedRequest->comment,
                 'updated_at' => now()->toIso8601String(),
             ],
         ];
@@ -720,6 +747,163 @@ class CoffracAppointmentService
             'comment' => $comment,
             'fetched_at' => now(),
         ]);
+    }
+
+    /**
+     * Corrige l’adresse du dossier source Coffrac quand l’adresse d’un RDV déjà placé
+     * est modifiée dans TechCalendar.
+     *
+     * @param array{address?: string|null, latitude?: mixed, longitude?: mixed} $payload
+     */
+    public function updateAppointmentAddress(Appointment $appointment, array $payload): void
+    {
+        if ($appointment->external_source !== self::SOURCE) {
+            return;
+        }
+
+        $externalReference = trim((string) $appointment->external_reference);
+
+        if ($externalReference === '') {
+            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+        }
+
+        $address = $this->addressCleaner->clean(trim((string) ($payload['address'] ?? '')));
+
+        if ($address === null || $address === '') {
+            throw new RuntimeException('Adresse obligatoire pour corriger le RDV Coffrac.');
+        }
+
+        $latitude = $this->coordinate($payload['latitude'] ?? null, -90, 90);
+        $longitude = $this->coordinate($payload['longitude'] ?? null, -180, 180);
+        $postalCode = $this->normalizePostalCode($this->postalCodeFromAddress($address));
+        $updates = [
+            'address' => $address,
+            'address_line' => $this->addressLineFromAddress($address),
+            'postal_code' => $postalCode,
+            'city' => $this->cityFromAddress($address, $postalCode),
+            'department_code' => $this->normalizeDepartmentCode(null, $postalCode),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+        ];
+
+        if (! $this->addressCorrectionChanged($appointment, $updates)) {
+            return;
+        }
+
+        $storedRequest = $this->pushAddressCorrection($externalReference, [
+            ...$updates,
+            'techcalendar_appointment_id' => $appointment->id,
+        ]);
+
+        $storedRequest ??= ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->first();
+
+        if ($storedRequest) {
+            $this->updateStoredRequestAddressCorrection($storedRequest, $updates);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function pushAddressCorrection(string $externalReference, array $payload): ?ExternalAppointmentRequest
+    {
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée, impossible de corriger l’adresse du RDV.');
+        }
+
+        $externalReference = trim($externalReference);
+
+        if ($externalReference === '') {
+            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+        }
+
+        $response = $this->request()->patch(
+            $this->endpoint("appointments/{$externalReference}/address"),
+            $this->filledPayload($payload),
+        );
+
+        if ($response->failed()) {
+            $responsePayload = $response->json();
+
+            throw new RuntimeException($this->responseError(is_array($responsePayload) ? $responsePayload : null, 'Impossible de corriger l’adresse du RDV dans Coffrac.'));
+        }
+
+        $remotePayload = $response->json('data');
+
+        return is_array($remotePayload)
+            ? $this->persistRemoteAppointment($remotePayload)
+            : null;
+    }
+
+    /**
+     * @param array<string, mixed> $updates
+     */
+    private function updateStoredRequestAddressCorrection(ExternalAppointmentRequest $storedRequest, array $updates): void
+    {
+        $payload = is_array($storedRequest->payload) ? $storedRequest->payload : [];
+        $payload['techcalendar_overrides'] = [
+            ...(is_array($payload['techcalendar_overrides'] ?? null) ? $payload['techcalendar_overrides'] : []),
+            'address' => $updates['address'] ?? $storedRequest->address,
+            'address_line' => $updates['address_line'] ?? $storedRequest->address_line,
+            'postal_code' => $updates['postal_code'] ?? $storedRequest->postal_code,
+            'city' => $updates['city'] ?? $storedRequest->city,
+            'latitude' => $updates['latitude'] ?? $storedRequest->latitude,
+            'longitude' => $updates['longitude'] ?? $storedRequest->longitude,
+            'updated_at' => now()->toIso8601String(),
+        ];
+
+        $postalCode = $updates['postal_code'] ?? $storedRequest->postal_code;
+
+        $storedRequest->update([
+            'address' => $updates['address'] ?? $storedRequest->address,
+            'address_line' => $updates['address_line'] ?? $storedRequest->address_line,
+            'postal_code' => $postalCode,
+            'city' => $updates['city'] ?? $storedRequest->city,
+            'department_code' => $updates['department_code'] ?? $this->normalizeDepartmentCode($storedRequest->department_code, is_string($postalCode) ? $postalCode : null),
+            'latitude' => array_key_exists('latitude', $updates) ? $updates['latitude'] : $storedRequest->latitude,
+            'longitude' => array_key_exists('longitude', $updates) ? $updates['longitude'] : $storedRequest->longitude,
+            'payload' => $payload,
+            'fetched_at' => now(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function filledPayload(array $payload): array
+    {
+        return array_filter($payload, fn (mixed $value): bool => $value !== '');
+    }
+
+    /**
+     * @param array<string, mixed> $updates
+     */
+    private function addressCorrectionChanged(ExternalAppointmentRequest|Appointment $model, array $updates): bool
+    {
+        return ! $this->sameNormalizedAddress((string) ($updates['address'] ?? ''), (string) $model->address)
+            || $this->coordinateChanged($model->latitude, $updates['latitude'] ?? null)
+            || $this->coordinateChanged($model->longitude, $updates['longitude'] ?? null);
+    }
+
+    private function coordinateChanged(mixed $left, mixed $right): bool
+    {
+        if (($left === null || $left === '') && ($right === null || $right === '')) {
+            return false;
+        }
+
+        if ($left === null || $left === '' || $right === null || $right === '') {
+            return true;
+        }
+
+        if (! is_numeric($left) || ! is_numeric($right)) {
+            return (string) $left !== (string) $right;
+        }
+
+        return abs((float) $left - (float) $right) > 0.000001;
     }
 
     /**
@@ -1414,7 +1598,7 @@ class CoffracAppointmentService
 
         return [
             'address' => $formattedAddress,
-            'address_line' => $address,
+            'address_line' => $this->addressLineFromAddress($formattedAddress) ?? $address,
             'postal_code' => $postalCode,
             'city' => $city,
             'department_code' => $this->normalizeDepartmentCode($storedRequest->department_code, $postalCode),
@@ -1445,6 +1629,26 @@ class CoffracAppointmentService
         }
 
         return trim($matches[1]) ?: null;
+    }
+
+    private function addressLineFromAddress(?string $address): ?string
+    {
+        $address = trim((string) $address);
+
+        if ($address === '') {
+            return null;
+        }
+
+        $withoutCountry = trim((string) preg_replace('/,\s*France\s*$/iu', '', $address));
+        $parts = array_values(array_filter(array_map('trim', explode(',', $withoutCountry))));
+        $addressLine = $parts[0] ?? $withoutCountry;
+        $postalCode = $this->postalCodeFromAddress($addressLine);
+
+        if ($postalCode) {
+            $addressLine = trim((string) preg_replace('/\b'.preg_quote($postalCode, '/').'\b.*$/u', '', $addressLine));
+        }
+
+        return $addressLine !== '' ? $addressLine : $address;
     }
 
     private function coordinate(mixed $value, float $min, float $max): ?float

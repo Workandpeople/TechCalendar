@@ -135,10 +135,6 @@ Route::middleware('auth')->group(function (): void {
         ->name('planner.tracking.appointments.details');
     Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])
         ->name('planner.tracking.appointments.technician');
-    Route::delete('/planner/tracking/appointments/{appointment}', [PlannerTrackingController::class, 'destroy'])
-        ->name('planner.tracking.appointments.destroy');
-    Route::post('/planner/tracking/appointments/{appointment}/restore', [PlannerTrackingController::class, 'restore'])
-        ->name('planner.tracking.appointments.restore');
 
     Route::get('/tech/planning', [TechPlanningController::class, 'index'])->name('tech.planning');
     Route::post('/tech/planning/events', [TechPlanningController::class, 'events'])->name('tech.planning.events');

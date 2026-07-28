@@ -956,6 +956,12 @@ it('updates a local coffrac appointment before booking it', function () {
         'payload' => ['id' => 4257],
         'fetched_at' => now(),
     ]);
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/4257/address' => Http::response([
+            'result' => true,
+            'message' => 'Adresse corrigée.',
+        ]),
+    ]);
 
     $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
@@ -995,11 +1001,83 @@ it('updates a local coffrac appointment before booking it', function () {
     expect($stored->service_type)->toBe(Service::TYPE_AUDIT)
         ->and($stored->service_name)->toBe('Audit choisi depuis le détail')
         ->and($stored->address)->toBe('22 Rue Victor Hugo, 69002 Lyon, France')
+        ->and($stored->address_line)->toBe('22 Rue Victor Hugo')
         ->and($stored->postal_code)->toBe('69002')
         ->and($stored->city)->toBe('Lyon')
         ->and($stored->latitude)->toBe(45.754921)
         ->and($stored->longitude)->toBe(4.829713)
         ->and($stored->comment)->toBe('Client à rappeler avant intervention.');
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'PATCH'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4257/address'
+        && $request->hasHeader('Authorization', 'Bearer secret-token')
+        && $request['address'] === '22 Rue Victor Hugo, 69002 Lyon, France'
+        && $request['address_line'] === '22 Rue Victor Hugo'
+        && $request['postal_code'] === '69002'
+        && $request['city'] === 'Lyon'
+        && $request['latitude'] === 45.754921
+        && $request['longitude'] === 4.829713
+        && $request['comment'] === 'Client à rappeler avant intervention.');
+});
+
+it('updates a pending coffrac appointment comment without geocoding it', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    ExternalAppointmentRequest::query()->create([
+        'source' => 'coffrac',
+        'external_reference' => '4260',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'MARTIN',
+        'phone' => '0600004260',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'address_line' => '20 Place Bellecour',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'comment' => 'Ancien commentaire',
+        'payload' => ['id' => 4260],
+        'fetched_at' => now(),
+    ]);
+    Http::fake();
+
+    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')->never();
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+
+    $this->actingAs($planner)
+        ->patchJson(route('planner.book.crm-appointments.update', ['crmAppointmentId' => 'coffrac-4260']), [
+            'comment' => 'Commentaire ajouté depuis la modale.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.id', 'coffrac-4260')
+        ->assertJsonPath('appointment.address', '20 Place Bellecour, 69002 Lyon, France')
+        ->assertJsonPath('appointment.comment', 'Commentaire ajouté depuis la modale.');
+
+    $stored = ExternalAppointmentRequest::query()
+        ->where('source', 'coffrac')
+        ->where('external_reference', '4260')
+        ->firstOrFail();
+
+    expect($stored->address)->toBe('20 Place Bellecour, 69002 Lyon, France')
+        ->and($stored->latitude)->toBe(45.7578)
+        ->and($stored->longitude)->toBe(4.832)
+        ->and($stored->comment)->toBe('Commentaire ajouté depuis la modale.');
+
+    Http::assertSentCount(0);
 });
 
 it('marks a pending coffrac appointment as problem from its detail modal', function () {
