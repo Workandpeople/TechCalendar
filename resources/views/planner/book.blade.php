@@ -176,13 +176,28 @@
                     @foreach ($crmAppointments as $appointment)
                         @php
                             $companyName = trim((string) ($appointment['company_name'] ?? ''));
+                            $serviceDisplayType = trim((string) ($appointment['service']['type'] ?? $appointment['service_type'] ?? ''));
                             $serviceDisplayName = trim((string) ($appointment['service']['name'] ?? $appointment['service_display_name'] ?? $appointment['service_name'] ?? ''));
-                            $searchHaystack = trim(($appointment['last_name'] ?? '').' '.($appointment['first_name'] ?? '').' '.$companyName.' '.$serviceDisplayName);
+                            $serviceBadgeLabel = trim(implode(' - ', array_filter([$serviceDisplayType, $serviceDisplayName])));
+                            $createdAtValue = $appointment['created_at'] ?? $appointment['external_payload']['created_at'] ?? $appointment['fetched_at'] ?? null;
+                            $createdAtLabel = '-';
+
+                            if ($createdAtValue) {
+                                try {
+                                    $createdAtLabel = \Illuminate\Support\Carbon::parse($createdAtValue)
+                                        ->timezone(config('app.timezone'))
+                                        ->format('d/m/Y H:i');
+                                } catch (\Throwable) {
+                                    $createdAtLabel = (string) $createdAtValue;
+                                }
+                            }
+
+                            $searchHaystack = trim(($appointment['last_name'] ?? '').' '.($appointment['first_name'] ?? '').' '.$companyName.' '.$serviceDisplayType.' '.$serviceDisplayName);
                         @endphp
                         <div
                             role="button"
                             tabindex="0"
-                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1.1fr)_140px_minmax(220px,1.4fr)_auto]"
+                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1fr)_140px_130px_minmax(220px,1.35fr)_auto]"
                             style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
                             data-client="{{ str($searchHaystack)->lower() }}"
@@ -193,11 +208,12 @@
                                 <p class="truncate text-xs" style="color:var(--gc-text-soft);">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
                             </div>
                             <p class="truncate text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
+                            <p class="truncate text-sm" style="color:var(--gc-text-soft);">Créé le {{ $createdAtLabel }}</p>
                             <p class="truncate text-sm" style="color:var(--gc-text);">{{ $appointment['address'] }}</p>
                             <div class="flex flex-wrap items-center gap-2 md:justify-end">
                                 <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
-                                @if ($serviceDisplayName !== '')
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $serviceDisplayName }}</span>
+                                @if ($serviceBadgeLabel !== '')
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $serviceBadgeLabel }}</span>
                                 @else
                                     <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
                                 @endif
@@ -499,8 +515,8 @@
     </div>
 
     <div id="booking-crm-detail-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
-            <div class="flex items-start justify-between gap-4">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
+            <div class="gc-appointment-modal-header">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Demande externe</p>
                     <h2 id="booking_crm_detail_title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
@@ -509,13 +525,13 @@
                 <button type="button" id="booking-crm-detail-close" class="gc-link">Fermer</button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_460px]">
-                <section>
-                    <div id="booking-crm-detail-map" class="h-[420px] overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
+            <div class="gc-appointment-modal-body">
+                <section class="gc-appointment-modal-map-pane">
+                    <div id="booking-crm-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
                     <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Carte libre: tu peux zoomer, dézoomer et te déplacer pour vérifier le point.</p>
                 </section>
 
-                <section class="space-y-4">
+                <section class="gc-appointment-modal-info-pane space-y-4">
                     <form id="booking-crm-detail-form" class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <div class="grid grid-cols-1 gap-3">
                             <div>
@@ -540,7 +556,10 @@
 
                         <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <p id="booking_crm_detail_status" class="hidden text-sm"></p>
-                            <button id="booking-crm-detail-save" type="submit" class="gc-btn">Enregistrer et regéocoder</button>
+                            <div class="flex flex-wrap justify-end gap-2">
+                                <button id="booking-crm-detail-problem" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
+                                <button id="booking-crm-detail-save" type="submit" class="gc-btn">Enregistrer et regéocoder</button>
+                            </div>
                         </div>
                     </form>
 
@@ -573,8 +592,8 @@
     </div>
 
     <div id="booking-appointment-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl">
-            <div class="flex items-start justify-between gap-4">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
+            <div class="gc-appointment-modal-header">
                 <div>
                     <p id="booking_modal_kind" class="text-sm" style="color:var(--gc-text-soft);">Rendez-vous</p>
                     <h2 id="booking_modal_title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
@@ -583,14 +602,14 @@
                 <button type="button" id="booking-modal-close" class="gc-link">Fermer</button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
-                <section>
-                    <div id="booking-detail-map" class="h-[420px] overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
+            <div class="gc-appointment-modal-body">
+                <section class="gc-appointment-modal-map-pane">
+                    <div id="booking-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
                     <div id="booking_route_summary" class="mt-3 rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text);"></div>
                     <div id="booking_day_route_summary" class="mt-3 rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);"></div>
                 </section>
 
-                <section class="space-y-4">
+                <section class="gc-appointment-modal-info-pane space-y-4">
                     <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
                         <dl class="grid grid-cols-1 gap-3 text-sm">
                             <div>
@@ -714,6 +733,7 @@
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
         const bookingCrmRefreshOneUrlTemplate = @json(route('planner.book.crm-appointments.refresh-one', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingCrmUpdateUrlTemplate = @json(route('planner.book.crm-appointments.update', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
+        const bookingCrmProblemUrlTemplate = @json(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
@@ -733,7 +753,9 @@
         let crmDetailMap = null;
         let crmDetailMapMarkers = [];
         let currentCrmDetailAppointmentId = null;
+        let bookingInitialCrmDetailComment = '';
         let bookingSuggestionTooltip = null;
+        let bookingCrmAppointmentTooltip = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
         let currentAnalysisPayload = null;
@@ -830,6 +852,7 @@
         const bookingCrmDetailComment = document.getElementById('booking_crm_detail_comment');
         const bookingCrmDetailStatus = document.getElementById('booking_crm_detail_status');
         const bookingCrmDetailSave = document.getElementById('booking-crm-detail-save');
+        const bookingCrmDetailProblem = document.getElementById('booking-crm-detail-problem');
         const bookingCrmDetailRefreshDocuments = document.getElementById('booking-crm-detail-refresh-documents');
         const bookingCrmDetailDocumentsStatus = document.getElementById('booking_crm_detail_documents_status');
         const bookingDetailRefreshDocuments = document.getElementById('booking-detail-refresh-documents');
@@ -891,6 +914,24 @@
             return new Date(value).toLocaleDateString('fr-FR');
         };
 
+        const formatShortDateTime = (value) => {
+            if (!value) return '-';
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return String(value);
+            }
+
+            return date.toLocaleString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        };
+
         const showFeedback = (message, type = 'info') => {
             bookingFeedback.textContent = message;
             bookingFeedback.classList.remove('hidden');
@@ -915,11 +956,14 @@
         const renderBookingCrmCard = (appointment) => {
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
             const companyName = (appointment.company_name || '').trim();
+            const serviceDisplayType = (appointment.service?.type || appointment.service_type || '').trim();
             const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
-            const searchHaystack = `${customerName} ${companyName} ${serviceDisplayName}`.trim().toLowerCase();
+            const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ');
+            const createdAtLabel = formatShortDateTime(appointment.created_at || appointment.external_payload?.created_at || appointment.fetched_at);
+            const searchHaystack = `${customerName} ${companyName} ${serviceDisplayType} ${serviceDisplayName}`.trim().toLowerCase();
             const hasCoordinates = Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
-            const serviceBadge = serviceDisplayName
-                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(serviceDisplayName)}</span>`
+            const serviceBadge = serviceLabel
+                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(serviceLabel)}</span>`
                 : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
             const gpsBadge = hasCoordinates
                 ? ''
@@ -929,7 +973,7 @@
                 <div
                     role="button"
                     tabindex="0"
-                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1.1fr)_140px_minmax(220px,1.4fr)_auto]"
+                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1fr)_140px_130px_minmax(220px,1.35fr)_auto]"
                     style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
                     data-client="${escapeHtml(searchHaystack)}"
@@ -940,6 +984,7 @@
                         <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(companyName || appointment.source || '')}</p>
                     </div>
                     <p class="truncate text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
+                    <p class="truncate text-sm" style="color:var(--gc-text-soft);">Créé le ${escapeHtml(createdAtLabel)}</p>
                     <p class="truncate text-sm" style="color:var(--gc-text);">${escapeHtml(appointment.address)}</p>
                     <div class="flex flex-wrap items-center gap-2 md:justify-end">
                         <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
@@ -1624,6 +1669,13 @@
             bookingCrmDetailSave.textContent = isSaving ? 'Géocodage...' : 'Enregistrer et regéocoder';
         };
 
+        const setCrmDetailProblemSaving = (isSaving) => {
+            if (!bookingCrmDetailProblem) return;
+
+            bookingCrmDetailProblem.disabled = isSaving;
+            bookingCrmDetailProblem.textContent = isSaving ? 'Signalement...' : 'Problème RDV';
+        };
+
         const fillCrmDetailForm = (appointment) => {
             if (bookingCrmDetailService) {
                 bookingCrmDetailService.value = appointment?.service?.id ? String(appointment.service.id) : '';
@@ -1637,6 +1689,7 @@
                 bookingCrmDetailComment.value = appointment?.comment || appointment?.external_payload?.comment || '';
             }
 
+            bookingInitialCrmDetailComment = bookingCrmDetailComment?.value || '';
             setCrmDetailStatus();
         };
 
@@ -1656,6 +1709,121 @@
                 hour: '2-digit',
                 minute: '2-digit',
             });
+        };
+
+        const limitTooltipText = (value, maxLength = 220) => {
+            const text = String(value || '').replace(/\s+/g, ' ').trim();
+
+            return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
+        };
+
+        const crmAppointmentCommentItems = (appointment) => {
+            if (!appointment) return [];
+
+            const items = [];
+            const mainComment = limitTooltipText(appointment.comment || appointment.external_payload?.comment || '');
+
+            if (mainComment) {
+                items.push({
+                    title: 'Commentaire',
+                    meta: 'Note principale',
+                    text: mainComment,
+                });
+            }
+
+            const externalComments = Array.isArray(appointment.comments)
+                ? appointment.comments
+                : (Array.isArray(appointment.external_payload?.comments) ? appointment.external_payload.comments : []);
+
+            externalComments.forEach((comment) => {
+                const text = limitTooltipText(comment?.text || comment?.comment || '');
+
+                if (!text) return;
+
+                const author = comment?.author_name || 'Coffrac';
+                const createdAt = formatExternalCommentDate(comment?.created_at);
+
+                items.push({
+                    title: author,
+                    meta: createdAt,
+                    text,
+                });
+            });
+
+            return items;
+        };
+
+        const ensureCrmAppointmentTooltip = () => {
+            if (bookingCrmAppointmentTooltip) {
+                return bookingCrmAppointmentTooltip;
+            }
+
+            bookingCrmAppointmentTooltip = document.createElement('div');
+            bookingCrmAppointmentTooltip.style.cssText = [
+                'position:fixed',
+                'z-index:95',
+                'display:none',
+                'pointer-events:none',
+                'max-width:420px',
+                'border-radius:16px',
+                'padding:12px 14px',
+                'background:#31424c',
+                'color:#ffffff',
+                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
+                'font-size:12px',
+                'line-height:1.45',
+                'transform:translate(-50%, calc(-100% - 14px))',
+            ].join(';');
+            document.body.appendChild(bookingCrmAppointmentTooltip);
+
+            return bookingCrmAppointmentTooltip;
+        };
+
+        const moveCrmAppointmentTooltip = (event) => {
+            const tooltip = ensureCrmAppointmentTooltip();
+            const safeLeft = Math.min(Math.max(event.clientX, 210), window.innerWidth - 210);
+            const safeTop = Math.max(event.clientY, 130);
+
+            tooltip.style.left = `${safeLeft}px`;
+            tooltip.style.top = `${safeTop}px`;
+        };
+
+        const showCrmAppointmentTooltip = (event, appointment) => {
+            const comments = crmAppointmentCommentItems(appointment);
+
+            if (comments.length === 0) {
+                hideCrmAppointmentTooltip();
+                return;
+            }
+
+            const tooltip = ensureCrmAppointmentTooltip();
+            const visibleComments = comments.slice(0, 4);
+            const remainingCount = comments.length - visibleComments.length;
+            const commentsHtml = visibleComments.map((comment, index) => `
+                <div style="${index === 0 ? 'margin-top:10px;' : 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;'}">
+                    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">
+                        <p style="font-weight:700;">${escapeHtml(comment.title)}</p>
+                        ${comment.meta ? `<p style="color:rgba(255,255,255,.62);font-size:11px;">${escapeHtml(comment.meta)}</p>` : ''}
+                    </div>
+                    <p style="margin-top:5px;color:rgba(255,255,255,.9);">${escapeHtml(comment.text)}</p>
+                </div>
+            `).join('');
+
+            tooltip.innerHTML = `
+                <div>
+                    <p style="font-weight:800;letter-spacing:.02em;">Commentaires du RDV</p>
+                    ${commentsHtml}
+                    ${remainingCount > 0 ? `<p style="margin-top:10px;color:rgba(255,255,255,.72);">+ ${remainingCount} commentaire(s) dans le détail</p>` : ''}
+                </div>
+            `;
+            tooltip.style.display = 'block';
+            moveCrmAppointmentTooltip(event);
+        };
+
+        const hideCrmAppointmentTooltip = () => {
+            if (bookingCrmAppointmentTooltip) {
+                bookingCrmAppointmentTooltip.style.display = 'none';
+            }
         };
 
         const renderExternalComments = (comments, listId, countId) => {
@@ -1868,7 +2036,9 @@
             currentCrmDetailAppointmentId = appointment.id;
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim() || 'Client';
             const companyName = (appointment.company_name || '').trim();
-            const serviceLabel = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim() || 'Prestation non renseignée';
+            const serviceDisplayType = (appointment.service?.type || appointment.service_type || '').trim();
+            const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
+            const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ') || 'Prestation non renseignée';
             const addressParts = [
                 appointment.address,
                 appointment.postal_code || null,
@@ -1880,6 +2050,7 @@
             document.getElementById('booking_crm_detail_infos').innerHTML = [
                 crmDetailInfoRow('Source', appointment.source || '-'),
                 crmDetailInfoRow('Référence', appointment.external_reference || appointment.id || '-'),
+                crmDetailInfoRow('Créé le', formatShortDateTime(appointment.created_at || appointment.external_payload?.created_at || appointment.fetched_at)),
                 crmDetailInfoRow('Client', customerName),
                 crmDetailInfoRow('Société', companyName || '-'),
                 crmDetailInfoRow('Téléphone', appointment.phone || '-'),
@@ -3652,8 +3823,19 @@
                 if (card.dataset.bound === '1') return;
 
                 card.dataset.bound = '1';
+                card.addEventListener('mouseenter', (event) => {
+                    showCrmAppointmentTooltip(event, crmAppointmentById(card.dataset.crmId));
+                });
+                card.addEventListener('mousemove', (event) => {
+                    if (bookingCrmAppointmentTooltip?.style.display === 'block') {
+                        moveCrmAppointmentTooltip(event);
+                    }
+                });
+                card.addEventListener('mouseleave', hideCrmAppointmentTooltip);
                 card.addEventListener('click', (event) => {
                     if (event.target.closest('.crm-appointment-detail-button')) return;
+
+                    hideCrmAppointmentTooltip();
 
                     if (card.dataset.hasCoordinates !== '1') {
                         openCrmAppointmentDetail(card.dataset.crmId);
@@ -3667,6 +3849,7 @@
                     if (!['Enter', ' '].includes(event.key)) return;
 
                     event.preventDefault();
+                    hideCrmAppointmentTooltip();
 
                     if (card.dataset.hasCoordinates !== '1') {
                         openCrmAppointmentDetail(card.dataset.crmId);
@@ -3684,6 +3867,7 @@
                 button.dataset.bound = '1';
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
+                    hideCrmAppointmentTooltip();
                     openCrmAppointmentDetail(button.dataset.crmDetailId);
                 });
             });
@@ -3788,6 +3972,55 @@
         bookingCrmDetailForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
             await saveCrmAppointmentDetail();
+        });
+
+        bookingCrmDetailProblem?.addEventListener('click', async () => {
+            if (!currentCrmDetailAppointmentId || bookingCrmDetailProblem.disabled) return;
+
+            const comment = bookingCrmDetailComment?.value.trim() || '';
+
+            if (!comment) {
+                setCrmDetailStatus('Un commentaire est obligatoire avant de déclarer un problème RDV.', 'error');
+                return;
+            }
+
+            if (comment === bookingInitialCrmDetailComment.trim()) {
+                setCrmDetailStatus('Le commentaire doit être modifié avant de déclarer un problème RDV.', 'error');
+                return;
+            }
+
+            setCrmDetailProblemSaving(true);
+            setCrmDetailStatus('Signalement du problème RDV dans Coffrac...');
+
+            try {
+                const response = await fetch(
+                    bookingCrmProblemUrlTemplate.replace('__CRM_APPOINTMENT__', encodeURIComponent(currentCrmDetailAppointmentId)),
+                    {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': bookingCsrfToken,
+                        },
+                        body: JSON.stringify({ comment }),
+                    },
+                );
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
+                    throw new Error(firstError || payload.message || 'Impossible de déclarer le problème RDV.');
+                }
+
+                renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
+                bookingInitialCrmDetailComment = comment;
+                setCrmDetailStatus(payload.message || 'Problème RDV déclaré.', 'success');
+                window.setTimeout(() => closeCrmAppointmentDetail(), 650);
+            } catch (error) {
+                setCrmDetailStatus(error.message || 'Impossible de déclarer le problème RDV.', 'error');
+            } finally {
+                setCrmDetailProblemSaving(false);
+            }
         });
 
         bookingCrmDetailRefreshDocuments?.addEventListener('click', async () => {

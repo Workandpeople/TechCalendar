@@ -231,6 +231,38 @@ class PlannerBookingController extends Controller
         ]);
     }
 
+    public function markCrmAppointmentProblem(
+        Request $request,
+        string $crmAppointmentId,
+        CoffracAppointmentService $coffracAppointments
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'comment' => ['required', 'string', 'max:5000'],
+        ]);
+
+        try {
+            $appointment = $coffracAppointments->markPendingAppointmentProblem($crmAppointmentId, (string) $payload['comment']);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'comment' => $exception->getMessage(),
+            ]);
+        }
+
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+
+        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
+
+        return response()->json([
+            'message' => 'Problème RDV déclaré dans Coffrac.',
+            'appointment' => $appointment,
+            'appointments' => $coffracPending['appointments'],
+            'coffrac_api_status' => $coffracPending['status'],
+            'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
+        ]);
+    }
+
     public function searchTechnicians(
         Request $request,
         CoffracAppointmentService $coffracAppointments,

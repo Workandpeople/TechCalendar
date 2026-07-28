@@ -120,8 +120,8 @@
     </div>
 
     <div id="tracking-appointment-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel max-h-[calc(100vh-2rem)] max-w-6xl overflow-y-auto">
-            <div class="flex items-start justify-between gap-4">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
+            <div class="gc-appointment-modal-header">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Rendez-vous</p>
                     <h2 id="tracking_detail_service" class="text-lg font-semibold" style="color:var(--gc-text);"></h2>
@@ -129,20 +129,20 @@
                 <button type="button" id="tracking-detail-close" class="gc-link">Fermer</button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-                <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+            <div class="gc-appointment-modal-body">
+                <section class="gc-appointment-modal-map-pane rounded-xl border bg-white p-4" style="border-color:var(--gc-border);">
                     <div class="mb-3 flex items-center justify-between gap-3">
                         <div>
                             <p class="text-sm font-medium" style="color:var(--gc-text);">Trajet</p>
                             <p id="tracking_route_origin" class="text-xs" style="color:var(--gc-text-soft);"></p>
                         </div>
                     </div>
-                    <div id="tracking-detail-map" class="h-[360px] overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
+                    <div id="tracking-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
                     <div id="tracking_route_summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
                     <div id="tracking_day_route_summary" class="mt-3 rounded-lg border px-3 py-3 text-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);"></div>
                 </section>
 
-                <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                <section class="gc-appointment-modal-info-pane rounded-xl border bg-white p-4" style="border-color:var(--gc-border);">
                     <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-1">
                         <div>
                             <dt style="color:var(--gc-text-soft);">Technicien</dt>
@@ -250,21 +250,21 @@
                             <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Réaffecter</button>
                         </div>
                     </form>
+
+                    <form id="tracking-comment-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                        <input id="tracking_detail_appointment_id" type="hidden" />
+                        <label class="gc-label" for="tracking_detail_comment">Commentaire</label>
+                        <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
+                        <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
+                        <div class="mt-3 flex flex-wrap justify-end gap-2">
+                            <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
+                            <button id="tracking-delete-appointment-btn" type="button" class="gc-btn-danger">Soft delete le RDV</button>
+                            <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Réactiver le RDV</button>
+                            <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary">Enregistrer le commentaire</button>
+                        </div>
+                    </form>
                 </section>
             </div>
-
-            <form id="tracking-comment-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
-                <input id="tracking_detail_appointment_id" type="hidden" />
-                <label class="gc-label" for="tracking_detail_comment">Commentaire</label>
-                <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
-                <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
-                <div class="mt-3 flex flex-wrap justify-end gap-2">
-                    <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-soft" style="background:#fef3c7;color:#92400e;">Problème RDV</button>
-                    <button id="tracking-delete-appointment-btn" type="button" class="gc-btn-danger">Soft delete le RDV</button>
-                    <button id="tracking-restore-appointment-btn" type="button" class="gc-btn-soft hidden">Réactiver le RDV</button>
-                    <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary">Enregistrer le commentaire</button>
-                </div>
-            </form>
         </div>
     </div>
 

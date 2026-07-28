@@ -117,6 +117,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/crm-appointments/refresh', [PlannerBookingController::class, 'refreshCrmAppointments'])->name('planner.book.crm-appointments.refresh');
     Route::post('/planner/book/crm-appointments/{crmAppointmentId}/refresh', [PlannerBookingController::class, 'refreshCrmAppointment'])->name('planner.book.crm-appointments.refresh-one');
     Route::patch('/planner/book/crm-appointments/{crmAppointmentId}', [PlannerBookingController::class, 'updateCrmAppointment'])->name('planner.book.crm-appointments.update');
+    Route::post('/planner/book/crm-appointments/{crmAppointmentId}/problem', [PlannerBookingController::class, 'markCrmAppointmentProblem'])->name('planner.book.crm-appointments.problem');
     Route::post('/planner/book/analyze', [PlannerBookingController::class, 'analyze'])->name('planner.book.analyze');
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');

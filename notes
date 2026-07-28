@@ -15,3 +15,8 @@ nom prenom se recupere que quand ils sont definis
 en fait si particuler: nom prenom adresse et si pro ce sera raison sociale et nom du site
 ajouter dans le premier form lors de l'upload un champ delegataire
 creer une gestion des delegataires en recuperant les delegataires depuis l'api et afficher sous forme de liste
+
+
+--------------------------------------
+
+ajouter les probleme rdv 

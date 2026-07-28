@@ -287,6 +287,101 @@
         @apply max-w-6xl;
     }
 
+    .gc-appointment-modal-panel {
+        width: min(96rem, calc(100vw - 2rem));
+        max-width: min(96rem, calc(100vw - 2rem));
+        max-height: calc(100vh - 2rem);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+    }
+
+    .gc-appointment-modal-header {
+        display: flex;
+        flex-shrink: 0;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--gc-border);
+        background: #fff;
+    }
+
+    .gc-appointment-modal-body {
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(390px, .85fr);
+        gap: 1rem;
+        overflow: hidden;
+        padding: 1rem;
+        background: linear-gradient(180deg, #fff 0%, var(--gc-accent-soft) 100%);
+    }
+
+    .gc-appointment-modal-map-pane,
+    .gc-appointment-modal-info-pane {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .gc-appointment-modal-map-pane {
+        border-radius: 1.25rem;
+    }
+
+    .gc-appointment-modal-info-pane {
+        padding-right: .25rem;
+    }
+
+    .gc-appointment-modal-map {
+        height: min(68vh, 620px);
+        min-height: 420px;
+    }
+
+    @media (max-width: 1279px) {
+        .gc-appointment-modal-body {
+            grid-template-columns: minmax(0, 1fr);
+            overflow-y: auto;
+        }
+
+        .gc-appointment-modal-map-pane,
+        .gc-appointment-modal-info-pane {
+            overflow: visible;
+        }
+
+        .gc-appointment-modal-map {
+            height: 380px;
+            min-height: 320px;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .gc-modal {
+            padding: .5rem;
+        }
+
+        .gc-appointment-modal-panel {
+            width: 100%;
+            max-width: 100%;
+            max-height: calc(100vh - 1rem);
+            border-radius: 1.25rem;
+        }
+
+        .gc-appointment-modal-header {
+            padding: 1rem;
+        }
+
+        .gc-appointment-modal-body {
+            padding: .75rem;
+        }
+
+        .gc-appointment-modal-map {
+            height: 300px;
+            min-height: 280px;
+        }
+    }
+
     .gc-modal-actions {
         @apply sticky bottom-0 -mx-6 -mb-6 mt-6 flex justify-end gap-2 border-t bg-white px-6 py-4;
         border-color: var(--gc-border);

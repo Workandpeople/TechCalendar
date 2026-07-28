@@ -1002,6 +1002,79 @@ it('updates a local coffrac appointment before booking it', function () {
         ->and($stored->comment)->toBe('Client à rappeler avant intervention.');
 });
 
+it('marks a pending coffrac appointment as problem from its detail modal', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.ignored_references' => [],
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/4258/problem' => Http::response([
+            'result' => true,
+            'message' => 'Dossier basculé en problème.',
+        ]),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $storedRequest = ExternalAppointmentRequest::query()->create([
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => '4258',
+        'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        'source_label' => 'Coffrac',
+        'remote_status_name' => 'Prise de RDV',
+        'customer_first_name' => 'Nina',
+        'customer_last_name' => 'MARTIN',
+        'phone' => '0600004258',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'comment' => 'Note importée depuis Coffrac',
+        'payload' => ['id' => 4258],
+        'fetched_at' => now(),
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
+            'comment' => '',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('comment');
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
+            'comment' => 'Note importée depuis Coffrac',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('comment');
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
+            'comment' => 'Client injoignable, dossier à retraiter côté Coffrac.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Problème RDV déclaré dans Coffrac.')
+        ->assertJsonPath('appointment.id', 'coffrac-4258')
+        ->assertJsonPath('appointment.status', ExternalAppointmentRequest::STATUS_PROBLEM)
+        ->assertJsonCount(0, 'appointments');
+
+    $storedRequest->refresh();
+
+    expect($storedRequest->status)->toBe(ExternalAppointmentRequest::STATUS_PROBLEM)
+        ->and($storedRequest->appointment_id)->toBeNull()
+        ->and($storedRequest->comment)->toBe('Client injoignable, dossier à retraiter côté Coffrac.');
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4258/problem'
+        && $request['comment'] === 'Client injoignable, dossier à retraiter côté Coffrac.'
+        && $request['techcalendar_external_request_id'] === $storedRequest->id);
+});
+
 it('matches a coffrac appointment service through an external alias', function () {
     $service = Service::query()->create([
         'type' => Service::TYPE_COFFRAC,

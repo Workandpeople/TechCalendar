@@ -212,6 +212,79 @@ class CoffracAppointmentService
     }
 
     /**
+     * Déclare une demande Coffrac non encore placée en problème, puis met à jour
+     * sa copie locale pour la retirer des RDV à placer.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function markPendingAppointmentProblem(string $id, string $comment): ?array
+    {
+        if (! str_starts_with($id, self::SOURCE.'-')) {
+            return null;
+        }
+
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée, impossible de signaler le problème RDV.');
+        }
+
+        $externalReference = $this->externalReferenceFromCrmId($id);
+
+        if ($externalReference === null || $this->isIgnoredExternalReference($externalReference)) {
+            return null;
+        }
+
+        $storedRequest = ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('external_reference', $externalReference)
+            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->whereNull('appointment_id')
+            ->first();
+
+        if (! $storedRequest) {
+            return null;
+        }
+
+        $normalizedComment = trim($comment);
+
+        if ($normalizedComment === '') {
+            throw new RuntimeException('Un commentaire est obligatoire avant de déclarer un problème RDV.');
+        }
+
+        if ($normalizedComment === trim((string) $storedRequest->comment)) {
+            throw new RuntimeException('Le commentaire doit être modifié avant de déclarer un problème RDV.');
+        }
+
+        $response = $this->request()->post($this->endpoint("appointments/{$externalReference}/problem"), [
+            'comment' => $normalizedComment,
+            'techcalendar_external_request_id' => $storedRequest->id,
+        ]);
+
+        if ($response->failed()) {
+            $payload = $response->json();
+
+            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de signaler le problème RDV dans Coffrac.'));
+        }
+
+        $remotePayload = $response->json('data');
+
+        if (is_array($remotePayload)) {
+            $persistedRequest = $this->persistRemoteAppointment($remotePayload);
+
+            if ($persistedRequest) {
+                $storedRequest = $persistedRequest;
+            }
+        }
+
+        $storedRequest->update([
+            'status' => ExternalAppointmentRequest::STATUS_PROBLEM,
+            'comment' => $normalizedComment,
+            'fetched_at' => now(),
+        ]);
+
+        return $this->appointmentFromStoredRequest($storedRequest->refresh());
+    }
+
+    /**
      * Synchronise les demandes Coffrac locales depuis l'API distante.
      *
      * @return array{available: bool, message: string, count: int, pending_count: int, placed_count: int, problem_count: int}
@@ -1460,6 +1533,8 @@ class CoffracAppointmentService
             'external_payload' => $request->payload,
             'status' => $request->status,
             'remote_status_name' => $request->remote_status_name,
+            'created_at' => $request->created_at?->toIso8601String(),
+            'fetched_at' => $request->fetched_at?->toIso8601String(),
             'source' => $request->source_label ?: 'Coffrac',
             'first_name' => $request->customer_first_name ?: 'Client',
             'last_name' => $request->customer_last_name ?: 'Coffrac',
@@ -1478,6 +1553,7 @@ class CoffracAppointmentService
             'documents' => $documents,
             'comment' => $request->comment,
             'comments' => $comments,
+            'service_type' => $request->service_type,
             'service_name' => $rawServiceName !== '' ? $rawServiceName : null,
             'service_display_name' => $service['name'] ?? ($rawServiceName !== '' ? $rawServiceName : null),
             'service' => $service,
