@@ -19,7 +19,11 @@ function fakeHealthLog(string $contents = ''): string
 {
     $path = sys_get_temp_dir().'/tech-calendar-health-test-'.uniqid('', true).'.log';
     file_put_contents($path, $contents);
-    config(['health.log_path' => $path]);
+    config([
+        'health.log_path' => $path,
+        'health.disk_failure_percent' => 0,
+        'health.disk_warning_percent' => 0,
+    ]);
 
     return $path;
 }

@@ -27,6 +27,9 @@ class CoffracAppointmentService
     public const REMOTE_STATUS_PENDING = 'pending';
     public const REMOTE_STATUS_PLACED = 'placed';
     public const REMOTE_STATUS_PROBLEM = 'problem';
+    public const PROBLEM_TYPE_RENVOI_CLIENT = 'Renvoi client';
+    public const PROBLEM_TYPE_CALLBACK = 'Demande de rapl';
+    public const PROBLEM_TYPE_DOCUMENT = 'Problème document';
 
     private const SYNC_MESSAGE_MAX_LENGTH = 240;
 
@@ -43,6 +46,176 @@ class CoffracAppointmentService
     {
         return filled(config('services.coffrac.api_url'))
             && filled(config('services.coffrac.api_token'));
+    }
+
+    /**
+     * @return array<int, array{value:string,label:string,requires_recall:bool}>
+     */
+    public function problemTypes(): array
+    {
+        if (! $this->isConfigured()) {
+            return $this->fallbackProblemTypes();
+        }
+
+        try {
+            return Cache::remember('coffrac:problem-types', now()->addHours(6), function (): array {
+                $response = $this->request()->get($this->endpoint('problem-types'));
+
+                if ($response->failed()) {
+                    $payload = $response->json();
+
+                    throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les types de problème Coffrac.'));
+                }
+
+                $problemTypes = collect($response->json('data', []))
+                    ->filter(fn (mixed $problemType): bool => is_array($problemType))
+                    ->map(fn (array $problemType): ?array => $this->normalizeProblemTypeOption($problemType))
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                return $problemTypes !== [] ? $problemTypes : $this->fallbackProblemTypes();
+            });
+        } catch (Throwable $exception) {
+            Log::warning('Impossible de récupérer les types de problème Coffrac.', [
+                'message' => $exception->getMessage(),
+            ]);
+
+            return $this->fallbackProblemTypes();
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function problemTypeValues(): array
+    {
+        return collect($this->problemTypes())
+            ->pluck('value')
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{comment:string,problem_type:string,recall_date:?string,recall_time:?string}
+     */
+    private function normalizeProblemReportPayload(array|string $problem): array
+    {
+        $payload = is_array($problem)
+            ? $problem
+            : [
+                'comment' => $problem,
+                'problem_type' => self::PROBLEM_TYPE_RENVOI_CLIENT,
+            ];
+
+        $comment = trim((string) ($payload['comment'] ?? ''));
+
+        if ($comment === '') {
+            throw new RuntimeException('Un commentaire de problème est obligatoire avant de déclarer un problème RDV.');
+        }
+
+        $problemType = trim((string) ($payload['problem_type'] ?? ''));
+
+        if ($problemType === '') {
+            throw new RuntimeException('Le type de problème RDV est obligatoire.');
+        }
+
+        if (! in_array($problemType, $this->problemTypeValues(), true)) {
+            throw new RuntimeException('Le type de problème RDV sélectionné n’est pas reconnu par Coffrac.');
+        }
+
+        $requiresRecall = $this->problemTypeRequiresRecall($problemType);
+        $recallDate = trim((string) ($payload['recall_date'] ?? ''));
+        $recallTime = trim((string) ($payload['recall_time'] ?? ''));
+
+        if ($requiresRecall && ($recallDate === '' || $recallTime === '')) {
+            throw new RuntimeException('La date et l’heure de rappel sont obligatoires pour une demande de rappel.');
+        }
+
+        return [
+            'comment' => $comment,
+            'problem_type' => $problemType,
+            'recall_date' => $requiresRecall ? $recallDate : null,
+            'recall_time' => $requiresRecall ? $recallTime : null,
+        ];
+    }
+
+    private function problemTypeRequiresRecall(string $problemType): bool
+    {
+        return collect($this->problemTypes())
+            ->firstWhere('value', $problemType)['requires_recall']
+            ?? $problemType === self::PROBLEM_TYPE_CALLBACK;
+    }
+
+    /**
+     * @param array<string, mixed> $problemType
+     * @return array{value:string,label:string,requires_recall:bool}|null
+     */
+    private function normalizeProblemTypeOption(array $problemType): ?array
+    {
+        $rawValue = trim((string) ($problemType['value'] ?? $problemType['name'] ?? $problemType['label'] ?? ''));
+
+        if ($rawValue === '') {
+            return null;
+        }
+
+        $normalized = $this->normalizeProblemTypeName($rawValue);
+        $value = match (true) {
+            str_contains($normalized, 'demande') && str_contains($normalized, 'rap') => self::PROBLEM_TYPE_CALLBACK,
+            str_contains($normalized, 'document') => self::PROBLEM_TYPE_DOCUMENT,
+            str_contains($normalized, 'renvoi') && str_contains($normalized, 'client') => self::PROBLEM_TYPE_RENVOI_CLIENT,
+            default => $rawValue,
+        };
+
+        $requiresRecall = (bool) ($problemType['requires_recall'] ?? $value === self::PROBLEM_TYPE_CALLBACK);
+
+        return [
+            'value' => $value,
+            'label' => trim((string) ($problemType['label'] ?? '')) ?: $this->problemTypeLabel($value),
+            'requires_recall' => $requiresRecall,
+        ];
+    }
+
+    private function normalizeProblemTypeName(string $value): string
+    {
+        $value = str_replace("\u{00A0}", ' ', $value);
+
+        return trim((string) preg_replace('/[^a-z0-9]+/', ' ', Str::lower(Str::ascii($value))));
+    }
+
+    private function problemTypeLabel(string $value): string
+    {
+        return match ($value) {
+            self::PROBLEM_TYPE_CALLBACK => 'Demande de rappel',
+            self::PROBLEM_TYPE_DOCUMENT => 'Problème document',
+            self::PROBLEM_TYPE_RENVOI_CLIENT => 'Renvoi client',
+            default => $value,
+        };
+    }
+
+    /**
+     * @return array<int, array{value:string,label:string,requires_recall:bool}>
+     */
+    private function fallbackProblemTypes(): array
+    {
+        return [
+            [
+                'value' => self::PROBLEM_TYPE_RENVOI_CLIENT,
+                'label' => 'Renvoi client',
+                'requires_recall' => false,
+            ],
+            [
+                'value' => self::PROBLEM_TYPE_CALLBACK,
+                'label' => 'Demande de rappel',
+                'requires_recall' => true,
+            ],
+            [
+                'value' => self::PROBLEM_TYPE_DOCUMENT,
+                'label' => 'Problème document',
+                'requires_recall' => false,
+            ],
+        ];
     }
 
     /**
@@ -244,7 +417,7 @@ class CoffracAppointmentService
      *
      * @return array<string, mixed>|null
      */
-    public function markPendingAppointmentProblem(string $id, string $comment): ?array
+    public function markPendingAppointmentProblem(string $id, array|string $problem): ?array
     {
         if (! str_starts_with($id, self::SOURCE.'-')) {
             return null;
@@ -271,18 +444,10 @@ class CoffracAppointmentService
             return null;
         }
 
-        $normalizedComment = trim($comment);
-
-        if ($normalizedComment === '') {
-            throw new RuntimeException('Un commentaire est obligatoire avant de déclarer un problème RDV.');
-        }
-
-        if ($normalizedComment === trim((string) $storedRequest->comment)) {
-            throw new RuntimeException('Le commentaire doit être modifié avant de déclarer un problème RDV.');
-        }
+        $problemPayload = $this->normalizeProblemReportPayload($problem);
 
         $response = $this->request()->post($this->endpoint("appointments/{$externalReference}/problem"), [
-            'comment' => $normalizedComment,
+            ...$problemPayload,
             'techcalendar_external_request_id' => $storedRequest->id,
         ]);
 
@@ -304,7 +469,11 @@ class CoffracAppointmentService
 
         $storedRequest->update([
             'status' => ExternalAppointmentRequest::STATUS_PROBLEM,
-            'comment' => $normalizedComment,
+            'comment' => $problemPayload['comment'],
+            'payload' => [
+                ...(is_array($storedRequest->payload) ? $storedRequest->payload : []),
+                'techcalendar_problem' => $problemPayload,
+            ],
             'fetched_at' => now(),
         ]);
 
@@ -704,7 +873,7 @@ class CoffracAppointmentService
             && str_contains($normalizedMessage, 'email');
     }
 
-    public function markProblem(Appointment $appointment, string $comment): void
+    public function markProblem(Appointment $appointment, array|string $problem): void
     {
         if ($appointment->external_source !== self::SOURCE) {
             return;
@@ -718,8 +887,10 @@ class CoffracAppointmentService
             throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
         }
 
+        $problemPayload = $this->normalizeProblemReportPayload($problem);
+
         $response = $this->request()->post($this->endpoint("appointments/{$appointment->external_reference}/problem"), [
-            'comment' => $comment,
+            ...$problemPayload,
             'techcalendar_appointment_id' => $appointment->id,
         ]);
 
@@ -744,7 +915,11 @@ class CoffracAppointmentService
         $storedRequest?->update([
             'status' => ExternalAppointmentRequest::STATUS_PROBLEM,
             'appointment_id' => $appointment->id,
-            'comment' => $comment,
+            'comment' => $problemPayload['comment'],
+            'payload' => [
+                ...(is_array($storedRequest->payload) ? $storedRequest->payload : []),
+                'techcalendar_problem' => $problemPayload,
+            ],
             'fetched_at' => now(),
         ]);
     }
@@ -1729,6 +1904,30 @@ class CoffracAppointmentService
             'service_name' => $request->service_name,
         ]);
         $rawServiceName = trim((string) $request->service_name);
+        $problemPayload = is_array(data_get($request->payload, 'techcalendar_problem'))
+            ? data_get($request->payload, 'techcalendar_problem')
+            : [];
+        $problemType = trim((string) (
+            data_get($request->payload, 'problem_type')
+            ?: data_get($request->payload, 'sub_statut')
+            ?: data_get($problemPayload, 'problem_type')
+        )) ?: null;
+        $problemComment = trim((string) (
+            data_get($request->payload, 'problem_comment')
+            ?: data_get($request->payload, 'commentaire_status')
+            ?: data_get($problemPayload, 'comment')
+        )) ?: null;
+        $recallDate = trim((string) (
+            data_get($request->payload, 'recall_date')
+            ?: data_get($problemPayload, 'recall_date')
+        )) ?: null;
+        $recallTime = trim((string) (
+            data_get($request->payload, 'recall_time')
+            ?: data_get($problemPayload, 'recall_time')
+        )) ?: null;
+        $recallAt = data_get($request->payload, 'recall_at')
+            ?: data_get($request->payload, 'date_rappel')
+            ?: ($recallDate && $recallTime ? $recallDate.' '.$recallTime : null);
 
         return [
             'id' => self::SOURCE.'-'.$request->external_reference,
@@ -1757,6 +1956,11 @@ class CoffracAppointmentService
             'documents' => $documents,
             'comment' => $request->comment,
             'comments' => $comments,
+            'problem_type' => $problemType,
+            'problem_comment' => $problemComment,
+            'recall_date' => $recallDate,
+            'recall_time' => $recallTime,
+            'recall_at' => $this->optionalIsoDateTime($recallAt),
             'service_type' => $request->service_type,
             'service_name' => $rawServiceName !== '' ? $rawServiceName : null,
             'service_display_name' => $service['name'] ?? ($rawServiceName !== '' ? $rawServiceName : null),
@@ -1805,6 +2009,19 @@ class CoffracAppointmentService
             ->first();
 
         return $alias?->service;
+    }
+
+    private function optionalIsoDateTime(mixed $value): ?string
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse((string) $value)->toIso8601String();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function request(): PendingRequest

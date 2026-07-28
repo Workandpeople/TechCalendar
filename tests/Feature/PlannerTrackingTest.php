@@ -748,13 +748,22 @@ it('refreshes documents for a placed coffrac appointment from tracking detail', 
     expect($appointment->refresh()->external_payload['documents'][0]['name'])->toBe('Nouveau document Coffrac');
 });
 
-it('requires a changed comment before reporting an appointment problem', function () {
+it('validates coffrac problem details before reporting an appointment problem', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
         'services.coffrac.api_token' => 'secret-token',
     ]);
 
-    Http::fake();
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/problem-types' => Http::response([
+            'result' => true,
+            'data' => [
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_RENVOI_CLIENT, 'label' => 'Renvoi client', 'requires_recall' => false],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'label' => 'Demande de rappel', 'requires_recall' => true],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT, 'label' => 'Problème document', 'requires_recall' => false],
+            ],
+        ]),
+    ]);
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -791,15 +800,16 @@ it('requires a changed comment before reporting an appointment problem', functio
 
     $this->actingAs($planner)
         ->postJson(route('planner.tracking.appointments.problem', $appointment), [
-            'comment' => 'Commentaire initial',
+            'comment' => 'Client à rappeler.',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK,
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors('comment');
+        ->assertJsonValidationErrors(['recall_date', 'recall_time']);
 
     expect($appointment->refresh()->status)->toBe(Appointment::STATUS_SCHEDULED)
         ->and($appointment->problem_reported_at)->toBeNull();
 
-    Http::assertNothingSent();
+    Http::assertSentCount(1);
 });
 
 it('reports a coffrac appointment problem and moves it to probleme rendez-vous', function () {
@@ -810,6 +820,14 @@ it('reports a coffrac appointment problem and moves it to probleme rendez-vous',
     Mail::fake();
 
     Http::fake([
+        'https://coffrac.test/api/techcalendar/problem-types' => Http::response([
+            'result' => true,
+            'data' => [
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_RENVOI_CLIENT, 'label' => 'Renvoi client', 'requires_recall' => false],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'label' => 'Demande de rappel', 'requires_recall' => true],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT, 'label' => 'Problème document', 'requires_recall' => false],
+            ],
+        ]),
         'https://coffrac.test/api/techcalendar/appointments/44/problem' => Http::response([
             'result' => true,
             'message' => 'Rendez-vous basculé en problème.',
@@ -853,6 +871,7 @@ it('reports a coffrac appointment problem and moves it to probleme rendez-vous',
     $this->actingAs($planner)
         ->postJson(route('planner.tracking.appointments.problem', $appointment), [
             'comment' => 'Client absent au rendez-vous, à retraiter côté Coffrac.',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT,
         ])
         ->assertOk()
         ->assertJsonPath('message', 'Problème RDV déclaré.')
@@ -866,7 +885,8 @@ it('reports a coffrac appointment problem and moves it to probleme rendez-vous',
 
     Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/problem'
-        && $request['comment'] === 'Client absent au rendez-vous, à retraiter côté Coffrac.');
+        && $request['comment'] === 'Client absent au rendez-vous, à retraiter côté Coffrac.'
+        && $request['problem_type'] === CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT);
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,

@@ -547,18 +547,53 @@
                                 <label class="gc-label" for="booking_crm_detail_address_input">Adresse</label>
                                 <input id="booking_crm_detail_address_input" type="text" class="gc-input" autocomplete="off" placeholder="Adresse complète du RDV" />
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
-                                    <button id="booking-crm-detail-save" type="submit" class="gc-btn-primary">Enregistrer et regéocoder</button>
-                                    <span class="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-sm font-semibold" style="border-color:var(--gc-border);background:#fff;color:var(--gc-text-soft);" title="Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.">?</span>
+                                    <button id="booking-crm-detail-save" type="submit" class="gc-btn-primary">Enregistrer</button>
+                                    <span class="gc-help-tooltip">
+                                        <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement de l’adresse">?</button>
+                                        <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.</span>
+                                    </span>
                                 </div>
                             </div>
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_comment">Commentaires</label>
                                 <textarea id="booking_crm_detail_comment" class="gc-input min-h-[110px]" placeholder="Commentaires du dossier ou notes internes"></textarea>
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
-                                    <button id="booking-crm-detail-problem" type="button" class="gc-btn-danger">Problème RDV</button>
                                     <button id="booking-crm-detail-save-comment" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                                 </div>
                             </div>
+                            <details id="booking-crm-problem-section" class="rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
+                                <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
+                                <div class="mt-3 grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label class="gc-label" for="booking_crm_problem_comment">Commentaire du problème</label>
+                                        <textarea id="booking_crm_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                    </div>
+                                    <div>
+                                        <label class="gc-label" for="booking_crm_problem_type">Type de problème</label>
+                                        <select id="booking_crm_problem_type" class="gc-input">
+                                            <option value="">Sélectionner un type</option>
+                                            @foreach (($coffracProblemTypes ?? []) as $problemType)
+                                                <option value="{{ $problemType['value'] }}" data-requires-recall="{{ ! empty($problemType['requires_recall']) ? '1' : '0' }}">
+                                                    {{ $problemType['label'] ?? $problemType['value'] }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div id="booking_crm_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                        <div>
+                                            <label class="gc-label" for="booking_crm_problem_recall_date">Date de rappel</label>
+                                            <input id="booking_crm_problem_recall_date" type="date" class="gc-input" />
+                                        </div>
+                                        <div>
+                                            <label class="gc-label" for="booking_crm_problem_recall_time">Heure de rappel</label>
+                                            <input id="booking_crm_problem_recall_time" type="time" class="gc-input" />
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end">
+                                        <button id="booking-crm-detail-problem" type="button" class="gc-btn-danger">Déclarer le problème RDV</button>
+                                    </div>
+                                </div>
+                            </details>
                         </div>
 
                         <div class="mt-4">
@@ -699,13 +734,48 @@
                         <div class="mt-4">
                             <label class="gc-label" for="booking_detail_comment">Commentaire</label>
                             <textarea id="booking_detail_comment" rows="5" class="gc-input" style="min-height:120px;"></textarea>
+                            <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+                                <button id="booking-save-comment-btn" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
+                            </div>
                         </div>
+
+                        <details id="booking-problem-section" class="mt-4 rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
+                            <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
+                            <div class="mt-3 grid grid-cols-1 gap-3">
+                                <div>
+                                    <label class="gc-label" for="booking_problem_comment">Commentaire du problème</label>
+                                    <textarea id="booking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                </div>
+                                <div>
+                                    <label class="gc-label" for="booking_problem_type">Type de problème</label>
+                                    <select id="booking_problem_type" class="gc-input">
+                                        <option value="">Sélectionner un type</option>
+                                        @foreach (($coffracProblemTypes ?? []) as $problemType)
+                                            <option value="{{ $problemType['value'] }}" data-requires-recall="{{ ! empty($problemType['requires_recall']) ? '1' : '0' }}">
+                                                {{ $problemType['label'] ?? $problemType['value'] }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div id="booking_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div>
+                                        <label class="gc-label" for="booking_problem_recall_date">Date de rappel</label>
+                                        <input id="booking_problem_recall_date" type="date" class="gc-input" />
+                                    </div>
+                                    <div>
+                                        <label class="gc-label" for="booking_problem_recall_time">Heure de rappel</label>
+                                        <input id="booking_problem_recall_time" type="time" class="gc-input" />
+                                    </div>
+                                </div>
+                                <div class="flex justify-end">
+                                    <button id="booking-problem-appointment-btn" type="button" class="gc-btn-danger">Déclarer le problème RDV</button>
+                                </div>
+                            </div>
+                        </details>
 
                         <div id="booking_detail_status" class="mt-3 hidden text-sm"></div>
 
                         <div class="mt-4 flex flex-wrap justify-end gap-2">
-                            <button id="booking-problem-appointment-btn" type="button" class="gc-btn-danger">Problème RDV</button>
-                            <button id="booking-save-comment-btn" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                             <button id="booking-confirm-suggestion-btn" type="button" class="gc-btn-primary">Valider la prise du RDV</button>
                         </div>
                     </form>
@@ -857,10 +927,22 @@
         const bookingCrmDetailSave = document.getElementById('booking-crm-detail-save');
         const bookingCrmDetailProblem = document.getElementById('booking-crm-detail-problem');
         const bookingCrmDetailSaveComment = document.getElementById('booking-crm-detail-save-comment');
+        const bookingCrmProblemSection = document.getElementById('booking-crm-problem-section');
+        const bookingCrmProblemComment = document.getElementById('booking_crm_problem_comment');
+        const bookingCrmProblemType = document.getElementById('booking_crm_problem_type');
+        const bookingCrmProblemRecallFields = document.getElementById('booking_crm_problem_recall_fields');
+        const bookingCrmProblemRecallDate = document.getElementById('booking_crm_problem_recall_date');
+        const bookingCrmProblemRecallTime = document.getElementById('booking_crm_problem_recall_time');
         const bookingCrmDetailRefreshDocuments = document.getElementById('booking-crm-detail-refresh-documents');
         const bookingCrmDetailDocumentsStatus = document.getElementById('booking_crm_detail_documents_status');
         const bookingDetailRefreshDocuments = document.getElementById('booking-detail-refresh-documents');
         const bookingDetailDocumentsStatus = document.getElementById('booking_detail_documents_status');
+        const bookingProblemSection = document.getElementById('booking-problem-section');
+        const bookingProblemComment = document.getElementById('booking_problem_comment');
+        const bookingProblemType = document.getElementById('booking_problem_type');
+        const bookingProblemRecallFields = document.getElementById('booking_problem_recall_fields');
+        const bookingProblemRecallDate = document.getElementById('booking_problem_recall_date');
+        const bookingProblemRecallTime = document.getElementById('booking_problem_recall_time');
         const bookingDetailStatus = document.getElementById('booking_detail_status');
         const bookingDetailComment = document.getElementById('booking_detail_comment');
         const bookingSaveComment = document.getElementById('booking-save-comment-btn');
@@ -1672,14 +1754,14 @@
             if (!bookingCrmDetailSave) return;
 
             bookingCrmDetailSave.disabled = isSaving;
-            bookingCrmDetailSave.textContent = isSaving ? 'Géocodage...' : 'Enregistrer et regéocoder';
+            bookingCrmDetailSave.textContent = isSaving ? 'Enregistrement...' : 'Enregistrer';
         };
 
         const setCrmDetailProblemSaving = (isSaving) => {
             if (!bookingCrmDetailProblem) return;
 
             bookingCrmDetailProblem.disabled = isSaving;
-            bookingCrmDetailProblem.textContent = isSaving ? 'Signalement...' : 'Problème RDV';
+            bookingCrmDetailProblem.textContent = isSaving ? 'Signalement...' : 'Déclarer le problème RDV';
         };
 
         const updateCrmDetailCommentButtonVisibility = () => {
@@ -1694,6 +1776,56 @@
 
             bookingCrmDetailSaveComment.disabled = isSaving;
             bookingCrmDetailSaveComment.textContent = isSaving ? 'Enregistrement...' : 'Enregistrer mon commentaire';
+        };
+
+        const problemTypeRequiresRecall = (select) => select?.selectedOptions?.[0]?.dataset.requiresRecall === '1';
+
+        const syncProblemRecallFields = (select, wrapper, dateInput, timeInput) => {
+            const requiresRecall = problemTypeRequiresRecall(select);
+
+            wrapper?.classList.toggle('hidden', !requiresRecall);
+
+            if (!requiresRecall) {
+                if (dateInput) dateInput.value = '';
+                if (timeInput) timeInput.value = '';
+            }
+        };
+
+        const resetProblemSection = (section, commentInput, typeSelect, recallWrapper, recallDateInput, recallTimeInput) => {
+            if (section) section.open = false;
+            if (commentInput) commentInput.value = '';
+            if (typeSelect) typeSelect.value = '';
+            if (recallDateInput) recallDateInput.value = '';
+            if (recallTimeInput) recallTimeInput.value = '';
+
+            syncProblemRecallFields(typeSelect, recallWrapper, recallDateInput, recallTimeInput);
+        };
+
+        const problemPayloadFromFields = (commentInput, typeSelect, recallDateInput, recallTimeInput) => {
+            const comment = commentInput?.value.trim() || '';
+            const problemType = typeSelect?.value || '';
+            const requiresRecall = problemTypeRequiresRecall(typeSelect);
+            const recallDate = recallDateInput?.value || '';
+            const recallTime = recallTimeInput?.value || '';
+
+            if (!comment) {
+                throw new Error('Un commentaire de problème est obligatoire avant de déclarer un problème RDV.');
+            }
+
+            if (!problemType) {
+                throw new Error('Le type de problème RDV est obligatoire.');
+            }
+
+            if (requiresRecall && (!recallDate || !recallTime)) {
+                throw new Error('La date et l’heure de rappel sont obligatoires pour une demande de rappel.');
+            }
+
+            return {
+                comment,
+                problem_type: problemType,
+                recall_date: requiresRecall ? recallDate : null,
+                recall_time: requiresRecall ? recallTime : null,
+            };
         };
 
         const updateBookingDetailCommentButtonVisibility = () => {
@@ -2101,6 +2233,14 @@
                     : '-'),
             ].join('');
             fillCrmDetailForm(appointment);
+            resetProblemSection(
+                bookingCrmProblemSection,
+                bookingCrmProblemComment,
+                bookingCrmProblemType,
+                bookingCrmProblemRecallFields,
+                bookingCrmProblemRecallDate,
+                bookingCrmProblemRecallTime,
+            );
             renderExternalComments(appointment.comments || appointment.external_payload?.comments || [], 'booking_crm_detail_comments', 'booking_crm_detail_comments_count');
             renderCrmDetailDocuments(appointment.documents || []);
             setBookingCrmDetailDocumentsStatus();
@@ -2118,6 +2258,14 @@
             bookingCrmDetailModal?.classList.add('hidden');
             currentCrmDetailAppointmentId = null;
             setCrmDetailStatus();
+            resetProblemSection(
+                bookingCrmProblemSection,
+                bookingCrmProblemComment,
+                bookingCrmProblemType,
+                bookingCrmProblemRecallFields,
+                bookingCrmProblemRecallDate,
+                bookingCrmProblemRecallTime,
+            );
             clearCrmDetailMap();
 
             if (bookingAppointmentModal?.classList.contains('hidden')) {
@@ -3374,7 +3522,15 @@
 
             startsAtInput.disabled = !isSuggestion;
             durationInput.disabled = !isSuggestion;
-            document.getElementById('booking-problem-appointment-btn').classList.toggle('hidden', !canReportProblem);
+            resetProblemSection(
+                bookingProblemSection,
+                bookingProblemComment,
+                bookingProblemType,
+                bookingProblemRecallFields,
+                bookingProblemRecallDate,
+                bookingProblemRecallTime,
+            );
+            bookingProblemSection?.classList.toggle('hidden', !canReportProblem);
             updateBookingDetailCommentButtonVisibility();
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
@@ -4077,20 +4233,33 @@
             await saveCrmAppointmentDetail();
         });
         bookingCrmDetailComment?.addEventListener('input', updateCrmDetailCommentButtonVisibility);
+        bookingCrmProblemType?.addEventListener('change', () => syncProblemRecallFields(
+            bookingCrmProblemType,
+            bookingCrmProblemRecallFields,
+            bookingCrmProblemRecallDate,
+            bookingCrmProblemRecallTime,
+        ));
+        bookingProblemType?.addEventListener('change', () => syncProblemRecallFields(
+            bookingProblemType,
+            bookingProblemRecallFields,
+            bookingProblemRecallDate,
+            bookingProblemRecallTime,
+        ));
         bookingCrmDetailSaveComment?.addEventListener('click', saveCrmAppointmentComment);
 
         bookingCrmDetailProblem?.addEventListener('click', async () => {
             if (!currentCrmDetailAppointmentId || bookingCrmDetailProblem.disabled) return;
 
-            const comment = bookingCrmDetailComment?.value.trim() || '';
-
-            if (!comment) {
-                setCrmDetailStatus('Un commentaire est obligatoire avant de déclarer un problème RDV.', 'error');
-                return;
-            }
-
-            if (comment === bookingInitialCrmDetailComment.trim()) {
-                setCrmDetailStatus('Le commentaire doit être modifié avant de déclarer un problème RDV.', 'error');
+            let problemPayload = null;
+            try {
+                problemPayload = problemPayloadFromFields(
+                    bookingCrmProblemComment,
+                    bookingCrmProblemType,
+                    bookingCrmProblemRecallDate,
+                    bookingCrmProblemRecallTime,
+                );
+            } catch (error) {
+                setCrmDetailStatus(error.message || 'Signalement impossible.', 'error');
                 return;
             }
 
@@ -4107,7 +4276,7 @@
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': bookingCsrfToken,
                         },
-                        body: JSON.stringify({ comment }),
+                        body: JSON.stringify(problemPayload),
                     },
                 );
                 const payload = await response.json();
@@ -4121,7 +4290,14 @@
                 if (currentAppointmentRequest?.id === currentCrmDetailAppointmentId) {
                     clearBookingAnalysisContext();
                 }
-                bookingInitialCrmDetailComment = comment;
+                resetProblemSection(
+                    bookingCrmProblemSection,
+                    bookingCrmProblemComment,
+                    bookingCrmProblemType,
+                    bookingCrmProblemRecallFields,
+                    bookingCrmProblemRecallDate,
+                    bookingCrmProblemRecallTime,
+                );
                 updateCrmDetailCommentButtonVisibility();
                 setCrmDetailStatus(payload.message || 'Problème RDV déclaré.', 'success');
                 window.setTimeout(() => closeCrmAppointmentDetail(), 650);
@@ -4268,19 +4444,21 @@
         document.getElementById('booking-problem-appointment-btn').addEventListener('click', async () => {
             const appointmentId = document.getElementById('booking_detail_appointment_id').value;
             const crmAppointmentId = document.getElementById('booking_detail_crm_id').value;
-            const comment = document.getElementById('booking_detail_comment').value.trim();
             const button = document.getElementById('booking-problem-appointment-btn');
             const isPendingCoffracProblem = !appointmentId && isCoffracCrmId(crmAppointmentId);
 
             if (!appointmentId && !isPendingCoffracProblem) return;
 
-            if (!comment) {
-                showDetailStatus('Un commentaire est obligatoire avant de déclarer un problème RDV.', 'error');
-                return;
-            }
-
-            if (comment === bookingInitialDetailComment.trim()) {
-                showDetailStatus('Le commentaire doit être modifié avant de déclarer un problème RDV.', 'error');
+            let problemPayload = null;
+            try {
+                problemPayload = problemPayloadFromFields(
+                    bookingProblemComment,
+                    bookingProblemType,
+                    bookingProblemRecallDate,
+                    bookingProblemRecallTime,
+                );
+            } catch (error) {
+                showDetailStatus(error.message || 'Signalement impossible.', 'error');
                 return;
             }
 
@@ -4298,7 +4476,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': bookingCsrfToken,
                     },
-                    body: JSON.stringify({ comment }),
+                    body: JSON.stringify(problemPayload),
                 });
                 const payload = await response.json();
 
@@ -4320,22 +4498,33 @@
                 }
 
                 if (selectedCalendarEvent) {
-                    selectedCalendarEvent.setExtendedProp('comment', payload.comment || comment);
+                    selectedCalendarEvent.setExtendedProp('comment', payload.comment || problemPayload.comment);
                     selectedCalendarEvent.setExtendedProp('status', payload.status || 'problem');
                     selectedCalendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
+                    selectedCalendarEvent.setExtendedProp('problem_type', payload.problem_type || problemPayload.problem_type);
+                    selectedCalendarEvent.setExtendedProp('recall_date', payload.recall_date || problemPayload.recall_date);
+                    selectedCalendarEvent.setExtendedProp('recall_time', payload.recall_time || problemPayload.recall_time);
                     selectedCalendarEvent.setProp('backgroundColor', '#fff7ed');
                     selectedCalendarEvent.setProp('borderColor', '#f97316');
                     selectedCalendarEvent.setProp('textColor', '#9a3412');
                 }
 
-                bookingInitialDetailComment = payload.comment || comment;
+                bookingInitialDetailComment = payload.comment || problemPayload.comment;
+                resetProblemSection(
+                    bookingProblemSection,
+                    bookingProblemComment,
+                    bookingProblemType,
+                    bookingProblemRecallFields,
+                    bookingProblemRecallDate,
+                    bookingProblemRecallTime,
+                );
                 updateBookingDetailCommentButtonVisibility();
                 showDetailStatus('Problème RDV déclaré.');
             } catch (error) {
                 showDetailStatus(error.message || 'Signalement impossible.', 'error');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Problème RDV';
+                button.textContent = 'Déclarer le problème RDV';
             }
         });
 

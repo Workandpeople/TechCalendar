@@ -150,6 +150,31 @@
         color: var(--gc-accent);
     }
 
+    .gc-help-tooltip {
+        @apply relative inline-flex;
+    }
+
+    .gc-help-tooltip-button {
+        @apply inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-sm font-semibold;
+        border-color: var(--gc-border);
+        background: #fff;
+        color: var(--gc-text-soft);
+    }
+
+    .gc-help-tooltip-content {
+        @apply pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-lg px-3 py-2 text-xs font-medium shadow-lg;
+        background: var(--gc-primary);
+        color: #fff;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    .gc-help-tooltip:hover .gc-help-tooltip-content,
+    .gc-help-tooltip:focus-within .gc-help-tooltip-content {
+        opacity: 1;
+        visibility: visible;
+    }
+
     .gc-alert {
         @apply mb-4 rounded-lg border px-4 py-3 text-sm;
         border-color: #e3d3a0;

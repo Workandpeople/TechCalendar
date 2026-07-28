@@ -52,6 +52,7 @@ class PlannerBookingController extends Controller
             'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'mapboxToken' => config('services.mapbox.token'),
+            'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'services' => $services,
             'bookingServices' => $services
                 ->map(fn (Service $service): array => [
@@ -238,12 +239,10 @@ class PlannerBookingController extends Controller
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
-        $payload = $request->validate([
-            'comment' => ['required', 'string', 'max:5000'],
-        ]);
+        $payload = $request->validate($this->problemReportRules($coffracAppointments));
 
         try {
-            $appointment = $coffracAppointments->markPendingAppointmentProblem($crmAppointmentId, (string) $payload['comment']);
+            $appointment = $coffracAppointments->markPendingAppointmentProblem($crmAppointmentId, $payload);
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([
                 'comment' => $exception->getMessage(),
@@ -808,6 +807,19 @@ class PlannerBookingController extends Controller
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function problemReportRules(CoffracAppointmentService $coffracAppointments): array
+    {
+        return [
+            'comment' => ['required', 'string', 'min:3', 'max:5000'],
+            'problem_type' => ['required', 'string', Rule::in($coffracAppointments->problemTypeValues())],
+            'recall_date' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date'],
+            'recall_time' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date_format:H:i'],
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $payload
      * @return array<string, mixed>|null
      */
@@ -1191,6 +1203,7 @@ class PlannerBookingController extends Controller
                 ->last();
             $originLat = $previousAppointment ? (float) $previousAppointment->latitude : (float) $appointment->technician?->latitude;
             $originLng = $previousAppointment ? (float) $previousAppointment->longitude : (float) $appointment->technician?->longitude;
+            $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
 
             return [
                 'id' => $appointment->id,
@@ -1218,6 +1231,11 @@ class PlannerBookingController extends Controller
                     'comment' => $appointment->comment,
                     'status' => $appointment->status,
                     'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
+                    'problem_type' => data_get($externalPayload, 'problem_type') ?: data_get($externalPayload, 'techcalendar_problem.problem_type'),
+                    'problem_comment' => data_get($externalPayload, 'problem_comment') ?: data_get($externalPayload, 'techcalendar_problem.comment'),
+                    'recall_date' => data_get($externalPayload, 'recall_date') ?: data_get($externalPayload, 'techcalendar_problem.recall_date'),
+                    'recall_time' => data_get($externalPayload, 'recall_time') ?: data_get($externalPayload, 'techcalendar_problem.recall_time'),
+                    'recall_at' => data_get($externalPayload, 'recall_at') ?: data_get($externalPayload, 'date_rappel'),
                     'origin_label' => $previousAppointment ? 'rdv précédent' : 'domicile',
                     'origin_latitude' => $originLat,
                     'origin_longitude' => $originLng,
@@ -1783,6 +1801,11 @@ class PlannerBookingController extends Controller
                     : ($crmAppointment['service_display_name'] ?? $crmAppointment['service_name'] ?? 'Prestation non renseignée'),
                 'documents' => app(AppointmentDocumentSerializer::class)->normalize($crmAppointment['documents'] ?? []),
                 'comments' => $crmAppointment['comments'] ?? [],
+                'problem_type' => $crmAppointment['problem_type'] ?? null,
+                'problem_comment' => $crmAppointment['problem_comment'] ?? null,
+                'recall_date' => $crmAppointment['recall_date'] ?? null,
+                'recall_time' => $crmAppointment['recall_time'] ?? null,
+                'recall_at' => $crmAppointment['recall_at'] ?? null,
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,

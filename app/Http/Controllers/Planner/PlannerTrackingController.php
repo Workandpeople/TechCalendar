@@ -22,7 +22,7 @@ use RuntimeException;
 
 class PlannerTrackingController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, CoffracAppointmentService $coffracAppointments): View
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -44,6 +44,7 @@ class PlannerTrackingController extends Controller
             'section' => $request->routeIs('manager.appointments') ? 'Gérant' : 'Planning',
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
             'mapboxToken' => config('services.mapbox.token'),
+            'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'refreshPlacedCoffracUrl' => route($request->routeIs('manager.appointments')
                 ? 'manager.appointments.coffrac.placed.refresh'
                 : 'planner.tracking.coffrac.placed.refresh'),
@@ -172,6 +173,7 @@ class PlannerTrackingController extends Controller
                 $originName = $previousAppointment
                     ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
                     : ($appointment->technician?->address ?: 'Domicile technicien');
+                $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
 
                 return [
                     'id' => $appointment->id,
@@ -205,6 +207,11 @@ class PlannerTrackingController extends Controller
                         'comment' => $appointment->comment,
                         'status' => $appointment->status,
                         'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
+                        'problem_type' => data_get($externalPayload, 'problem_type') ?: data_get($externalPayload, 'techcalendar_problem.problem_type'),
+                        'problem_comment' => data_get($externalPayload, 'problem_comment') ?: data_get($externalPayload, 'techcalendar_problem.comment'),
+                        'recall_date' => data_get($externalPayload, 'recall_date') ?: data_get($externalPayload, 'techcalendar_problem.recall_date'),
+                        'recall_time' => data_get($externalPayload, 'recall_time') ?: data_get($externalPayload, 'techcalendar_problem.recall_time'),
+                        'recall_at' => data_get($externalPayload, 'recall_at') ?: data_get($externalPayload, 'date_rappel'),
                         'created_by_name' => $appointment->creator?->full_name,
                         'comments' => $this->externalComments($appointment),
                         'documents' => $documentsByAppointment[$appointment->id] ?? [],
@@ -431,29 +438,27 @@ class PlannerTrackingController extends Controller
 
         $appointment = Appointment::query()->findOrFail($appointment);
 
-        $payload = $request->validate([
-            'comment' => ['required', 'string', 'max:2000'],
-        ]);
-
-        if (trim($payload['comment']) === trim((string) $appointment->comment)) {
-            throw ValidationException::withMessages([
-                'comment' => 'Le commentaire doit être modifié avant de déclarer un problème RDV.',
-            ]);
-        }
+        $payload = $request->validate($this->problemReportRules($coffracAppointments));
 
         try {
             $appointment = DB::transaction(function () use ($appointment, $coffracAppointments, $payload): Appointment {
+                $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+
                 $appointment->update([
                     'comment' => $payload['comment'],
                     'status' => Appointment::STATUS_PROBLEM,
                     'problem_reported_at' => now(),
+                    'external_payload' => [
+                        ...$externalPayload,
+                        'techcalendar_problem' => $payload,
+                    ],
                 ]);
 
                 $appointment = Appointment::query()
                     ->with(['technician:id,email', 'service:id,type,name'])
                     ->findOrFail($appointment->id);
 
-                $coffracAppointments->markProblem($appointment, (string) $payload['comment']);
+                $coffracAppointments->markProblem($appointment, $payload);
 
                 return $appointment;
             });
@@ -470,6 +475,9 @@ class PlannerTrackingController extends Controller
             'comment' => $appointment->comment,
             'status' => $appointment->status,
             'problem_reported_at' => $appointment->problem_reported_at?->toIso8601String(),
+            'problem_type' => $payload['problem_type'],
+            'recall_date' => $payload['recall_date'] ?? null,
+            'recall_time' => $payload['recall_time'] ?? null,
         ]);
     }
 
@@ -536,6 +544,19 @@ class PlannerTrackingController extends Controller
             'postal_code' => $postalCode,
             'city' => $city ?: null,
             'label' => $label !== '' ? $label : $address,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function problemReportRules(CoffracAppointmentService $coffracAppointments): array
+    {
+        return [
+            'comment' => ['required', 'string', 'min:3', 'max:5000'],
+            'problem_type' => ['required', 'string', Rule::in($coffracAppointments->problemTypeValues())],
+            'recall_date' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date'],
+            'recall_time' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date_format:H:i'],
         ];
     }
 

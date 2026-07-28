@@ -1088,6 +1088,14 @@ it('marks a pending coffrac appointment as problem from its detail modal', funct
     ]);
 
     Http::fake([
+        'https://coffrac.test/api/techcalendar/problem-types' => Http::response([
+            'result' => true,
+            'data' => [
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_RENVOI_CLIENT, 'label' => 'Renvoi client', 'requires_recall' => false],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'label' => 'Demande de rappel', 'requires_recall' => true],
+                ['value' => CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT, 'label' => 'Problème document', 'requires_recall' => false],
+            ],
+        ]),
         'https://coffrac.test/api/techcalendar/appointments/4258/problem' => Http::response([
             'result' => true,
             'message' => 'Dossier basculé en problème.',
@@ -1119,20 +1127,25 @@ it('marks a pending coffrac appointment as problem from its detail modal', funct
     $this->actingAs($planner)
         ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
             'comment' => '',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_RENVOI_CLIENT,
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('comment');
 
     $this->actingAs($planner)
         ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
-            'comment' => 'Note importée depuis Coffrac',
+            'comment' => 'Client à rappeler.',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK,
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors('comment');
+        ->assertJsonValidationErrors(['recall_date', 'recall_time']);
 
     $this->actingAs($planner)
         ->postJson(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => 'coffrac-4258']), [
             'comment' => 'Client injoignable, dossier à retraiter côté Coffrac.',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_CALLBACK,
+            'recall_date' => '2026-06-24',
+            'recall_time' => '09:30',
         ])
         ->assertOk()
         ->assertJsonPath('message', 'Problème RDV déclaré dans Coffrac.')
@@ -1146,10 +1159,12 @@ it('marks a pending coffrac appointment as problem from its detail modal', funct
         ->and($storedRequest->appointment_id)->toBeNull()
         ->and($storedRequest->comment)->toBe('Client injoignable, dossier à retraiter côté Coffrac.');
 
-    Http::assertSentCount(1);
     Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4258/problem'
         && $request['comment'] === 'Client injoignable, dossier à retraiter côté Coffrac.'
+        && $request['problem_type'] === CoffracAppointmentService::PROBLEM_TYPE_CALLBACK
+        && $request['recall_date'] === '2026-06-24'
+        && $request['recall_time'] === '09:30'
         && $request['techcalendar_external_request_id'] === $storedRequest->id);
 });
 

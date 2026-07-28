@@ -42,6 +42,13 @@
         </svg>
         @break
 
+    @case('mail')
+        <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m4 7 8 6 8-6" />
+        </svg>
+        @break
+
     @case('lots')
         <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8">
             <path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z" />

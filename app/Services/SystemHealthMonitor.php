@@ -133,7 +133,9 @@ class SystemHealthMonitor
         $total = disk_total_space(base_path()) ?: 0;
         $free = disk_free_space(base_path()) ?: 0;
         $freePercent = $total > 0 ? round(($free / $total) * 100, 1) : 0;
-        $status = $freePercent < 5 ? 'fail' : ($freePercent < 15 ? 'warn' : 'ok');
+        $failureThreshold = (float) config('health.disk_failure_percent', 5);
+        $warningThreshold = (float) config('health.disk_warning_percent', 15);
+        $status = $freePercent < $failureThreshold ? 'fail' : ($freePercent < $warningThreshold ? 'warn' : 'ok');
 
         return [
             'status' => $status,

@@ -221,8 +221,11 @@
                             <input id="tracking_detail_latitude" type="hidden" />
                             <input id="tracking_detail_longitude" type="hidden" />
                             <div class="mt-2 flex flex-wrap items-center gap-2">
-                                <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer et regéocoder</button>
-                                <span class="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-sm font-semibold" style="border-color:var(--gc-border);background:#fff;color:var(--gc-text-soft);" title="Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.">?</span>
+                                <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer</button>
+                                <span class="gc-help-tooltip">
+                                    <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement du RDV">?</button>
+                                    <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.</span>
+                                </span>
                             </div>
                         </div>
 
@@ -258,9 +261,41 @@
                         <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
                         <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
                         <div class="mt-3 flex flex-wrap justify-end gap-2">
-                            <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-danger">Problème RDV</button>
                             <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
                         </div>
+                        <details id="tracking-problem-section" class="mt-4 rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
+                            <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
+                            <div class="mt-3 grid grid-cols-1 gap-3">
+                                <div>
+                                    <label class="gc-label" for="tracking_problem_comment">Commentaire du problème</label>
+                                    <textarea id="tracking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                </div>
+                                <div>
+                                    <label class="gc-label" for="tracking_problem_type">Type de problème</label>
+                                    <select id="tracking_problem_type" class="gc-input">
+                                        <option value="">Sélectionner un type</option>
+                                        @foreach (($coffracProblemTypes ?? []) as $problemType)
+                                            <option value="{{ $problemType['value'] }}" data-requires-recall="{{ ! empty($problemType['requires_recall']) ? '1' : '0' }}">
+                                                {{ $problemType['label'] ?? $problemType['value'] }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div id="tracking_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div>
+                                        <label class="gc-label" for="tracking_problem_recall_date">Date de rappel</label>
+                                        <input id="tracking_problem_recall_date" type="date" class="gc-input" />
+                                    </div>
+                                    <div>
+                                        <label class="gc-label" for="tracking_problem_recall_time">Heure de rappel</label>
+                                        <input id="tracking_problem_recall_time" type="time" class="gc-input" />
+                                    </div>
+                                </div>
+                                <div class="flex justify-end">
+                                    <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-danger">Déclarer le problème RDV</button>
+                                </div>
+                            </div>
+                        </details>
                     </form>
                 </section>
             </div>
@@ -295,6 +330,12 @@
         const trackingRefreshDocumentsStatus = document.getElementById('tracking_detail_documents_status');
         const trackingCommentInput = document.getElementById('tracking_detail_comment');
         const trackingSaveCommentButton = document.getElementById('tracking-save-comment-btn');
+        const trackingProblemSection = document.getElementById('tracking-problem-section');
+        const trackingProblemComment = document.getElementById('tracking_problem_comment');
+        const trackingProblemType = document.getElementById('tracking_problem_type');
+        const trackingProblemRecallFields = document.getElementById('tracking_problem_recall_fields');
+        const trackingProblemRecallDate = document.getElementById('tracking_problem_recall_date');
+        const trackingProblemRecallTime = document.getElementById('tracking_problem_recall_time');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
@@ -378,6 +419,56 @@
                 'hidden',
                 trackingCommentInput.value.trim() === trackingInitialComment.trim(),
             );
+        };
+
+        const trackingProblemTypeRequiresRecall = () => trackingProblemType?.selectedOptions?.[0]?.dataset.requiresRecall === '1';
+
+        const syncTrackingProblemRecallFields = () => {
+            const requiresRecall = trackingProblemTypeRequiresRecall();
+
+            trackingProblemRecallFields?.classList.toggle('hidden', !requiresRecall);
+
+            if (!requiresRecall) {
+                if (trackingProblemRecallDate) trackingProblemRecallDate.value = '';
+                if (trackingProblemRecallTime) trackingProblemRecallTime.value = '';
+            }
+        };
+
+        const resetTrackingProblemSection = () => {
+            if (trackingProblemSection) trackingProblemSection.open = false;
+            if (trackingProblemComment) trackingProblemComment.value = '';
+            if (trackingProblemType) trackingProblemType.value = '';
+            if (trackingProblemRecallDate) trackingProblemRecallDate.value = '';
+            if (trackingProblemRecallTime) trackingProblemRecallTime.value = '';
+
+            syncTrackingProblemRecallFields();
+        };
+
+        const trackingProblemPayloadFromFields = () => {
+            const comment = trackingProblemComment?.value.trim() || '';
+            const problemType = trackingProblemType?.value || '';
+            const requiresRecall = trackingProblemTypeRequiresRecall();
+            const recallDate = trackingProblemRecallDate?.value || '';
+            const recallTime = trackingProblemRecallTime?.value || '';
+
+            if (!comment) {
+                throw new Error('Un commentaire de problème est obligatoire avant de déclarer un problème RDV.');
+            }
+
+            if (!problemType) {
+                throw new Error('Le type de problème RDV est obligatoire.');
+            }
+
+            if (requiresRecall && (!recallDate || !recallTime)) {
+                throw new Error('La date et l’heure de rappel sont obligatoires pour une demande de rappel.');
+            }
+
+            return {
+                comment,
+                problem_type: problemType,
+                recall_date: requiresRecall ? recallDate : null,
+                recall_time: requiresRecall ? recallTime : null,
+            };
         };
 
         const trackingEscapeHtml = (value) => String(value ?? '')
@@ -1205,6 +1296,7 @@
         const closeTrackingAppointmentModal = () => {
             trackingDetailMapRenderRequestId++;
             trackingAppointmentModal.classList.add('hidden');
+            resetTrackingProblemSection();
         };
 
         const openTrackingAppointmentModal = (event) => {
@@ -1234,6 +1326,7 @@
             trackingInitialComment = props.comment || '';
             document.getElementById('tracking_detail_comment').value = trackingInitialComment;
             document.getElementById('tracking_comment_status').classList.add('hidden');
+            resetTrackingProblemSection();
             updateTrackingCommentButtonVisibility();
             trackingAppointmentModal.classList.remove('hidden');
             initTrackingDetailAddressAutocomplete();
@@ -1715,6 +1808,7 @@
         trackingAppointmentModal.addEventListener('click', (event) => {
             if (event.target.id === 'tracking-appointment-modal') closeTrackingAppointmentModal();
         });
+        trackingProblemType?.addEventListener('change', syncTrackingProblemRecallFields);
 
         trackingRefreshDocumentsButton?.addEventListener('click', async () => {
             const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
@@ -1827,7 +1921,7 @@
                 setTrackingDetailsStatus(error.message || 'Impossible de modifier le RDV.', '#9f1239');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Enregistrer et regéocoder';
+                button.textContent = 'Enregistrer';
             }
         });
 
@@ -1949,22 +2043,17 @@
 
         document.getElementById('tracking-problem-appointment-btn').addEventListener('click', async () => {
             const appointmentId = document.getElementById('tracking_detail_appointment_id').value;
-            const comment = document.getElementById('tracking_detail_comment').value.trim();
             const status = document.getElementById('tracking_comment_status');
             const button = document.getElementById('tracking-problem-appointment-btn');
 
             if (!appointmentId) return;
 
-            if (!comment) {
+            let problemPayload = null;
+            try {
+                problemPayload = trackingProblemPayloadFromFields();
+            } catch (error) {
                 status.style.color = '#9f1239';
-                status.textContent = 'Un commentaire est obligatoire avant de déclarer un problème RDV.';
-                status.classList.remove('hidden');
-                return;
-            }
-
-            if (comment === trackingInitialComment.trim()) {
-                status.style.color = '#9f1239';
-                status.textContent = 'Le commentaire doit être modifié avant de déclarer un problème RDV.';
+                status.textContent = error.message || 'Signalement impossible.';
                 status.classList.remove('hidden');
                 return;
             }
@@ -1981,7 +2070,7 @@
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ comment }),
+                    body: JSON.stringify(problemPayload),
                 });
                 const payload = await response.json();
 
@@ -1992,13 +2081,17 @@
 
                 const calendarEvent = trackingCalendar?.getEventById(appointmentId);
                 if (calendarEvent) {
-                    calendarEvent.setExtendedProp('comment', payload.comment || comment);
+                    calendarEvent.setExtendedProp('comment', payload.comment || problemPayload.comment);
                     calendarEvent.setExtendedProp('status', payload.status || 'problem');
                     calendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
+                    calendarEvent.setExtendedProp('problem_type', payload.problem_type || problemPayload.problem_type);
+                    calendarEvent.setExtendedProp('recall_date', payload.recall_date || problemPayload.recall_date);
+                    calendarEvent.setExtendedProp('recall_time', payload.recall_time || problemPayload.recall_time);
                     applyTrackingEventStyle(calendarEvent);
                 }
 
-                trackingInitialComment = payload.comment || comment;
+                trackingInitialComment = payload.comment || problemPayload.comment;
+                resetTrackingProblemSection();
                 updateTrackingCommentButtonVisibility();
                 status.style.color = '#92400e';
                 status.textContent = 'Problème RDV déclaré.';
@@ -2009,7 +2102,7 @@
                 status.classList.remove('hidden');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Problème RDV';
+                button.textContent = 'Déclarer le problème RDV';
             }
         });
 
