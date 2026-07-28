@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Planner;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
+use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use App\Services\AppointmentDocumentSerializer;
+use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use Carbon\Carbon;
@@ -34,6 +36,19 @@ class PlannerTrackingController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code', 'role']);
+        $mailTemplates = MailTemplate::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug', 'subject', 'markdown_body', 'logo_path']);
+        $trackingMailTemplates = $mailTemplates
+            ->map(fn (MailTemplate $template): array => [
+                'id' => $template->id,
+                'name' => $template->name,
+                'subject' => $template->subject,
+                'markdown_body' => $template->markdown_body,
+                'logo_url' => $template->logo_url,
+            ])
+            ->values();
 
         return view('planner.tracking', [
             'technicians' => $technicians,
@@ -45,6 +60,8 @@ class PlannerTrackingController extends Controller
             'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
             'mapboxToken' => config('services.mapbox.token'),
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
+            'mailTemplates' => $mailTemplates,
+            'trackingMailTemplates' => $trackingMailTemplates,
             'refreshPlacedCoffracUrl' => route($request->routeIs('manager.appointments')
                 ? 'manager.appointments.coffrac.placed.refresh'
                 : 'planner.tracking.coffrac.placed.refresh'),
@@ -100,7 +117,7 @@ class PlannerTrackingController extends Controller
         ]);
     }
 
-    public function events(Request $request): JsonResponse
+    public function events(Request $request, AppointmentMailTemplateData $appointmentMailData): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -154,7 +171,7 @@ class PlannerTrackingController extends Controller
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment, $appointmentMailData): array {
                 $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
@@ -193,6 +210,7 @@ class PlannerTrackingController extends Controller
                         'external_reference' => $appointment->external_reference,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
+                        'customer_email' => $appointmentMailData->defaultRecipientEmail($appointment),
                         'address' => $appointment->address,
                         'postal_code' => $location['postal_code'],
                         'city' => $location['city'],

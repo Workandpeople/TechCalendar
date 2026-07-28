@@ -6,6 +6,7 @@ use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
@@ -17,6 +18,33 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
+
+it('renders the appointment mail composer on planner and manager tracking pages', function () {
+    MailTemplate::query()->create([
+        'name' => 'Confirmation RDV',
+        'slug' => 'confirmation-rdv',
+        'subject' => 'RDV {{ client_name }}',
+        'markdown_body' => '# Bonjour {{ client_name }}',
+        'is_active' => true,
+    ]);
+
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    $manager = User::factory()->create(['role' => 0, 'admin' => false]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.tracking'))
+        ->assertOk()
+        ->assertSee('Envoyer le mail')
+        ->assertSee('tracking-mail-form')
+        ->assertSee('Confirmation RDV');
+
+    $this->actingAs($manager)
+        ->get(route('manager.appointments'))
+        ->assertOk()
+        ->assertSee('Envoyer le mail')
+        ->assertSee('tracking-mail-form')
+        ->assertSee('Confirmation RDV');
+});
 
 it('refreshes placed coffrac appointments from the tracking page', function () {
     config([

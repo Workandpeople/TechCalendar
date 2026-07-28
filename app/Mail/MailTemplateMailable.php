@@ -14,18 +14,28 @@ class MailTemplateMailable extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $renderedSubject;
+
+    public string $renderedMarkdown;
+
+    public ?string $logoUrl;
+
     /**
      * @param  array<string, mixed>  $data
      */
-    public function __construct(
-        public MailTemplate $template,
-        public array $data = [],
-    ) {}
+    public function __construct(MailTemplate $template, public array $data = [])
+    {
+        $renderer = app(MailTemplateRenderer::class);
+
+        $this->renderedSubject = $renderer->renderSubject($template, $data);
+        $this->renderedMarkdown = $renderer->renderMarkdownBody($template, $data);
+        $this->logoUrl = $template->logo_url;
+    }
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: app(MailTemplateRenderer::class)->renderSubject($this->template, $this->data),
+            subject: $this->renderedSubject,
         );
     }
 
@@ -34,7 +44,8 @@ class MailTemplateMailable extends Mailable
         return new Content(
             markdown: 'emails.templates.dynamic',
             with: [
-                'markdown' => app(MailTemplateRenderer::class)->renderMarkdownBody($this->template, $this->data),
+                'markdown' => $this->renderedMarkdown,
+                'logoUrl' => $this->logoUrl,
             ],
         );
     }

@@ -12,6 +12,31 @@ Votre rendez-vous pour **{{ service_label }}** est prévu le **{{ appointment_da
 Merci,
 {{ app_name }}
 MD;
+
+        $variableLabels = [
+            'app_name' => 'Nom de l’application',
+            'appointment_id' => 'Référence du RDV',
+            'client_name' => 'Nom du client',
+            'customer_name' => 'Nom du client',
+            'customer_first_name' => 'Prénom du client',
+            'customer_last_name' => 'Nom de famille du client',
+            'customer_phone' => 'Téléphone du client',
+            'customer_email' => 'Email du client',
+            'company_name' => 'Raison sociale',
+            'site_name' => 'Nom du site',
+            'technician_name' => 'Nom du technicien',
+            'technician_email' => 'Email du technicien',
+            'service_label' => 'Prestation',
+            'service_type' => 'Type de prestation',
+            'service_name' => 'Nom de la prestation',
+            'appointment_date' => 'Date du RDV',
+            'appointment_time' => 'Heure du RDV',
+            'appointment_end_time' => 'Heure de fin',
+            'appointment_duration' => 'Durée du RDV',
+            'address' => 'Adresse du RDV',
+            'comment' => 'Commentaire',
+            'manager_name' => 'Créé par',
+        ];
     @endphp
 
     <div class="space-y-6">
@@ -76,6 +101,7 @@ MD;
                                     'slug' => $template->slug,
                                     'subject' => $template->subject,
                                     'markdown_body' => $template->markdown_body,
+                                    'logo_url' => $template->logo_url,
                                     'is_active' => (bool) $template->is_active,
                                     'update_url' => route('manager.mail-templates.update', $template),
                                     'delete_url' => route('manager.mail-templates.destroy', $template),
@@ -84,8 +110,17 @@ MD;
                             @endphp
                             <tr class="border-b last:border-b-0" style="border-color:var(--gc-border);">
                                 <td class="px-4 py-3">
-                                    <div class="font-semibold" style="color:var(--gc-text);">{{ $template->name }}</div>
-                                    <div class="mt-0.5 font-mono text-xs" style="color:var(--gc-text-soft);">{{ $template->slug }}</div>
+                                    <div class="flex items-center gap-3">
+                                        @if ($template->logo_url)
+                                            <img src="{{ $template->logo_url }}" alt="" class="h-10 w-10 rounded-xl border object-contain p-1" style="border-color:var(--gc-border);background:#fff;">
+                                        @else
+                                            <div class="flex h-10 w-10 items-center justify-center rounded-xl border text-xs font-semibold" style="border-color:var(--gc-border);background:var(--gc-accent-soft);color:var(--gc-text-soft);">ML</div>
+                                        @endif
+                                        <div class="min-w-0">
+                                            <div class="font-semibold" style="color:var(--gc-text);">{{ $template->name }}</div>
+                                            <div class="mt-0.5 font-mono text-xs" style="color:var(--gc-text-soft);">{{ $template->slug }}</div>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="max-w-md px-4 py-3">
                                     <span class="line-clamp-2">{{ $template->subject }}</span>
@@ -161,7 +196,7 @@ MD;
             </div>
 
             <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
-                <form id="mail-template-editor-form" method="POST" action="{{ route('manager.mail-templates.store') }}" class="space-y-4" data-validate-form>
+                <form id="mail-template-editor-form" method="POST" action="{{ route('manager.mail-templates.store') }}" enctype="multipart/form-data" class="space-y-4" data-validate-form>
                     @csrf
                     <input id="mail_template_method" type="hidden" name="_method" value="POST" disabled />
 
@@ -181,6 +216,24 @@ MD;
                         <input id="mail_template_subject" name="subject" type="text" maxlength="190" class="gc-input" required placeholder="RDV @{{ service_label }} - @{{ appointment_date }}" />
                     </div>
 
+                    <div class="rounded-xl border p-3" style="border-color:var(--gc-border);">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <label class="gc-label" for="mail_template_logo">Logo du template</label>
+                                <p class="text-xs" style="color:var(--gc-text-soft);">Optionnel. Format JPG ou PNG, 2 Mo maximum.</p>
+                            </div>
+                            <div id="mail-template-logo-preview" class="hidden shrink-0">
+                                <img id="mail-template-logo-preview-img" src="" alt="" class="h-14 w-28 rounded-xl border object-contain p-2" style="border-color:var(--gc-border);background:#fff;">
+                            </div>
+                        </div>
+                        <input id="mail_template_logo" name="logo" type="file" accept="image/png,image/jpeg" class="gc-input mt-3" />
+                        <p id="mail-template-logo-status" class="mt-2 text-xs" style="color:var(--gc-text-soft);">Aucun logo défini.</p>
+                        <label id="mail-template-remove-logo-row" class="mt-3 hidden items-center gap-3 text-sm">
+                            <input id="mail_template_remove_logo" name="remove_logo" type="checkbox" value="1" class="gc-check" />
+                            <span style="color:var(--gc-text);">Supprimer le logo actuel</span>
+                        </label>
+                    </div>
+
                     <div>
                         <label class="gc-label" for="mail_template_markdown_body">Vue Markdown</label>
                         <textarea id="mail_template_markdown_body" name="markdown_body" rows="18" maxlength="60000" class="gc-input font-mono text-xs leading-relaxed" required></textarea>
@@ -196,8 +249,14 @@ MD;
                         <p class="text-sm font-semibold" style="color:var(--gc-text);">Variables disponibles en preview</p>
                         <div class="mt-3 flex flex-wrap gap-1.5">
                             @foreach ($sampleVariables as $variable => $sampleValue)
-                                <button type="button" class="rounded-lg border bg-white px-2 py-1 font-mono text-xs transition hover:-translate-y-0.5" style="border-color:var(--gc-border);color:var(--gc-text);" data-template-variable="{{ $variable }}">
-                                    {{ $variable }}
+                                <button
+                                    type="button"
+                                    class="rounded-lg border bg-white px-2 py-1 text-xs font-semibold transition hover:-translate-y-0.5"
+                                    style="border-color:var(--gc-border);color:var(--gc-text);"
+                                    data-template-variable="{{ $variable }}"
+                                    title="Insérer @{{ $variable }}"
+                                >
+                                    {{ $variableLabels[$variable] ?? ucwords(str_replace('_', ' ', $variable)) }}
                                 </button>
                             @endforeach
                         </div>
@@ -250,6 +309,12 @@ MD;
         const slugInput = document.getElementById('mail_template_slug');
         const subjectInput = document.getElementById('mail_template_subject');
         const markdownInput = document.getElementById('mail_template_markdown_body');
+        const logoInput = document.getElementById('mail_template_logo');
+        const removeLogoInput = document.getElementById('mail_template_remove_logo');
+        const removeLogoRow = document.getElementById('mail-template-remove-logo-row');
+        const logoPreview = document.getElementById('mail-template-logo-preview');
+        const logoPreviewImg = document.getElementById('mail-template-logo-preview-img');
+        const logoStatus = document.getElementById('mail-template-logo-status');
         const activeInput = document.getElementById('mail_template_is_active');
         const submitButton = document.getElementById('mail-template-submit');
         const previewFrame = document.getElementById('mail-template-preview-frame');
@@ -262,6 +327,9 @@ MD;
         let previewTimer = null;
         let previewAbortController = null;
         let editingExistingTemplate = false;
+        let editingTemplateId = null;
+        let editingLogoUrl = null;
+        let selectedLogoObjectUrl = null;
 
         const openModal = (modal) => modal?.classList.remove('hidden');
         const closeModal = (modal) => modal?.classList.add('hidden');
@@ -276,6 +344,7 @@ MD;
 
         const setEditorMode = (template = null) => {
             editingExistingTemplate = Boolean(template);
+            editingTemplateId = template?.id || null;
             editorTitle.textContent = template ? `Modifier ${template.name}` : 'Ajouter un template';
             editorForm.action = template ? template.update_url : mailTemplateStoreUrl;
             methodInput.disabled = !template;
@@ -287,6 +356,7 @@ MD;
             subjectInput.value = template?.subject || '';
             markdownInput.value = template?.markdown_body || defaultMailTemplateMarkdown;
             activeInput.checked = template ? Boolean(template.is_active) : true;
+            resetLogoField(template);
 
             window.TechCalendarForms?.refresh(editorForm);
             openModal(editorModal);
@@ -295,6 +365,83 @@ MD;
 
         const renderPreviewFallback = (message) => {
             previewFrame.srcdoc = `<!doctype html><html><body style="font-family:sans-serif;color:#31424c;padding:24px;">${message}</body></html>`;
+        };
+
+        const clearSelectedLogoObjectUrl = () => {
+            if (selectedLogoObjectUrl) {
+                URL.revokeObjectURL(selectedLogoObjectUrl);
+                selectedLogoObjectUrl = null;
+            }
+        };
+
+        const setLogoPreview = (url, status) => {
+            clearSelectedLogoObjectUrl();
+
+            if (url) {
+                logoPreviewImg.src = url;
+                logoPreview.classList.remove('hidden');
+            } else {
+                logoPreviewImg.src = '';
+                logoPreview.classList.add('hidden');
+            }
+
+            logoStatus.textContent = status;
+        };
+
+        const resetLogoField = (template = null) => {
+            editingLogoUrl = template?.logo_url || null;
+
+            if (logoInput) {
+                logoInput.value = '';
+            }
+
+            if (removeLogoInput) {
+                removeLogoInput.checked = false;
+            }
+
+            if (removeLogoRow) {
+                removeLogoRow.classList.toggle('hidden', !template?.logo_url);
+                removeLogoRow.classList.toggle('inline-flex', Boolean(template?.logo_url));
+            }
+
+            setLogoPreview(template?.logo_url || null, template?.logo_url ? 'Logo actuel conservé.' : 'Aucun logo défini.');
+        };
+
+        const showSelectedLogoFile = () => {
+            clearSelectedLogoObjectUrl();
+
+            const file = logoInput?.files?.[0] || null;
+
+            if (!file) {
+                setLogoPreview(editingLogoUrl, editingLogoUrl ? 'Logo actuel conservé.' : 'Aucun logo défini.');
+                schedulePreview();
+                return;
+            }
+
+            selectedLogoObjectUrl = URL.createObjectURL(file);
+            logoPreviewImg.src = selectedLogoObjectUrl;
+            logoPreview.classList.remove('hidden');
+            logoStatus.textContent = `${file.name} sélectionné. Le logo sera visible dans la preview réelle après enregistrement.`;
+
+            if (removeLogoInput) {
+                removeLogoInput.checked = false;
+            }
+
+            schedulePreview();
+        };
+
+        const syncRemoveLogoState = () => {
+            if (removeLogoInput?.checked) {
+                if (logoInput) {
+                    logoInput.value = '';
+                }
+
+                setLogoPreview(null, 'Le logo actuel sera supprimé.');
+            } else {
+                setLogoPreview(editingLogoUrl, editingLogoUrl ? 'Logo actuel conservé.' : 'Aucun logo défini.');
+            }
+
+            schedulePreview(0);
         };
 
         const updatePreview = async () => {
@@ -311,8 +458,10 @@ MD;
                         'X-CSRF-TOKEN': mailTemplateCsrf,
                     },
                     body: JSON.stringify({
+                        mail_template_id: editingTemplateId,
                         subject: subjectInput.value,
                         markdown_body: markdownInput.value,
+                        remove_logo: removeLogoInput?.checked || false,
                     }),
                     signal: previewAbortController.signal,
                 });
@@ -378,6 +527,9 @@ MD;
         [subjectInput, markdownInput].forEach((input) => {
             input?.addEventListener('input', () => schedulePreview());
         });
+
+        logoInput?.addEventListener('change', showSelectedLogoFile);
+        removeLogoInput?.addEventListener('change', syncRemoveLogoState);
 
         document.querySelectorAll('[data-template-variable]').forEach((button) => {
             button.addEventListener('click', () => {

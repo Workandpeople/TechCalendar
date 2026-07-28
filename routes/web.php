@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\Account\FirstLoginPasswordController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminSettingController;
 use App\Http\Controllers\Admin\AdminUserController;
-use App\Http\Controllers\Account\FirstLoginPasswordController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -13,6 +13,7 @@ use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerMailTemplateController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\PlannerAppointmentMailController;
 use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
 use App\Http\Controllers\Planner\PlannerTrackingController;
@@ -128,6 +129,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
+    Route::post('/planner/book/appointments/{appointment}/mail-preview', [PlannerAppointmentMailController::class, 'preview'])->name('planner.book.appointments.mail.preview');
+    Route::post('/planner/book/appointments/{appointment}/mail', [PlannerAppointmentMailController::class, 'send'])->name('planner.book.appointments.mail.send');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
     Route::post('/planner/tracking/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('planner.tracking.coffrac.placed.refresh');
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');

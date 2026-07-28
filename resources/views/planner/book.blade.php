@@ -57,7 +57,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div class="p-6">
                     <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">
-                        Placement confirme
+                        Placement confirmé
                     </span>
                     <h2 class="mt-4 text-2xl font-semibold" style="color:var(--gc-text);">Le rendez-vous a bien été placé</h2>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
@@ -66,8 +66,8 @@
 
                     <dl class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Reference</dt>
-                            <dd id="booking_confirmation_référence" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Référence</dt>
+                            <dd id="booking_confirmation_reference" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
                         </div>
                         <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                             <dt class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Date</dt>
@@ -104,6 +104,73 @@
                         </button>
                     </div>
                 </aside>
+            </div>
+
+            <div class="border-t p-6" style="border-color:var(--gc-border);background:#fbfaf6;">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold" style="color:var(--gc-text);">Envoyer le mail</h3>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Choisis un template, ajuste cette copie si besoin, puis envoie le mail sans modifier le template d’origine.</p>
+                    </div>
+                    <button id="booking-confirmation-mail-toggle" type="button" class="gc-btn-soft self-start md:self-auto">
+                        Préparer un mail
+                    </button>
+                </div>
+
+                <div id="booking-confirmation-mail-panel" class="mt-5 hidden">
+                    @if ($mailTemplates->isEmpty())
+                        <div class="rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);background:white;color:var(--gc-text-soft);">
+                            Aucun template actif disponible. Ajoute un template depuis la gestion gérant avant d’envoyer un mail depuis cette confirmation.
+                        </div>
+                    @else
+                        <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
+                            <form id="booking-confirmation-mail-form" class="space-y-4 rounded-2xl border bg-white p-4" style="border-color:var(--gc-border);">
+                                <div>
+                                    <label class="gc-label" for="booking_confirmation_mail_template">Template</label>
+                                    <select id="booking_confirmation_mail_template" class="gc-input" required>
+                                        @foreach ($mailTemplates as $mailTemplate)
+                                            <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="gc-label" for="booking_confirmation_mail_recipient">Destinataire</label>
+                                    <input id="booking_confirmation_mail_recipient" type="email" class="gc-input" required placeholder="client@example.com">
+                                </div>
+
+                                <div>
+                                    <label class="gc-label" for="booking_confirmation_mail_subject">Sujet</label>
+                                    <input id="booking_confirmation_mail_subject" type="text" maxlength="190" class="gc-input" required>
+                                </div>
+
+                                <div>
+                                    <label class="gc-label" for="booking_confirmation_mail_body">Contenu Markdown</label>
+                                    <textarea id="booking_confirmation_mail_body" rows="12" maxlength="60000" class="gc-input font-mono text-xs leading-relaxed" required></textarea>
+                                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Variables utilisables : <span class="font-mono">@{{ client_name }}</span>, <span class="font-mono">@{{ service_label }}</span>, <span class="font-mono">@{{ appointment_date }}</span>, <span class="font-mono">@{{ appointment_time }}</span>, <span class="font-mono">@{{ address }}</span>.</p>
+                                </div>
+
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <p id="booking_confirmation_mail_status" class="text-sm" style="color:var(--gc-text-soft);"></p>
+                                    <button id="booking-confirmation-mail-send" type="submit" class="gc-btn-primary">
+                                        Envoyer le mail
+                                    </button>
+                                </div>
+                            </form>
+
+                            <aside class="rounded-2xl border bg-white p-4" style="border-color:var(--gc-border);">
+                                <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-xs uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Preview réelle</p>
+                                        <h4 id="booking_confirmation_mail_preview_subject" class="mt-1 text-base font-semibold" style="color:var(--gc-text);">Sujet du mail</h4>
+                                    </div>
+                                    <span id="booking_confirmation_mail_preview_status" class="text-xs" style="color:var(--gc-text-soft);">En attente</span>
+                                </div>
+                                <iframe id="booking_confirmation_mail_preview_frame" title="Preview du mail de confirmation" class="h-[560px] w-full rounded-xl border bg-white" style="border-color:var(--gc-border);"></iframe>
+                            </aside>
+                        </div>
+                    @endif
+                </div>
             </div>
         </section>
 
@@ -543,7 +610,7 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div>
+                            <div class="relative">
                                 <label class="gc-label" for="booking_crm_detail_address_input">Adresse</label>
                                 <input id="booking_crm_detail_address_input" type="text" class="gc-input" autocomplete="off" placeholder="Adresse complète du RDV" />
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -810,6 +877,8 @@
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
         const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
+        const bookingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
+        const bookingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const bookingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const bookingAppointmentRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
@@ -818,6 +887,7 @@
         const bookingMapboxToken = @json($mapboxToken);
         const bookingInitialCrmAppointmentId = @json($initialCrmAppointmentId);
         const bookingServices = @json($bookingServices);
+        const bookingMailTemplates = @json($bookingMailTemplates);
         let bookingCrmAppointments = @json($crmAppointments->values());
         const routeColors = ['#1d4ed8', '#0f766e', '#b45309', '#7e22ce', '#be123c', '#475569', '#a16207', '#0369a1'];
         let bookingMap = null;
@@ -959,6 +1029,18 @@
         const bookingCalendarLoaderLabel = document.getElementById('booking-calendar-loader-label');
         const bookingCalendarLoaderBar = document.getElementById('booking-calendar-loader-bar');
         const confirmationTrackLink = document.getElementById('booking-confirmation-track-link');
+        const confirmationMailToggle = document.getElementById('booking-confirmation-mail-toggle');
+        const confirmationMailPanel = document.getElementById('booking-confirmation-mail-panel');
+        const confirmationMailForm = document.getElementById('booking-confirmation-mail-form');
+        const confirmationMailTemplate = document.getElementById('booking_confirmation_mail_template');
+        const confirmationMailRecipient = document.getElementById('booking_confirmation_mail_recipient');
+        const confirmationMailSubject = document.getElementById('booking_confirmation_mail_subject');
+        const confirmationMailBody = document.getElementById('booking_confirmation_mail_body');
+        const confirmationMailStatus = document.getElementById('booking_confirmation_mail_status');
+        const confirmationMailSend = document.getElementById('booking-confirmation-mail-send');
+        const confirmationMailPreviewSubject = document.getElementById('booking_confirmation_mail_preview_subject');
+        const confirmationMailPreviewStatus = document.getElementById('booking_confirmation_mail_preview_status');
+        const confirmationMailPreviewFrame = document.getElementById('booking_confirmation_mail_preview_frame');
         const bookingCrmPageSize = 10;
         let bookingCrmPage = 1;
         let bookingSourceMode = 'crm';
@@ -970,6 +1052,10 @@
         let externalSyncLocalRefreshTimer = null;
         let externalSyncPollingTimer = null;
         let externalSyncPollStartedAt = null;
+        let confirmationMailAppointmentId = null;
+        let confirmationMailPreviewTimer = null;
+        let confirmationMailPreviewAbortController = null;
+        let confirmationMailSent = false;
 
         const externalRefreshStatusStyles = {
             available: {
@@ -1864,6 +1950,85 @@
             updateCrmDetailCommentButtonVisibility();
         };
 
+        const initCrmDetailAddressAutocomplete = () => {
+            if (!bookingCrmDetailAddress) return;
+
+            let list = bookingCrmDetailAddress.parentElement.querySelector('.gc-mapbox-suggestions');
+            if (!list) {
+                list = document.createElement('div');
+                list.className = 'gc-mapbox-suggestions hidden';
+                bookingCrmDetailAddress.parentElement.appendChild(list);
+            }
+
+            if (bookingCrmDetailAddress.dataset.mapboxBound === '1') return;
+            bookingCrmDetailAddress.dataset.mapboxBound = '1';
+
+            if (!bookingMapboxToken) {
+                bookingCrmDetailAddress.addEventListener('focus', () => {
+                    setCrmDetailStatus('Token Mapbox absent: autocomplétion indisponible.', 'error');
+                });
+                return;
+            }
+
+            let debounceTimer;
+            bookingCrmDetailAddress.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                const query = bookingCrmDetailAddress.value.trim();
+
+                if (query.length < 3) {
+                    list.innerHTML = '';
+                    list.classList.add('hidden');
+                    return;
+                }
+
+                debounceTimer = setTimeout(async () => {
+                    const url = new URL(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`);
+                    url.searchParams.set('access_token', bookingMapboxToken);
+                    url.searchParams.set('autocomplete', 'true');
+                    url.searchParams.set('language', 'fr');
+                    url.searchParams.set('country', 'fr');
+                    url.searchParams.set('types', 'address,postcode,place,locality');
+                    url.searchParams.set('limit', '5');
+
+                    try {
+                        const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                        const data = await response.json();
+                        const features = Array.isArray(data.features) ? data.features : [];
+
+                        if (!response.ok || features.length === 0) {
+                            list.innerHTML = '';
+                            list.classList.add('hidden');
+                            return;
+                        }
+
+                        list.innerHTML = features.map((feature) => {
+                            const address = escapeHtml(feature.place_name || '');
+
+                            return `<button type="button" class="gc-mapbox-item" data-address="${address}">${address}</button>`;
+                        }).join('');
+                        list.classList.remove('hidden');
+
+                        list.querySelectorAll('.gc-mapbox-item').forEach((item) => {
+                            item.addEventListener('click', () => {
+                                bookingCrmDetailAddress.value = item.dataset.address || '';
+                                list.innerHTML = '';
+                                list.classList.add('hidden');
+                                setCrmDetailStatus('Adresse sélectionnée. Clique sur Enregistrer pour corriger le RDV et relancer le géocodage.', 'success');
+                            });
+                        });
+                    } catch (error) {
+                        setCrmDetailStatus('Erreur Mapbox pendant la recherche d’adresse.', 'error');
+                    }
+                }, 280);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!bookingCrmDetailAddress.parentElement.contains(event.target)) {
+                    list.classList.add('hidden');
+                }
+            });
+        };
+
         const formatExternalCommentDate = (value) => {
             if (!value) return '';
 
@@ -2233,6 +2398,7 @@
                     : '-'),
             ].join('');
             fillCrmDetailForm(appointment);
+            initCrmDetailAddressAutocomplete();
             resetProblemSection(
                 bookingCrmProblemSection,
                 bookingCrmProblemComment,
@@ -3338,6 +3504,141 @@
             }).format(new Date(value));
         };
 
+        const confirmationMailUrl = (template, appointmentId) => template.replace('__APPOINTMENT__', encodeURIComponent(appointmentId));
+
+        const selectedConfirmationMailTemplate = () => {
+            const selectedId = Number(confirmationMailTemplate?.value || 0);
+
+            return bookingMailTemplates.find((template) => Number(template.id) === selectedId) || bookingMailTemplates[0] || null;
+        };
+
+        const setConfirmationMailStatus = (message = '', type = 'info') => {
+            if (!confirmationMailStatus) return;
+
+            confirmationMailStatus.textContent = message;
+            confirmationMailStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+        };
+
+        const setConfirmationMailPreviewStatus = (message = 'En attente', type = 'info') => {
+            if (!confirmationMailPreviewStatus) return;
+
+            confirmationMailPreviewStatus.textContent = message;
+            confirmationMailPreviewStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+        };
+
+        const renderConfirmationMailFallback = (message) => {
+            if (!confirmationMailPreviewFrame) return;
+
+            confirmationMailPreviewFrame.srcdoc = `<!doctype html><html><body style="font-family:sans-serif;color:#31424c;padding:24px;">${escapeHtml(message)}</body></html>`;
+        };
+
+        const setConfirmationMailFieldsDisabled = (disabled) => {
+            [
+                confirmationMailTemplate,
+                confirmationMailRecipient,
+                confirmationMailSubject,
+                confirmationMailBody,
+            ].forEach((field) => {
+                if (field) field.disabled = disabled;
+            });
+
+            if (confirmationMailSend) {
+                confirmationMailSend.disabled = disabled;
+            }
+        };
+
+        const populateConfirmationMailFromTemplate = () => {
+            const template = selectedConfirmationMailTemplate();
+
+            if (!template) {
+                if (confirmationMailSubject) confirmationMailSubject.value = '';
+                if (confirmationMailBody) confirmationMailBody.value = '';
+                renderConfirmationMailFallback('Aucun template actif disponible.');
+                setConfirmationMailPreviewStatus('Aucun template', 'error');
+                return;
+            }
+
+            confirmationMailSubject.value = template.subject || '';
+            confirmationMailBody.value = template.markdown_body || '';
+            scheduleConfirmationMailPreview(0);
+        };
+
+        const resetConfirmationMailComposer = (data) => {
+            confirmationMailAppointmentId = data?.appointment_id || null;
+            confirmationMailSent = false;
+            confirmationMailPanel?.classList.add('hidden');
+            confirmationMailToggle && (confirmationMailToggle.textContent = 'Préparer un mail');
+            setConfirmationMailFieldsDisabled(false);
+            setConfirmationMailStatus('');
+            setConfirmationMailPreviewStatus('En attente');
+
+            if (confirmationMailRecipient) {
+                confirmationMailRecipient.value = data?.mail_recipient_email || '';
+            }
+
+            if (confirmationMailTemplate && bookingMailTemplates.length > 0) {
+                confirmationMailTemplate.value = String(bookingMailTemplates[0].id);
+                populateConfirmationMailFromTemplate();
+            }
+        };
+
+        const updateConfirmationMailPreview = async () => {
+            if (!confirmationMailAppointmentId || !confirmationMailSubject || !confirmationMailBody) {
+                return;
+            }
+
+            if (!confirmationMailSubject.value.trim() || !confirmationMailBody.value.trim()) {
+                renderConfirmationMailFallback('Renseigne un sujet et un contenu pour générer la preview.');
+                setConfirmationMailPreviewStatus('En attente');
+                return;
+            }
+
+            confirmationMailPreviewAbortController?.abort();
+            confirmationMailPreviewAbortController = new AbortController();
+            setConfirmationMailPreviewStatus('Génération...');
+
+            try {
+                const response = await fetch(confirmationMailUrl(bookingMailPreviewUrlTemplate, confirmationMailAppointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        mail_template_id: confirmationMailTemplate ? Number(confirmationMailTemplate.value || 0) || null : null,
+                        subject: confirmationMailSubject.value,
+                        markdown_body: confirmationMailBody.value,
+                    }),
+                    signal: confirmationMailPreviewAbortController.signal,
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Preview impossible.');
+                }
+
+                confirmationMailPreviewSubject.textContent = payload.subject || 'Sujet du mail';
+                confirmationMailPreviewFrame.srcdoc = payload.html || '';
+                setConfirmationMailPreviewStatus('À jour', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+
+                renderConfirmationMailFallback(error.message || 'Preview impossible.');
+                setConfirmationMailPreviewStatus('Erreur', 'error');
+            }
+        };
+
+        function scheduleConfirmationMailPreview(delay = 300) {
+            window.clearTimeout(confirmationMailPreviewTimer);
+            confirmationMailPreviewTimer = window.setTimeout(updateConfirmationMailPreview, delay);
+        }
+
         const showPlacementConfirmation = (data, payload, event) => {
             const props = event?.extendedProps || {};
             const technician = technicianById(payload.technician_id);
@@ -3354,7 +3655,7 @@
             manualBookingToggle?.classList.add('hidden');
             placementConfirmationSection?.classList.remove('hidden');
 
-            document.getElementById('booking_confirmation_référence').textContent = data.appointment_id
+            document.getElementById('booking_confirmation_reference').textContent = data.appointment_id
                 ? `RDV #${data.appointment_id}`
                 : 'RDV créé';
             document.getElementById('booking_confirmation_date').textContent = formatDateTimeForConfirmation(startsAt);
@@ -3374,6 +3675,7 @@
             }
 
             confirmationTrackLink.href = trackingUrl.toString();
+            resetConfirmationMailComposer(data);
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
@@ -4184,6 +4486,81 @@
 
         document.getElementById('booking-confirmation-new').addEventListener('click', () => {
             window.location.reload();
+        });
+
+        confirmationMailToggle?.addEventListener('click', () => {
+            const isHidden = confirmationMailPanel?.classList.toggle('hidden');
+            confirmationMailToggle.textContent = isHidden ? 'Préparer un mail' : 'Masquer le mail';
+
+            if (!isHidden) {
+                confirmationMailRecipient?.focus();
+                scheduleConfirmationMailPreview(0);
+            }
+        });
+
+        confirmationMailTemplate?.addEventListener('change', () => {
+            if (confirmationMailSent) return;
+
+            populateConfirmationMailFromTemplate();
+        });
+
+        [confirmationMailSubject, confirmationMailBody].forEach((input) => {
+            input?.addEventListener('input', () => {
+                if (!confirmationMailSent) {
+                    scheduleConfirmationMailPreview();
+                }
+            });
+        });
+
+        confirmationMailForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            if (confirmationMailSent || !confirmationMailAppointmentId) return;
+
+            const recipientEmail = confirmationMailRecipient.value.trim();
+            const subject = confirmationMailSubject.value.trim();
+            const markdownBody = confirmationMailBody.value.trim();
+
+            if (!recipientEmail || !subject || !markdownBody) {
+                setConfirmationMailStatus('Renseigne le destinataire, le sujet et le contenu.', 'error');
+                return;
+            }
+
+            confirmationMailSend.disabled = true;
+            confirmationMailSend.textContent = 'Envoi...';
+            setConfirmationMailStatus('Envoi du mail en cours...');
+
+            try {
+                const response = await fetch(confirmationMailUrl(bookingMailSendUrlTemplate, confirmationMailAppointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        mail_template_id: confirmationMailTemplate ? Number(confirmationMailTemplate.value || 0) || null : null,
+                        recipient_email: recipientEmail,
+                        subject,
+                        markdown_body: markdownBody,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Envoi impossible.');
+                }
+
+                confirmationMailSent = true;
+                setConfirmationMailFieldsDisabled(true);
+                setConfirmationMailStatus(payload.message || 'Mail envoyé.', 'success');
+                confirmationMailSend.textContent = 'Mail envoyé';
+            } catch (error) {
+                confirmationMailSend.disabled = false;
+                confirmationMailSend.textContent = 'Envoyer le mail';
+                setConfirmationMailStatus(error.message || 'Envoi impossible.', 'error');
+            }
         });
 
         document.getElementById('manual-booking-toggle').addEventListener('click', () => {

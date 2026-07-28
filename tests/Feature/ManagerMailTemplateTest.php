@@ -3,6 +3,8 @@
 use App\Models\MailTemplate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -86,6 +88,64 @@ it('creates updates and soft deletes a mail template', function () {
         ->assertRedirect(route('manager.mail-templates'));
 
     $this->assertSoftDeleted('mail_templates', ['id' => $template->id]);
+});
+
+it('stores previews and removes a mail template logo', function () {
+    Storage::fake('public');
+
+    $manager = managerMailTemplateUser();
+    $logo = UploadedFile::fake()->createWithContent(
+        'logo.png',
+        base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=')
+    );
+
+    $this->actingAs($manager)
+        ->post(route('manager.mail-templates.store'), [
+            'name' => 'Confirmation RDV',
+            'slug' => '',
+            'subject' => 'RDV {{ appointment_date }}',
+            'markdown_body' => '# Bonjour {{ client_name }}',
+            'logo' => $logo,
+            'is_active' => '1',
+        ])
+        ->assertRedirect(route('manager.mail-templates'));
+
+    $template = MailTemplate::query()->firstOrFail();
+
+    expect($template->logo_path)->not->toBeNull()
+        ->and($template->logo_path)->toStartWith('mail-template-logos/');
+
+    Storage::disk('public')->assertExists($template->logo_path);
+
+    $response = $this->actingAs($manager)
+        ->postJson(route('manager.mail-templates.preview'), [
+            'mail_template_id' => $template->id,
+            'subject' => 'RDV {{ client_name }}',
+            'markdown_body' => '# Bonjour {{ client_name }}',
+        ])
+        ->assertOk();
+
+    expect($response->json('html'))
+        ->toContain('<img')
+        ->toContain('/storage/mail-template-logos/');
+
+    $previousLogoPath = $template->logo_path;
+
+    $this->actingAs($manager)
+        ->put(route('manager.mail-templates.update', $template), [
+            'name' => 'Confirmation RDV',
+            'slug' => 'confirmation-rdv',
+            'subject' => 'RDV {{ appointment_date }}',
+            'markdown_body' => '# Bonjour {{ client_name }}',
+            'remove_logo' => '1',
+            'is_active' => '1',
+        ])
+        ->assertRedirect(route('manager.mail-templates'));
+
+    $template->refresh();
+
+    expect($template->logo_path)->toBeNull();
+    Storage::disk('public')->assertMissing($previousLogoPath);
 });
 
 it('renders a real mailable preview with sample variables and escaped html', function () {

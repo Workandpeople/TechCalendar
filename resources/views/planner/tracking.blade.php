@@ -198,6 +198,71 @@
                         <div id="tracking_detail_documents" class="mt-3 space-y-2"></div>
                     </section>
 
+                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Envoyer le mail</h3>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Prépare un envoi ponctuel sans modifier le template d’origine.</p>
+                            </div>
+                            <button id="tracking-mail-toggle" type="button" class="gc-btn-soft self-start px-3 py-1.5 text-xs sm:self-auto">
+                                Préparer un mail
+                            </button>
+                        </div>
+
+                        <div id="tracking-mail-panel" class="mt-4 hidden">
+                            @if ($mailTemplates->isEmpty())
+                                <div class="rounded-xl border bg-white p-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                                    Aucun template actif disponible. Ajoute un template depuis la gestion gérant avant d’envoyer un mail depuis ce modal.
+                                </div>
+                            @else
+                                <div class="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                                    <form id="tracking-mail-form" class="space-y-3 rounded-xl border bg-white p-3" style="border-color:var(--gc-border);">
+                                        <div>
+                                            <label class="gc-label" for="tracking_mail_template">Template</label>
+                                            <select id="tracking_mail_template" class="gc-input" required>
+                                                @foreach ($mailTemplates as $mailTemplate)
+                                                    <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label class="gc-label" for="tracking_mail_recipient">Destinataire</label>
+                                            <input id="tracking_mail_recipient" type="email" class="gc-input" required placeholder="client@example.com">
+                                        </div>
+
+                                        <div>
+                                            <label class="gc-label" for="tracking_mail_subject">Sujet</label>
+                                            <input id="tracking_mail_subject" type="text" maxlength="190" class="gc-input" required>
+                                        </div>
+
+                                        <div>
+                                            <label class="gc-label" for="tracking_mail_body">Contenu Markdown</label>
+                                            <textarea id="tracking_mail_body" rows="10" maxlength="60000" class="gc-input font-mono text-xs leading-relaxed" required></textarea>
+                                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Variables : <span class="font-mono">@{{ client_name }}</span>, <span class="font-mono">@{{ service_label }}</span>, <span class="font-mono">@{{ appointment_date }}</span>, <span class="font-mono">@{{ appointment_time }}</span>, <span class="font-mono">@{{ address }}</span>.</p>
+                                        </div>
+
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <p id="tracking_mail_status" class="text-sm" style="color:var(--gc-text-soft);"></p>
+                                            <button id="tracking-mail-send" type="submit" class="gc-btn-primary">Envoyer le mail</button>
+                                        </div>
+                                    </form>
+
+                                    <aside class="rounded-xl border bg-white p-3" style="border-color:var(--gc-border);">
+                                        <div class="mb-3 flex items-start justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <p class="text-xs uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Preview réelle</p>
+                                                <h4 id="tracking_mail_preview_subject" class="mt-1 truncate text-sm font-semibold" style="color:var(--gc-text);">Sujet du mail</h4>
+                                            </div>
+                                            <span id="tracking_mail_preview_status" class="shrink-0 text-xs" style="color:var(--gc-text-soft);">En attente</span>
+                                        </div>
+                                        <iframe id="tracking_mail_preview_frame" title="Preview du mail du RDV" class="h-[500px] w-full rounded-xl border bg-white" style="border-color:var(--gc-border);"></iframe>
+                                    </aside>
+                                </div>
+                            @endif
+                        </div>
+                    </section>
+
                     <form id="tracking-details-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);" data-validate-form>
                         <div class="mb-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Modifier le RDV</h3>
@@ -336,15 +401,30 @@
         const trackingProblemRecallFields = document.getElementById('tracking_problem_recall_fields');
         const trackingProblemRecallDate = document.getElementById('tracking_problem_recall_date');
         const trackingProblemRecallTime = document.getElementById('tracking_problem_recall_time');
+        const trackingMailToggle = document.getElementById('tracking-mail-toggle');
+        const trackingMailPanel = document.getElementById('tracking-mail-panel');
+        const trackingMailForm = document.getElementById('tracking-mail-form');
+        const trackingMailTemplate = document.getElementById('tracking_mail_template');
+        const trackingMailRecipient = document.getElementById('tracking_mail_recipient');
+        const trackingMailSubject = document.getElementById('tracking_mail_subject');
+        const trackingMailBody = document.getElementById('tracking_mail_body');
+        const trackingMailStatus = document.getElementById('tracking_mail_status');
+        const trackingMailSend = document.getElementById('tracking-mail-send');
+        const trackingMailPreviewSubject = document.getElementById('tracking_mail_preview_subject');
+        const trackingMailPreviewStatus = document.getElementById('tracking_mail_preview_status');
+        const trackingMailPreviewFrame = document.getElementById('tracking_mail_preview_frame');
         const trackingReassignOptions = Array.from(trackingReassignSelect?.querySelectorAll('option') || []);
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const trackingDetailsUrlTemplate = @json(route('planner.tracking.appointments.details', ['appointment' => '__APPOINTMENT__']));
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingCoffracRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
+        const trackingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
+        const trackingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const trackingMapboxToken = @json($mapboxToken ?? null);
+        const trackingMailTemplates = @json($trackingMailTemplates);
         const trackingCalendarLoading = document.getElementById('tracking-calendar-loading');
         const trackingCalendarLoadingDetail = document.getElementById('tracking-calendar-loading-detail');
         const trackingCalendarProgressBar = document.getElementById('tracking-calendar-progress-bar');
@@ -376,6 +456,10 @@
         let trackingEventsAbortController = null;
         let trackingEventsRequestId = 0;
         let trackingAppointmentTooltip = null;
+        let trackingMailAppointmentId = null;
+        let trackingMailPreviewTimer = null;
+        let trackingMailPreviewAbortController = null;
+        let trackingMailSent = false;
 
         const formatDateTime = (value) => {
             if (!value) return '-';
@@ -716,6 +800,148 @@
             trackingCoffracPlacedRefreshStatus.style.color = color;
             trackingCoffracPlacedRefreshStatus.classList.toggle('hidden', !message);
         };
+
+        const trackingMailUrl = (template, appointmentId) => template.replace('__APPOINTMENT__', encodeURIComponent(appointmentId));
+
+        const selectedTrackingMailTemplate = () => {
+            const selectedId = Number(trackingMailTemplate?.value || 0);
+
+            return trackingMailTemplates.find((template) => Number(template.id) === selectedId) || trackingMailTemplates[0] || null;
+        };
+
+        const setTrackingMailStatus = (message = '', type = 'info') => {
+            if (!trackingMailStatus) return;
+
+            trackingMailStatus.textContent = message;
+            trackingMailStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+        };
+
+        const setTrackingMailPreviewStatus = (message = 'En attente', type = 'info') => {
+            if (!trackingMailPreviewStatus) return;
+
+            trackingMailPreviewStatus.textContent = message;
+            trackingMailPreviewStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+        };
+
+        const renderTrackingMailFallback = (message) => {
+            if (!trackingMailPreviewFrame) return;
+
+            trackingMailPreviewFrame.srcdoc = `<!doctype html><html><body style="font-family:sans-serif;color:#31424c;padding:24px;">${trackingEscapeHtml(message)}</body></html>`;
+        };
+
+        const setTrackingMailFieldsDisabled = (disabled) => {
+            [
+                trackingMailTemplate,
+                trackingMailRecipient,
+                trackingMailSubject,
+                trackingMailBody,
+            ].forEach((field) => {
+                if (field) field.disabled = disabled;
+            });
+
+            if (trackingMailSend) {
+                trackingMailSend.disabled = disabled;
+            }
+        };
+
+        const scheduleTrackingMailPreview = (delay = 300) => {
+            window.clearTimeout(trackingMailPreviewTimer);
+            trackingMailPreviewTimer = window.setTimeout(updateTrackingMailPreview, delay);
+        };
+
+        const populateTrackingMailFromTemplate = () => {
+            const template = selectedTrackingMailTemplate();
+
+            if (!template) {
+                if (trackingMailSubject) trackingMailSubject.value = '';
+                if (trackingMailBody) trackingMailBody.value = '';
+                renderTrackingMailFallback('Aucun template actif disponible.');
+                setTrackingMailPreviewStatus('Aucun template', 'error');
+                return;
+            }
+
+            trackingMailSubject.value = template.subject || '';
+            trackingMailBody.value = template.markdown_body || '';
+            scheduleTrackingMailPreview(0);
+        };
+
+        const resetTrackingMailComposer = (event) => {
+            trackingMailAppointmentId = event?.id || null;
+            trackingMailSent = false;
+            trackingMailPreviewAbortController?.abort();
+            trackingMailPanel?.classList.add('hidden');
+            trackingMailToggle && (trackingMailToggle.textContent = 'Préparer un mail');
+            setTrackingMailFieldsDisabled(false);
+            setTrackingMailStatus('');
+            setTrackingMailPreviewStatus('En attente');
+
+            if (trackingMailSend) {
+                trackingMailSend.textContent = 'Envoyer le mail';
+            }
+
+            if (trackingMailRecipient) {
+                trackingMailRecipient.value = event?.extendedProps?.customer_email || '';
+            }
+
+            if (trackingMailTemplate && trackingMailTemplates.length > 0) {
+                trackingMailTemplate.value = String(trackingMailTemplates[0].id);
+                populateTrackingMailFromTemplate();
+            } else {
+                renderTrackingMailFallback('Aucun template actif disponible.');
+            }
+        };
+
+        async function updateTrackingMailPreview() {
+            if (!trackingMailAppointmentId || !trackingMailSubject || !trackingMailBody) {
+                return;
+            }
+
+            if (!trackingMailSubject.value.trim() || !trackingMailBody.value.trim()) {
+                renderTrackingMailFallback('Renseigne un sujet et un contenu pour générer la preview.');
+                setTrackingMailPreviewStatus('En attente');
+                return;
+            }
+
+            trackingMailPreviewAbortController?.abort();
+            trackingMailPreviewAbortController = new AbortController();
+            setTrackingMailPreviewStatus('Génération...');
+
+            try {
+                const response = await fetch(trackingMailUrl(trackingMailPreviewUrlTemplate, trackingMailAppointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        mail_template_id: trackingMailTemplate ? Number(trackingMailTemplate.value || 0) || null : null,
+                        subject: trackingMailSubject.value,
+                        markdown_body: trackingMailBody.value,
+                    }),
+                    signal: trackingMailPreviewAbortController.signal,
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Preview impossible.');
+                }
+
+                trackingMailPreviewSubject.textContent = payload.subject || 'Sujet du mail';
+                trackingMailPreviewFrame.srcdoc = payload.html || '';
+                setTrackingMailPreviewStatus('À jour', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+
+                renderTrackingMailFallback(error.message || 'Preview impossible.');
+                setTrackingMailPreviewStatus('Erreur', 'error');
+            }
+        }
 
         const initTrackingDetailAddressAutocomplete = () => {
             const addressInput = document.getElementById('tracking_detail_address_input');
@@ -1297,6 +1523,8 @@
             trackingDetailMapRenderRequestId++;
             trackingAppointmentModal.classList.add('hidden');
             resetTrackingProblemSection();
+            trackingMailPreviewAbortController?.abort();
+            trackingMailPanel?.classList.add('hidden');
         };
 
         const openTrackingAppointmentModal = (event) => {
@@ -1328,6 +1556,7 @@
             document.getElementById('tracking_comment_status').classList.add('hidden');
             resetTrackingProblemSection();
             updateTrackingCommentButtonVisibility();
+            resetTrackingMailComposer(event);
             trackingAppointmentModal.classList.remove('hidden');
             initTrackingDetailAddressAutocomplete();
             window.TechCalendarForms?.refresh(trackingDetailsForm);
@@ -1809,6 +2038,80 @@
             if (event.target.id === 'tracking-appointment-modal') closeTrackingAppointmentModal();
         });
         trackingProblemType?.addEventListener('change', syncTrackingProblemRecallFields);
+        trackingMailToggle?.addEventListener('click', () => {
+            const isHidden = trackingMailPanel?.classList.toggle('hidden');
+            trackingMailToggle.textContent = isHidden ? 'Préparer un mail' : 'Masquer le mail';
+
+            if (!isHidden) {
+                trackingMailRecipient?.focus();
+                scheduleTrackingMailPreview(0);
+            }
+        });
+
+        trackingMailTemplate?.addEventListener('change', () => {
+            if (trackingMailSent) return;
+
+            populateTrackingMailFromTemplate();
+        });
+
+        [trackingMailSubject, trackingMailBody].forEach((input) => {
+            input?.addEventListener('input', () => {
+                if (!trackingMailSent) {
+                    scheduleTrackingMailPreview();
+                }
+            });
+        });
+
+        trackingMailForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            if (trackingMailSent || !trackingMailAppointmentId) return;
+
+            const recipientEmail = trackingMailRecipient.value.trim();
+            const subject = trackingMailSubject.value.trim();
+            const markdownBody = trackingMailBody.value.trim();
+
+            if (!recipientEmail || !subject || !markdownBody) {
+                setTrackingMailStatus('Renseigne le destinataire, le sujet et le contenu.', 'error');
+                return;
+            }
+
+            trackingMailSend.disabled = true;
+            trackingMailSend.textContent = 'Envoi...';
+            setTrackingMailStatus('Envoi du mail en cours...');
+
+            try {
+                const response = await fetch(trackingMailUrl(trackingMailSendUrlTemplate, trackingMailAppointmentId), {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        mail_template_id: trackingMailTemplate ? Number(trackingMailTemplate.value || 0) || null : null,
+                        recipient_email: recipientEmail,
+                        subject,
+                        markdown_body: markdownBody,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Envoi impossible.');
+                }
+
+                trackingMailSent = true;
+                setTrackingMailFieldsDisabled(true);
+                setTrackingMailStatus(payload.message || 'Mail envoyé.', 'success');
+                trackingMailSend.textContent = 'Mail envoyé';
+            } catch (error) {
+                trackingMailSend.disabled = false;
+                trackingMailSend.textContent = 'Envoyer le mail';
+                setTrackingMailStatus(error.message || 'Envoi impossible.', 'error');
+            }
+        });
 
         trackingRefreshDocumentsButton?.addEventListener('click', async () => {
             const appointmentId = document.getElementById('tracking_detail_appointment_id').value;

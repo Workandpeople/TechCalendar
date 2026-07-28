@@ -7,10 +7,12 @@ use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\AppointmentDocumentSerializer;
+use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\ExternalAppointmentSourceRegistry;
@@ -34,14 +36,26 @@ class PlannerBookingController extends Controller
         Request $request,
         CoffracAppointmentService $coffracAppointments,
         LotAutoCompletionCalculator $autoCompletion
-    ): View
-    {
+    ): View {
         abort_unless($this->canAccess($request), 403);
 
         $services = Service::query()
             ->orderBy('type')
             ->orderBy('name')
             ->get(['id', 'type', 'name', 'average_duration_minutes']);
+        $mailTemplates = MailTemplate::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug', 'subject', 'markdown_body', 'logo_path']);
+        $bookingMailTemplates = $mailTemplates
+            ->map(fn (MailTemplate $template): array => [
+                'id' => $template->id,
+                'name' => $template->name,
+                'subject' => $template->subject,
+                'markdown_body' => $template->markdown_body,
+                'logo_url' => $template->logo_url,
+            ])
+            ->values();
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
         $externalAppointmentSources = $this->externalAppointmentSources($coffracPending['status']);
 
@@ -54,6 +68,8 @@ class PlannerBookingController extends Controller
             'mapboxToken' => config('services.mapbox.token'),
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'services' => $services,
+            'mailTemplates' => $mailTemplates,
+            'bookingMailTemplates' => $bookingMailTemplates,
             'bookingServices' => $services
                 ->map(fn (Service $service): array => [
                     'id' => $service->id,
@@ -69,8 +85,7 @@ class PlannerBookingController extends Controller
         Request $request,
         CoffracAppointmentService $coffracAppointments,
         MapboxDrivingRouteService $drivingRoutes
-    ): JsonResponse
-    {
+    ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate($this->appointmentRequestRules());
@@ -340,6 +355,7 @@ class PlannerBookingController extends Controller
         Request $request,
         CoffracAppointmentService $coffracAppointments,
         AppointmentTechnicianMailService $appointmentMails,
+        AppointmentMailTemplateData $appointmentMailData,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
@@ -455,6 +471,7 @@ class PlannerBookingController extends Controller
         return response()->json([
             'message' => 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
+            'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
         ], 201);
     }
 
@@ -601,7 +618,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array<int, mixed> $technicianIds
+     * @param  array<int, mixed>  $technicianIds
      * @return Collection<int, User>
      */
     private function techniciansByIdsForAppointment(
@@ -644,7 +661,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, User> $technicians
+     * @param  Collection<int, User>  $technicians
      * @return Collection<int, User>
      */
     private function withRouteAttributes(Collection $technicians, array $crmAppointment, MapboxDrivingRouteService $drivingRoutes): Collection
@@ -672,7 +689,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, User> $technicians
+     * @param  Collection<int, User>  $technicians
      * @return Collection<int, array<string, mixed>>
      */
     private function serializeTechnicians(Collection $technicians): Collection
@@ -711,7 +728,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, User> $technicians
+     * @param  Collection<int, User>  $technicians
      */
     private function loadAbsencesForTechnicians(Collection $technicians, Carbon $start, Carbon $end): void
     {
@@ -738,13 +755,13 @@ class PlannerBookingController extends Controller
         $technicians->each(function (User $technician) use ($absences): void {
             $technician->setRelation(
                 'absences',
-                $absences->get($technician->id, (new TechnicianAbsence())->newCollection())
+                $absences->get($technician->id, (new TechnicianAbsence)->newCollection())
             );
         });
     }
 
     /**
-     * @param Collection<int, int> $technicianIds
+     * @param  Collection<int, int>  $technicianIds
      * @return Collection<int, Appointment>
      */
     private function appointmentsForTechnicians(Collection $technicianIds, Carbon $start, Carbon $end): Collection
@@ -820,14 +837,13 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>|null
      */
     private function resolveRequestedAppointment(
         array $payload,
         CoffracAppointmentService $coffracAppointments
-    ): ?array
-    {
+    ): ?array {
         if (! empty($payload['crm_appointment_id'])) {
             $crmAppointmentId = (string) $payload['crm_appointment_id'];
 
@@ -1076,7 +1092,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $appointment
+     * @param  array<string, mixed>  $appointment
      */
     private function appointmentRequestDisplayName(array $appointment): string
     {
@@ -1137,7 +1153,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $manualAppointment
+     * @param  array<string, mixed>  $manualAppointment
      * @return array<string, mixed>|null
      */
     private function manualAppointmentFromPayload(array $manualAppointment): ?array
@@ -1181,7 +1197,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, Appointment> $appointments
+     * @param  Collection<int, Appointment>  $appointments
      * @return Collection<int, array<string, mixed>>
      */
     private function calendarEvents(Collection $appointments): Collection
@@ -1260,9 +1276,9 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, User> $technicians
-     * @param Collection<int, Appointment> $appointments
-     * @param array<string, mixed> $crmAppointment
+     * @param  Collection<int, User>  $technicians
+     * @param  Collection<int, Appointment>  $appointments
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<int, array<string, mixed>>
      */
     private function buildSlotSuggestions(
@@ -1343,7 +1359,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
+     * @param  array<string, mixed>  $crmAppointment
      */
     private function preferredStartsAt(array $crmAppointment): ?Carbon
     {
@@ -1355,9 +1371,9 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, User> $technicians
-     * @param Collection<int, Appointment> $appointments
-     * @param array<string, mixed> $crmAppointment
+     * @param  Collection<int, User>  $technicians
+     * @param  Collection<int, Appointment>  $appointments
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<int, array<string, mixed>>
      */
     private function buildPreferredSlotSuggestions(
@@ -1394,8 +1410,8 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, Appointment> $dayAppointments
-     * @param array<string, mixed> $crmAppointment
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<string, mixed>|null
      */
     private function suggestSlotForDay(
@@ -1493,8 +1509,8 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param Collection<int, Appointment> $dayAppointments
-     * @param array<string, mixed> $crmAppointment
+     * @param  Collection<int, Appointment>  $dayAppointments
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<string, mixed>|null
      */
     private function suggestPreferredSlotForDay(
@@ -1595,8 +1611,8 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array{lat: float, lng: float, label: string} $origin
-     * @param array<string, mixed> $crmAppointment
+     * @param  array{lat: float, lng: float, label: string}  $origin
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<string, mixed>|null
      */
     private function buildSuggestionIfFits(
@@ -1733,10 +1749,10 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array{lat: float, lng: float, label: string} $origin
-     * @param array<string, mixed> $crmAppointment
-     * @param array<string, mixed> $travelTo
-     * @param array<string, mixed> $travelAfter
+     * @param  array{lat: float, lng: float, label: string}  $origin
+     * @param  array<string, mixed>  $crmAppointment
+     * @param  array<string, mixed>  $travelTo
+     * @param  array<string, mixed>  $travelAfter
      * @return array<string, mixed>
      */
     private function suggestionPayload(
@@ -1827,7 +1843,7 @@ class PlannerBookingController extends Controller
     }
 
     /**
-     * @param array{state?: string, label?: string, detail?: string, count?: int} $coffracStatus
+     * @param  array{state?: string, label?: string, detail?: string, count?: int}  $coffracStatus
      * @return array<int, array<string, mixed>>
      */
     private function externalAppointmentSources(array $coffracStatus): array
