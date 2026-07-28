@@ -116,6 +116,48 @@
                     </div>
                 </div>
             </div>
+
+            <div class="mt-6 rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold" style="color:var(--gc-text);">Recherche de RDV</h3>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Retrouve rapidement un RDV par client, téléphone, adresse, référence, prestation ou technicien.</p>
+                    </div>
+                    <p id="tracking-search-summary" class="text-sm" style="color:var(--gc-text-soft);">Aucune recherche lancée.</p>
+                </div>
+
+                <form id="tracking-search-form" class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px_auto_auto]" data-validate-form>
+                    <div>
+                        <label class="gc-label" for="tracking_search_query">Recherche</label>
+                        <input id="tracking_search_query" type="search" maxlength="160" class="gc-input" placeholder="Client, téléphone, adresse, référence..." autocomplete="off" />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="tracking_search_date_from">Du</label>
+                        <input id="tracking_search_date_from" type="date" class="gc-input" />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="tracking_search_date_to">Au</label>
+                        <input id="tracking_search_date_to" type="date" class="gc-input" />
+                    </div>
+                    <button id="tracking-search-submit" type="submit" class="gc-btn-primary self-end">Rechercher</button>
+                    <button id="tracking-search-reset" type="button" class="gc-btn-soft self-end">Réinitialiser</button>
+                </form>
+
+                <div id="tracking-search-status" class="mt-3 hidden rounded-lg px-3 py-2 text-sm"></div>
+
+                <div class="mt-4 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);">
+                    <div class="hidden grid-cols-[1.2fr_1fr_1fr_1.4fr_92px] gap-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] lg:grid" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:var(--gc-accent-soft);">
+                        <span>Client</span>
+                        <span>Technicien</span>
+                        <span>Date</span>
+                        <span>Prestation / adresse</span>
+                        <span class="text-right">Action</span>
+                    </div>
+                    <div id="tracking-search-results" class="divide-y" style="border-color:var(--gc-border);">
+                        <div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Lance une recherche pour afficher les RDV ici.</div>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
 
@@ -221,7 +263,7 @@
                                             <label class="gc-label" for="tracking_mail_template">Template</label>
                                             <select id="tracking_mail_template" class="gc-input" required>
                                                 @foreach ($mailTemplates as $mailTemplate)
-                                                    <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }}</option>
+                                                    <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }} @if($mailTemplate->sender) — {{ $mailTemplate->sender->name }} @endif</option>
                                                 @endforeach
                                             </select>
                                         </div>
@@ -384,6 +426,15 @@
         const trackingResetFilters = document.getElementById('tracking-reset-filters');
         const trackingCoffracPlacedRefreshButton = document.getElementById('tracking-coffrac-placed-refresh');
         const trackingCoffracPlacedRefreshStatus = document.getElementById('tracking-coffrac-placed-refresh-status');
+        const trackingSearchForm = document.getElementById('tracking-search-form');
+        const trackingSearchQuery = document.getElementById('tracking_search_query');
+        const trackingSearchDateFrom = document.getElementById('tracking_search_date_from');
+        const trackingSearchDateTo = document.getElementById('tracking_search_date_to');
+        const trackingSearchSubmit = document.getElementById('tracking-search-submit');
+        const trackingSearchReset = document.getElementById('tracking-search-reset');
+        const trackingSearchSummary = document.getElementById('tracking-search-summary');
+        const trackingSearchStatus = document.getElementById('tracking-search-status');
+        const trackingSearchResults = document.getElementById('tracking-search-results');
         const trackingAppointmentModal = document.getElementById('tracking-appointment-modal');
         const trackingDetailsForm = document.getElementById('tracking-details-form');
         const trackingCommentForm = document.getElementById('tracking-comment-form');
@@ -422,6 +473,7 @@
         const trackingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
         const trackingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
+        const trackingSearchUrl = @json($searchAppointmentsUrl);
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const trackingMapboxToken = @json($mapboxToken ?? null);
         const trackingMailTemplates = @json($trackingMailTemplates);
@@ -460,6 +512,9 @@
         let trackingMailPreviewTimer = null;
         let trackingMailPreviewAbortController = null;
         let trackingMailSent = false;
+        let trackingCurrentDetailEvent = null;
+        let trackingSearchAbortController = null;
+        const trackingSearchResultEvents = new Map();
 
         const formatDateTime = (value) => {
             if (!value) return '-';
@@ -741,6 +796,78 @@
             }
 
             return `${address}, ${suffix}`;
+        };
+
+        const trackingNormalizeEventPayload = (payload) => ({
+            id: String(payload.id),
+            title: payload.title || '',
+            start: payload.start ? new Date(payload.start) : null,
+            end: payload.end ? new Date(payload.end) : null,
+            extendedProps: payload.extendedProps || {},
+        });
+
+        const trackingCalendarEventById = (appointmentId) => {
+            if (!trackingCalendar || !appointmentId) return null;
+
+            return trackingCalendar.getEventById(String(appointmentId))
+                || trackingCalendar.getEventById(Number(appointmentId));
+        };
+
+        const trackingDetailEventById = (appointmentId) => {
+            const calendarEvent = trackingCalendarEventById(appointmentId);
+
+            if (calendarEvent) return calendarEvent;
+
+            return trackingCurrentDetailEvent && String(trackingCurrentDetailEvent.id) === String(appointmentId)
+                ? trackingCurrentDetailEvent
+                : null;
+        };
+
+        const trackingSetEventExtendedProp = (event, key, value) => {
+            if (!event) return;
+
+            if (typeof event.setExtendedProp === 'function') {
+                event.setExtendedProp(key, value);
+                return;
+            }
+
+            event.extendedProps = {
+                ...(event.extendedProps || {}),
+                [key]: value,
+            };
+        };
+
+        const trackingSetEventStart = (event, value) => {
+            if (!event) return;
+
+            if (typeof event.setStart === 'function') {
+                event.setStart(value);
+                return;
+            }
+
+            event.start = value ? new Date(value) : null;
+        };
+
+        const trackingSetEventEnd = (event, value) => {
+            if (!event) return;
+
+            if (typeof event.setEnd === 'function') {
+                event.setEnd(value);
+                return;
+            }
+
+            event.end = value ? new Date(value) : null;
+        };
+
+        const trackingSetEventTitle = (event, value) => {
+            if (!event) return;
+
+            if (typeof event.setProp === 'function') {
+                event.setProp('title', value);
+                return;
+            }
+
+            event.title = value;
         };
 
         const showTrackingAppointmentTooltip = (mouseEvent, calendarEvent) => {
@@ -1522,12 +1649,14 @@
         const closeTrackingAppointmentModal = () => {
             trackingDetailMapRenderRequestId++;
             trackingAppointmentModal.classList.add('hidden');
+            trackingCurrentDetailEvent = null;
             resetTrackingProblemSection();
             trackingMailPreviewAbortController?.abort();
             trackingMailPanel?.classList.add('hidden');
         };
 
         const openTrackingAppointmentModal = (event) => {
+            trackingCurrentDetailEvent = event;
             const props = event.extendedProps;
 
             document.getElementById('tracking_detail_appointment_id').value = event.id;
@@ -1599,6 +1728,127 @@
             service_id: trackingServiceFilter?.value || null,
             appointment_status: trackingStatusFilter?.value || 'all',
         });
+
+        const setTrackingSearchStatus = (message = '', type = 'info') => {
+            if (!trackingSearchStatus) return;
+
+            trackingSearchStatus.textContent = message;
+            trackingSearchStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+            trackingSearchStatus.style.background = type === 'error'
+                ? '#fff1f2'
+                : (type === 'success' ? '#ecfdf5' : 'var(--gc-accent-soft)');
+            trackingSearchStatus.classList.toggle('hidden', message === '');
+        };
+
+        const trackingSearchEyeIcon = () => `
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2.25 12s3.5-6.75 9.75-6.75S21.75 12 21.75 12 18.25 18.75 12 18.75 2.25 12 2.25 12Z" />
+                <circle cx="12" cy="12" r="3" />
+            </svg>
+        `;
+
+        const renderTrackingSearchResults = (appointments) => {
+            if (!trackingSearchResults || !trackingSearchSummary) return;
+
+            trackingSearchResultEvents.clear();
+
+            if (!appointments.length) {
+                trackingSearchSummary.textContent = '0 RDV trouvé.';
+                trackingSearchResults.innerHTML = '<div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Aucun RDV ne correspond à cette recherche.</div>';
+                return;
+            }
+
+            appointments.forEach((appointment) => {
+                const event = trackingNormalizeEventPayload(appointment);
+                trackingSearchResultEvents.set(String(event.id), event);
+            });
+
+            trackingSearchSummary.textContent = `${appointments.length} RDV trouvé(s), 50 maximum affichés.`;
+            trackingSearchResults.innerHTML = appointments.map((appointment) => {
+                const event = trackingNormalizeEventPayload(appointment);
+                const props = event.extendedProps || {};
+                const fullAddress = trackingAppointmentFullAddress(props);
+                const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
+                const statusLabel = props.status === 'problem' ? 'Problème RDV' : 'Planifié';
+                const statusStyle = props.status === 'problem'
+                    ? 'background:#fff7ed;color:#9a3412;border-color:#fdba74;'
+                    : 'background:#ecfdf5;color:#047857;border-color:#86efac;';
+
+                return `
+                    <article class="grid grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_92px] lg:items-center lg:gap-3">
+                        <div class="min-w-0">
+                            <p class="truncate font-semibold" style="color:var(--gc-text);">${trackingEscapeHtml(props.customer_name || 'Client non renseigné')}</p>
+                            <p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${trackingEscapeHtml([props.customer_phone, props.external_reference ? `Ref. ${props.external_reference}` : null].filter(Boolean).join(' · '))}</p>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
+                        </div>
+                        <div>
+                            <p class="font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(formatDateTime(event.start))}</p>
+                            <span class="mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" style="${statusStyle}">${trackingEscapeHtml(statusLabel)}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(serviceLabel)}</p>
+                            <p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${trackingEscapeHtml(fullAddress)}</p>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="button" class="gc-btn-soft inline-flex items-center gap-2 px-3 py-1.5 text-xs" data-tracking-search-open="${trackingEscapeHtml(event.id)}" aria-label="Voir le RDV">
+                                ${trackingSearchEyeIcon()}
+                                Voir
+                            </button>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        };
+
+        const runTrackingAppointmentSearch = async () => {
+            if (!trackingSearchUrl || !trackingSearchSubmit) return;
+
+            trackingSearchAbortController?.abort();
+            trackingSearchAbortController = new AbortController();
+            trackingSearchSubmit.disabled = true;
+            trackingSearchSubmit.textContent = 'Recherche...';
+            setTrackingSearchStatus('Recherche des RDV en cours...');
+
+            try {
+                const response = await fetch(trackingSearchUrl, {
+                    method: 'POST',
+                    signal: trackingSearchAbortController.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        q: trackingSearchQuery?.value.trim() || null,
+                        date_from: trackingSearchDateFrom?.value || null,
+                        date_to: trackingSearchDateTo?.value || null,
+                        technician_ids: selectedTechnicianIds(),
+                        ...trackingCalendarFilters(),
+                        limit: 50,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Recherche impossible.');
+                }
+
+                renderTrackingSearchResults(payload.appointments || []);
+                setTrackingSearchStatus(payload.count > 0 ? 'Recherche terminée.' : '', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+
+                setTrackingSearchStatus(error.message || 'Recherche impossible.', 'error');
+            } finally {
+                trackingSearchSubmit.disabled = false;
+                trackingSearchSubmit.textContent = 'Rechercher';
+            }
+        };
 
         const fetchTrackingEventsChunk = async (technicianIds, fetchInfo, signal) => {
             const response = await fetch(trackingEventsUrl, {
@@ -1980,6 +2230,35 @@
             if (trackingStatusFilter) trackingStatusFilter.value = 'all';
             refetchCalendar();
         });
+        trackingSearchForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            runTrackingAppointmentSearch();
+        });
+        trackingSearchReset?.addEventListener('click', () => {
+            trackingSearchAbortController?.abort();
+            if (trackingSearchQuery) trackingSearchQuery.value = '';
+            if (trackingSearchDateFrom) trackingSearchDateFrom.value = '';
+            if (trackingSearchDateTo) trackingSearchDateTo.value = '';
+            trackingSearchResultEvents.clear();
+            if (trackingSearchSummary) trackingSearchSummary.textContent = 'Aucune recherche lancée.';
+            if (trackingSearchResults) {
+                trackingSearchResults.innerHTML = '<div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Lance une recherche pour afficher les RDV ici.</div>';
+            }
+            setTrackingSearchStatus('');
+            window.TechCalendarForms?.refresh(trackingSearchForm);
+        });
+        trackingSearchResults?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-tracking-search-open]');
+            if (!button) return;
+
+            const appointmentId = button.dataset.trackingSearchOpen;
+            const appointmentEvent = trackingSearchResultEvents.get(String(appointmentId));
+
+            if (appointmentEvent) {
+                hideTrackingAppointmentTooltip();
+                openTrackingAppointmentModal(appointmentEvent);
+            }
+        });
         trackingReassignSelect?.addEventListener('change', updateTrackingReassignButtonState);
 
         trackingCoffracPlacedRefreshButton?.addEventListener('click', async () => {
@@ -2140,11 +2419,11 @@
 
                 const documents = payload.documents || [];
                 const comments = payload.comments || [];
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+                const detailEvent = trackingDetailEventById(appointmentId);
 
-                if (calendarEvent) {
-                    calendarEvent.setExtendedProp('documents', documents);
-                    calendarEvent.setExtendedProp('comments', comments);
+                if (detailEvent) {
+                    trackingSetEventExtendedProp(detailEvent, 'documents', documents);
+                    trackingSetEventExtendedProp(detailEvent, 'comments', comments);
                 }
 
                 renderTrackingDetailComments(comments);
@@ -2199,25 +2478,25 @@
                 }
 
                 const updatedAppointment = payload.appointment || {};
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
+                const detailEvent = trackingDetailEventById(appointmentId);
 
-                if (calendarEvent) {
-                    calendarEvent.setStart(updatedAppointment.start);
-                    calendarEvent.setEnd(updatedAppointment.end);
-                    calendarEvent.setExtendedProp('duration_minutes', updatedAppointment.duration_minutes);
-                    calendarEvent.setExtendedProp('address', updatedAppointment.address);
-                    calendarEvent.setExtendedProp('latitude', updatedAppointment.latitude);
-                    calendarEvent.setExtendedProp('longitude', updatedAppointment.longitude);
-                    calendarEvent.setExtendedProp('postal_code', updatedAppointment.postal_code);
-                    calendarEvent.setExtendedProp('city', updatedAppointment.city);
-                    calendarEvent.setExtendedProp('location_label', updatedAppointment.location_label);
-                    setText('tracking_detail_duration', updatedAppointment.duration_minutes ? `${updatedAppointment.duration_minutes} min` : '-');
-                    setText('tracking_detail_start', formatDateTime(updatedAppointment.start));
-                    setText('tracking_detail_end', formatDateTime(updatedAppointment.end));
-                    setText('tracking_detail_address', updatedAppointment.address);
-                    window.setTimeout(() => renderTrackingDetailMap(calendarEvent), 180);
+                if (detailEvent) {
+                    trackingSetEventStart(detailEvent, updatedAppointment.start);
+                    trackingSetEventEnd(detailEvent, updatedAppointment.end);
+                    trackingSetEventExtendedProp(detailEvent, 'duration_minutes', updatedAppointment.duration_minutes);
+                    trackingSetEventExtendedProp(detailEvent, 'address', updatedAppointment.address);
+                    trackingSetEventExtendedProp(detailEvent, 'latitude', updatedAppointment.latitude);
+                    trackingSetEventExtendedProp(detailEvent, 'longitude', updatedAppointment.longitude);
+                    trackingSetEventExtendedProp(detailEvent, 'postal_code', updatedAppointment.postal_code);
+                    trackingSetEventExtendedProp(detailEvent, 'city', updatedAppointment.city);
+                    trackingSetEventExtendedProp(detailEvent, 'location_label', updatedAppointment.location_label);
+                    window.setTimeout(() => renderTrackingDetailMap(detailEvent), 180);
                 }
 
+                setText('tracking_detail_duration', updatedAppointment.duration_minutes ? `${updatedAppointment.duration_minutes} min` : '-');
+                setText('tracking_detail_start', formatDateTime(updatedAppointment.start));
+                setText('tracking_detail_end', formatDateTime(updatedAppointment.end));
+                setText('tracking_detail_address', updatedAppointment.address);
                 setTrackingDetailsStatus('Rendez-vous mis à jour.');
                 refetchCalendar();
             } catch (error) {
@@ -2258,8 +2537,8 @@
 
                 if (!response.ok) throw new Error(payload?.message || 'Erreur commentaire.');
 
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
-                if (calendarEvent) calendarEvent.setExtendedProp('comment', payload.comment || '');
+                const detailEvent = trackingDetailEventById(appointmentId);
+                if (detailEvent) trackingSetEventExtendedProp(detailEvent, 'comment', payload.comment || '');
                 trackingInitialComment = payload.comment || '';
                 updateTrackingCommentButtonVisibility();
 
@@ -2315,26 +2594,26 @@
                 setText('tracking_detail_technician', technician.name);
                 updateTrackingReassignOptions(trackingReassignSelect.dataset.serviceId, technician.id);
 
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
-                if (calendarEvent) {
-                    calendarEvent.setProp('title', `${technician.name || 'Technicien'} | ${calendarEvent.extendedProps.customer_name || ''}`);
-                    calendarEvent.setExtendedProp('technician_id', technician.id);
-                    calendarEvent.setExtendedProp('technician_name', technician.name);
-                    calendarEvent.setExtendedProp('technician_address', technician.address);
-                    calendarEvent.setExtendedProp('technician_latitude', technician.latitude);
-                    calendarEvent.setExtendedProp('technician_longitude', technician.longitude);
-                    calendarEvent.setExtendedProp('origin_latitude', technician.latitude);
-                    calendarEvent.setExtendedProp('origin_longitude', technician.longitude);
-                    calendarEvent.setExtendedProp('origin_name', technician.address || 'Domicile technicien');
-                    calendarEvent.setExtendedProp('origin_label', 'Domicile');
-                    applyTrackingEventStyle(calendarEvent);
+                const detailEvent = trackingDetailEventById(appointmentId);
+                if (detailEvent) {
+                    trackingSetEventTitle(detailEvent, `${technician.name || 'Technicien'} | ${detailEvent.extendedProps?.customer_name || ''}`);
+                    trackingSetEventExtendedProp(detailEvent, 'technician_id', technician.id);
+                    trackingSetEventExtendedProp(detailEvent, 'technician_name', technician.name);
+                    trackingSetEventExtendedProp(detailEvent, 'technician_address', technician.address);
+                    trackingSetEventExtendedProp(detailEvent, 'technician_latitude', technician.latitude);
+                    trackingSetEventExtendedProp(detailEvent, 'technician_longitude', technician.longitude);
+                    trackingSetEventExtendedProp(detailEvent, 'origin_latitude', technician.latitude);
+                    trackingSetEventExtendedProp(detailEvent, 'origin_longitude', technician.longitude);
+                    trackingSetEventExtendedProp(detailEvent, 'origin_name', technician.address || 'Domicile technicien');
+                    trackingSetEventExtendedProp(detailEvent, 'origin_label', 'Domicile');
+                    if (typeof detailEvent.setProp === 'function') applyTrackingEventStyle(detailEvent);
                 }
 
                 setTrackingReassignStatus('Rendez-vous réaffecté.');
                 refetchCalendar();
 
-                if (calendarEvent) {
-                    window.setTimeout(() => renderTrackingDetailMap(calendarEvent), 180);
+                if (detailEvent) {
+                    window.setTimeout(() => renderTrackingDetailMap(detailEvent), 180);
                 }
             } catch (error) {
                 setTrackingReassignStatus(error.message || 'Impossible de réaffecter le RDV.', '#9f1239');
@@ -2382,15 +2661,15 @@
                     throw new Error(firstError);
                 }
 
-                const calendarEvent = trackingCalendar?.getEventById(appointmentId);
-                if (calendarEvent) {
-                    calendarEvent.setExtendedProp('comment', payload.comment || problemPayload.comment);
-                    calendarEvent.setExtendedProp('status', payload.status || 'problem');
-                    calendarEvent.setExtendedProp('problem_reported_at', payload.problem_reported_at || new Date().toISOString());
-                    calendarEvent.setExtendedProp('problem_type', payload.problem_type || problemPayload.problem_type);
-                    calendarEvent.setExtendedProp('recall_date', payload.recall_date || problemPayload.recall_date);
-                    calendarEvent.setExtendedProp('recall_time', payload.recall_time || problemPayload.recall_time);
-                    applyTrackingEventStyle(calendarEvent);
+                const detailEvent = trackingDetailEventById(appointmentId);
+                if (detailEvent) {
+                    trackingSetEventExtendedProp(detailEvent, 'comment', payload.comment || problemPayload.comment);
+                    trackingSetEventExtendedProp(detailEvent, 'status', payload.status || 'problem');
+                    trackingSetEventExtendedProp(detailEvent, 'problem_reported_at', payload.problem_reported_at || new Date().toISOString());
+                    trackingSetEventExtendedProp(detailEvent, 'problem_type', payload.problem_type || problemPayload.problem_type);
+                    trackingSetEventExtendedProp(detailEvent, 'recall_date', payload.recall_date || problemPayload.recall_date);
+                    trackingSetEventExtendedProp(detailEvent, 'recall_time', payload.recall_time || problemPayload.recall_time);
+                    if (typeof detailEvent.setProp === 'function') applyTrackingEventStyle(detailEvent);
                 }
 
                 trackingInitialComment = payload.comment || problemPayload.comment;

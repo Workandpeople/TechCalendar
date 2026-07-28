@@ -6,6 +6,7 @@ use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\MailSender;
 use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
@@ -23,6 +24,7 @@ it('renders the appointment mail composer on planner and manager tracking pages'
     MailTemplate::query()->create([
         'name' => 'Confirmation RDV',
         'slug' => 'confirmation-rdv',
+        'mail_sender_id' => MailSender::query()->firstOrFail()->id,
         'subject' => 'RDV {{ client_name }}',
         'markdown_body' => '# Bonjour {{ client_name }}',
         'is_active' => true,
@@ -34,6 +36,8 @@ it('renders the appointment mail composer on planner and manager tracking pages'
     $this->actingAs($planner)
         ->get(route('planner.tracking'))
         ->assertOk()
+        ->assertSee('Recherche de RDV')
+        ->assertSee('trackingSearchUrl')
         ->assertSee('Envoyer le mail')
         ->assertSee('tracking-mail-form')
         ->assertSee('Confirmation RDV');
@@ -41,6 +45,8 @@ it('renders the appointment mail composer on planner and manager tracking pages'
     $this->actingAs($manager)
         ->get(route('manager.appointments'))
         ->assertOk()
+        ->assertSee('Recherche de RDV')
+        ->assertSee('trackingSearchUrl')
         ->assertSee('Envoyer le mail')
         ->assertSee('tracking-mail-form')
         ->assertSee('Confirmation RDV');
@@ -625,6 +631,88 @@ it('filters tracking events by appointment status', function () {
         ->and($problemEvents)->toHaveCount(1)
         ->and($problemEvents[0]['id'])->toBe($problemAppointment->id)
         ->and($problemEvents[0]['extendedProps']['status'])->toBe(Appointment::STATUS_PROBLEM);
+});
+
+it('searches tracking appointments and returns the modal event payload', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'first_name' => 'Paul',
+        'last_name' => 'Tech',
+        'address' => '10 Rue Centrale, 69001 Lyon, France',
+        'latitude' => 45.767,
+        'longitude' => 4.834,
+    ]);
+    $otherTechnician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Contrôle cible',
+        'average_duration_minutes' => 90,
+    ]);
+    $otherService = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit hors filtre',
+        'average_duration_minutes' => 120,
+    ]);
+
+    $startsAt = Carbon::parse('2026-06-20 14:00:00');
+    $targetAppointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Alice',
+        'customer_last_name' => 'Durand',
+        'customer_phone' => '06 11 22 33 44',
+        'address' => '12 Rue Victor Hugo, 69002 Lyon, France',
+        'latitude' => 45.759,
+        'longitude' => 4.832,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'external_reference' => 'COF-123',
+        'comment' => 'Prévenir le gardien.',
+    ]);
+    Appointment::query()->create([
+        'service_id' => $otherService->id,
+        'technician_id' => $otherTechnician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Bob',
+        'customer_last_name' => 'Masque',
+        'customer_phone' => '0600000000',
+        'address' => '1 Rue Masquée, Paris',
+        'latitude' => 48.8566,
+        'longitude' => 2.3522,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 120,
+        'ends_at' => $startsAt->copy()->addMinutes(120),
+    ]);
+
+    $appointments = $this->actingAs($planner)
+        ->postJson(route('planner.tracking.search'), [
+            'q' => 'Alice Durand',
+            'technician_ids' => [$technician->id],
+            'date_from' => '2026-06-20',
+            'date_to' => '2026-06-20',
+            'service_id' => $service->id,
+            'appointment_status' => 'all',
+        ])
+        ->assertOk()
+        ->json('appointments');
+
+    expect($appointments)->toHaveCount(1)
+        ->and($appointments[0]['id'])->toBe($targetAppointment->id)
+        ->and($appointments[0]['extendedProps']['customer_name'])->toBe('Alice Durand')
+        ->and($appointments[0]['extendedProps']['technician_name'])->toContain('Paul Tech')
+        ->and($appointments[0]['extendedProps']['service_label'])->toBe('COFFRAC - Contrôle cible')
+        ->and($appointments[0]['extendedProps']['postal_code'])->toBe('69002')
+        ->and($appointments[0]['extendedProps']['city'])->toBe('Lyon');
 });
 
 it('includes coffrac documents from stored external requests in tracking events', function () {

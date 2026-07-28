@@ -96,6 +96,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/manager/delegataires', [ManagerDelegataireController::class, 'index'])->name('manager.delegataires');
     Route::post('/manager/delegataires/sync', [ManagerDelegataireController::class, 'sync'])->name('manager.delegataires.sync');
     Route::get('/manager/mail-templates', [ManagerMailTemplateController::class, 'index'])->name('manager.mail-templates');
+    Route::post('/manager/mail-templates/senders', [ManagerMailTemplateController::class, 'storeSender'])->name('manager.mail-templates.senders.store');
+    Route::put('/manager/mail-templates/senders/{mailSender}', [ManagerMailTemplateController::class, 'updateSender'])->name('manager.mail-templates.senders.update');
+    Route::delete('/manager/mail-templates/senders/{mailSender}', [ManagerMailTemplateController::class, 'destroySender'])->name('manager.mail-templates.senders.destroy');
     Route::post('/manager/mail-templates', [ManagerMailTemplateController::class, 'store'])->name('manager.mail-templates.store');
     Route::put('/manager/mail-templates/{mailTemplate}', [ManagerMailTemplateController::class, 'update'])->name('manager.mail-templates.update');
     Route::delete('/manager/mail-templates/{mailTemplate}', [ManagerMailTemplateController::class, 'destroy'])->name('manager.mail-templates.destroy');
@@ -116,6 +119,7 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
+    Route::post('/manager/appointments/search', [PlannerTrackingController::class, 'search'])->name('manager.appointments.search');
     Route::post('/manager/appointments/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('manager.appointments.coffrac.placed.refresh');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
@@ -132,6 +136,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/appointments/{appointment}/mail-preview', [PlannerAppointmentMailController::class, 'preview'])->name('planner.book.appointments.mail.preview');
     Route::post('/planner/book/appointments/{appointment}/mail', [PlannerAppointmentMailController::class, 'send'])->name('planner.book.appointments.mail.send');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
+    Route::post('/planner/tracking/search', [PlannerTrackingController::class, 'search'])->name('planner.tracking.search');
     Route::post('/planner/tracking/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('planner.tracking.coffrac.placed.refresh');
     Route::post('/planner/tracking/events', [PlannerTrackingController::class, 'events'])->name('planner.tracking.events');
     Route::patch('/planner/tracking/appointments/{appointment}/comment', [PlannerTrackingController::class, 'updateComment'])

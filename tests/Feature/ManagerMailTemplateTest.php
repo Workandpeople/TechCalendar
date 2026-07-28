@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\MailSender;
 use App\Models\MailTemplate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,11 +21,29 @@ function managerMailTemplateUser(array $overrides = []): User
     ], $overrides));
 }
 
+function managerMailSender(array $overrides = []): MailSender
+{
+    return MailSender::query()->create(array_merge([
+        'name' => 'Genius Contrôle',
+        'mail_host' => 'ssl0.ovh.net',
+        'mail_port' => 587,
+        'mail_username' => 'contact@example.test',
+        'mail_password' => 'secret-password',
+        'mail_encryption' => 'tls',
+        'mail_from_address' => 'contact@example.test',
+        'mail_from_name' => 'Genius Contrôle',
+        'mail_admin_email' => 'admin@example.test',
+        'is_active' => true,
+    ], $overrides));
+}
+
 it('renders the manager mail templates page for managers', function () {
     $manager = managerMailTemplateUser();
+    $sender = managerMailSender();
     MailTemplate::query()->create([
         'name' => 'Confirmation RDV',
         'slug' => 'confirmation-rdv',
+        'mail_sender_id' => $sender->id,
         'subject' => 'RDV {{ appointment_date }}',
         'markdown_body' => '# Bonjour {{ client_name }}',
         'is_active' => true,
@@ -51,11 +70,12 @@ it('blocks mail templates management for planning users', function () {
 
 it('creates updates and soft deletes a mail template', function () {
     $manager = managerMailTemplateUser();
+    $sender = managerMailSender();
 
     $this->actingAs($manager)
         ->post(route('manager.mail-templates.store'), [
             'name' => 'Confirmation RDV',
-            'slug' => '',
+            'mail_sender_id' => $sender->id,
             'subject' => 'RDV {{ appointment_date }}',
             'markdown_body' => '# Bonjour {{ client_name }}',
             'is_active' => '1',
@@ -71,7 +91,7 @@ it('creates updates and soft deletes a mail template', function () {
     $this->actingAs($manager)
         ->put(route('manager.mail-templates.update', $template), [
             'name' => 'Confirmation modifiée',
-            'slug' => 'confirmation-modifiee',
+            'mail_sender_id' => $sender->id,
             'subject' => 'Sujet modifié',
             'markdown_body' => 'Corps modifié',
         ])
@@ -80,7 +100,7 @@ it('creates updates and soft deletes a mail template', function () {
     $template->refresh();
 
     expect($template->name)->toBe('Confirmation modifiée')
-        ->and($template->slug)->toBe('confirmation-modifiee')
+        ->and($template->slug)->toBe('confirmation-rdv')
         ->and($template->is_active)->toBeFalse();
 
     $this->actingAs($manager)
@@ -90,7 +110,7 @@ it('creates updates and soft deletes a mail template', function () {
     $this->assertSoftDeleted('mail_templates', ['id' => $template->id]);
 });
 
-it('stores previews and removes a mail template logo', function () {
+it('stores previews and removes a mail sender logo', function () {
     Storage::fake('public');
 
     $manager = managerMailTemplateUser();
@@ -100,22 +120,36 @@ it('stores previews and removes a mail template logo', function () {
     );
 
     $this->actingAs($manager)
-        ->post(route('manager.mail-templates.store'), [
-            'name' => 'Confirmation RDV',
-            'slug' => '',
-            'subject' => 'RDV {{ appointment_date }}',
-            'markdown_body' => '# Bonjour {{ client_name }}',
+        ->post(route('manager.mail-templates.senders.store'), [
+            'name' => 'Genius Contrôle',
+            'mail_host' => 'ssl0.ovh.net',
+            'mail_port' => 587,
+            'mail_username' => 'contact@example.test',
+            'mail_password' => 'secret-password',
+            'mail_encryption' => 'tls',
+            'mail_from_address' => 'contact@example.test',
+            'mail_from_name' => 'Genius Contrôle',
+            'mail_admin_email' => 'admin@example.test',
             'logo' => $logo,
             'is_active' => '1',
         ])
         ->assertRedirect(route('manager.mail-templates'));
 
-    $template = MailTemplate::query()->firstOrFail();
+    $sender = MailSender::query()->latest('id')->firstOrFail();
 
-    expect($template->logo_path)->not->toBeNull()
-        ->and($template->logo_path)->toStartWith('mail-template-logos/');
+    expect($sender->logo_path)->not->toBeNull()
+        ->and($sender->logo_path)->toStartWith('mail-sender-logos/');
 
-    Storage::disk('public')->assertExists($template->logo_path);
+    Storage::disk('public')->assertExists($sender->logo_path);
+
+    $template = MailTemplate::query()->create([
+        'name' => 'Confirmation RDV',
+        'slug' => 'confirmation-rdv',
+        'mail_sender_id' => $sender->id,
+        'subject' => 'RDV {{ appointment_date }}',
+        'markdown_body' => '# Bonjour {{ client_name }}',
+        'is_active' => true,
+    ]);
 
     $response = $this->actingAs($manager)
         ->postJson(route('manager.mail-templates.preview'), [
@@ -127,24 +161,28 @@ it('stores previews and removes a mail template logo', function () {
 
     expect($response->json('html'))
         ->toContain('<img')
-        ->toContain('/storage/mail-template-logos/');
+        ->toContain('/storage/mail-sender-logos/');
 
-    $previousLogoPath = $template->logo_path;
+    $previousLogoPath = $sender->logo_path;
 
     $this->actingAs($manager)
-        ->put(route('manager.mail-templates.update', $template), [
-            'name' => 'Confirmation RDV',
-            'slug' => 'confirmation-rdv',
-            'subject' => 'RDV {{ appointment_date }}',
-            'markdown_body' => '# Bonjour {{ client_name }}',
+        ->put(route('manager.mail-templates.senders.update', $sender), [
+            'name' => 'Genius Contrôle',
+            'mail_host' => 'ssl0.ovh.net',
+            'mail_port' => 587,
+            'mail_username' => 'contact@example.test',
+            'mail_encryption' => 'tls',
+            'mail_from_address' => 'contact@example.test',
+            'mail_from_name' => 'Genius Contrôle',
+            'mail_admin_email' => 'admin@example.test',
             'remove_logo' => '1',
             'is_active' => '1',
         ])
         ->assertRedirect(route('manager.mail-templates'));
 
-    $template->refresh();
+    $sender->refresh();
 
-    expect($template->logo_path)->toBeNull();
+    expect($sender->logo_path)->toBeNull();
     Storage::disk('public')->assertMissing($previousLogoPath);
 });
 

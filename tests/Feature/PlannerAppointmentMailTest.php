@@ -2,6 +2,7 @@
 
 use App\Mail\MailTemplateMailable;
 use App\Models\Appointment;
+use App\Models\MailSender;
 use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\User;
@@ -38,6 +39,7 @@ it('queues a one shot appointment mail without changing the stored template', fu
     $template = MailTemplate::query()->create([
         'name' => 'Confirmation RDV',
         'slug' => 'confirmation-rdv',
+        'mail_sender_id' => MailSender::query()->firstOrFail()->id,
         'subject' => 'Template original {{ client_name }}',
         'markdown_body' => '# Original {{ client_name }}',
         'is_active' => true,
@@ -87,20 +89,32 @@ it('lets managers queue a one shot appointment mail from appointment details', f
     );
 });
 
-it('keeps the selected template logo for one shot appointment previews and sends', function () {
+it('keeps the selected template sender logo for one shot appointment previews and sends', function () {
     Mail::fake();
     Storage::fake('public');
 
-    Storage::disk('public')->put('mail-template-logos/logo.png', 'fake-logo');
+    Storage::disk('public')->put('mail-sender-logos/logo.png', 'fake-logo');
 
     $planner = User::factory()->create(['role' => 1, 'admin' => false]);
     $appointment = plannerMailAppointment($planner);
+    $sender = MailSender::query()->create([
+        'name' => 'Genius Contrôle',
+        'mail_host' => 'ssl0.ovh.net',
+        'mail_port' => 587,
+        'mail_username' => 'contact@example.test',
+        'mail_password' => 'secret-password',
+        'mail_encryption' => 'tls',
+        'mail_from_address' => 'contact@example.test',
+        'mail_from_name' => 'Genius Contrôle',
+        'logo_path' => 'mail-sender-logos/logo.png',
+        'is_active' => true,
+    ]);
     $template = MailTemplate::query()->create([
         'name' => 'Confirmation logo',
         'slug' => 'confirmation-logo',
+        'mail_sender_id' => $sender->id,
         'subject' => 'RDV {{ client_name }}',
         'markdown_body' => '# Bonjour {{ client_name }}',
-        'logo_path' => 'mail-template-logos/logo.png',
         'is_active' => true,
     ]);
 
@@ -114,7 +128,7 @@ it('keeps the selected template logo for one shot appointment previews and sends
 
     expect($response->json('html'))
         ->toContain('<img')
-        ->toContain('/storage/mail-template-logos/logo.png');
+        ->toContain('/storage/mail-sender-logos/logo.png');
 
     $this->actingAs($planner)
         ->postJson(route('planner.book.appointments.mail.send', $appointment), [
@@ -128,7 +142,8 @@ it('keeps the selected template logo for one shot appointment previews and sends
     Mail::assertQueued(
         MailTemplateMailable::class,
         fn (MailTemplateMailable $mail): bool => $mail->hasTo('client@example.com')
-            && str_contains((string) $mail->logoUrl, '/storage/mail-template-logos/logo.png')
+            && str_contains((string) $mail->logoUrl, '/storage/mail-sender-logos/logo.png')
+            && $mail->senderFromAddress === 'contact@example.test'
     );
 });
 
