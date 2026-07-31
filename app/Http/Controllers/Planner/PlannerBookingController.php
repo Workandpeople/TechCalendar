@@ -10,6 +10,7 @@ use App\Models\LotAppointment;
 use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
+use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
 use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentMailTemplateData;
@@ -45,6 +46,8 @@ class PlannerBookingController extends Controller
     ): View {
         abort_unless($this->canAccess($request), 403);
 
+        $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify');
+        $isManagerRoute = $request->routeIs('manager.*');
         $services = Service::query()
             ->orderBy('type')
             ->orderBy('name')
@@ -75,6 +78,16 @@ class PlannerBookingController extends Controller
             'externalAppointmentSources' => $externalAppointmentSources,
             'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
+            'initialReplaceAppointmentId' => $request->query('replace_appointment_id') ?: $request->query('appointment_id'),
+            'bookingMode' => $isReplacementMode ? 'replace' : 'create',
+            'bookingSection' => $isManagerRoute ? 'Gérant' : 'Planning',
+            'bookingTitle' => $isReplacementMode ? 'Modifier un RDV' : 'Prise de RDV',
+            'bookingSubtitle' => $isReplacementMode
+                ? 'Recherche un RDV existant, consulte son détail ou relance un workflow complet de replacement.'
+                : 'Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.',
+            'replaceSearchUrl' => route($isManagerRoute ? 'manager.appointments.search' : 'planner.tracking.search'),
+            'replacementPageUrl' => route($isManagerRoute ? 'manager.appointments.modify' : 'planner.appointments.modify'),
+            'bookingTrackingUrl' => route($isManagerRoute ? 'manager.appointments' : 'planner.tracking'),
             'mapboxToken' => config('services.mapbox.token'),
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'services' => $services,
@@ -110,7 +123,11 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        $technicians = $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
+        $technicians = $this->ensureReplacementTechnician(
+            $this->eligibleTechnicians($crmAppointment, $drivingRoutes),
+            $crmAppointment,
+            $drivingRoutes
+        );
         $technicianIds = $technicians->pluck('id');
         $calendarStart = now()->startOfWeek();
         $calendarEnd = now()->copy()->addWeeks(8)->endOfWeek();
@@ -131,6 +148,8 @@ class PlannerBookingController extends Controller
 
         $this->loadAbsencesForTechnicians($technicians, $calendarStart, $calendarEnd);
         $appointments = $this->appointmentsForTechnicians($technicianIds, $calendarStart, $calendarEnd);
+        $replacementAppointmentId = $this->replacementAppointmentId($crmAppointment);
+        $appointmentsForSuggestions = $this->appointmentsWithoutReplacement($appointments, $replacementAppointmentId);
 
         return response()->json([
             'crm_appointment' => $crmAppointment,
@@ -143,8 +162,8 @@ class PlannerBookingController extends Controller
                 'is_lot' => (bool) ($crmAppointment['is_lot'] ?? false),
             ],
             'technicians' => $this->serializeTechnicians($technicians),
-            'events' => $this->calendarEvents($appointments),
-            'suggestions' => $this->buildSlotSuggestions($technicians, $appointments, $crmAppointment, $drivingRoutes),
+            'events' => $this->calendarEvents($appointments, $replacementAppointmentId),
+            'suggestions' => $this->buildSlotSuggestions($technicians, $appointmentsForSuggestions, $crmAppointment, $drivingRoutes),
             'calendar_range' => [
                 'start' => $calendarStart->toDateString(),
                 'end' => $calendarEnd->toDateString(),
@@ -340,15 +359,18 @@ class PlannerBookingController extends Controller
         $technicians = isset($payload['technician_ids'])
             ? $this->techniciansByIdsForAppointment($payload['technician_ids'], $crmAppointment, $drivingRoutes)
             : $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
+        $technicians = $this->ensureReplacementTechnician($technicians, $crmAppointment, $drivingRoutes);
         $this->loadAbsencesForTechnicians($technicians, $windowStart, $windowEnd);
         $appointments = $this->appointmentsForTechnicians($technicians->pluck('id'), $windowStart, $windowEnd);
+        $replacementAppointmentId = $this->replacementAppointmentId($crmAppointment);
+        $appointmentsForSuggestions = $this->appointmentsWithoutReplacement($appointments, $replacementAppointmentId);
 
         return response()->json([
             'technicians' => $this->serializeTechnicians($technicians),
-            'events' => $this->calendarEvents($appointments),
+            'events' => $this->calendarEvents($appointments, $replacementAppointmentId),
             'suggestions' => $this->buildSlotSuggestions(
                 $technicians,
-                $appointments,
+                $appointmentsForSuggestions,
                 $crmAppointment,
                 $drivingRoutes,
                 $windowStart,
@@ -383,9 +405,16 @@ class PlannerBookingController extends Controller
 
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
+        $replacementAppointment = ! empty($payload['replace_appointment_id'])
+            ? Appointment::query()->findOrFail((int) $payload['replace_appointment_id'])
+            : null;
 
         if (! $crmAppointment['service']) {
-            $serviceErrorKey = ! empty($payload['lot_appointment_id']) ? 'lot_service_id' : 'crm_service_id';
+            $serviceErrorKey = match (true) {
+                ! empty($payload['lot_appointment_id']) => 'lot_service_id',
+                ! empty($payload['replace_appointment_id']) => 'replace_appointment_id',
+                default => 'crm_service_id',
+            };
 
             throw ValidationException::withMessages([
                 $serviceErrorKey => 'Impossible de valider sans prestation renseignée.',
@@ -409,15 +438,33 @@ class PlannerBookingController extends Controller
             ]);
         }
 
+        $hasOverlappingAppointment = Appointment::query()
+            ->where('technician_id', (int) $payload['technician_id'])
+            ->whereNull('deleted_at')
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))
+            ->exists();
+
+        if ($hasOverlappingAppointment) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'Ce technicien a déjà un RDV sur ce créneau.',
+            ]);
+        }
+
         if (($crmAppointment['external_source'] ?? null) === CoffracAppointmentService::SOURCE
             && Appointment::query()
                 ->where('external_source', CoffracAppointmentService::SOURCE)
                 ->where('external_reference', (string) ($crmAppointment['external_reference'] ?? ''))
+                ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))
                 ->exists()) {
             throw ValidationException::withMessages([
                 'crm_appointment_id' => 'Ce RDV Coffrac a déjà été placé dans TechCalendar.',
             ]);
         }
+
+        $previousTechnicianId = $replacementAppointment?->technician_id ? (int) $replacementAppointment->technician_id : null;
+        $previousDate = $replacementAppointment?->starts_at?->toDateString();
 
         try {
             $appointment = DB::transaction(function () use (
@@ -426,13 +473,13 @@ class PlannerBookingController extends Controller
                 $durationMinutes,
                 $endsAt,
                 $payload,
+                $replacementAppointment,
                 $request,
                 $startsAt
             ): Appointment {
-                $appointment = Appointment::query()->create([
+                $appointmentAttributes = [
                     'service_id' => $crmAppointment['service']['id'],
                     'technician_id' => $payload['technician_id'],
-                    'created_by' => $request->user()->id,
                     'customer_first_name' => $crmAppointment['first_name'],
                     'customer_last_name' => $crmAppointment['last_name'],
                     'customer_phone' => $crmAppointment['phone'],
@@ -444,12 +491,23 @@ class PlannerBookingController extends Controller
                     'ends_at' => $endsAt,
                     'comment' => $payload['comment'] ?? null,
                     'status' => Appointment::STATUS_SCHEDULED,
+                    'problem_reported_at' => null,
                     'external_source' => $crmAppointment['external_source'] ?? null,
                     'external_reference' => $crmAppointment['external_reference'] ?? null,
                     'external_payload' => $crmAppointment['external_payload'] ?? null,
-                ]);
+                ];
 
-                if (! empty($payload['lot_appointment_id'])) {
+                if ($replacementAppointment) {
+                    $replacementAppointment->update($appointmentAttributes);
+                    $appointment = $replacementAppointment->refresh();
+                } else {
+                    $appointment = Appointment::query()->create([
+                        ...$appointmentAttributes,
+                        'created_by' => $request->user()->id,
+                    ]);
+                }
+
+                if (! $replacementAppointment && ! empty($payload['lot_appointment_id'])) {
                     $lotAppointment = LotAppointment::query()
                         ->with('lot')
                         ->whereKey((int) $payload['lot_appointment_id'])
@@ -476,13 +534,28 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        $appointmentMails->created($appointment);
+        if ($replacementAppointment) {
+            $this->forgetRouteMetricsForAppointmentChange(
+                $previousTechnicianId,
+                (int) $appointment->technician_id,
+                $previousDate,
+                $appointment->starts_at?->toDateString(),
+            );
+
+            if ($previousTechnicianId && $previousTechnicianId !== (int) $appointment->technician_id) {
+                $appointmentMails->reassigned($appointment, $previousTechnicianId);
+            } else {
+                $appointmentMails->detailsUpdated($appointment);
+            }
+        } else {
+            $appointmentMails->created($appointment);
+        }
 
         return response()->json([
-            'message' => 'Rendez-vous créé.',
+            'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
             'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
-        ], 201);
+        ], $replacementAppointment ? 200 : 201);
     }
 
     /**
@@ -700,6 +773,76 @@ class PlannerBookingController extends Controller
 
     /**
      * @param  Collection<int, User>  $technicians
+     * @return Collection<int, User>
+     */
+    private function ensureReplacementTechnician(
+        Collection $technicians,
+        array $crmAppointment,
+        MapboxDrivingRouteService $drivingRoutes
+    ): Collection {
+        $replacementAppointmentId = $this->replacementAppointmentId($crmAppointment);
+
+        if (! $replacementAppointmentId) {
+            return $technicians;
+        }
+
+        $replacementAppointment = Appointment::query()
+            ->with(['technician.departments:code,name'])
+            ->whereKey($replacementAppointmentId)
+            ->first();
+
+        $technician = $replacementAppointment?->technician;
+
+        if (! $technician || $technicians->contains('id', $technician->id)) {
+            return $technicians;
+        }
+
+        if ($technician->latitude === null || $technician->longitude === null) {
+            return $technicians;
+        }
+
+        return $this->withRouteAttributes($technicians->push($technician), $crmAppointment, $drivingRoutes)
+            ->sort(function (User $leftTechnician, User $rightTechnician): int {
+                $durationComparison = (int) $leftTechnician->getAttribute('driving_duration_minutes')
+                    <=> (int) $rightTechnician->getAttribute('driving_duration_minutes');
+
+                if ($durationComparison !== 0) {
+                    return $durationComparison;
+                }
+
+                return (float) $leftTechnician->getAttribute('driving_distance_km')
+                    <=> (float) $rightTechnician->getAttribute('driving_distance_km');
+            })
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $appointments
+     * @return Collection<int, Appointment>
+     */
+    private function appointmentsWithoutReplacement(Collection $appointments, ?int $replacementAppointmentId): Collection
+    {
+        if (! $replacementAppointmentId) {
+            return $appointments;
+        }
+
+        return $appointments
+            ->reject(fn (Appointment $appointment): bool => (int) $appointment->id === $replacementAppointmentId)
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $crmAppointment
+     */
+    private function replacementAppointmentId(array $crmAppointment): ?int
+    {
+        $replacementAppointmentId = $crmAppointment['replace_appointment_id'] ?? null;
+
+        return filled($replacementAppointmentId) ? (int) $replacementAppointmentId : null;
+    }
+
+    /**
+     * @param  Collection<int, User>  $technicians
      * @return Collection<int, array<string, mixed>>
      */
     private function serializeTechnicians(Collection $technicians): Collection
@@ -799,7 +942,7 @@ class PlannerBookingController extends Controller
     private function appointmentRequestRules(): array
     {
         return [
-            'crm_appointment_id' => ['nullable', 'string', 'required_without_all:manual_appointment,lot_appointment_id'],
+            'crm_appointment_id' => ['nullable', 'string', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id'],
             'crm_service_id' => [
                 'nullable',
                 'integer',
@@ -808,7 +951,7 @@ class PlannerBookingController extends Controller
             'lot_appointment_id' => [
                 'nullable',
                 'integer',
-                'required_without_all:crm_appointment_id,manual_appointment',
+                'required_without_all:crm_appointment_id,manual_appointment,replace_appointment_id',
                 Rule::exists('lot_appointments', 'id'),
             ],
             'lot_service_id' => [
@@ -817,7 +960,13 @@ class PlannerBookingController extends Controller
                 'required_with:lot_appointment_id',
                 Rule::exists('services', 'id'),
             ],
-            'manual_appointment' => ['nullable', 'array', 'required_without_all:crm_appointment_id,lot_appointment_id'],
+            'replace_appointment_id' => [
+                'nullable',
+                'integer',
+                'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id',
+                Rule::exists('appointments', 'id')->whereNull('deleted_at'),
+            ],
+            'manual_appointment' => ['nullable', 'array', 'required_without_all:crm_appointment_id,lot_appointment_id,replace_appointment_id'],
             'manual_appointment.first_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.last_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:255'],
@@ -892,6 +1041,10 @@ class PlannerBookingController extends Controller
                 (int) $payload['lot_appointment_id'],
                 isset($payload['lot_service_id']) ? (int) $payload['lot_service_id'] : null,
             );
+        }
+
+        if (! empty($payload['replace_appointment_id'])) {
+            return $this->replacementAppointmentFromId((int) $payload['replace_appointment_id']);
         }
 
         if (! isset($payload['manual_appointment']) || ! is_array($payload['manual_appointment'])) {
@@ -1071,6 +1224,69 @@ class PlannerBookingController extends Controller
     }
 
     /**
+     * @return array<string, mixed>|null
+     */
+    private function replacementAppointmentFromId(int $id): ?array
+    {
+        $appointment = Appointment::query()
+            ->with(['service:id,type,name,average_duration_minutes'])
+            ->whereKey($id)
+            ->first();
+
+        if (! $appointment || ! filled($appointment->address)) {
+            return null;
+        }
+
+        if ($appointment->latitude === null || $appointment->longitude === null) {
+            return null;
+        }
+
+        $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+        $companyName = data_get($externalPayload, 'company_name') ?: data_get($externalPayload, 'client.company_name');
+        $siteName = data_get($externalPayload, 'site_name') ?: data_get($externalPayload, 'client.site_name');
+        $departmentCode = $this->departmentCodeFromAddress($appointment->address);
+
+        return [
+            'id' => 'replace-'.$appointment->id,
+            'replace_appointment_id' => $appointment->id,
+            'source' => 'RDV à replacer',
+            'first_name' => $appointment->customer_first_name,
+            'last_name' => $appointment->customer_last_name,
+            'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
+            'company_name' => $companyName,
+            'site_name' => $siteName,
+            'phone' => $appointment->customer_phone,
+            'address' => $appointment->address,
+            'department_code' => $departmentCode,
+            'latitude' => (float) $appointment->latitude,
+            'longitude' => (float) $appointment->longitude,
+            'preferred_starts_at' => null,
+            'is_manual' => false,
+            'is_lot' => false,
+            'is_replacement' => true,
+            'comment' => $appointment->comment,
+            'external_source' => $appointment->external_source,
+            'external_reference' => $appointment->external_reference,
+            'external_payload' => $externalPayload,
+            'documents' => app(AppointmentDocumentSerializer::class)->forAppointment($appointment),
+            'comments' => $this->externalComments($appointment),
+            'service' => $appointment->service ? [
+                'id' => $appointment->service->id,
+                'type' => $appointment->service->type,
+                'name' => $appointment->service->name,
+                'average_duration_minutes' => $appointment->service->average_duration_minutes,
+            ] : null,
+        ];
+    }
+
+    private function departmentCodeFromAddress(?string $address): string
+    {
+        preg_match('/\b(\d{2})\d{3}\b/u', (string) $address, $matches);
+
+        return strtoupper($matches[1] ?? '');
+    }
+
+    /**
      * @return array{0:string,1:string}
      */
     private function splitCustomerName(LotAppointment $lotAppointment): array
@@ -1152,6 +1368,33 @@ class PlannerBookingController extends Controller
         }
     }
 
+    private function forgetRouteMetricsForAppointmentChange(
+        ?int $previousTechnicianId,
+        int $newTechnicianId,
+        ?string $previousDate,
+        ?string $newDate
+    ): void {
+        $technicianIds = collect([$previousTechnicianId, $newTechnicianId])
+            ->filter()
+            ->map(fn (int $id): int => $id)
+            ->unique()
+            ->values();
+
+        $serviceDates = collect([$previousDate, $newDate])
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($technicianIds->isEmpty() || $serviceDates->isEmpty()) {
+            return;
+        }
+
+        TechnicianDailyRouteMetric::query()
+            ->whereIn('technician_id', $technicianIds->all())
+            ->whereIn('service_date', $serviceDates->all())
+            ->delete();
+    }
+
     private function technicianSupportsService(int $technicianId, int $serviceId): bool
     {
         return User::query()
@@ -1210,16 +1453,17 @@ class PlannerBookingController extends Controller
      * @param  Collection<int, Appointment>  $appointments
      * @return Collection<int, array<string, mixed>>
      */
-    private function calendarEvents(Collection $appointments): Collection
+    private function calendarEvents(Collection $appointments, ?int $replacementAppointmentId = null): Collection
     {
         $appointmentsByTechnicianAndDay = $appointments
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at?->toDateString());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
-        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment): array {
+        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment, $replacementAppointmentId): array {
             $serviceLabel = $appointment->service
                 ? $appointment->service->type.' - '.$appointment->service->name
                 : 'Prestation';
+            $isReplacementTarget = $replacementAppointmentId !== null && (int) $appointment->id === $replacementAppointmentId;
             $sameDayAppointments = $appointmentsByTechnicianAndDay
                 ->get($appointment->technician_id.'|'.$appointment->starts_at?->toDateString(), collect())
                 ->sortBy('starts_at')
@@ -1237,8 +1481,9 @@ class PlannerBookingController extends Controller
                 'start' => $appointment->starts_at?->toIso8601String(),
                 'end' => $appointment->ends_at?->toIso8601String(),
                 'backgroundColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#fff7ed' : '#9ccfe3',
-                'borderColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#f97316' : '#31424c',
+                'borderColor' => $isReplacementTarget ? '#faff00' : ($appointment->status === Appointment::STATUS_PROBLEM ? '#f97316' : '#31424c'),
                 'textColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#9a3412' : '#31424c',
+                'classNames' => $isReplacementTarget ? ['appointment-replacement-target'] : [],
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $appointment->technician?->full_name_with_departments,
@@ -1246,6 +1491,8 @@ class PlannerBookingController extends Controller
                     'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                     'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
                     'service_label' => $serviceLabel,
+                    'service_id' => $appointment->service_id,
+                    'is_replacement_target' => $isReplacementTarget,
                     'external_source' => $appointment->external_source,
                     'external_reference' => $appointment->external_reference,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
@@ -2169,6 +2416,7 @@ class PlannerBookingController extends Controller
                 'recall_at' => $crmAppointment['recall_at'] ?? null,
                 'crm_appointment_id' => $crmAppointment['id'],
                 'lot_appointment_id' => $crmAppointment['lot_appointment_id'] ?? null,
+                'replace_appointment_id' => $crmAppointment['replace_appointment_id'] ?? null,
                 'can_validate' => $crmAppointment['service'] !== null,
                 'travel_to_distance_km' => round((float) $travelTo['distance_km'], 1),
                 'travel_to_minutes' => (int) $travelTo['duration_minutes'],
@@ -2220,7 +2468,7 @@ class PlannerBookingController extends Controller
     {
         $user = $request->user();
 
-        return (bool) $user && ($user->admin || $user->role === 1);
+        return (bool) $user && ($user->admin || in_array($user->role, [0, 1], true));
     }
 
     private function haversine(float $fromLat, float $fromLng, float $toLat, float $toLng): float

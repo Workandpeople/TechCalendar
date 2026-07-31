@@ -39,16 +39,18 @@
                 ],
             ],
         ];
+        $bookingMode = $bookingMode ?? 'create';
+        $isReplacementMode = $bookingMode === 'replace';
     @endphp
 
     <div class="space-y-6">
         <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Planning</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Prise de rdv</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.</p>
+                <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingSection ?? 'Planning' }}</p>
+                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">{{ $bookingTitle ?? 'Prise de RDV' }}</h1>
+                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">{{ $bookingSubtitle ?? 'Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.' }}</p>
             </div>
-            <button id="manual-booking-toggle" type="button" class="gc-btn-primary self-start md:self-auto">
+            <button id="manual-booking-toggle" type="button" class="gc-btn-primary self-start md:self-auto {{ $isReplacementMode ? 'hidden' : '' }}">
                 RDV manuel
             </button>
         </div>
@@ -174,7 +176,59 @@
             </div>
         </section>
 
-        <section id="crm-booking-section" class="gc-card p-5">
+        @if ($isReplacementMode)
+            <section id="booking-replacement-search-section" class="gc-card p-5">
+                <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Recherche de RDV à modifier</h2>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Retrouve le RDV existant, consulte son détail ou relance un replacement complet.</p>
+                    </div>
+                    <p id="booking-replacement-search-summary" class="text-sm" style="color:var(--gc-text-soft);">Aucune recherche lancée.</p>
+                </div>
+
+                <form id="booking-replacement-search-form" class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto_auto]" data-validate-form>
+                    <div>
+                        <label class="gc-label" for="booking_replacement_search_query">Recherche</label>
+                        <input id="booking_replacement_search_query" type="search" maxlength="160" class="gc-input" placeholder="Client, téléphone, adresse, référence, technicien..." autocomplete="off" />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="booking_replacement_search_date_from">Du</label>
+                        <input id="booking_replacement_search_date_from" type="date" class="gc-input" />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="booking_replacement_search_date_to">Au</label>
+                        <input id="booking_replacement_search_date_to" type="date" class="gc-input" />
+                    </div>
+                    <div>
+                        <label class="gc-label" for="booking_replacement_search_status">État</label>
+                        <select id="booking_replacement_search_status" class="gc-input">
+                            <option value="all">Tous les RDV</option>
+                            <option value="active">Planifiés uniquement</option>
+                            <option value="problem">Problèmes uniquement</option>
+                        </select>
+                    </div>
+                    <button id="booking-replacement-search-submit" type="submit" class="gc-btn-primary self-end">Rechercher</button>
+                    <button id="booking-replacement-search-reset" type="button" class="gc-btn-soft self-end">Réinitialiser</button>
+                </form>
+
+                <div id="booking-replacement-search-status" class="mt-3 hidden rounded-lg px-3 py-2 text-sm"></div>
+
+                <div class="mt-4 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);">
+                    <div class="hidden grid-cols-[1.2fr_1fr_1fr_1.4fr_170px] gap-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] lg:grid" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:var(--gc-accent-soft);">
+                        <span>Client</span>
+                        <span>Technicien</span>
+                        <span>Date</span>
+                        <span>Prestation / adresse</span>
+                        <span class="text-right">Actions</span>
+                    </div>
+                    <div id="booking-replacement-search-results" class="divide-y" style="border-color:var(--gc-border);">
+                        <div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Lance une recherche pour afficher les RDV ici.</div>
+                    </div>
+                </div>
+            </section>
+        @endif
+
+        <section id="crm-booking-section" class="gc-card p-5 {{ $isReplacementMode ? 'hidden' : '' }}">
             <div class="mb-4 space-y-3">
                 <div id="booking-external-controls" class="flex flex-col gap-2">
                     <div class="flex flex-wrap items-center gap-2">
@@ -964,9 +1018,17 @@
             background: #fef3c7;
             color: #92400e;
         }
+
+        #booking-calendar .appointment-replacement-target {
+            border-color: #faff00 !important;
+            box-shadow: 0 0 0 3px #faff00, 0 0 18px rgba(250, 255, 0, .75) !important;
+            opacity: .92;
+        }
     </style>
 
     <script>
+        const bookingMode = @json($bookingMode ?? 'create');
+        const bookingIsReplacementMode = bookingMode === 'replace';
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
         const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
@@ -981,10 +1043,13 @@
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const bookingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const bookingAppointmentRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
-        const bookingTrackingUrl = @json(route('planner.tracking'));
+        const bookingTrackingUrl = @json($bookingTrackingUrl ?? route('planner.tracking'));
+        const bookingReplaceSearchUrl = @json($replaceSearchUrl ?? null);
+        const bookingReplacementPageUrl = @json($replacementPageUrl ?? url()->current());
         const bookingCsrfToken = @json(csrf_token());
         const bookingMapboxToken = @json($mapboxToken);
         const bookingInitialCrmAppointmentId = @json($initialCrmAppointmentId);
+        const bookingInitialReplaceAppointmentId = @json($initialReplaceAppointmentId ?? null);
         const bookingServices = @json($bookingServices);
         const bookingMailTemplates = @json($bookingMailTemplates);
         let bookingCrmAppointments = @json($crmAppointments->values());
@@ -1064,6 +1129,7 @@
 
         const analysisSection = document.getElementById('booking-analysis-section');
         const crmBookingSection = document.getElementById('crm-booking-section');
+        const bookingReplacementSearchSection = document.getElementById('booking-replacement-search-section');
         const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
         const bookingResultsAnchor = document.getElementById('booking-results-anchor');
@@ -1140,9 +1206,21 @@
         const confirmationMailPreviewSubject = document.getElementById('booking_confirmation_mail_preview_subject');
         const confirmationMailPreviewStatus = document.getElementById('booking_confirmation_mail_preview_status');
         const confirmationMailPreviewFrame = document.getElementById('booking_confirmation_mail_preview_frame');
+        const bookingReplacementSearchForm = document.getElementById('booking-replacement-search-form');
+        const bookingReplacementSearchQuery = document.getElementById('booking_replacement_search_query');
+        const bookingReplacementSearchDateFrom = document.getElementById('booking_replacement_search_date_from');
+        const bookingReplacementSearchDateTo = document.getElementById('booking_replacement_search_date_to');
+        const bookingReplacementSearchStatusFilter = document.getElementById('booking_replacement_search_status');
+        const bookingReplacementSearchSubmit = document.getElementById('booking-replacement-search-submit');
+        const bookingReplacementSearchReset = document.getElementById('booking-replacement-search-reset');
+        const bookingReplacementSearchSummary = document.getElementById('booking-replacement-search-summary');
+        const bookingReplacementSearchStatus = document.getElementById('booking-replacement-search-status');
+        const bookingReplacementSearchResults = document.getElementById('booking-replacement-search-results');
         const bookingCrmPageSize = 10;
         let bookingCrmPage = 1;
         let bookingSourceMode = 'crm';
+        let bookingReplacementSearchAbortController = null;
+        const bookingReplacementSearchResultEvents = new Map();
         let bookingAnalysisProgress = 0;
         let bookingAnalysisProgressTimer = null;
         let bookingCalendarProgress = 0;
@@ -1203,6 +1281,191 @@
                 hour: '2-digit',
                 minute: '2-digit',
             });
+        };
+
+        const bookingSearchEyeIcon = () => `
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2.25 12s3.5-6.75 9.75-6.75S21.75 12 21.75 12 18.25 18.75 12 18.75 2.25 12 2.25 12Z" />
+                <circle cx="12" cy="12" r="3" />
+            </svg>
+        `;
+
+        const bookingSearchReplaceIcon = () => `
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 7h10a4 4 0 0 1 0 8H7" />
+                <path d="M7 11 3 7l4-4" />
+                <path d="M20 17h-8a4 4 0 0 0 0 8" transform="translate(0 -4)" />
+            </svg>
+        `;
+
+        const bookingPostalCity = (props) => [props.postal_code, props.city]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+
+        const bookingFullAddress = (props) => {
+            const address = String(props.address || '').trim();
+            const postalCity = bookingPostalCity(props);
+            const location = String(props.location_label || '').trim();
+            const suffix = postalCity || (location && location !== address ? location : '');
+
+            if (!address) {
+                return suffix || 'Adresse non renseignée';
+            }
+
+            if (!suffix || address.toLowerCase().includes(suffix.toLowerCase())) {
+                return address;
+            }
+
+            return `${address}, ${suffix}`;
+        };
+
+        const normalizeBookingEventPayload = (payload) => {
+            const event = {
+                id: String(payload.id),
+                title: payload.title || '',
+                start: payload.start ? new Date(payload.start) : null,
+                end: payload.end ? new Date(payload.end) : null,
+                backgroundColor: payload.backgroundColor || null,
+                borderColor: payload.borderColor || null,
+                textColor: payload.textColor || null,
+                classNames: Array.isArray(payload.classNames) ? payload.classNames : [],
+                extendedProps: payload.extendedProps || {},
+                setExtendedProp(key, value) {
+                    this.extendedProps = {
+                        ...(this.extendedProps || {}),
+                        [key]: value,
+                    };
+                },
+                setProp(key, value) {
+                    this[key] = value;
+                },
+            };
+
+            return event;
+        };
+
+        const setBookingReplacementSearchStatus = (message = '', type = 'info') => {
+            if (!bookingReplacementSearchStatus) return;
+
+            bookingReplacementSearchStatus.textContent = message;
+            bookingReplacementSearchStatus.style.color = type === 'error'
+                ? '#9f1239'
+                : (type === 'success' ? '#0f766e' : 'var(--gc-text-soft)');
+            bookingReplacementSearchStatus.style.background = type === 'error'
+                ? '#fff1f2'
+                : (type === 'success' ? '#ecfdf5' : 'var(--gc-accent-soft)');
+            bookingReplacementSearchStatus.classList.toggle('hidden', message === '');
+        };
+
+        const renderBookingReplacementSearchResults = (appointments) => {
+            if (!bookingReplacementSearchResults || !bookingReplacementSearchSummary) return;
+
+            bookingReplacementSearchResultEvents.clear();
+
+            if (!appointments.length) {
+                bookingReplacementSearchSummary.textContent = '0 RDV trouvé.';
+                bookingReplacementSearchResults.innerHTML = '<div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Aucun RDV ne correspond à cette recherche.</div>';
+                return;
+            }
+
+            const events = appointments.map(normalizeBookingEventPayload);
+
+            events.forEach((event) => bookingReplacementSearchResultEvents.set(String(event.id), event));
+
+            bookingReplacementSearchSummary.textContent = `${events.length} RDV trouvé(s), 50 maximum affichés.`;
+            bookingReplacementSearchResults.innerHTML = events.map((event) => {
+                const props = event.extendedProps || {};
+                const fullAddress = bookingFullAddress(props);
+                const statusLabel = props.status === 'problem' ? 'Problème RDV' : 'Planifié';
+                const statusStyle = props.status === 'problem'
+                    ? 'background:#fff7ed;color:#9a3412;border-color:#fdba74;'
+                    : 'background:#ecfdf5;color:#047857;border-color:#86efac;';
+
+                return `
+                    <article class="grid grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_170px] lg:items-center lg:gap-3">
+                        <div class="min-w-0">
+                            <p class="truncate font-semibold" style="color:var(--gc-text);">${escapeHtml(props.customer_name || 'Client non renseigné')}</p>
+                            <p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml([props.customer_phone, props.external_reference ? `Ref. ${props.external_reference}` : null].filter(Boolean).join(' · '))}</p>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate font-medium" style="color:var(--gc-text);">${escapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
+                        </div>
+                        <div>
+                            <p class="font-medium" style="color:var(--gc-text);">${escapeHtml(formatShortDateTime(event.start))}</p>
+                            <span class="mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" style="${statusStyle}">${escapeHtml(statusLabel)}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="truncate font-medium" style="color:var(--gc-text);">${escapeHtml(props.service_label || 'Prestation non renseignée')}</p>
+                            <p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(fullAddress)}</p>
+                        </div>
+                        <div class="flex flex-wrap justify-start gap-2 lg:justify-end">
+                            <button type="button" class="gc-btn-soft inline-flex items-center gap-2 px-3 py-1.5 text-xs" data-booking-replacement-view="${escapeHtml(event.id)}" aria-label="Voir le RDV">
+                                ${bookingSearchEyeIcon()}
+                                Voir
+                            </button>
+                            <button type="button" class="gc-btn-primary inline-flex items-center gap-2 px-3 py-1.5 text-xs" data-booking-replacement-start="${escapeHtml(event.id)}" aria-label="Replacer le RDV">
+                                ${bookingSearchReplaceIcon()}
+                                Replacer
+                            </button>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        };
+
+        const runBookingReplacementSearch = async () => {
+            if (!bookingReplaceSearchUrl || !bookingReplacementSearchSubmit) return;
+
+            bookingReplacementSearchAbortController?.abort();
+            bookingReplacementSearchAbortController = new AbortController();
+            bookingReplacementSearchSubmit.disabled = true;
+            bookingReplacementSearchSubmit.textContent = 'Recherche...';
+            setBookingReplacementSearchStatus('Recherche des RDV en cours...');
+
+            try {
+                const response = await fetch(bookingReplaceSearchUrl, {
+                    method: 'POST',
+                    signal: bookingReplacementSearchAbortController.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                        Accept: 'application/json',
+                    },
+                    body: JSON.stringify({
+                        q: bookingReplacementSearchQuery?.value?.trim() || null,
+                        date_from: bookingReplacementSearchDateFrom?.value || null,
+                        date_to: bookingReplacementSearchDateTo?.value || null,
+                        appointment_status: bookingReplacementSearchStatusFilter?.value || 'all',
+                        limit: 50,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
+                    throw new Error(firstError || 'Recherche impossible.');
+                }
+
+                renderBookingReplacementSearchResults(payload.appointments || []);
+                setBookingReplacementSearchStatus(`${payload.count || 0} RDV trouvé(s).`, 'success');
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    setBookingReplacementSearchStatus(error.message || 'Recherche impossible.', 'error');
+                }
+            } finally {
+                bookingReplacementSearchSubmit.disabled = false;
+                bookingReplacementSearchSubmit.textContent = 'Rechercher';
+            }
+        };
+
+        const startReplacementWorkflow = async (appointmentId) => {
+            if (!appointmentId) return false;
+
+            return analyzeAppointment(
+                { replace_appointment_id: Number(appointmentId) },
+                'RDV à replacer'
+            );
         };
 
         const showFeedback = (message, type = 'info') => {
@@ -3114,6 +3377,7 @@
                 crm_appointment_id: currentAppointmentRequest.id,
                 crm_service_id: null,
                 lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
+                replace_appointment_id: currentAppointmentRequest.replace_appointment_id || null,
                 documents: currentAppointmentRequest.documents || [],
                 comments: currentAppointmentRequest.comments || currentAppointmentRequest.external_payload?.comments || [],
                 can_validate: Boolean(currentAppointmentRequest.service),
@@ -3787,6 +4051,7 @@
             const props = event?.extendedProps || {};
             const technician = technicianById(payload.technician_id);
             const startsAt = payload.starts_at || event?.start || null;
+            const isReplacement = Boolean(payload.replace_appointment_id);
 
             calendarWindowAbortController?.abort();
             technicianSearchAbortController?.abort();
@@ -3794,14 +4059,21 @@
             selectedCalendarEvent = null;
 
             crmBookingSection?.classList.add('hidden');
+            bookingReplacementSearchSection?.classList.add('hidden');
             manualBookingSection?.classList.add('hidden');
             analysisSection?.classList.add('hidden');
             manualBookingToggle?.classList.add('hidden');
             placementConfirmationSection?.classList.remove('hidden');
 
+            placementConfirmationSection.querySelector('h2').textContent = isReplacement
+                ? 'Le rendez-vous a bien été replacé'
+                : 'Le rendez-vous a bien été placé';
+            placementConfirmationSection.querySelector('span').textContent = isReplacement
+                ? 'Replacement confirmé'
+                : 'Placement confirmé';
             document.getElementById('booking_confirmation_reference').textContent = data.appointment_id
                 ? `RDV #${data.appointment_id}`
-                : 'RDV créé';
+                : (isReplacement ? 'RDV replacé' : 'RDV créé');
             document.getElementById('booking_confirmation_date').textContent = formatDateTimeForConfirmation(startsAt);
             document.getElementById('booking_confirmation_customer').textContent = props.customer_name || '-';
             document.getElementById('booking_confirmation_technician').textContent = technician?.name || props.technician_name || '-';
@@ -3865,6 +4137,10 @@
             bookingDetailStatus.classList.add('hidden');
         };
 
+        const bookingConfirmSuggestionLabel = () => bookingIsReplacementMode
+            ? 'Valider le replacement'
+            : 'Valider la prise du RDV';
+
         const requiresCrmServiceSelection = (props) => Boolean(
             props?.is_suggestion
             && props.crm_appointment_id
@@ -3923,14 +4199,14 @@
 
             hideDetailStatus();
             document.getElementById('booking_modal_kind').textContent = props.is_calendar_click
-                ? 'Placement depuis le calendrier'
-                : (isSuggestion ? 'Proposition de rendez-vous' : 'Rendez-vous place');
+                ? (bookingIsReplacementMode ? 'Replacement depuis le calendrier' : 'Placement depuis le calendrier')
+                : (isSuggestion ? 'Proposition de rendez-vous' : 'Rendez-vous placé');
             document.getElementById('booking_modal_title').textContent = props.service_label || event.title;
             document.getElementById('booking_modal_subtitle').textContent = props.is_calendar_click
                 ? 'Le RDV courant est repris; tu peux changer le technicien, l’heure et la durée avant validation.'
                 : (isSuggestion
-                ? 'Tu peux ajuster l’heure et la durée avant validation.'
-                : 'Detail du rendez-vous déjà place.');
+                ? (bookingIsReplacementMode ? 'Tu peux ajuster le replacement avant validation.' : 'Tu peux ajuster l’heure et la durée avant validation.')
+                : 'Détail du rendez-vous déjà placé.');
             document.getElementById('booking_detail_technician').textContent = props.technician_name || '-';
             document.getElementById('booking_detail_customer').textContent = props.customer_name || '-';
             document.getElementById('booking_detail_phone').textContent = props.customer_phone || '-';
@@ -3978,6 +4254,7 @@
             );
             bookingProblemSection?.classList.toggle('hidden', !canReportProblem);
             updateBookingDetailCommentButtonVisibility();
+            document.getElementById('booking-confirm-suggestion-btn').textContent = bookingConfirmSuggestionLabel();
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
 
@@ -4176,6 +4453,7 @@
                 const technicianId = String(event.extendedProps?.technician_id || '');
                 const color = currentTechnicianColors[technicianId] || '#31424c';
                 const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
+                const isReplacementTarget = Boolean(event.extendedProps?.is_replacement_target);
                 const travelBadges = isSuggestion ? travelBadgesForSuggestion(event) : [];
 
                 return {
@@ -4185,11 +4463,12 @@
                         booking_travel_badges: travelBadges,
                     },
                     backgroundColor: isSuggestion ? `${color}26` : color,
-                    borderColor: color,
+                    borderColor: isReplacementTarget ? '#faff00' : color,
                     textColor: isSuggestion ? color : '#ffffff',
                     classNames: [
                         ...(Array.isArray(event.classNames) ? event.classNames : []),
                         ...(isSuggestion ? ['appointment-suggestion'] : ['appointment-placed']),
+                        ...(isReplacementTarget ? ['appointment-replacement-target'] : []),
                         ...(isSuggestion && travelBadges.length > 0 ? ['appointment-has-travel-badges'] : []),
                     ],
                 };
@@ -4653,6 +4932,51 @@
             }
 
             window.setTimeout(() => analyzeCrmAppointment(bookingInitialCrmAppointmentId), 120);
+        }
+
+        bookingReplacementSearchForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            runBookingReplacementSearch();
+        });
+
+        bookingReplacementSearchReset?.addEventListener('click', () => {
+            bookingReplacementSearchAbortController?.abort();
+            if (bookingReplacementSearchQuery) bookingReplacementSearchQuery.value = '';
+            if (bookingReplacementSearchDateFrom) bookingReplacementSearchDateFrom.value = '';
+            if (bookingReplacementSearchDateTo) bookingReplacementSearchDateTo.value = '';
+            if (bookingReplacementSearchStatusFilter) bookingReplacementSearchStatusFilter.value = 'all';
+            bookingReplacementSearchResultEvents.clear();
+            if (bookingReplacementSearchSummary) bookingReplacementSearchSummary.textContent = 'Aucune recherche lancée.';
+            if (bookingReplacementSearchResults) {
+                bookingReplacementSearchResults.innerHTML = '<div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Lance une recherche pour afficher les RDV ici.</div>';
+            }
+            setBookingReplacementSearchStatus('');
+            window.TechCalendarForms?.refresh(bookingReplacementSearchForm);
+        });
+
+        bookingReplacementSearchResults?.addEventListener('click', (event) => {
+            const viewButton = event.target.closest('[data-booking-replacement-view]');
+            const replaceButton = event.target.closest('[data-booking-replacement-start]');
+
+            if (!viewButton && !replaceButton) return;
+
+            const appointmentId = viewButton?.dataset.bookingReplacementView || replaceButton?.dataset.bookingReplacementStart;
+            const appointmentEvent = bookingReplacementSearchResultEvents.get(String(appointmentId));
+
+            if (!appointmentEvent) return;
+
+            if (viewButton) {
+                openBookingAppointmentModal(appointmentEvent);
+                return;
+            }
+
+            startReplacementWorkflow(appointmentId);
+        });
+
+        if (bookingInitialReplaceAppointmentId) {
+            window.setTimeout(() => {
+                startReplacementWorkflow(bookingInitialReplaceAppointmentId);
+            }, 140);
         }
 
         technicianSearchInput.addEventListener('input', () => {
@@ -5124,7 +5448,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    const firstError = data?.errors ? Object.values(data.errors)[0][0] : data.message || 'Création impossible.';
+                    const firstError = data?.errors ? Object.values(data.errors)[0][0] : data.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.');
                     throw new Error(firstError);
                 }
 
@@ -5132,10 +5456,10 @@
                 closeBookingAppointmentModal();
                 showPlacementConfirmation(data, payload, confirmedEvent);
             } catch (error) {
-                showDetailStatus(error.message || 'Création impossible.', 'error');
+                showDetailStatus(error.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.'), 'error');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Valider la prise du RDV';
+                button.textContent = bookingConfirmSuggestionLabel();
             }
         });
 

@@ -51,7 +51,8 @@
                         ['route' => 'manager.mail-templates', 'label' => 'Templates de mails', 'icon' => 'mail'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
                         ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
-                        ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
+                        ['route' => 'manager.appointments', 'label' => 'Gestion des RDV', 'icon' => 'appointments'],
+                        ['route' => 'manager.appointments.modify', 'label' => 'Modifier un RDV', 'icon' => 'appointments'],
                     ],
                 ];
 
@@ -60,7 +61,8 @@
                     'items' => [
                         ['route' => 'planner.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'planner.book', 'label' => 'Prendre un rdv', 'icon' => 'book'],
-                        ['route' => 'planner.tracking', 'label' => 'Suivi des rdv', 'icon' => 'tracking'],
+                        ['route' => 'planner.tracking', 'label' => 'Suivi des RDV', 'icon' => 'tracking'],
+                        ['route' => 'planner.appointments.modify', 'label' => 'Modifier un RDV', 'icon' => 'appointments'],
                     ],
                 ];
             } elseif ($user->role === 0) {
@@ -73,7 +75,8 @@
                         ['route' => 'manager.mail-templates', 'label' => 'Templates de mails', 'icon' => 'mail'],
                         ['route' => 'manager.services', 'label' => 'Gestion des prestations', 'icon' => 'services'],
                         ['route' => 'manager.lots', 'label' => 'Gestion des lots', 'icon' => 'lots'],
-                        ['route' => 'manager.appointments', 'label' => 'Gestion des rdv', 'icon' => 'appointments'],
+                        ['route' => 'manager.appointments', 'label' => 'Gestion des RDV', 'icon' => 'appointments'],
+                        ['route' => 'manager.appointments.modify', 'label' => 'Modifier un RDV', 'icon' => 'appointments'],
                     ],
                 ];
             } elseif ($user->role === 1) {
@@ -82,7 +85,8 @@
                     'items' => [
                         ['route' => 'planner.dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
                         ['route' => 'planner.book', 'label' => 'Prendre un rdv', 'icon' => 'book'],
-                        ['route' => 'planner.tracking', 'label' => 'Suivi des rdv', 'icon' => 'tracking'],
+                        ['route' => 'planner.tracking', 'label' => 'Suivi des RDV', 'icon' => 'tracking'],
+                        ['route' => 'planner.appointments.modify', 'label' => 'Modifier un RDV', 'icon' => 'appointments'],
                     ],
                 ];
             }

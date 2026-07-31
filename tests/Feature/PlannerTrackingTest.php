@@ -36,8 +36,8 @@ it('renders the appointment mail composer on planner and manager tracking pages'
     $this->actingAs($planner)
         ->get(route('planner.tracking'))
         ->assertOk()
-        ->assertSee('Recherche de RDV')
-        ->assertSee('trackingSearchUrl')
+        ->assertDontSee('Recherche de RDV')
+        ->assertDontSee('id="tracking-search-form"', false)
         ->assertSee('Envoyer le mail')
         ->assertSee('tracking-mail-form')
         ->assertSee('Confirmation RDV');
@@ -45,11 +45,34 @@ it('renders the appointment mail composer on planner and manager tracking pages'
     $this->actingAs($manager)
         ->get(route('manager.appointments'))
         ->assertOk()
-        ->assertSee('Recherche de RDV')
-        ->assertSee('trackingSearchUrl')
+        ->assertDontSee('Recherche de RDV')
+        ->assertDontSee('id="tracking-search-form"', false)
         ->assertSee('Envoyer le mail')
         ->assertSee('tracking-mail-form')
         ->assertSee('Confirmation RDV');
+});
+
+it('renders the dedicated appointment replacement pages for planners and managers', function () {
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    $manager = User::factory()->create(['role' => 0, 'admin' => false]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.appointments.modify'))
+        ->assertOk()
+        ->assertSee('Modifier un RDV')
+        ->assertSee('Recherche de RDV à modifier')
+        ->assertSee('booking-replacement-search-form')
+        ->assertSee('data-booking-replacement-start', false)
+        ->assertSee('const bookingMode = "replace";', false);
+
+    $this->actingAs($manager)
+        ->get(route('manager.appointments.modify'))
+        ->assertOk()
+        ->assertSee('Modifier un RDV')
+        ->assertSee('Recherche de RDV à modifier')
+        ->assertSee('booking-replacement-search-form')
+        ->assertSee('data-booking-replacement-start', false)
+        ->assertSee(str_replace('/', '\/', route('manager.appointments.search')), false);
 });
 
 it('refreshes placed coffrac appointments from the tracking page', function () {

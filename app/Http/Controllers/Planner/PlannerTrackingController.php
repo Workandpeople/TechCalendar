@@ -62,7 +62,7 @@ class PlannerTrackingController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'type', 'name']),
             'section' => $request->routeIs('manager.appointments') ? 'Gérant' : 'Planning',
-            'title' => $request->routeIs('manager.appointments') ? 'Gestion des rdv' : 'Suivi des rdv',
+            'title' => $request->routeIs('manager.appointments') ? 'Gestion des RDV' : 'Suivi des RDV',
             'mapboxToken' => config('services.mapbox.token'),
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'mailTemplates' => $mailTemplates,

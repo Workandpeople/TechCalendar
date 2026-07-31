@@ -119,11 +119,13 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
+    Route::get('/manager/appointments/modify', [PlannerBookingController::class, 'index'])->name('manager.appointments.modify');
     Route::post('/manager/appointments/search', [PlannerTrackingController::class, 'search'])->name('manager.appointments.search');
     Route::post('/manager/appointments/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('manager.appointments.coffrac.placed.refresh');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
+    Route::get('/planner/appointments/modify', [PlannerBookingController::class, 'index'])->name('planner.appointments.modify');
     Route::get('/planner/book/crm-appointments', [PlannerBookingController::class, 'crmAppointments'])->name('planner.book.crm-appointments.index');
     Route::post('/planner/book/crm-appointments/refresh', [PlannerBookingController::class, 'refreshCrmAppointments'])->name('planner.book.crm-appointments.refresh');
     Route::post('/planner/book/crm-appointments/{crmAppointmentId}/refresh', [PlannerBookingController::class, 'refreshCrmAppointment'])->name('planner.book.crm-appointments.refresh-one');

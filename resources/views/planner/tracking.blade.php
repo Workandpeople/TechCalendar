@@ -117,47 +117,6 @@
                 </div>
             </div>
 
-            <div class="mt-6 rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-                    <div>
-                        <h3 class="text-base font-semibold" style="color:var(--gc-text);">Recherche de RDV</h3>
-                        <p class="text-sm" style="color:var(--gc-text-soft);">Retrouve rapidement un RDV par client, téléphone, adresse, référence, prestation ou technicien.</p>
-                    </div>
-                    <p id="tracking-search-summary" class="text-sm" style="color:var(--gc-text-soft);">Aucune recherche lancée.</p>
-                </div>
-
-                <form id="tracking-search-form" class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px_auto_auto]" data-validate-form>
-                    <div>
-                        <label class="gc-label" for="tracking_search_query">Recherche</label>
-                        <input id="tracking_search_query" type="search" maxlength="160" class="gc-input" placeholder="Client, téléphone, adresse, référence..." autocomplete="off" />
-                    </div>
-                    <div>
-                        <label class="gc-label" for="tracking_search_date_from">Du</label>
-                        <input id="tracking_search_date_from" type="date" class="gc-input" />
-                    </div>
-                    <div>
-                        <label class="gc-label" for="tracking_search_date_to">Au</label>
-                        <input id="tracking_search_date_to" type="date" class="gc-input" />
-                    </div>
-                    <button id="tracking-search-submit" type="submit" class="gc-btn-primary self-end">Rechercher</button>
-                    <button id="tracking-search-reset" type="button" class="gc-btn-soft self-end">Réinitialiser</button>
-                </form>
-
-                <div id="tracking-search-status" class="mt-3 hidden rounded-lg px-3 py-2 text-sm"></div>
-
-                <div class="mt-4 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);">
-                    <div class="hidden grid-cols-[1.2fr_1fr_1fr_1.4fr_92px] gap-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] lg:grid" style="border-color:var(--gc-border);color:var(--gc-text-soft);background:var(--gc-accent-soft);">
-                        <span>Client</span>
-                        <span>Technicien</span>
-                        <span>Date</span>
-                        <span>Prestation / adresse</span>
-                        <span class="text-right">Action</span>
-                    </div>
-                    <div id="tracking-search-results" class="divide-y" style="border-color:var(--gc-border);">
-                        <div class="px-4 py-5 text-sm" style="color:var(--gc-text-soft);">Lance une recherche pour afficher les RDV ici.</div>
-                    </div>
-                </div>
-            </div>
         </section>
     </div>
 

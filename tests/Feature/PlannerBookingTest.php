@@ -1962,6 +1962,111 @@ it('rejects booking creation during technician absence', function () {
     }
 });
 
+it('replaces an existing appointment through the booking workflow without creating a duplicate', function () {
+    config(['services.mapbox.token' => null]);
+    Mail::fake();
+    \Carbon\Carbon::setTestNow('2026-06-10 08:00:00');
+
+    try {
+        Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
+
+        $planner = User::factory()->create([
+            'role' => 1,
+            'admin' => false,
+        ]);
+        $service = Service::query()->create([
+            'type' => Service::TYPE_COFFRAC,
+            'name' => 'Contrôle à replacer',
+            'average_duration_minutes' => 90,
+        ]);
+        $originalTechnician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'first_name' => 'Paul',
+            'last_name' => 'Original',
+            'latitude' => 45.764,
+            'longitude' => 4.8357,
+            'day_start_time' => '08:00',
+            'day_end_time' => '19:00',
+            'break_duration_minutes' => 45,
+        ]);
+        $replacementTechnician = User::factory()->create([
+            'role' => 2,
+            'admin' => false,
+            'first_name' => 'Nina',
+            'last_name' => 'Remplaçante',
+            'latitude' => 45.75,
+            'longitude' => 4.85,
+            'day_start_time' => '08:00',
+            'day_end_time' => '19:00',
+            'break_duration_minutes' => 45,
+        ]);
+
+        $originalTechnician->services()->attach($service);
+        $replacementTechnician->services()->attach($service);
+        $originalTechnician->departments()->attach('69');
+        $replacementTechnician->departments()->attach('69');
+
+        $appointment = Appointment::query()->create([
+            'service_id' => $service->id,
+            'technician_id' => $originalTechnician->id,
+            'created_by' => $planner->id,
+            'customer_first_name' => 'Alice',
+            'customer_last_name' => 'Durand',
+            'customer_phone' => '0600000000',
+            'address' => '20 Place Bellecour, 69002 Lyon, France',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+            'starts_at' => '2026-06-12 14:00:00',
+            'duration_minutes' => 90,
+            'ends_at' => '2026-06-12 15:30:00',
+            'comment' => 'Ancien créneau',
+        ]);
+
+        $analysis = $this->actingAs($planner)
+            ->postJson(route('planner.book.analyze'), [
+                'replace_appointment_id' => $appointment->id,
+            ])
+            ->assertOk()
+            ->json();
+
+        $replacementEvent = collect($analysis['events'])->firstWhere('id', $appointment->id);
+
+        expect($analysis['crm_appointment']['replace_appointment_id'])->toBe($appointment->id)
+            ->and($replacementEvent)->not->toBeNull()
+            ->and($replacementEvent['borderColor'])->toBe('#faff00')
+            ->and($replacementEvent['extendedProps']['is_replacement_target'])->toBeTrue();
+
+        $this->actingAs($planner)
+            ->postJson(route('planner.book.appointments.store'), [
+                'replace_appointment_id' => $appointment->id,
+                'technician_id' => $replacementTechnician->id,
+                'starts_at' => '2026-06-13 09:30:00',
+                'duration_minutes' => 90,
+                'comment' => 'Replacement confirmé',
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Rendez-vous replacé.')
+            ->assertJsonPath('appointment_id', $appointment->id);
+
+        $appointment->refresh();
+
+        expect(Appointment::query()->count())->toBe(1)
+            ->and($appointment->technician_id)->toBe($replacementTechnician->id)
+            ->and($appointment->starts_at->format('Y-m-d H:i:s'))->toBe('2026-06-13 09:30:00')
+            ->and($appointment->comment)->toBe('Replacement confirmé');
+
+        Mail::assertQueued(
+            TechnicianAppointmentNotificationMail::class,
+            fn (TechnicianAppointmentNotificationMail $mail): bool => $mail->eventType === 'reassigned_to'
+                && $mail->hasTo($replacementTechnician->email)
+                && $mail->appointment->id === $appointment->id,
+        );
+    } finally {
+        \Carbon\Carbon::setTestNow();
+    }
+});
+
 it('places a coffrac appointment without service when a service is selected at validation time', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
