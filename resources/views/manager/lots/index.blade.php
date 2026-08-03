@@ -434,10 +434,13 @@
                                 @endforeach
                             </select>
                         </div>
-                        <label class="inline-flex items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
-                            <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
-                            <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
-                        </label>
+                        <div>
+                            <label class="gc-label" for="lot_global_plus">Option</label>
+                            <label class="mt-2 inline-flex w-full items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
+                                <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
+                            </label>
+                        </div>
                         <div id="lot-single-sampling-wrap">
                             <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
                             <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
