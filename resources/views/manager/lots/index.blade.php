@@ -139,7 +139,7 @@
                                 class="gc-btn-soft relative z-20 whitespace-nowrap lot-action-trigger"
                                 data-lot-id="{{ $lot['id'] }}"
                             >
-                                Actions
+                                Modifier
                             </button>
                         </div>
 
@@ -209,8 +209,8 @@
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Lot</p>
-                        <h2 id="lot-action-title" class="text-xl font-semibold" style="color:var(--gc-text);">Actions du lot</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Modifie les informations du lot ou supprime-le si aucun RDV n’a encore été placé.</p>
+                        <h2 id="lot-action-title" class="text-xl font-semibold" style="color:var(--gc-text);">Modifier le lot</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Modifie les informations du lot. Les admins peuvent aussi supprimer localement un lot déjà démarré.</p>
                     </div>
                     <button id="lot-action-close" type="button" class="gc-link">Fermer</button>
                 </div>
@@ -226,7 +226,17 @@
                             </div>
                             <div class="md:col-span-2">
                                 <label class="gc-label" for="lot_action_delegataire">Délégataire</label>
-                                <input id="lot_action_delegataire" name="delegataire" type="text" class="gc-input" maxlength="190" />
+                                <select id="lot_action_delegataire" name="delegataire" class="gc-input">
+                                    <option value="">Sélectionner</option>
+                                    @foreach ($delegataires as $delegataire)
+                                        <option value="{{ $delegataire->name }}">
+                                            {{ $delegataire->name }}
+                                            @if ($delegataire->company_name)
+                                                · {{ $delegataire->company_name }}
+                                            @endif
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div>
                                 <label class="gc-label" for="lot_action_type">Type de lot</label>
@@ -255,15 +265,15 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="md:col-span-2">
+                            <div id="lot-action-single-sampling-wrap" class="hidden md:col-span-2">
                                 <label class="gc-label" for="lot_action_sampling_percentage">% d'échantillonnage</label>
                                 <input id="lot_action_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Uniquement pour les lots échantillonnés" />
                             </div>
-                            <div>
+                            <div id="lot-action-physical-sampling-wrap" class="hidden">
                                 <label class="gc-label" for="lot_action_physical_sampling_percentage">% physique</label>
                                 <input id="lot_action_physical_sampling_percentage" name="physical_sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled />
                             </div>
-                            <div>
+                            <div id="lot-action-contact-sampling-wrap" class="hidden">
                                 <label class="gc-label" for="lot_action_contact_sampling_percentage">% contact</label>
                                 <input id="lot_action_contact_sampling_percentage" name="contact_sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled />
                             </div>
@@ -436,7 +446,7 @@
                         </div>
                         <div>
                             <label class="gc-label" for="lot_global_plus">Option</label>
-                            <label class="mt-2 inline-flex w-full items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <label class="inline-flex w-full items-center gap-3 rounded-xl border px-4 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
                                 <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
                                 <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
                             </label>
@@ -566,6 +576,7 @@
         let lotSearchTimer = null;
         const sampleLotTypes = @json(\App\Models\Lot::samplingTypes());
         const hybridLotType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
+        const canForceDeleteStartedLots = @json($canForceDeleteStartedLots);
         const resumedLotImport = @json($activeImportPreview);
         const lockedLotImportStatuses = ['pending', 'processing'];
         const lotData = new Map();
@@ -581,6 +592,9 @@
         const lotActionType = document.getElementById('lot_action_type');
         const lotActionServiceId = document.getElementById('lot_action_service_id');
         const lotActionStatus = document.getElementById('lot_action_status');
+        const lotActionSingleSamplingWrap = document.getElementById('lot-action-single-sampling-wrap');
+        const lotActionPhysicalSamplingWrap = document.getElementById('lot-action-physical-sampling-wrap');
+        const lotActionContactSamplingWrap = document.getElementById('lot-action-contact-sampling-wrap');
         const lotActionSamplingPercentage = document.getElementById('lot_action_sampling_percentage');
         const lotActionPhysicalSamplingPercentage = document.getElementById('lot_action_physical_sampling_percentage');
         const lotActionContactSamplingPercentage = document.getElementById('lot_action_contact_sampling_percentage');
@@ -751,8 +765,14 @@
             const currentType = lotActionType?.value;
             const needsSampling = isSamplingType(currentType);
             const needsHybridSampling = isHybridType(currentType);
+            const needsSingleSampling = needsSampling && !needsHybridSampling;
+
+            lotActionSingleSamplingWrap?.classList.toggle('hidden', !needsSingleSampling);
+            lotActionPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+            lotActionContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+
             lotActionSamplingPercentage.disabled = !needsSampling;
-            lotActionSamplingPercentage.required = needsSampling;
+            lotActionSamplingPercentage.required = needsSingleSampling;
             if (lotActionPhysicalSamplingPercentage) {
                 lotActionPhysicalSamplingPercentage.disabled = !needsHybridSampling;
                 lotActionPhysicalSamplingPercentage.required = needsHybridSampling;
@@ -762,12 +782,22 @@
                 lotActionContactSamplingPercentage.required = needsHybridSampling;
             }
 
-            if (!needsSampling) {
+            if (!needsSingleSampling) {
                 lotActionSamplingPercentage.value = '';
             }
             if (!needsHybridSampling) {
                 if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = '';
                 if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = '';
+            }
+        }
+
+        function ensureSelectOption(select, value, label = value) {
+            if (!select || !value) return;
+
+            const exists = Array.from(select.options).some((option) => option.value === value);
+
+            if (!exists) {
+                select.add(new Option(label, value));
             }
         }
 
@@ -779,7 +809,7 @@
             }
 
             currentLotAction = lot;
-            lotActionTitle.textContent = `Actions du lot ${lot.title || `#${lot.id}`}`;
+            lotActionTitle.textContent = `Modifier le lot ${lot.title || `#${lot.id}`}`;
             lotActionEditForm.action = lot.update_url;
             lotActionDeleteForm.action = lot.delete_url;
             lotActionName.value = lot.title || '';
@@ -790,6 +820,7 @@
             if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
             if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
             if (lotActionGlobalPlus) lotActionGlobalPlus.checked = Boolean(lot.global_plus);
+            ensureSelectOption(lotActionDelegataire, lot.delegataire || '');
             lotActionDelegataire.value = lot.delegataire || '';
             updateLotActionSamplingState();
 
@@ -797,9 +828,11 @@
             const contactProcessedCount = Number(lot.contact_processed_count || 0);
             const tracedCount = placedCount + contactProcessedCount;
             const appointmentsCount = Number(lot.appointments_count || 0);
-            lotActionDeleteSubmit.disabled = tracedCount > 0;
+            lotActionDeleteSubmit.disabled = tracedCount > 0 && !canForceDeleteStartedLots;
             lotActionDeleteNote.textContent = tracedCount > 0
-                ? `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`
+                ? (canForceDeleteStartedLots
+                    ? `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression locale autorisée pour admin, sans modification Coffrac.`
+                    : `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`)
                 : `${appointmentsCount} RDV non placé(s) seront supprimés avec ce lot.`;
 
             lotActionModal?.classList.remove('hidden');
@@ -816,16 +849,17 @@
             const currentType = lotImportType?.value;
             const needsSampling = isSamplingType(currentType);
             const needsHybridSampling = isHybridType(currentType);
+            const needsSingleSampling = needsSampling && !needsHybridSampling;
 
-            lotSingleSamplingWrap?.classList.toggle('hidden', needsHybridSampling);
+            lotSingleSamplingWrap?.classList.toggle('hidden', !needsSingleSampling);
             lotPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
             lotContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
 
             if (lotSamplingPercentage) {
-                lotSamplingPercentage.disabled = !needsSampling;
-                lotSamplingPercentage.required = needsSampling;
+                lotSamplingPercentage.disabled = !needsSingleSampling;
+                lotSamplingPercentage.required = needsSingleSampling;
 
-                if (!needsSampling) {
+                if (!needsSingleSampling) {
                     lotSamplingPercentage.value = '';
                 }
             }

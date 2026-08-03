@@ -103,7 +103,8 @@ it('renders manager lots from database', function () {
         ->assertSee('Voir le détail')
         ->assertSee(route('manager.lots.show', $lot), false)
         ->assertSee('RDV à placer')
-        ->assertSee('Actions du lot')
+        ->assertSee('Modifier le lot')
+        ->assertSee('Modifier')
         ->assertSee('Supprimer le lot')
         ->assertDontSee('Camille Martin');
 
@@ -246,6 +247,63 @@ it('blocks lot deletion when at least one appointment is already placed', functi
         'id' => $lot->id,
         'name' => 'Lot avec RDV placé',
     ]);
+});
+
+it('allows an admin to locally delete a started lot and linked appointments', function () {
+    $admin = User::factory()->create([
+        'role' => 0,
+        'admin' => true,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $startsAt = now()->copy()->addDay()->setTime(10, 0);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $admin->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Lot',
+        'customer_phone' => '0612345678',
+        'address' => '10 Rue de Test',
+        'latitude' => 45.75,
+        'longitude' => 4.83,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 120,
+        'ends_at' => $startsAt->copy()->addMinutes(120),
+        'external_source' => 'coffrac',
+        'external_reference' => 'remote-42',
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot démarré',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'created_by' => $admin->id,
+        'imported_at' => now(),
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'Client Lot',
+        'address' => '10 Rue de Test',
+        'status' => LotAppointment::STATUS_PLACED,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('manager.lots'))
+        ->delete(route('manager.lots.destroy', $lot))
+        ->assertRedirect(route('manager.lots'))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('status', 'Lot "Lot démarré" supprimé.');
+
+    $this->assertDatabaseMissing('lots', ['id' => $lot->id]);
+    $this->assertDatabaseMissing('lot_appointments', ['id' => $lotAppointment->id]);
+    $this->assertSoftDeleted('appointments', ['id' => $appointment->id]);
 });
 
 it('updates a persisted lot appointment and refreshes geocoding data', function () {

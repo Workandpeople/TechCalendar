@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -62,6 +64,7 @@ class ManagerLotController extends Controller
                 'contact_processed_count' => $statsLots->sum('contact_processed_count'),
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
+            'canForceDeleteStartedLots' => $this->canForceDeleteStartedLots($request),
             'mapboxToken' => config('services.mapbox.token'),
             'services' => Service::query()
                 ->orderBy('type')
@@ -216,6 +219,7 @@ class ManagerLotController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
+        $canForceDelete = $this->canForceDeleteStartedLots($request);
         $placedAppointmentsCount = $lot->appointments()
             ->where(function (Builder $query): void {
                 $query
@@ -225,7 +229,7 @@ class ManagerLotController extends Controller
             })
             ->count();
 
-        if ($placedAppointmentsCount > 0) {
+        if ($placedAppointmentsCount > 0 && ! $canForceDelete) {
             return back()->withErrors([
                 'lot' => sprintf(
                     'Impossible de supprimer ce lot: %d RDV est/sont déjà placé(s).',
@@ -237,8 +241,24 @@ class ManagerLotController extends Controller
         $lotName = $lot->name;
         $originalFileDisk = $lot->original_file_disk;
         $originalFilePath = $lot->original_file_path;
+        $appointmentIds = $canForceDelete
+            ? $lot->appointments()
+                ->whereNotNull('appointment_id')
+                ->pluck('appointment_id')
+                ->filter()
+                ->unique()
+                ->values()
+            : collect();
 
-        $lot->delete();
+        DB::transaction(function () use ($lot, $appointmentIds): void {
+            if ($appointmentIds->isNotEmpty()) {
+                Appointment::query()
+                    ->whereKey($appointmentIds->all())
+                    ->delete();
+            }
+
+            $lot->delete();
+        });
 
         if (filled($originalFileDisk) && filled($originalFilePath)) {
             Storage::disk($originalFileDisk)->delete($originalFilePath);
@@ -887,6 +907,11 @@ class ManagerLotController extends Controller
         $user = $request->user();
 
         return (bool) $user && ($user->admin || $user->role === 0);
+    }
+
+    private function canForceDeleteStartedLots(Request $request): bool
+    {
+        return (bool) $request->user()?->admin;
     }
 
     private function isPlacedLotAppointment(LotAppointment $appointment): bool
