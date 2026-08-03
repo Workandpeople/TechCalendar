@@ -19,7 +19,18 @@ class LotExcelImportService
     ) {
     }
 
-    public function import(UploadedFile $file, int $userId, ?string $requestedLotName = null, ?string $lotType = null, ?float $samplingPercentage = null, ?string $source = null, ?string $delegataire = null): Lot
+    public function import(
+        UploadedFile $file,
+        int $userId,
+        ?string $requestedLotName = null,
+        ?string $lotType = null,
+        ?float $samplingPercentage = null,
+        ?string $source = null,
+        ?string $delegataire = null,
+        ?float $physicalSamplingPercentage = null,
+        ?float $contactSamplingPercentage = null,
+        bool $globalPlus = false,
+    ): Lot
     {
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
@@ -27,14 +38,17 @@ class LotExcelImportService
         $storedFile = $this->storeOriginalFile($file);
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $rows, $normalized, $rawRowsByNumber, $storedFile): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $globalPlus, $rows, $normalized, $rawRowsByNumber, $storedFile): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
                     'status' => Lot::STATUS_NOT_STARTED,
                     'sampling_percentage' => $samplingPercentage,
+                    'physical_sampling_percentage' => $physicalSamplingPercentage,
+                    'contact_sampling_percentage' => $contactSamplingPercentage,
                     'source' => filled($source) ? trim((string) $source) : null,
                     'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
+                    'global_plus' => $globalPlus,
                     'original_filename' => $file->getClientOriginalName(),
                     'original_file_disk' => $storedFile['disk'],
                     'original_file_path' => $storedFile['path'],

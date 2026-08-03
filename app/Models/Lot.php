@@ -12,8 +12,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'type',
     'status',
     'sampling_percentage',
+    'physical_sampling_percentage',
+    'contact_sampling_percentage',
     'source',
     'delegataire',
+    'global_plus',
     'original_filename',
     'original_file_disk',
     'original_file_path',
@@ -34,6 +37,7 @@ class Lot extends Model
     public const TYPE_SAMPLE_CONTACT_CONTROL = 'echantillonage controle contact';
     public const TYPE_FULL_CONTROL = '100% controle';
     public const TYPE_SAMPLE_CONTROL = 'echantillonage controle';
+    public const TYPE_HYBRID_LOCATION_CONTACT = 'hybride sur lieu/contact';
 
     public const STATUS_NOT_STARTED = 'a_commencer';
     public const STATUS_IN_PROGRESS = 'en_cours';
@@ -49,6 +53,7 @@ class Lot extends Model
             self::TYPE_SAMPLE_CONTACT_CONTROL => 'Échantillonnage contrôle contact',
             self::TYPE_FULL_CONTROL => '100% contrôle',
             self::TYPE_SAMPLE_CONTROL => 'Échantillonnage contrôle',
+            self::TYPE_HYBRID_LOCATION_CONTACT => 'Hybride sur lieu/contact',
         ];
     }
 
@@ -80,6 +85,67 @@ class Lot extends Model
         return in_array($type, self::samplingTypes(), true);
     }
 
+    public static function requiresPhysicalSamplingPercentageFor(?string $type): bool
+    {
+        return in_array($type, [self::TYPE_SAMPLE_CONTROL, self::TYPE_HYBRID_LOCATION_CONTACT], true);
+    }
+
+    public static function requiresContactSamplingPercentageFor(?string $type): bool
+    {
+        return in_array($type, [self::TYPE_SAMPLE_CONTACT_CONTROL, self::TYPE_HYBRID_LOCATION_CONTACT], true);
+    }
+
+    public function isContactOnly(): bool
+    {
+        return in_array($this->type, [self::TYPE_FULL_CONTACT_CONTROL, self::TYPE_SAMPLE_CONTACT_CONTROL], true);
+    }
+
+    public function isPhysicalOnly(): bool
+    {
+        return in_array($this->type, [self::TYPE_FULL_CONTROL, self::TYPE_SAMPLE_CONTROL], true);
+    }
+
+    public function isHybrid(): bool
+    {
+        return $this->type === self::TYPE_HYBRID_LOCATION_CONTACT;
+    }
+
+    public function supportsContactProcessing(): bool
+    {
+        return $this->isContactOnly() || $this->isHybrid();
+    }
+
+    public function supportsPhysicalProcessing(): bool
+    {
+        return $this->isPhysicalOnly() || $this->isHybrid();
+    }
+
+    public function physicalSamplingPercentage(): ?float
+    {
+        if ($this->isHybrid()) {
+            return $this->physical_sampling_percentage !== null
+                ? (float) $this->physical_sampling_percentage
+                : null;
+        }
+
+        return $this->type === self::TYPE_SAMPLE_CONTROL && $this->sampling_percentage !== null
+            ? (float) $this->sampling_percentage
+            : null;
+    }
+
+    public function contactSamplingPercentage(): ?float
+    {
+        if ($this->isHybrid()) {
+            return $this->contact_sampling_percentage !== null
+                ? (float) $this->contact_sampling_percentage
+                : null;
+        }
+
+        return $this->type === self::TYPE_SAMPLE_CONTACT_CONTROL && $this->sampling_percentage !== null
+            ? (float) $this->sampling_percentage
+            : null;
+    }
+
     public function appointments(): HasMany
     {
         return $this->hasMany(LotAppointment::class);
@@ -107,6 +173,9 @@ class Lot extends Model
             'imported_rows' => 'integer',
             'rejected_rows' => 'integer',
             'sampling_percentage' => 'float',
+            'physical_sampling_percentage' => 'float',
+            'contact_sampling_percentage' => 'float',
+            'global_plus' => 'boolean',
             'original_file_size' => 'integer',
             'import_summary' => 'array',
             'imported_at' => 'datetime',

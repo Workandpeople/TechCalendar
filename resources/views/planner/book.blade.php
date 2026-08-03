@@ -369,9 +369,16 @@
                                     <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
                                         {{ $lot['status_label'] }}
                                     </span>
+                                    @if ($lot['is_hybrid'])
+                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">Hybride</span>
+                                    @elseif ($lot['supports_contact'])
+                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;">Contact</span>
+                                    @else
+                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">Physique</span>
+                                    @endif
                                 </div>
                                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à placer · {{ $lot['placed_count'] }} places
+                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à traiter · {{ $lot['placed_count'] }} placés · {{ $lot['contact_processed_count'] }} contacts
                                     @if ($lot['imported_at'])
                                         · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                     @endif
@@ -400,6 +407,9 @@
                             @foreach ($lot['appointments'] as $appointment)
                                 @php
                                     $isPlaced = (bool) $appointment['is_placed'];
+                                    $isContactProcessed = (bool) ($appointment['is_contact_processed'] ?? false);
+                                    $canContact = (bool) ($appointment['can_contact'] ?? false);
+                                    $canSearch = (bool) ($appointment['can_search'] ?? false);
                                     $appointmentPostalCity = trim(implode(' ', array_filter([
                                         $appointment['postal_code'] ?? null,
                                         $appointment['city'] ?? null,
@@ -413,12 +423,20 @@
                                         $appointmentFullAddress .= ', '.$appointmentPostalCity;
                                     }
                                 @endphp
-                                <article class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(280px,auto)] xl:items-center" style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};">
+                                <article
+                                    class="lot-appointment-row grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(320px,auto)] xl:items-center"
+                                    style="border-color:{{ $isPlaced ? '#bbf7d0' : ($isContactProcessed ? '#bae6fd' : 'var(--gc-border)') }};background:{{ $isPlaced ? '#f0fdf4' : ($isContactProcessed ? '#f0f9ff' : '#ffffff') }};"
+                                    data-lot-appointment-row="{{ $appointment['id'] }}"
+                                    data-default-processing-mode="{{ $lot['supports_physical'] ? 'physical' : 'contact' }}"
+                                >
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
                                             @if ($isPlaced)
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
+                                            @endif
+                                            @if ($isContactProcessed)
+                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;">Contact traité</span>
                                             @endif
                                             @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A vérifier</span>
@@ -473,35 +491,76 @@
                                                 </span>
                                             @endif
                                         </div>
+                                    @elseif ($isContactProcessed)
+                                        <div class="rounded-xl border p-3 text-sm" style="border-color:#bae6fd;background:#ffffff;color:var(--gc-text);">
+                                            <p class="font-semibold">
+                                                {{ $appointment['contact_satisfaction'] ? 'Satisfaisant' : 'Non satisfaisant' }}
+                                            </p>
+                                            @if (! empty($appointment['contact_comment']))
+                                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $appointment['contact_comment'] }}</p>
+                                            @endif
+                                        </div>
                                     @else
-                                        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                            <div>
-                                                <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
-                                                <select
-                                                    id="lot_appointment_service_{{ $appointment['id'] }}"
-                                                    class="gc-input lot-appointment-service-select"
-                                                    data-lot-appointment-id="{{ $appointment['id'] }}"
-                                                    data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
-                                                    @disabled(! $appointment['can_search'])
-                                                >
-                                                    <option value="">Sélectionner</option>
-                                                    @foreach ($services as $service)
-                                                        <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
-                                                            {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </div>
+                                        <div class="space-y-3">
+                                            @if ($lot['is_hybrid'])
+                                                <label class="inline-flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">Traitement physique</span>
+                                                    <span class="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-200 transition">
+                                                        <input type="checkbox" class="lot-processing-mode-switch peer sr-only" data-lot-appointment-id="{{ $appointment['id'] }}">
+                                                        <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-5 peer-checked:bg-[color:var(--gc-primary)]"></span>
+                                                    </span>
+                                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">Téléphone</span>
+                                                </label>
+                                            @endif
 
-                                            <button
-                                                type="button"
-                                                class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
-                                                data-lot-appointment-id="{{ $appointment['id'] }}"
-                                                data-can-search="{{ $appointment['can_search'] ? '1' : '0' }}"
-                                                disabled
-                                            >
-                                                Placer le RDV
-                                            </button>
+                                            @if ($lot['supports_physical'])
+                                                <div class="lot-processing-panel lot-processing-physical-panel grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-lot-appointment-id="{{ $appointment['id'] }}">
+                                                    <div>
+                                                        <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
+                                                        <select
+                                                            id="lot_appointment_service_{{ $appointment['id'] }}"
+                                                            class="gc-input lot-appointment-service-select"
+                                                            data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                            data-can-search="{{ $canSearch ? '1' : '0' }}"
+                                                            @disabled(! $canSearch)
+                                                        >
+                                                            <option value="">Sélectionner</option>
+                                                            @foreach ($services as $service)
+                                                                <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
+                                                                    {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
+                                                        @unless ($canSearch)
+                                                            <p class="mt-1 text-xs" style="color:#be123c;">Adresse/GPS incomplet: corrige le dossier avant placement physique.</p>
+                                                        @endunless
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+                                                        data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                        data-can-search="{{ $canSearch ? '1' : '0' }}"
+                                                        disabled
+                                                    >
+                                                        Placer le RDV
+                                                    </button>
+                                                </div>
+                                            @endif
+
+                                            @if ($lot['supports_contact'])
+                                                <div class="lot-processing-panel lot-processing-contact-panel {{ $lot['supports_physical'] ? 'hidden' : '' }} rounded-xl border p-3" data-lot-appointment-id="{{ $appointment['id'] }}" style="border-color:#bae6fd;background:#f0f9ff;">
+                                                    <p class="text-sm" style="color:var(--gc-text);">Traitement téléphonique: commentaire et résultat uniquement, sans création Coffrac.</p>
+                                                    <button
+                                                        type="button"
+                                                        class="lot-appointment-contact-button gc-btn-soft mt-3 justify-center"
+                                                        data-contact-url="{{ $appointment['contact_url'] }}"
+                                                        data-customer-name="{{ $appointment['company_name'] ?: $appointment['customer_name'] }}"
+                                                    >
+                                                        Traiter par téléphone
+                                                    </button>
+                                                </div>
+                                            @endif
                                         </div>
                                     @endif
                                 </article>
@@ -902,6 +961,44 @@
                     </form>
                 </section>
             </div>
+        </div>
+    </div>
+
+    <div id="booking-lot-contact-modal" class="gc-modal hidden">
+        <div class="gc-modal-panel max-w-2xl">
+            <div class="gc-appointment-modal-header">
+                <div>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Traitement téléphonique</p>
+                    <h2 id="booking_lot_contact_title" class="text-xl font-semibold" style="color:var(--gc-text);">Dossier du lot</h2>
+                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ce traitement reste local à TechCalendar et fait avancer le taux de satisfaction contact.</p>
+                </div>
+                <button type="button" id="booking-lot-contact-close" class="gc-link">Fermer</button>
+            </div>
+
+            <form id="booking-lot-contact-form" class="space-y-4 p-5">
+                <div>
+                    <label class="gc-label" for="booking_lot_contact_satisfaction">Résultat du contact</label>
+                    <select id="booking_lot_contact_satisfaction" class="gc-input" required>
+                        <option value="">Sélectionner</option>
+                        <option value="1">Satisfaisant</option>
+                        <option value="0">Non satisfaisant</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="gc-label" for="booking_lot_contact_comment">Commentaire</label>
+                    <textarea id="booking_lot_contact_comment" class="gc-input min-h-[130px]" maxlength="2000" required placeholder="Résumé de l’appel, éléments constatés, suite à donner..."></textarea>
+                </div>
+
+                <p id="booking_lot_contact_status" class="hidden text-sm"></p>
+
+                <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                    <button id="booking-lot-contact-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                    <button id="booking-lot-contact-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+                        Enregistrer le contact
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 

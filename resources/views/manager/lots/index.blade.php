@@ -1,11 +1,16 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des lots</h1>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                Un lot regroupe des RDV à placer depuis un fichier d’import. Les colonnes sont normalisées par OpenAI pour absorber les variations de format.
-            </p>
+        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+                <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
+                <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des lots</h1>
+                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
+                    Un lot regroupe des dossiers à traiter depuis un fichier d’import, avec suivi physique, contact ou hybride.
+                </p>
+            </div>
+            <button id="lot-import-form-open" type="button" class="gc-btn-primary justify-center">
+                Importer un lot
+            </button>
         </div>
 
         @if (session('status'))
@@ -17,57 +22,6 @@
                 {{ $errors->first() }}
             </div>
         @endif
-
-        <section class="gc-card p-5">
-            <div class="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Import</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Ajouter un lot par fichier</h2>
-                    <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportés: .xlsx, .csv et .txt. Le fichier original est conservé en stockage privé après import.</p>
-                </div>
-            </div>
-
-            <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_220px_280px_180px_auto] xl:items-end">
-                @csrf
-                <div id="lot-file-field">
-                    <label class="gc-label" for="lot_file">Fichier du lot</label>
-                    <input id="lot_file" name="file" type="file" class="gc-input" accept=".xlsx,.csv,.txt" required />
-                    <p id="lot-file-selected" class="mt-1 hidden text-xs font-medium" style="color:#047857;"></p>
-                </div>
-                <div>
-                    <label class="gc-label" for="lot_name">Nom du lot</label>
-                    <input id="lot_name" name="name" type="text" value="{{ old('name') }}" class="gc-input" placeholder="Optionnel" />
-                </div>
-                <div>
-                    <label class="gc-label" for="lot_delegataire">Délégataire</label>
-                    <select id="lot_delegataire" name="delegataire_id" class="gc-input" required>
-                        <option value="">Sélectionner</option>
-                        @foreach ($delegataires as $delegataire)
-                            <option value="{{ $delegataire->id }}" @selected((string) old('delegataire_id') === (string) $delegataire->id)>
-                                {{ $delegataire->name }}{{ $delegataire->email ? ' · '.$delegataire->email : '' }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @if ($delegataires->isEmpty())
-                        <p class="mt-1 text-xs" style="color:#9f1239;">Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.</p>
-                    @endif
-                </div>
-                <div>
-                    <label class="gc-label" for="lot_type">Type de lot</label>
-                    <select id="lot_type" name="type" class="gc-input" required>
-                        <option value="">Sélectionner</option>
-                        @foreach ($lotTypes as $typeValue => $typeLabel)
-                            <option value="{{ $typeValue }}" @selected(old('type') === $typeValue)>{{ $typeLabel }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
-                    <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
-                </div>
-                <button id="lot-import-submit" type="submit" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled>Importer</button>
-            </form>
-        </section>
 
         <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
@@ -122,190 +76,110 @@
             </form>
         </section>
 
-        <section class="space-y-3">
+        <section class="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             @forelse ($lots as $lot)
-                <details class="lot-details overflow-hidden rounded-2xl border bg-white shadow-sm" style="border-color:var(--gc-border);">
-                    <summary class="flex cursor-pointer list-none flex-col gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] lg:flex-row lg:items-center lg:justify-between">
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <h2 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h2>
-                                @if ($lot['type_label'])
-                                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">
-                                        {{ $lot['type_label'] }}
-                                    </span>
-                                @endif
-                                <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
-                                    {{ $lot['status_label'] }}
-                                </span>
-                            </div>
-                            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à placer · {{ $lot['placed_count'] }} placés
-                                @if ($lot['delegataire'])
-                                    · Délégataire : {{ $lot['delegataire'] }}
-                                @endif
-                                @if ($lot['imported_at'])
-                                    · Importé {{ $lot['imported_at']->format('d/m/Y H:i') }}
-                                @endif
-                            </p>
-                        </div>
+                @php
+                    $lotActionPayload = [
+                        'id' => $lot['id'],
+                        'title' => $lot['title'],
+                        'type' => $lot['type'],
+                        'status' => $lot['status'],
+                        'sampling_percentage' => $lot['sampling_percentage'],
+                        'physical_sampling_percentage' => $lot['physical_sampling_percentage'],
+                        'contact_sampling_percentage' => $lot['contact_sampling_percentage'],
+                        'global_plus' => $lot['global_plus'],
+                        'delegataire' => $lot['delegataire'],
+                        'appointments_count' => $lot['appointments_count'],
+                        'placed_count' => $lot['placed_count'],
+                        'contact_processed_count' => $lot['contact_processed_count'],
+                        'update_url' => $lot['update_url'],
+                        'delete_url' => $lot['delete_url'],
+                    ];
+                    $chartItems = collect([
+                        $lot['auto_completion']['physical'] ?? null,
+                        $lot['auto_completion']['contact'] ?? null,
+                    ])->filter()->values();
 
-                        <div class="flex w-full shrink-0 items-center gap-3 lg:w-auto">
-                            <div class="min-w-[220px] flex-1 lg:w-64 lg:flex-none">
-                                <div class="mb-1 flex items-center justify-between gap-3">
-                                    <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Auto-completion</span>
-                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $lot['auto_completion']['percentage'] }}%</span>
+                    if ($chartItems->isEmpty()) {
+                        $chartItems = collect([$lot['auto_completion']]);
+                    }
+                @endphp
+                <article class="lot-card group relative overflow-hidden rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg" style="border-color:var(--gc-border);">
+                    <a href="{{ $lot['show_url'] }}" class="absolute inset-0 z-0" aria-label="Voir le détail du lot {{ $lot['title'] }}"></a>
+                    <div class="relative z-10 flex h-full flex-col gap-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0">
+                                <div class="mb-2 flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
+                                        {{ $lot['status_label'] }}
+                                    </span>
+                                    @if ($lot['global_plus'])
+                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">Global +</span>
+                                    @endif
                                 </div>
-                                <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-                                    <div class="h-full rounded-full transition-all" style="width:{{ $lot['auto_completion']['percentage'] }}%;background:var(--gc-primary);"></div>
-                                </div>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lot['auto_completion']['detail'] }}</p>
+                                <h2 class="truncate text-xl font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h2>
+                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $lot['type_label'] }}</p>
+                                @if ($lot['delegataire'])
+                                    <p class="mt-1 truncate text-xs" style="color:var(--gc-text-soft);">Délégataire : {{ $lot['delegataire'] }}</p>
+                                @endif
                             </div>
                             <button
                                 type="button"
-                                class="gc-btn-soft whitespace-nowrap lot-action-trigger"
+                                class="gc-btn-soft relative z-20 whitespace-nowrap lot-action-trigger"
                                 data-lot-id="{{ $lot['id'] }}"
                             >
                                 Actions
                             </button>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
                         </div>
-                    </summary>
-                    @php
-                        $lotActionPayload = [
-                            'id' => $lot['id'],
-                            'title' => $lot['title'],
-                            'type' => $lot['type'],
-                            'status' => $lot['status'],
-                            'sampling_percentage' => $lot['sampling_percentage'],
-                            'delegataire' => $lot['delegataire'],
-                            'appointments_count' => $lot['appointments_count'],
-                            'placed_count' => $lot['placed_count'],
-                            'update_url' => $lot['update_url'],
-                            'delete_url' => $lot['delete_url'],
-                        ];
-                    @endphp
+
+                        <div class="grid grid-cols-3 gap-3 text-center">
+                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <p class="text-xs" style="color:var(--gc-text-soft);">Total</p>
+                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['appointments_count'] }}</p>
+                            </div>
+                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <p class="text-xs" style="color:var(--gc-text-soft);">Physiques</p>
+                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['placed_count'] }}</p>
+                            </div>
+                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <p class="text-xs" style="color:var(--gc-text-soft);">Contacts</p>
+                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['contact_processed_count'] }}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-{{ $chartItems->count() > 1 ? '2' : '1' }} gap-4">
+                            @foreach ($chartItems as $chart)
+                                @php($percentage = (int) ($chart['percentage'] ?? 0))
+                                <div class="rounded-2xl border p-4 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
+                                    <div class="lot-chart-ring mx-auto" style="--value:{{ $percentage }};">
+                                        <span>{{ $percentage }}%</span>
+                                    </div>
+                                    <p class="mt-3 text-sm font-semibold capitalize" style="color:var(--gc-text);">{{ $chart['label'] ?? 'Lot' }}</p>
+                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $chart['detail'] ?? '' }}</p>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t pt-4" style="border-color:var(--gc-border);">
+                            <div class="min-w-0 text-xs" style="color:var(--gc-text-soft);">
+                                @if ($lot['original_filename'])
+                                    <span class="truncate">{{ $lot['original_filename'] }}</span>
+                                @else
+                                    <span>Fichier original non renseigné</span>
+                                @endif
+                                @if ($lot['imported_at'])
+                                    <span> · {{ $lot['imported_at']->format('d/m/Y H:i') }}</span>
+                                @endif
+                            </div>
+                            <span class="text-sm font-semibold" style="color:var(--gc-primary);">Voir le détail</span>
+                        </div>
+                    </div>
                     <script type="application/json" data-lot-json="{{ $lot['id'] }}">
                         @json($lotActionPayload)
                     </script>
-
-                    <div class="border-t" style="border-color:var(--gc-border);">
-                        @if ($lot['type_label'] || $lot['original_filename'])
-                            <div class="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center md:justify-between" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        @if ($lot['type_label'])
-                                            <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">Type: {{ $lot['type_label'] }}</span>
-                                        @endif
-                                        @if ($lot['original_filename'])
-                                            <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
-                                                Fichier: {{ $lot['original_filename'] }}
-                                                @if ($lot['original_file_size'])
-                                                    · {{ number_format($lot['original_file_size'] / 1024, 1, ',', ' ') }} Ko
-                                                @endif
-                                            </span>
-                                        @endif
-                                    </div>
-                                </div>
-
-                                @if ($lot['can_download_original_file'])
-                                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex justify-center">
-                                        Télécharger le fichier original
-                                    </a>
-                                @endif
-                            </div>
-                        @endif
-
-                        <div class="grid grid-cols-1">
-                            @foreach ($lot['appointments'] as $appointment)
-                                @php
-                                    $isPlaced = (bool) $appointment['is_placed'];
-                                    $appointmentLocation = trim(implode(' ', array_filter([
-                                        $appointment['postal_code'] ?? null,
-                                        $appointment['city'] ?? null,
-                                    ])));
-                                @endphp
-                                <article
-                                    class="grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_auto] xl:items-center"
-                                    data-lot-appointment-row="{{ $appointment['id'] }}"
-                                    style="border-color:{{ $isPlaced ? '#bbf7d0' : 'var(--gc-border)' }};background:{{ $isPlaced ? '#f0fdf4' : '#ffffff' }};"
-                                >
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span data-lot-appointment-department class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
-                                            @if ($isPlaced)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
-                                            @endif
-                                            @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">À vérifier</span>
-                                            @endif
-                                        </div>
-                                        @php
-                                            $appointmentBusiness = trim(implode(' · ', array_filter([
-                                                ! empty($appointment['company_name']) ? 'Raison sociale : '.$appointment['company_name'] : null,
-                                                ! empty($appointment['site_name']) ? 'Site : '.$appointment['site_name'] : null,
-                                            ])));
-                                        @endphp
-                                        <h3 data-lot-appointment-customer class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h3>
-                                        <p data-lot-appointment-business class="{{ $appointmentBusiness === '' ? 'hidden ' : '' }}mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $appointmentBusiness }}</p>
-                                        <p data-lot-appointment-phone class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
-                                    </div>
-
-                                    <div class="min-w-0">
-                                        <p data-lot-appointment-address class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointment['address'] ?: 'Adresse à qualifier' }}</p>
-                                        <p data-lot-appointment-location class="{{ $appointmentLocation === '' ? 'hidden ' : '' }}mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointmentLocation }}</p>
-                                        <p data-lot-appointment-reference class="mt-1 text-xs" style="color:var(--gc-text-soft);">
-                                            @if ($appointment['external_reference'])
-                                                Réf. {{ $appointment['external_reference'] }}
-                                            @elseif ($appointment['row_number'])
-                                                Ligne fichier {{ $appointment['row_number'] }}
-                                            @else
-                                                RDV lot #{{ $appointment['id'] }}
-                                            @endif
-                                        </p>
-                                        <p data-lot-appointment-warnings class="{{ empty($appointment['ai_warnings']) ? 'hidden ' : '' }}mt-1 text-xs" style="color:#b45309;">{{ implode(' · ', $appointment['ai_warnings']) }}</p>
-                                        @if ($isPlaced)
-                                            <p class="mt-2 text-xs" style="color:#15803d;">
-                                                {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignée' }}
-                                                @if ($appointment['placed_technician_name'])
-                                                    · {{ $appointment['placed_technician_name'] }}
-                                                @endif
-                                                @if ($appointment['placed_service_label'])
-                                                    · {{ $appointment['placed_service_label'] }}
-                                                @endif
-                                            </p>
-                                        @endif
-                                    </div>
-
-                                    <div class="flex flex-wrap justify-start gap-2 xl:justify-end">
-                                        <button
-                                            type="button"
-                                            class="gc-btn-soft whitespace-nowrap lot-appointment-edit-trigger"
-                                            data-lot-appointment-id="{{ $appointment['id'] }}"
-                                        >
-                                            Modifier
-                                        </button>
-                                        @if ($isPlaced && $appointment['tracking_url'])
-                                            <a href="{{ $appointment['tracking_url'] }}" class="gc-btn-soft whitespace-nowrap">
-                                                Voir le RDV
-                                            </a>
-                                        @elseif ($isPlaced)
-                                            <span class="rounded-lg border px-3 py-2 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                                                RDV indisponible
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <script type="application/json" data-lot-appointment-json="{{ $appointment['id'] }}">
-                                        @json($appointment)
-                                    </script>
-                                </article>
-                            @endforeach
-                        </div>
-                    </div>
-                </details>
+                </article>
             @empty
-                <div class="rounded-2xl border border-dashed p-8 text-center" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                <div class="rounded-2xl border border-dashed p-8 text-center xl:col-span-2 2xl:col-span-3" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
                     Aucun lot ne correspond aux filtres.
                 </div>
             @endforelse
@@ -355,6 +229,18 @@
                                 <label class="gc-label" for="lot_action_sampling_percentage">% d'échantillonnage</label>
                                 <input id="lot_action_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Uniquement pour les lots échantillonnés" />
                             </div>
+                            <div>
+                                <label class="gc-label" for="lot_action_physical_sampling_percentage">% physique</label>
+                                <input id="lot_action_physical_sampling_percentage" name="physical_sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled />
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_action_contact_sampling_percentage">% contact</label>
+                                <input id="lot_action_contact_sampling_percentage" name="contact_sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled />
+                            </div>
+                            <label class="md:col-span-2 inline-flex items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <input id="lot_action_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" />
+                                <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
+                            </label>
                         </div>
                         <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
                             <button id="lot-action-cancel" type="button" class="gc-btn-soft">Annuler</button>
@@ -461,6 +347,78 @@
             </div>
         </div>
 
+        <div id="lot-import-form-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Nouveau lot</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Importer un lot</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportés : .xlsx, .csv et .txt. Le nombre de lignes sera recalculé pendant la normalisation IA.</p>
+                    </div>
+                    <button id="lot-import-form-close" type="button" class="gc-link">Fermer</button>
+                </div>
+
+                <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="space-y-5 overflow-y-auto p-5">
+                    @csrf
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div id="lot-file-field" class="xl:col-span-2">
+                            <label class="gc-label" for="lot_file">Fichier du lot</label>
+                            <input id="lot_file" name="file" type="file" class="gc-input" accept=".xlsx,.csv,.txt" required />
+                            <p id="lot-file-selected" class="mt-1 hidden text-xs font-medium" style="color:#047857;"></p>
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_name">Nom du lot</label>
+                            <input id="lot_name" name="name" type="text" value="{{ old('name') }}" class="gc-input" placeholder="Optionnel" />
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_delegataire">Délégataire</label>
+                            <select id="lot_delegataire" name="delegataire_id" class="gc-input" required>
+                                <option value="">Sélectionner</option>
+                                @foreach ($delegataires as $delegataire)
+                                    <option value="{{ $delegataire->id }}" @selected((string) old('delegataire_id') === (string) $delegataire->id)>
+                                        {{ $delegataire->name }}{{ $delegataire->email ? ' · '.$delegataire->email : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @if ($delegataires->isEmpty())
+                                <p class="mt-1 text-xs" style="color:#9f1239;">Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.</p>
+                            @endif
+                        </div>
+                        <div>
+                            <label class="gc-label" for="lot_type">Type de lot</label>
+                            <select id="lot_type" name="type" class="gc-input" required>
+                                <option value="">Sélectionner</option>
+                                @foreach ($lotTypes as $typeValue => $typeLabel)
+                                    <option value="{{ $typeValue }}" @selected(old('type') === $typeValue)>{{ $typeLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <label class="inline-flex items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
+                            <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
+                        </label>
+                        <div id="lot-single-sampling-wrap">
+                            <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
+                            <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
+                        </div>
+                        <div id="lot-physical-sampling-wrap" class="hidden">
+                            <label class="gc-label" for="lot_physical_sampling_percentage">% échantillonnage physique</label>
+                            <input id="lot_physical_sampling_percentage" name="physical_sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('physical_sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
+                        </div>
+                        <div id="lot-contact-sampling-wrap" class="hidden">
+                            <label class="gc-label" for="lot_contact_sampling_percentage">% échantillonnage contact</label>
+                            <input id="lot_contact_sampling_percentage" name="contact_sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('contact_sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 20" disabled />
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                        <button id="lot-import-form-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                        <button id="lot-import-submit" type="submit" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled>Importer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div id="lot-import-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
             <div class="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
@@ -536,12 +494,22 @@
     </div>
 
     <style>
-        .lot-details > summary::-webkit-details-marker {
-            display: none;
+        .lot-chart-ring {
+            align-items: center;
+            background:
+                radial-gradient(circle at center, #ffffff 0 58%, transparent 59%),
+                conic-gradient(var(--gc-primary) calc(var(--value) * 1%), #e2e8f0 0);
+            border-radius: 9999px;
+            display: flex;
+            height: 88px;
+            justify-content: center;
+            width: 88px;
         }
 
-        .lot-details[open] .lot-chevron {
-            transform: rotate(180deg);
+        .lot-chart-ring span {
+            color: var(--gc-text);
+            font-size: 0.95rem;
+            font-weight: 800;
         }
     </style>
 
@@ -553,6 +521,7 @@
         const lotSearchInput = document.getElementById('q');
         let lotSearchTimer = null;
         const sampleLotTypes = @json(\App\Models\Lot::samplingTypes());
+        const hybridLotType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
         const resumedLotImport = @json($activeImportPreview);
         const lockedLotImportStatuses = ['pending', 'processing'];
         const lotData = new Map();
@@ -568,15 +537,27 @@
         const lotActionType = document.getElementById('lot_action_type');
         const lotActionStatus = document.getElementById('lot_action_status');
         const lotActionSamplingPercentage = document.getElementById('lot_action_sampling_percentage');
+        const lotActionPhysicalSamplingPercentage = document.getElementById('lot_action_physical_sampling_percentage');
+        const lotActionContactSamplingPercentage = document.getElementById('lot_action_contact_sampling_percentage');
+        const lotActionGlobalPlus = document.getElementById('lot_action_global_plus');
         const lotActionDelegataire = document.getElementById('lot_action_delegataire');
         let currentLotAction = null;
 
+        const lotImportFormOpen = document.getElementById('lot-import-form-open');
+        const lotImportFormModal = document.getElementById('lot-import-form-modal');
+        const lotImportFormClose = document.getElementById('lot-import-form-close');
+        const lotImportFormCancel = document.getElementById('lot-import-form-cancel');
         const lotImportForm = document.getElementById('lot-import-form');
         const lotImportFile = document.getElementById('lot_file');
         const lotFileSelected = document.getElementById('lot-file-selected');
         const lotImportDelegataire = document.getElementById('lot_delegataire');
         const lotImportType = document.getElementById('lot_type');
         const lotSamplingPercentage = document.getElementById('lot_sampling_percentage');
+        const lotSingleSamplingWrap = document.getElementById('lot-single-sampling-wrap');
+        const lotPhysicalSamplingWrap = document.getElementById('lot-physical-sampling-wrap');
+        const lotContactSamplingWrap = document.getElementById('lot-contact-sampling-wrap');
+        const lotPhysicalSamplingPercentage = document.getElementById('lot_physical_sampling_percentage');
+        const lotContactSamplingPercentage = document.getElementById('lot_contact_sampling_percentage');
         const lotImportSubmit = document.getElementById('lot-import-submit');
         const lotImportModal = document.getElementById('lot-import-modal');
         const lotImportModalClose = document.getElementById('lot-import-modal-close');
@@ -687,15 +668,33 @@
             return sampleLotTypes.includes(type);
         }
 
+        function isHybridType(type) {
+            return type === hybridLotType;
+        }
+
         function updateLotActionSamplingState() {
             if (!lotActionSamplingPercentage) return;
 
-            const needsSampling = isSamplingType(lotActionType?.value);
+            const currentType = lotActionType?.value;
+            const needsSampling = isSamplingType(currentType);
+            const needsHybridSampling = isHybridType(currentType);
             lotActionSamplingPercentage.disabled = !needsSampling;
             lotActionSamplingPercentage.required = needsSampling;
+            if (lotActionPhysicalSamplingPercentage) {
+                lotActionPhysicalSamplingPercentage.disabled = !needsHybridSampling;
+                lotActionPhysicalSamplingPercentage.required = needsHybridSampling;
+            }
+            if (lotActionContactSamplingPercentage) {
+                lotActionContactSamplingPercentage.disabled = !needsHybridSampling;
+                lotActionContactSamplingPercentage.required = needsHybridSampling;
+            }
 
             if (!needsSampling) {
                 lotActionSamplingPercentage.value = '';
+            }
+            if (!needsHybridSampling) {
+                if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = '';
+                if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = '';
             }
         }
 
@@ -714,6 +713,9 @@
             lotActionType.value = lot.type || '';
             lotActionStatus.value = lot.status || '';
             lotActionSamplingPercentage.value = lot.sampling_percentage ?? '';
+            if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
+            if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
+            if (lotActionGlobalPlus) lotActionGlobalPlus.checked = Boolean(lot.global_plus);
             lotActionDelegataire.value = lot.delegataire || '';
             updateLotActionSamplingState();
 
@@ -735,13 +737,38 @@
         }
 
         function updateLotImportState() {
-            const needsSampling = isSamplingType(lotImportType?.value);
+            const currentType = lotImportType?.value;
+            const needsSampling = isSamplingType(currentType);
+            const needsHybridSampling = isHybridType(currentType);
+
+            lotSingleSamplingWrap?.classList.toggle('hidden', needsHybridSampling);
+            lotPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+            lotContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
 
             if (lotSamplingPercentage) {
                 lotSamplingPercentage.disabled = !needsSampling;
+                lotSamplingPercentage.required = needsSampling;
 
                 if (!needsSampling) {
                     lotSamplingPercentage.value = '';
+                }
+            }
+
+            if (lotPhysicalSamplingPercentage) {
+                lotPhysicalSamplingPercentage.disabled = !needsHybridSampling;
+                lotPhysicalSamplingPercentage.required = needsHybridSampling;
+
+                if (!needsHybridSampling) {
+                    lotPhysicalSamplingPercentage.value = '';
+                }
+            }
+
+            if (lotContactSamplingPercentage) {
+                lotContactSamplingPercentage.disabled = !needsHybridSampling;
+                lotContactSamplingPercentage.required = needsHybridSampling;
+
+                if (!needsHybridSampling) {
+                    lotContactSamplingPercentage.value = '';
                 }
             }
 
@@ -749,7 +776,9 @@
             const selectedFile = hasFile ? lotImportFile.files[0] : null;
             const hasDelegataire = Boolean(lotImportDelegataire?.value?.trim());
             const hasType = Boolean(lotImportType?.value);
-            const hasSampling = !needsSampling || Number(lotSamplingPercentage?.value || 0) > 0;
+            const hasSampling = needsHybridSampling
+                ? Number(lotPhysicalSamplingPercentage?.value || 0) > 0 && Number(lotContactSamplingPercentage?.value || 0) > 0
+                : (!needsSampling || Number(lotSamplingPercentage?.value || 0) > 0);
 
             if (lotImportFile && lotFileSelected) {
                 lotImportFile.style.borderColor = hasFile ? '#86efac' : '';
@@ -762,6 +791,17 @@
             if (lotImportSubmit) {
                 lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasType && hasSampling);
             }
+        }
+
+        function openLotImportFormModal() {
+            lotImportFormModal?.classList.remove('hidden');
+            lotImportFormModal?.classList.add('flex');
+            updateLotImportState();
+        }
+
+        function closeLotImportFormModal() {
+            lotImportFormModal?.classList.add('hidden');
+            lotImportFormModal?.classList.remove('flex');
         }
 
         function formatFileSize(bytes) {
@@ -1757,6 +1797,11 @@
         lotImportDelegataire?.addEventListener('change', updateLotImportState);
         lotImportType?.addEventListener('change', updateLotImportState);
         lotSamplingPercentage?.addEventListener('input', updateLotImportState);
+        lotPhysicalSamplingPercentage?.addEventListener('input', updateLotImportState);
+        lotContactSamplingPercentage?.addEventListener('input', updateLotImportState);
+        lotImportFormOpen?.addEventListener('click', openLotImportFormModal);
+        lotImportFormClose?.addEventListener('click', closeLotImportFormModal);
+        lotImportFormCancel?.addEventListener('click', closeLotImportFormModal);
         updateLotImportState();
 
         lotImportModalClose?.addEventListener('click', closeLotImportModal);
@@ -1865,6 +1910,7 @@
             resetLotImportProgressAnimation(5);
             currentLotImportCompleted = false;
             selectedLotImportRows = null;
+            closeLotImportFormModal();
             openLotImportModal();
             updateLotImportModalCloseState();
             hideLotImportError();

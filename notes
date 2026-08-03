@@ -1,26 +1,16 @@
-dans la liste des rdv a placer, ajouter la presta et le nom de la societe (a recup)
-il faut recup les commentaires pre existants lors de la prise
-voir comment accelerer la recup des rdv dans prise de rdv
-quand meme recup les rdv qui ont des erreurs nottement les addresses impossibles
-trouver d'ou vient les docs phantomes
-pouvoir supprimer les lots
+Gestion de lot:
 
-recup le numero du lot
-la raison social du demandeur = le delegataire
-lors du matching du excel il faut lier la presta a "la ref de la fiche"
+une partie gestions de lot -> gerant
+page detail dedié au lot, voir excel pour les champs
 
-dans la recup des lots, nom complet existe pas on remplace par "raison sociale"
-ajouter nom du site
-nom prenom se recupere que quand ils sont definis
-en fait si particuler: nom prenom adresse et si pro ce sera raison sociale et nom du site
-ajouter dans le premier form lors de l'upload un champ delegataire
-creer une gestion des delegataires en recuperant les delegataires depuis l'api et afficher sous forme de liste
+ajouter type le lot: hybride physique/contact avec 2 champ echantillonage
 
+dans la prise de rdv pour les rdv telephonique, on a pas de rdv phyique donc pas d'envoie dans coffrac
 
---------------------------------------
+sur un rdv non satisfaisant -> pouvoir le sortir du lot
 
-ajouter les probleme rdv
+ajouter un bool "ajouté sur global +" dans detail d'un rdv physique
 
-changer la methode de placement des propositions pour les rapprocher le + possible d'un rdv existant le meme jour (label a placer sur les propo et pas sur le rdv deja placé du coup)
+rdv -> satisfaisant/non-satisfaisant telephone, satisfaisant/ sur lieu, porte (cummulable avec un autre status), sorti du lot
 
-pouvoir replacer un rdv methodiquement depuis la recherche rdv 
+gerer le nombre de rdv a prendre sur la gestion du lot

@@ -118,6 +118,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/lots/imports/{preview}/confirm', [ManagerLotController::class, 'confirmImport'])->name('manager.lots.imports.confirm');
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
+    Route::get('/manager/lots/{lot}', [ManagerLotController::class, 'show'])->name('manager.lots.show');
     Route::get('/manager/appointments', [PlannerTrackingController::class, 'index'])->name('manager.appointments');
     Route::get('/manager/appointments/modify', [PlannerBookingController::class, 'index'])->name('manager.appointments.modify');
     Route::post('/manager/appointments/search', [PlannerTrackingController::class, 'search'])->name('manager.appointments.search');
@@ -134,6 +135,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/analyze', [PlannerBookingController::class, 'analyze'])->name('planner.book.analyze');
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
+    Route::post('/planner/book/lots/appointments/{lotAppointment}/contact', [PlannerBookingController::class, 'processLotContactAppointment'])->name('planner.book.lots.appointments.contact');
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::post('/planner/book/appointments/{appointment}/mail-preview', [PlannerAppointmentMailController::class, 'preview'])->name('planner.book.appointments.mail.preview');
     Route::post('/planner/book/appointments/{appointment}/mail', [PlannerAppointmentMailController::class, 'send'])->name('planner.book.appointments.mail.send');

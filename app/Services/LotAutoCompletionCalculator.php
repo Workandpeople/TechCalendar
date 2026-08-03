@@ -17,7 +17,9 @@ class LotAutoCompletionCalculator
      *     total_count:int,
      *     detail:string,
      *     is_sampling:bool,
-     *     sampling_percentage:float|null
+     *     sampling_percentage:float|null,
+     *     physical:array<string, mixed>|null,
+     *     contact:array<string, mixed>|null
      * }
      */
     public function calculate(Lot $lot, Collection $appointments): array
@@ -36,7 +38,7 @@ class LotAutoCompletionCalculator
             ? (int) min(100, round(($completedCount / $targetCount) * 100))
             : 0;
 
-        return [
+        $result = [
             'percentage' => $percentage,
             'placed_count' => $placedCount,
             'target_count' => $targetCount,
@@ -45,6 +47,30 @@ class LotAutoCompletionCalculator
             'is_sampling' => $isSampling,
             'sampling_percentage' => $samplingPercentage,
         ];
+
+        $result['physical'] = $lot->supportsPhysicalProcessing()
+            ? $this->channelCompletion(
+                $appointments,
+                'physique',
+                $lot->physicalSamplingPercentage(),
+                $lot->type === Lot::TYPE_SAMPLE_CONTROL || $lot->isHybrid(),
+                fn (LotAppointment $appointment): bool => $appointment->physical_satisfaction !== null
+                    || $appointment->appointment_id !== null
+                    || $appointment->status === LotAppointment::STATUS_PLACED,
+            )
+            : null;
+        $result['contact'] = $lot->supportsContactProcessing()
+            ? $this->channelCompletion(
+                $appointments,
+                'contact',
+                $lot->contactSamplingPercentage(),
+                $lot->type === Lot::TYPE_SAMPLE_CONTACT_CONTROL || $lot->isHybrid(),
+                fn (LotAppointment $appointment): bool => $appointment->contact_satisfaction !== null
+                    || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED,
+            )
+            : null;
+
+        return $result;
     }
 
     private function targetCount(int $totalCount, bool $isSampling, ?float $samplingPercentage): int
@@ -58,6 +84,63 @@ class LotAutoCompletionCalculator
         }
 
         return max(1, (int) ceil($totalCount * ($samplingPercentage / 100)));
+    }
+
+    /**
+     * @param Collection<int, LotAppointment> $appointments
+     * @return array{
+     *     label:string,
+     *     percentage:int,
+     *     completed_count:int,
+     *     target_count:int,
+     *     total_count:int,
+     *     detail:string,
+     *     is_sampling:bool,
+     *     sampling_percentage:float|null
+     * }
+     */
+    private function channelCompletion(
+        Collection $appointments,
+        string $label,
+        ?float $samplingPercentage,
+        bool $isSampling,
+        callable $isCompleted,
+    ): array {
+        $totalCount = $appointments->count();
+        $safeSamplingPercentage = $isSampling && $samplingPercentage !== null
+            ? max(0, min(100, (float) $samplingPercentage))
+            : null;
+        $targetCount = $this->targetCount($totalCount, $isSampling, $safeSamplingPercentage);
+        $completedCount = min($appointments->filter($isCompleted)->count(), $targetCount);
+        $percentage = $targetCount > 0
+            ? (int) min(100, round(($completedCount / $targetCount) * 100))
+            : 0;
+
+        return [
+            'label' => $label,
+            'percentage' => $percentage,
+            'completed_count' => $completedCount,
+            'target_count' => $targetCount,
+            'total_count' => $totalCount,
+            'detail' => $this->channelDetail($label, $completedCount, $targetCount, $isSampling, $safeSamplingPercentage),
+            'is_sampling' => $isSampling,
+            'sampling_percentage' => $safeSamplingPercentage,
+        ];
+    }
+
+    private function channelDetail(string $label, int $completedCount, int $targetCount, bool $isSampling, ?float $samplingPercentage): string
+    {
+        if ($isSampling && $samplingPercentage !== null) {
+            $samplingLabel = rtrim(rtrim(number_format($samplingPercentage, 2, ',', ' '), '0'), ',');
+
+            return sprintf('%d/%d %s (%s%%)', $completedCount, $targetCount, $label, $samplingLabel);
+        }
+
+        if ($isSampling) {
+            return sprintf('%d/%d %s (échantillonnage non défini)', $completedCount, $targetCount, $label);
+        }
+
+        return sprintf('%d/%d %s', $completedCount, $targetCount, $label);
     }
 
     private function detail(int $completedCount, int $targetCount, int $placedCount, bool $isSampling, ?float $samplingPercentage): string
