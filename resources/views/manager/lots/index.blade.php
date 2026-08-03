@@ -76,7 +76,7 @@
             </form>
         </section>
 
-        <section class="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             @forelse ($lots as $lot)
                 @php
                     $lotActionPayload = [
@@ -104,8 +104,14 @@
                         $chartItems = collect([$lot['auto_completion']]);
                     }
                 @endphp
-                <article class="lot-card group relative overflow-hidden rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg" style="border-color:var(--gc-border);">
-                    <a href="{{ $lot['show_url'] }}" class="absolute inset-0 z-0" aria-label="Voir le détail du lot {{ $lot['title'] }}"></a>
+                <article
+                    class="lot-card group relative cursor-pointer overflow-hidden rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--gc-primary)] focus:ring-offset-2"
+                    style="border-color:var(--gc-border);"
+                    data-lot-card-href="{{ $lot['show_url'] }}"
+                    role="link"
+                    tabindex="0"
+                    aria-label="Voir le détail du lot {{ $lot['title'] }}"
+                >
                     <div class="relative z-10 flex h-full flex-col gap-5">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0">
@@ -149,7 +155,9 @@
 
                         <div class="grid grid-cols-{{ $chartItems->count() > 1 ? '2' : '1' }} gap-4">
                             @foreach ($chartItems as $chart)
-                                @php($percentage = (int) ($chart['percentage'] ?? 0))
+                                @php
+                                    $percentage = (int) ($chart['percentage'] ?? 0);
+                                @endphp
                                 <div class="rounded-2xl border p-4 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
                                     <div class="lot-chart-ring mx-auto" style="--value:{{ $percentage }};">
                                         <span>{{ $percentage }}%</span>
@@ -179,11 +187,17 @@
                     </script>
                 </article>
             @empty
-                <div class="rounded-2xl border border-dashed p-8 text-center xl:col-span-2 2xl:col-span-3" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                <div class="rounded-2xl border border-dashed p-8 text-center md:col-span-2 xl:col-span-3" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
                     Aucun lot ne correspond aux filtres.
                 </div>
             @endforelse
         </section>
+
+        @if ($lots->hasPages())
+            <div class="rounded-2xl border bg-white px-4 py-3" style="border-color:var(--gc-border);">
+                {{ $lots->links() }}
+            </div>
+        @endif
 
         <div id="lot-action-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
             <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -638,6 +652,33 @@
             });
         }
 
+        document.querySelectorAll('[data-lot-card-href]').forEach((card) => {
+            const goToLotDetail = () => {
+                const target = card.dataset.lotCardHref;
+
+                if (target) {
+                    window.location.href = target;
+                }
+            };
+
+            card.addEventListener('click', (event) => {
+                if (event.target.closest('button, a, input, select, textarea, label')) {
+                    return;
+                }
+
+                goToLotDetail();
+            });
+
+            card.addEventListener('keydown', (event) => {
+                if (!['Enter', ' '].includes(event.key)) {
+                    return;
+                }
+
+                event.preventDefault();
+                goToLotDetail();
+            });
+        });
+
         document.querySelectorAll('.lot-action-trigger').forEach((button) => {
             button.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -720,10 +761,12 @@
             updateLotActionSamplingState();
 
             const placedCount = Number(lot.placed_count || 0);
+            const contactProcessedCount = Number(lot.contact_processed_count || 0);
+            const tracedCount = placedCount + contactProcessedCount;
             const appointmentsCount = Number(lot.appointments_count || 0);
-            lotActionDeleteSubmit.disabled = placedCount > 0;
-            lotActionDeleteNote.textContent = placedCount > 0
-                ? `${placedCount} RDV placé(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`
+            lotActionDeleteSubmit.disabled = tracedCount > 0;
+            lotActionDeleteNote.textContent = tracedCount > 0
+                ? `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`
                 : `${appointmentsCount} RDV non placé(s) seront supprimés avec ce lot.`;
 
             lotActionModal?.classList.remove('hidden');

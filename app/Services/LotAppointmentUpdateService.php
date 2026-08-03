@@ -48,7 +48,7 @@ class LotAppointmentUpdateService
             ]);
         }
 
-        $appointment->update([
+        $updatePayload = [
             'external_reference' => $this->nullableString($attributes['external_reference'] ?? null),
             'customer_name' => $this->customerName($attributes),
             'company_name' => $this->nullableString($attributes['company_name'] ?? null),
@@ -65,7 +65,13 @@ class LotAppointmentUpdateService
             'ai_warnings' => $geocoding !== null ? collect($geocoding['warnings'] ?? [])->filter()->values()->all() : $appointment->ai_warnings,
             'raw_payload' => $rawPayload,
             'comment' => $this->nullableString($attributes['comment'] ?? null),
-        ]);
+        ];
+
+        if (array_key_exists('unsuccessful_visits_count', $attributes)) {
+            $updatePayload['unsuccessful_visits_count'] = max(0, (int) $attributes['unsuccessful_visits_count']);
+        }
+
+        $appointment->update($updatePayload);
 
         return $appointment->refresh();
     }

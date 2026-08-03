@@ -5002,6 +5002,110 @@
             select.addEventListener('change', () => updateLotBookButtonState(select.dataset.lotAppointmentId));
         });
 
+        const setLotProcessingMode = (lotAppointmentId, mode) => {
+            const row = document.querySelector(`[data-lot-appointment-row="${lotAppointmentId}"]`);
+
+            row?.querySelectorAll('.lot-processing-panel').forEach((panel) => {
+                const isPhysicalPanel = panel.classList.contains('lot-processing-physical-panel');
+                const shouldShow = mode === 'physical' ? isPhysicalPanel : !isPhysicalPanel;
+                panel.classList.toggle('hidden', !shouldShow);
+            });
+        };
+
+        document.querySelectorAll('.lot-processing-mode-switch').forEach((switchInput) => {
+            setLotProcessingMode(switchInput.dataset.lotAppointmentId, switchInput.checked ? 'contact' : 'physical');
+            switchInput.addEventListener('change', () => {
+                setLotProcessingMode(switchInput.dataset.lotAppointmentId, switchInput.checked ? 'contact' : 'physical');
+            });
+        });
+
+        const lotContactModal = document.getElementById('booking-lot-contact-modal');
+        const lotContactForm = document.getElementById('booking-lot-contact-form');
+        const lotContactTitle = document.getElementById('booking_lot_contact_title');
+        const lotContactSatisfaction = document.getElementById('booking_lot_contact_satisfaction');
+        const lotContactComment = document.getElementById('booking_lot_contact_comment');
+        const lotContactStatus = document.getElementById('booking_lot_contact_status');
+        const lotContactSubmit = document.getElementById('booking-lot-contact-submit');
+        let currentLotContactUrl = null;
+
+        const setLotContactStatus = (message, type = 'info') => {
+            if (!lotContactStatus) return;
+
+            lotContactStatus.textContent = message;
+            lotContactStatus.style.color = type === 'error' ? '#be123c' : (type === 'success' ? '#15803d' : 'var(--gc-text-soft)');
+            lotContactStatus.classList.remove('hidden');
+        };
+
+        const openLotContactModal = (button) => {
+            currentLotContactUrl = button.dataset.contactUrl || null;
+            if (lotContactTitle) {
+                lotContactTitle.textContent = button.dataset.customerName || 'Dossier du lot';
+            }
+            if (lotContactSatisfaction) lotContactSatisfaction.value = '';
+            if (lotContactComment) lotContactComment.value = '';
+            lotContactStatus?.classList.add('hidden');
+            lotContactModal?.classList.remove('hidden');
+            lotContactModal?.classList.add('flex');
+        };
+
+        const closeLotContactModal = () => {
+            lotContactModal?.classList.add('hidden');
+            lotContactModal?.classList.remove('flex');
+            currentLotContactUrl = null;
+        };
+
+        document.getElementById('booking-lot-contact-close')?.addEventListener('click', closeLotContactModal);
+        document.getElementById('booking-lot-contact-cancel')?.addEventListener('click', closeLotContactModal);
+
+        document.querySelectorAll('.lot-appointment-contact-button').forEach((button) => {
+            button.addEventListener('click', () => openLotContactModal(button));
+        });
+
+        lotContactForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            if (!currentLotContactUrl || lotContactSubmit?.disabled) {
+                return;
+            }
+
+            if (!lotContactSatisfaction?.value || !lotContactComment?.value.trim()) {
+                setLotContactStatus('Sélectionne un résultat et saisis un commentaire.', 'error');
+                return;
+            }
+
+            lotContactSubmit.disabled = true;
+            lotContactSubmit.textContent = 'Enregistrement...';
+            setLotContactStatus('Enregistrement du traitement téléphonique...');
+
+            try {
+                const response = await fetch(currentLotContactUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        contact_satisfaction: lotContactSatisfaction.value === '1',
+                        contact_comment: lotContactComment.value.trim(),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Traitement téléphonique impossible.');
+                }
+
+                setLotContactStatus(payload.message || 'Contact enregistré.', 'success');
+                window.setTimeout(() => window.location.reload(), 550);
+            } catch (error) {
+                setLotContactStatus(error.message || 'Erreur réseau pendant l’enregistrement.', 'error');
+            } finally {
+                lotContactSubmit.disabled = false;
+                lotContactSubmit.textContent = 'Enregistrer le contact';
+            }
+        });
+
         bookingCrmSearch.addEventListener('input', () => {
             bookingCrmPage = 1;
             filterBookingCrmCards();

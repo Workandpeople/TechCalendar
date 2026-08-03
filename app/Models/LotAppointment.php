@@ -36,6 +36,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'contact_processed_by',
     'physical_satisfaction',
     'physical_satisfaction_synced_at',
+    'unsuccessful_visits_count',
+    'excluded_from_lot_stats',
+    'excluded_from_lot_stats_at',
+    'excluded_from_lot_stats_by',
     'ai_confidence',
     'ai_warnings',
     'raw_payload',
@@ -93,6 +97,11 @@ class LotAppointment extends Model
         return $this->belongsTo(User::class, 'contact_processed_by');
     }
 
+    public function statsExcluder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'excluded_from_lot_stats_by');
+    }
+
     protected function casts(): array
     {
         return [
@@ -104,6 +113,9 @@ class LotAppointment extends Model
             'contact_processed_at' => 'datetime',
             'physical_satisfaction' => 'boolean',
             'physical_satisfaction_synced_at' => 'datetime',
+            'unsuccessful_visits_count' => 'integer',
+            'excluded_from_lot_stats' => 'boolean',
+            'excluded_from_lot_stats_at' => 'datetime',
             'ai_confidence' => 'float',
             'ai_warnings' => 'array',
             'raw_payload' => 'array',

@@ -510,19 +510,22 @@ class PlannerBookingController extends Controller
                 if (! $replacementAppointment && ! empty($payload['lot_appointment_id'])) {
                     $lotAppointment = LotAppointment::query()
                         ->with('lot')
+                        ->where('excluded_from_lot_stats', false)
                         ->whereKey((int) $payload['lot_appointment_id'])
                         ->first();
 
-                    if ($lotAppointment) {
-                        $lotAppointment->update([
-                            'appointment_id' => $appointment->id,
-                            'service_id' => $crmAppointment['service']['id'],
-                            'status' => LotAppointment::STATUS_PLACED,
-                            'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
-                        ]);
-
-                        $this->refreshLotStatus($lotAppointment->lot);
+                    if (! $lotAppointment) {
+                        throw new RuntimeException('Ce dossier est sorti des statistiques du lot.');
                     }
+
+                    $lotAppointment->update([
+                        'appointment_id' => $appointment->id,
+                        'service_id' => $crmAppointment['service']['id'],
+                        'status' => LotAppointment::STATUS_PLACED,
+                        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+                    ]);
+
+                    $this->refreshLotStatus($lotAppointment->lot);
                 }
 
                 $coffracAppointments->markPlaced($appointment, $crmAppointment);
@@ -532,7 +535,31 @@ class PlannerBookingController extends Controller
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([
                 'crm_appointment_id' => $exception->getMessage(),
-        ]);
+            ]);
+        }
+
+        if ($replacementAppointment) {
+            $this->forgetRouteMetricsForAppointmentChange(
+                $previousTechnicianId,
+                (int) $appointment->technician_id,
+                $previousDate,
+                $appointment->starts_at?->toDateString(),
+            );
+
+            if ($previousTechnicianId && $previousTechnicianId !== (int) $appointment->technician_id) {
+                $appointmentMails->reassigned($appointment, $previousTechnicianId);
+            } else {
+                $appointmentMails->detailsUpdated($appointment);
+            }
+        } else {
+            $appointmentMails->created($appointment);
+        }
+
+        return response()->json([
+            'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
+            'appointment_id' => $appointment->id,
+            'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
+        ], $replacementAppointment ? 200 : 201);
     }
 
     public function processLotContactAppointment(Request $request, LotAppointment $lotAppointment): JsonResponse
@@ -542,6 +569,7 @@ class PlannerBookingController extends Controller
         $lotAppointment->load('lot');
 
         abort_if(! $lotAppointment->lot?->supportsContactProcessing(), 422, 'Ce lot ne prévoit pas de traitement par téléphone.');
+        abort_if($this->isExcludedFromLotStats($lotAppointment), 422, 'Ce dossier est sorti des statistiques du lot.');
         abort_if($this->isPlacedLotAppointment($lotAppointment), 422, 'Ce dossier a déjà été transformé en RDV physique.');
 
         $payload = $request->validate([
@@ -568,30 +596,6 @@ class PlannerBookingController extends Controller
                 'status_label' => $lotAppointment->fresh()->statusLabel(),
             ],
         ]);
-    }
-
-        if ($replacementAppointment) {
-            $this->forgetRouteMetricsForAppointmentChange(
-                $previousTechnicianId,
-                (int) $appointment->technician_id,
-                $previousDate,
-                $appointment->starts_at?->toDateString(),
-            );
-
-            if ($previousTechnicianId && $previousTechnicianId !== (int) $appointment->technician_id) {
-                $appointmentMails->reassigned($appointment, $previousTechnicianId);
-            } else {
-                $appointmentMails->detailsUpdated($appointment);
-            }
-        } else {
-            $appointmentMails->created($appointment);
-        }
-
-        return response()->json([
-            'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
-            'appointment_id' => $appointment->id,
-            'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
-        ], $replacementAppointment ? 200 : 201);
     }
 
     /**
@@ -1114,11 +1118,19 @@ class PlannerBookingController extends Controller
                             ->where(function ($query) use ($placeableStatus): void {
                                 $query
                                     ->whereNull('appointment_id')
-                                    ->whereIn('status', $placeableStatus);
+                                    ->whereIn('status', $placeableStatus)
+                                    ->where('excluded_from_lot_stats', false);
                             })
-                            ->orWhereNotNull('appointment_id')
-                            ->orWhere('status', LotAppointment::STATUS_PLACED)
-                            ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED);
+                            ->orWhere(function ($query): void {
+                                $query
+                                    ->where('excluded_from_lot_stats', false)
+                                    ->where(function ($query): void {
+                                        $query
+                                            ->orWhereNotNull('appointment_id')
+                                            ->orWhere('status', LotAppointment::STATUS_PLACED)
+                                            ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED);
+                                    });
+                            });
                     })
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                     ->orderBy('row_number')
@@ -1126,15 +1138,17 @@ class PlannerBookingController extends Controller
             ])
             ->whereHas('appointments', fn ($query) => $query
                 ->whereNull('appointment_id')
-                ->whereIn('status', $placeableStatus))
+                ->whereIn('status', $placeableStatus)
+                ->where('excluded_from_lot_stats', false))
             ->where('status', '!=', Lot::STATUS_COMPLETED)
             ->latest()
             ->limit(50)
             ->get()
             ->map(function (Lot $lot) use ($autoCompletion): array {
-                $placedAppointments = $lot->appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
-                $placeableAppointments = $lot->appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
-                $contactProcessedAppointments = $lot->appointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
+                $statsAppointments = $lot->appointments->reject(fn (LotAppointment $appointment): bool => $this->isExcludedFromLotStats($appointment));
+                $placedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+                $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
+                $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
                 $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
                 $statusMeta = $this->lotStatusMeta($status);
 
@@ -1146,7 +1160,7 @@ class PlannerBookingController extends Controller
                     'status_color' => $statusMeta['color'],
                     'status_background' => $statusMeta['background'],
                     'imported_at' => $lot->imported_at,
-                    'auto_completion' => $autoCompletion->calculate($lot, $lot->appointments),
+                    'auto_completion' => $autoCompletion->calculate($lot, $statsAppointments),
                     'appointments_count' => $lot->appointments->count(),
                     'placeable_count' => $placeableAppointments->count(),
                     'placed_count' => $placedAppointments->count(),
@@ -1173,6 +1187,7 @@ class PlannerBookingController extends Controller
                         'appointment_id' => $appointment->appointment_id,
                         'is_placed' => $this->isPlacedLotAppointment($appointment),
                         'is_contact_processed' => $this->isContactProcessedLotAppointment($appointment),
+                        'excluded_from_lot_stats' => $this->isExcludedFromLotStats($appointment),
                         'contact_satisfaction' => $appointment->contact_satisfaction,
                         'contact_comment' => $appointment->contact_comment,
                         'contact_processed_at' => $appointment->contact_processed_at,
@@ -1221,6 +1236,7 @@ class PlannerBookingController extends Controller
 
         if (! $lotAppointment
             || ! $lotAppointment->lot?->supportsPhysicalProcessing()
+            || $this->isExcludedFromLotStats($lotAppointment)
             || $this->isContactProcessedLotAppointment($lotAppointment)
             || ! filled($lotAppointment->address)
             || ! filled($lotAppointment->department_code)) {
@@ -1405,13 +1421,17 @@ class PlannerBookingController extends Controller
             return;
         }
 
-        $totalAppointments = $lot->appointments()->count();
-        $completedAppointments = $lot->appointments()
+        $baseQuery = $lot->appointments()
+            ->where('excluded_from_lot_stats', false);
+
+        $totalAppointments = (clone $baseQuery)->count();
+        $completedAppointments = (clone $baseQuery)
             ->where(function ($query): void {
                 $query
                     ->whereNotNull('appointment_id')
                     ->orWhere('status', LotAppointment::STATUS_PLACED)
-                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED);
+                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED)
+                    ->orWhereNotNull('contact_satisfaction');
             })
             ->count();
 
@@ -2382,9 +2402,15 @@ class PlannerBookingController extends Controller
             || $appointment->contact_satisfaction !== null;
     }
 
+    private function isExcludedFromLotStats(LotAppointment $appointment): bool
+    {
+        return (bool) $appointment->excluded_from_lot_stats;
+    }
+
     private function isPlaceableLotAppointment(LotAppointment $appointment): bool
     {
-        return ! $this->isPlacedLotAppointment($appointment)
+        return ! $this->isExcludedFromLotStats($appointment)
+            && ! $this->isPlacedLotAppointment($appointment)
             && ! $this->isContactProcessedLotAppointment($appointment)
             && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
     }

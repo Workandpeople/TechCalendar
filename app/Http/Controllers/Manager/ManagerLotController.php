@@ -30,10 +30,19 @@ class ManagerLotController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $filters = $this->validatedFilters($request);
-        $lots = $this->lotQuery($filters)
-            ->latest()
+        $query = $this->lotQuery($filters)->latest();
+        $statsLots = (clone $query)
             ->get()
             ->map(fn (Lot $lot): array => $this->serializeLot($lot, $autoCompletion));
+        $lots = $query
+            ->paginate(9)
+            ->withQueryString();
+
+        $lots->setCollection(
+            $lots
+                ->getCollection()
+                ->map(fn (Lot $lot): array => $this->serializeLot($lot, $autoCompletion))
+        );
 
         return view('manager.lots.index', [
             'lots' => $lots,
@@ -45,11 +54,11 @@ class ManagerLotController extends Controller
                 'status' => $filters['status'] ?? '',
             ],
             'stats' => [
-                'lots_count' => $lots->count(),
-                'appointments_count' => $lots->sum('appointments_count'),
-                'placeable_count' => $lots->sum('placeable_count'),
-                'placed_count' => $lots->sum('placed_count'),
-                'contact_processed_count' => $lots->sum('contact_processed_count'),
+                'lots_count' => $statsLots->count(),
+                'appointments_count' => $statsLots->sum('appointments_count'),
+                'placeable_count' => $statsLots->sum('placeable_count'),
+                'placed_count' => $statsLots->sum('placed_count'),
+                'contact_processed_count' => $statsLots->sum('contact_processed_count'),
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
             'mapboxToken' => config('services.mapbox.token'),
@@ -74,6 +83,7 @@ class ManagerLotController extends Controller
                     'appointment.technician:id,first_name,last_name,department_code,role',
                     'appointment.technician.departments:code',
                     'contactProcessor:id,first_name,last_name',
+                    'statsExcluder:id,first_name,last_name',
                 ])
                 ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                 ->orderBy('row_number')
@@ -183,7 +193,8 @@ class ManagerLotController extends Controller
             ->where(function (Builder $query): void {
                 $query
                     ->whereNotNull('appointment_id')
-                    ->orWhere('status', LotAppointment::STATUS_PLACED);
+                    ->orWhere('status', LotAppointment::STATUS_PLACED)
+                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED);
             })
             ->count();
 
@@ -336,6 +347,7 @@ class ManagerLotController extends Controller
             'city' => ['nullable', 'string', 'max:120'],
             'department_code' => ['nullable', 'string', 'max:3'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            'unsuccessful_visits_count' => ['nullable', 'integer', 'min:0', 'max:65535'],
             'force_geocode' => ['nullable', 'boolean'],
         ]);
 
@@ -394,11 +406,79 @@ class ManagerLotController extends Controller
                 'appointment.service:id,type,name',
                 'appointment.technician:id,first_name,last_name,department_code,role',
                 'appointment.technician.departments:code',
+                'contactProcessor:id,first_name,last_name',
+                'statsExcluder:id,first_name,last_name',
             ]);
 
         return response()->json([
             'message' => 'RDV du lot mis à jour.',
             'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
+    public function updateAppointmentVisits(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+        abort_unless($this->isPlacedLotAppointment($lotAppointment), 422, 'Le nombre de portes concerne uniquement les RDV en déplacement.');
+
+        $payload = $request->validate([
+            'unsuccessful_visits_count' => ['required', 'integer', 'min:0', 'max:65535'],
+        ]);
+
+        $lotAppointment->update([
+            'unsuccessful_visits_count' => (int) $payload['unsuccessful_visits_count'],
+        ]);
+
+        $lotAppointment->loadMissing([
+            'lot',
+            'appointment:id,technician_id,service_id,starts_at,ends_at',
+            'appointment.service:id,type,name',
+            'appointment.technician:id,first_name,last_name,department_code,role',
+            'appointment.technician.departments:code',
+            'contactProcessor:id,first_name,last_name',
+            'statsExcluder:id,first_name,last_name',
+        ]);
+
+        return response()->json([
+            'message' => 'Nombre de portes mis à jour.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
+    public function updateAppointmentStatsExclusion(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'excluded_from_lot_stats' => ['required', 'boolean'],
+        ]);
+
+        $excluded = (bool) $payload['excluded_from_lot_stats'];
+
+        $lotAppointment->update([
+            'excluded_from_lot_stats' => $excluded,
+            'excluded_from_lot_stats_at' => $excluded ? now() : null,
+            'excluded_from_lot_stats_by' => $excluded ? $request->user()->id : null,
+        ]);
+
+        $lotAppointment->loadMissing([
+            'lot',
+            'appointment:id,technician_id,service_id,starts_at,ends_at',
+            'appointment.service:id,type,name',
+            'appointment.technician:id,first_name,last_name,department_code,role',
+            'appointment.technician.departments:code',
+            'contactProcessor:id,first_name,last_name',
+            'statsExcluder:id,first_name,last_name',
+        ]);
+
+        $this->refreshLotStatus($lotAppointment->lot);
+
+        return response()->json([
+            'message' => $excluded
+                ? 'Dossier sorti des statistiques du lot.'
+                : 'Dossier réintégré dans les statistiques du lot.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+            'reload_required' => true,
         ]);
     }
 
@@ -508,6 +588,7 @@ class ManagerLotController extends Controller
                         'appointment.technician:id,first_name,last_name,department_code,role',
                         'appointment.technician.departments:code',
                         'contactProcessor:id,first_name,last_name',
+                        'statsExcluder:id,first_name,last_name',
                     ])
                     ->when(! empty($filters['q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['q'])))
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
@@ -556,12 +637,13 @@ class ManagerLotController extends Controller
     private function serializeLot(Lot $lot, LotAutoCompletionCalculator $autoCompletion): array
     {
         $appointments = $lot->appointments;
-        $placedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
-        $placeableAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
-        $contactProcessedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
+        $statsAppointments = $appointments->reject(fn (LotAppointment $appointment): bool => $this->isExcludedFromLotStats($appointment));
+        $placedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+        $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
+        $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
         $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
         $statusMeta = $this->statusMeta($status);
-        $autoCompletionData = $autoCompletion->calculate($lot, $appointments);
+        $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
 
         return [
             'id' => $lot->id,
@@ -593,6 +675,7 @@ class ManagerLotController extends Controller
             'auto_completion' => $autoCompletionData,
             'appointments' => $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
+            'stats_excluded_count' => $appointments->count() - $statsAppointments->count(),
             'placed_count' => $placedAppointments->count(),
             'placeable_count' => $placeableAppointments->count(),
             'contact_processed_count' => $contactProcessedAppointments->count(),
@@ -610,6 +693,8 @@ class ManagerLotController extends Controller
         return [
             'id' => $appointment->id,
             'update_url' => route('manager.lots.appointments.update', $appointment),
+            'visits_update_url' => route('manager.lots.appointments.visits.update', $appointment),
+            'stats_exclusion_update_url' => route('manager.lots.appointments.stats-exclusion.update', $appointment),
             'external_reference' => $appointment->external_reference,
             'row_number' => $appointment->row_number,
             'source' => $appointment->source ?: $lot->source,
@@ -635,6 +720,10 @@ class ManagerLotController extends Controller
             'contact_processed_by_name' => $appointment->contactProcessor?->full_name,
             'physical_satisfaction' => $appointment->physical_satisfaction,
             'physical_satisfaction_synced_at' => $appointment->physical_satisfaction_synced_at,
+            'unsuccessful_visits_count' => $appointment->unsuccessful_visits_count ?? 0,
+            'excluded_from_lot_stats' => (bool) $appointment->excluded_from_lot_stats,
+            'excluded_from_lot_stats_at' => $appointment->excluded_from_lot_stats_at,
+            'excluded_from_lot_stats_by_name' => $appointment->statsExcluder?->full_name,
             'appointment_id' => $appointment->appointment_id,
             'is_placed' => $this->isPlacedLotAppointment($appointment),
             'is_contact_processed' => $this->isContactProcessedLotAppointment($appointment),
@@ -679,11 +768,48 @@ class ManagerLotController extends Controller
             || $appointment->contact_satisfaction !== null;
     }
 
+    private function isExcludedFromLotStats(LotAppointment $appointment): bool
+    {
+        return (bool) $appointment->excluded_from_lot_stats;
+    }
+
     private function isPlaceableLotAppointment(LotAppointment $appointment): bool
     {
-        return ! $this->isPlacedLotAppointment($appointment)
+        return ! $this->isExcludedFromLotStats($appointment)
+            && ! $this->isPlacedLotAppointment($appointment)
             && ! $this->isContactProcessedLotAppointment($appointment)
             && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
+    }
+
+    private function refreshLotStatus(?Lot $lot): void
+    {
+        if (! $lot) {
+            return;
+        }
+
+        $baseQuery = $lot->appointments()
+            ->where('excluded_from_lot_stats', false);
+
+        $totalAppointments = (clone $baseQuery)->count();
+        $completedAppointments = (clone $baseQuery)
+            ->where(function ($query): void {
+                $query
+                    ->whereNotNull('appointment_id')
+                    ->orWhere('status', LotAppointment::STATUS_PLACED)
+                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED)
+                    ->orWhereNotNull('contact_satisfaction');
+            })
+            ->count();
+
+        $status = match (true) {
+            $totalAppointments > 0 && $completedAppointments >= $totalAppointments => Lot::STATUS_COMPLETED,
+            $completedAppointments > 0 => Lot::STATUS_IN_PROGRESS,
+            default => Lot::STATUS_NOT_STARTED,
+        };
+
+        if ($lot->status !== $status) {
+            $lot->update(['status' => $status]);
+        }
     }
 
     private function trackingUrlForLotAppointment(LotAppointment $lotAppointment, string $routeName): ?string

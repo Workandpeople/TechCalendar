@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\ExternalServiceAlias;
+use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
@@ -1482,6 +1483,7 @@ class CoffracAppointmentService
         );
 
         $this->syncPlacedAppointment($storedRequest);
+        $this->syncLotPhysicalSatisfaction($storedRequest->refresh());
 
         return $storedRequest->refresh();
     }
@@ -1545,6 +1547,26 @@ class CoffracAppointmentService
         if ((int) $request->appointment_id !== (int) $appointment->id) {
             $request->update(['appointment_id' => $appointment->id]);
         }
+    }
+
+    private function syncLotPhysicalSatisfaction(ExternalAppointmentRequest $request): void
+    {
+        if ($request->status !== ExternalAppointmentRequest::STATUS_PLACED || ! $request->appointment_id) {
+            return;
+        }
+
+        $satisfaction = $this->physicalSatisfactionFromRemotePayload($request->payload);
+
+        if ($satisfaction === null) {
+            return;
+        }
+
+        LotAppointment::query()
+            ->where('appointment_id', $request->appointment_id)
+            ->update([
+                'physical_satisfaction' => $satisfaction,
+                'physical_satisfaction_synced_at' => now(),
+            ]);
     }
 
     /**
@@ -1892,7 +1914,75 @@ class CoffracAppointmentService
             return ExternalAppointmentRequest::STATUS_PLACED;
         }
 
+        if (str_contains($statusName, 'rapport genius')) {
+            return ExternalAppointmentRequest::STATUS_PLACED;
+        }
+
         return ExternalAppointmentRequest::STATUS_PENDING;
+    }
+
+    private function physicalSatisfactionFromRemotePayload(mixed $payload): ?bool
+    {
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $candidates = [
+            data_get($payload, 'satisfaction.is_satisfactory'),
+            data_get($payload, 'is_satisfactory'),
+            data_get($payload, 'physical_satisfaction'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_bool($candidate)) {
+                return $candidate;
+            }
+        }
+
+        $numericCandidates = [
+            data_get($payload, 'satisfaction.value'),
+            data_get($payload, 'is_favorable'),
+            data_get($payload, 'favorable'),
+        ];
+
+        foreach ($numericCandidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            if (is_numeric($candidate)) {
+                return match ((int) $candidate) {
+                    0 => true,
+                    1 => false,
+                    default => null,
+                };
+            }
+        }
+
+        $labelCandidates = [
+            data_get($payload, 'satisfaction.label'),
+            data_get($payload, 'satisfaction'),
+            data_get($payload, 'rapport_avis'),
+            data_get($payload, 'avis'),
+        ];
+
+        foreach ($labelCandidates as $candidate) {
+            if (! is_string($candidate) || trim($candidate) === '') {
+                continue;
+            }
+
+            $normalized = Str::lower(Str::ascii($candidate));
+
+            if (str_contains($normalized, 'non satisf')) {
+                return false;
+            }
+
+            if (str_contains($normalized, 'satisf')) {
+                return true;
+            }
+        }
+
+        return null;
     }
 
     private function appointmentFromStoredRequest(ExternalAppointmentRequest $request): array

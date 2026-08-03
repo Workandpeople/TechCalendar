@@ -24,6 +24,10 @@ class LotAutoCompletionCalculator
      */
     public function calculate(Lot $lot, Collection $appointments): array
     {
+        $appointments = $appointments
+            ->reject(fn (LotAppointment $appointment): bool => (bool) $appointment->excluded_from_lot_stats)
+            ->values();
+
         $totalCount = $appointments->count();
         $placedCount = $appointments
             ->filter(fn (LotAppointment $appointment): bool => $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED)

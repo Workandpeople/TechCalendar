@@ -1456,6 +1456,57 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertSee('appointment_id='.$placedAppointment->id, false);
 });
 
+it('does not render lot appointments excluded from lot statistics on the booking page', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit interne',
+        'average_duration_minutes' => 120,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot filtré',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client inclus',
+        'customer_phone' => '0600000003',
+        'address' => '20 Place Bellecour',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client sorti',
+        'customer_phone' => '0600000005',
+        'address' => '30 Place Bellecour',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.758,
+        'longitude' => 4.833,
+        'status' => LotAppointment::STATUS_PENDING,
+        'excluded_from_lot_stats' => true,
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.book'))
+        ->assertOk()
+        ->assertSee('Lot filtré')
+        ->assertSee('Client inclus')
+        ->assertDontSee('Client sorti');
+});
+
 it('searches additional booking technicians compatible with the requested service', function () {
     config(['services.mapbox.token' => null]);
 

@@ -116,6 +116,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/lots/imports/{preview}/retry', [ManagerLotController::class, 'retryImport'])->name('manager.lots.imports.retry');
     Route::patch('/manager/lots/imports/{preview}/rows/{rowNumber}', [ManagerLotController::class, 'updateImportRow'])->name('manager.lots.imports.rows.update');
     Route::post('/manager/lots/imports/{preview}/confirm', [ManagerLotController::class, 'confirmImport'])->name('manager.lots.imports.confirm');
+    Route::patch('/manager/lots/appointments/{lotAppointment}/visits', [ManagerLotController::class, 'updateAppointmentVisits'])->name('manager.lots.appointments.visits.update');
+    Route::patch('/manager/lots/appointments/{lotAppointment}/stats-exclusion', [ManagerLotController::class, 'updateAppointmentStatsExclusion'])->name('manager.lots.appointments.stats-exclusion.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/lots/{lot}', [ManagerLotController::class, 'show'])->name('manager.lots.show');
