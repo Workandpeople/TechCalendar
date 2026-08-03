@@ -102,10 +102,13 @@ it('renders manager lots from database', function () {
         ->assertSee('audit-juin.xlsx')
         ->assertSee('Voir le détail')
         ->assertSee(route('manager.lots.show', $lot), false)
-        ->assertSee('RDV à placer')
+        ->assertSee('Lots non commencés')
+        ->assertSee('Lots en cours')
+        ->assertSee('Lots terminés')
         ->assertSee('Modifier le lot')
         ->assertSee('Modifier')
         ->assertSee('Supprimer le lot')
+        ->assertDontSee('RDV total')
         ->assertDontSee('Camille Martin');
 
     $this->actingAs($manager)
@@ -739,8 +742,11 @@ it('renders lot type select in the import form', function () {
         ->assertSee("% d'échantillonnage", false)
         ->assertSee('Échantillonnage contrôle contact')
         ->assertSee('100% contrôle')
-        ->assertSee('RDV placés')
-        ->assertSee('RDV total')
+        ->assertSee('Lots non commencés')
+        ->assertSee('Lots en cours')
+        ->assertSee('Lots terminés')
+        ->assertDontSee('RDV placés')
+        ->assertDontSee('RDV total')
         ->assertDontSee('Statut service');
 });
 
@@ -1364,6 +1370,84 @@ it('confirms selected preview rows and creates a lot', function () {
     ]);
     $this->assertDatabaseMissing('lot_appointments', [
         'customer_name' => 'Julien Bernard',
+    ]);
+});
+
+it('blocks selected import preview rows that still have warnings', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+    $preview = LotImportPreview::query()->create([
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'status' => LotImportPreview::STATUS_COMPLETED,
+        'progress' => 100,
+        'name' => 'Lot avec warnings',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'original_filename' => 'preview.xlsx',
+        'original_file_disk' => 'local',
+        'original_file_path' => 'lot-import-previews/preview.xlsx',
+        'total_rows' => 2,
+        'normalized_rows' => 2,
+        'rejected_rows' => 0,
+        'created_by' => $manager->id,
+        'payload' => [
+            'summary' => 'Preview avec correction attendue',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 2,
+                    'customer_name' => 'Client à corriger',
+                    'address' => 'Adresse incomplète',
+                    'ai_confidence' => 0.4,
+                    'warnings' => ['Adresse non géocodée'],
+                ],
+                [
+                    'row_number' => 3,
+                    'customer_name' => 'Client prêt',
+                    'address' => '20 Rue Bellecordière',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'ai_confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.imports.confirm', $preview), [
+            'selected_rows' => [2],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('message', 'Corrige ou décoche les lignes avec warning avant validation : 2.');
+
+    $this->assertDatabaseMissing('lots', [
+        'name' => 'Lot avec warnings',
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.imports.confirm', $preview), [
+            'selected_rows' => [3],
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Lot "Lot avec warnings" créé avec 1 RDV.');
+
+    $this->assertDatabaseHas('lot_appointments', [
+        'customer_name' => 'Client prêt',
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+    $this->assertDatabaseMissing('lot_appointments', [
+        'customer_name' => 'Client à corriger',
     ]);
 });
 

@@ -4806,8 +4806,6 @@
                 return false;
             }
 
-            closeLotAppointmentDetails(lotAppointmentId);
-
             if (mode === 'contact') {
                 const button = lotBookButtonFor(lotAppointmentId);
 
@@ -4819,6 +4817,8 @@
                 openLotContactModal(button);
                 return true;
             }
+
+            closeLotAppointmentDetails(lotAppointmentId);
 
             return analyzeAppointment({
                 lot_appointment_id: Number(lotAppointmentId),

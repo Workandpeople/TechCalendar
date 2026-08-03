@@ -41,6 +41,19 @@ class LotImportConfirmationService
             throw new \RuntimeException('Aucune ligne sélectionnée ne correspond à la preview.');
         }
 
+        $selectedRowsWithWarnings = $appointments
+            ->filter(fn (array $appointment): bool => collect($appointment['warnings'] ?? [])->filter()->isNotEmpty())
+            ->map(fn (array $appointment): int => (int) ($appointment['row_number'] ?? 0))
+            ->filter()
+            ->values();
+
+        if ($selectedRowsWithWarnings->isNotEmpty()) {
+            throw new \RuntimeException(sprintf(
+                'Corrige ou décoche les lignes avec warning avant validation : %s.',
+                $selectedRowsWithWarnings->join(', '),
+            ));
+        }
+
         return DB::transaction(function () use ($preview, $payload, $appointments): Lot {
             $service = $preview->service_id
                 ? Service::query()->find((int) $preview->service_id)

@@ -23,23 +23,19 @@
             </div>
         @endif
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Lots</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['lots_count'] }}</p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV à placer</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placeable_count'] }}</p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV placés</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['placed_count'] }}</p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV total</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $stats['appointments_count'] }}</p>
-            </article>
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            @foreach ($stats['status_widgets'] as $widget)
+                <article class="flex items-center justify-between gap-4 rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $widget['label'] }}</p>
+                        <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $widget['count'] }}</p>
+                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $widget['percentage'] }}% du total</p>
+                    </div>
+                    <div class="lot-chart-ring lot-widget-ring shrink-0" style="--value:{{ $widget['percentage'] }};--ring-color:{{ $widget['color'] }};">
+                        <span>{{ $widget['percentage'] }}%</span>
+                    </div>
+                </article>
+            @endforeach
         </section>
 
         <section class="gc-card p-4">
@@ -510,10 +506,15 @@
                     <div id="lot-import-preview" class="hidden space-y-3">
                         <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
-                                <h3 class="font-semibold" style="color:var(--gc-text);">Données nettoyees</h3>
+                                <h3 class="font-semibold" style="color:var(--gc-text);">Données nettoyées</h3>
                                 <p id="lot-import-preview-summary" class="text-sm" style="color:var(--gc-text-soft);"></p>
+                                <p id="lot-import-warnings-summary" class="mt-1 text-xs font-semibold" style="color:var(--gc-text-soft);"></p>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <label class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                                    <input id="lot-import-warnings-only" type="checkbox" class="gc-check">
+                                    <span>Voir uniquement les warnings</span>
+                                </label>
                                 <button id="lot-import-select-all" type="button" class="gc-link">Tout cocher</button>
                                 <button id="lot-import-unselect-all" type="button" class="gc-link">Tout décocher</button>
                             </div>
@@ -552,12 +553,17 @@
             align-items: center;
             background:
                 radial-gradient(circle at center, #ffffff 0 58%, transparent 59%),
-                conic-gradient(var(--gc-primary) calc(var(--value) * 1%), #e2e8f0 0);
+                conic-gradient(var(--ring-color, var(--gc-primary)) calc(var(--value) * 1%), #e2e8f0 0);
             border-radius: 9999px;
             display: flex;
             height: 88px;
             justify-content: center;
             width: 88px;
+        }
+
+        .lot-widget-ring {
+            height: 74px;
+            width: 74px;
         }
 
         .lot-chart-ring span {
@@ -630,6 +636,8 @@
         const lotImportPreview = document.getElementById('lot-import-preview');
         const lotImportPreviewRows = document.getElementById('lot-import-preview-rows');
         const lotImportPreviewSummary = document.getElementById('lot-import-preview-summary');
+        const lotImportWarningsSummary = document.getElementById('lot-import-warnings-summary');
+        const lotImportWarningsOnly = document.getElementById('lot-import-warnings-only');
         const lotImportConfirm = document.getElementById('lot-import-confirm');
         const lotImportSelectionCount = document.getElementById('lot-import-selection-count');
         const lotImportSelectAll = document.getElementById('lot-import-select-all');
@@ -1075,12 +1083,59 @@
             return expectedRows === 0 || rows.length >= expectedRows;
         }
 
+        function lotImportWarnings(appointment) {
+            return Array.isArray(appointment?.warnings)
+                ? appointment.warnings.filter(Boolean)
+                : [];
+        }
+
+        function lotImportCheckboxes() {
+            return Array.from(lotImportPreviewRows.querySelectorAll('.lot-import-row-checkbox'));
+        }
+
+        function lotImportVisibleCheckboxes() {
+            const checkboxes = lotImportCheckboxes();
+
+            if (!lotImportWarningsOnly?.checked) {
+                return checkboxes;
+            }
+
+            return checkboxes.filter((checkbox) => !checkbox.closest('[data-preview-row]')?.classList.contains('hidden'));
+        }
+
+        function lotImportSelectedWarningCheckboxes() {
+            return lotImportCheckboxes()
+                .filter((checkbox) => checkbox.checked && checkbox.dataset.hasWarnings === '1');
+        }
+
+        function applyLotImportWarningFilter() {
+            const warningsOnly = Boolean(lotImportWarningsOnly?.checked);
+
+            lotImportPreviewRows.querySelectorAll('[data-preview-row]').forEach((row) => {
+                const hiddenByFilter = warningsOnly && row.dataset.hasWarnings !== '1';
+                row.classList.toggle('hidden', hiddenByFilter);
+
+                lotImportPreviewRows.querySelectorAll('.lot-import-edit-row').forEach((editRow) => {
+                    if (editRow.dataset.editRow === row.dataset.previewRow && hiddenByFilter) {
+                        editRow.classList.add('hidden');
+                    }
+                });
+            });
+        }
+
         function updateLotImportSelectionCount() {
-            selectedLotImportRows = new Set(Array.from(lotImportPreviewRows.querySelectorAll('input[type="checkbox"]:checked'))
+            selectedLotImportRows = new Set(lotImportCheckboxes().filter((checkbox) => checkbox.checked)
                 .map((checkbox) => checkbox.value));
 
-            lotImportSelectionCount.textContent = `${selectedLotImportRows.size} ligne(s) sélectionnée(s)`;
-            lotImportConfirm.disabled = selectedLotImportRows.size === 0 || !currentLotImport?.confirm_url;
+            const selectedWarningRows = lotImportSelectedWarningCheckboxes();
+            const warningSuffix = selectedWarningRows.length > 0
+                ? ` · ${selectedWarningRows.length} warning(s) à corriger ou décocher`
+                : '';
+
+            lotImportSelectionCount.textContent = `${selectedLotImportRows.size} ligne(s) sélectionnée(s)${warningSuffix}`;
+            lotImportConfirm.disabled = selectedLotImportRows.size === 0
+                || selectedWarningRows.length > 0
+                || !currentLotImport?.confirm_url;
         }
 
         function isLotImportRowSelected(rowNumber) {
@@ -1097,22 +1152,38 @@
                 ...data,
             };
             lotImportPreviewRows.innerHTML = '';
-            lotImportPreviewSummary.textContent = `${data.normalized_rows || 0} ligne(s) nettoyee(s), ${data.rejected_rows || 0} rejet(s). ${data.summary || ''}`;
+            lotImportPreviewSummary.textContent = `${data.normalized_rows || 0} ligne(s) nettoyée(s), ${data.rejected_rows || 0} rejet(s). ${data.summary || ''}`;
 
             const appointments = normalizedPreviewRows(data.appointments);
+            const warningRowsCount = appointments.filter((appointment) => lotImportWarnings(appointment).length > 0).length;
+
+            if (lotImportWarningsOnly?.checked && warningRowsCount === 0) {
+                lotImportWarningsOnly.checked = false;
+            }
+
+            if (lotImportWarningsSummary) {
+                lotImportWarningsSummary.textContent = warningRowsCount > 0
+                    ? `${warningRowsCount} ligne(s) avec warning : corrige-les ou décoche-les avant validation.`
+                    : 'Aucun warning détecté sur les lignes nettoyées.';
+                lotImportWarningsSummary.style.color = warningRowsCount > 0 ? '#b45309' : '#15803d';
+            }
 
             appointments.forEach((appointment) => {
                 const rowNumber = appointment.row_number || '';
                 const rowChecked = isLotImportRowSelected(rowNumber) ? 'checked' : '';
+                const warnings = lotImportWarnings(appointment);
+                const hasWarnings = warnings.length > 0;
                 const gps = appointment.latitude && appointment.longitude
                     ? `${Number(appointment.latitude).toFixed(5)}, ${Number(appointment.longitude).toFixed(5)}`
                     : '--';
                 const displayName = lotImportDisplayName(appointment);
                 const businessLabel = lotAppointmentBusinessLabel(appointment);
                 const row = document.createElement('tr');
+                row.dataset.previewRow = String(rowNumber);
+                row.dataset.hasWarnings = hasWarnings ? '1' : '0';
                 row.innerHTML = `
                     <td class="px-3 py-3 align-top">
-                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowNumber)}" ${rowChecked}>
+                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowNumber)}" data-has-warnings="${hasWarnings ? '1' : '0'}" ${rowChecked}>
                     </td>
                     <td class="px-3 py-3 align-top">
                         <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(displayName)}</div>
@@ -1123,7 +1194,11 @@
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.address || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml([appointment.postal_code, appointment.city].filter(Boolean).join(' ') || appointment.department_code || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml(gps)}</td>
-                    <td class="px-3 py-3 align-top">${escapeHtml((appointment.warnings || []).join(' · ') || '--')}</td>
+                    <td class="px-3 py-3 align-top">
+                        ${hasWarnings
+                            ? `<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#92400e;">${escapeHtml(warnings.join(' · '))}</span>`
+                            : '<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#166534;">OK</span>'}
+                    </td>
                     <td class="px-3 py-3 align-top">
                         ${appointment.update_url ? `<button type="button" class="gc-link lot-import-edit-button" data-row-number="${escapeHtml(rowNumber)}">Modifier</button>` : '--'}
                     </td>
@@ -1134,6 +1209,7 @@
                     const editRow = document.createElement('tr');
                     editRow.className = 'lot-import-edit-row hidden';
                     editRow.dataset.editRow = String(rowNumber);
+                    editRow.dataset.hasWarnings = hasWarnings ? '1' : '0';
                     editRow.dataset.updateUrl = appointment.update_url;
                     editRow.innerHTML = `
                         <td colspan="8" class="bg-slate-50 px-4 py-4">
@@ -1206,10 +1282,11 @@
                     void saveLotImportPreviewRow(button);
                 });
             });
+            applyLotImportWarningFilter();
             updateLotImportSelectionCount();
 
             if (Number(data.normalized_rows || 0) > 0 && appointments.length === 0) {
-                showLotImportError('La preview indique des lignes nettoyees, mais le payload complet est absent. Relancé l’import.');
+                showLotImportError('La preview indique des lignes nettoyées, mais le payload complet est absent. Relance l’import.');
             }
         }
 
@@ -1919,12 +1996,17 @@
         lotImportModalClose?.addEventListener('click', closeLotImportModal);
 
         lotImportSelectAll?.addEventListener('click', () => {
-            lotImportPreviewRows.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.checked = true);
+            lotImportVisibleCheckboxes().forEach((checkbox) => checkbox.checked = true);
             updateLotImportSelectionCount();
         });
 
         lotImportUnselectAll?.addEventListener('click', () => {
-            lotImportPreviewRows.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.checked = false);
+            lotImportVisibleCheckboxes().forEach((checkbox) => checkbox.checked = false);
+            updateLotImportSelectionCount();
+        });
+
+        lotImportWarningsOnly?.addEventListener('change', () => {
+            applyLotImportWarningFilter();
             updateLotImportSelectionCount();
         });
 
@@ -1945,6 +2027,9 @@
             stopLotImportWatchers();
             currentLotImportCompleted = false;
             selectedLotImportRows = null;
+            if (lotImportWarningsOnly) {
+                lotImportWarningsOnly.checked = false;
+            }
             if (lotImportRetry) {
                 lotImportRetry.disabled = true;
                 lotImportRetry.textContent = 'Relance en cours...';
@@ -2022,6 +2107,9 @@
             resetLotImportProgressAnimation(5);
             currentLotImportCompleted = false;
             selectedLotImportRows = null;
+            if (lotImportWarningsOnly) {
+                lotImportWarningsOnly.checked = false;
+            }
             closeLotImportFormModal();
             openLotImportModal();
             updateLotImportModalCloseState();
@@ -2072,8 +2160,17 @@
             const selectedRows = Array.from(lotImportPreviewRows.querySelectorAll('input[type="checkbox"]:checked'))
                 .map((checkbox) => Number(checkbox.value))
                 .filter(Boolean);
+            const selectedWarningRows = lotImportSelectedWarningCheckboxes()
+                .map((checkbox) => checkbox.value)
+                .filter(Boolean);
 
             if (!selectedRows.length || !currentLotImport?.confirm_url) {
+                return;
+            }
+
+            if (selectedWarningRows.length > 0) {
+                showLotImportError(`Corrige ou décoche les lignes avec warning avant validation : ${selectedWarningRows.join(', ')}.`, false);
+                updateLotImportSelectionCount();
                 return;
             }
 

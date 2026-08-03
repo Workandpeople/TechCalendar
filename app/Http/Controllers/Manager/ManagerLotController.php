@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use RuntimeException;
 use Throwable;
 
 class ManagerLotController extends Controller
@@ -57,11 +58,7 @@ class ManagerLotController extends Controller
                 'status' => $filters['status'] ?? '',
             ],
             'stats' => [
-                'lots_count' => $statsLots->count(),
-                'appointments_count' => $statsLots->sum('appointments_count'),
-                'placeable_count' => $statsLots->sum('placeable_count'),
-                'placed_count' => $statsLots->sum('placed_count'),
-                'contact_processed_count' => $statsLots->sum('contact_processed_count'),
+                'status_widgets' => $this->lotStatusWidgets($statsLots),
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
             'canForceDeleteStartedLots' => $this->canForceDeleteStartedLots($request),
@@ -367,7 +364,13 @@ class ManagerLotController extends Controller
             'selected_rows.*' => ['required', 'integer', 'min:1'],
         ]);
 
-        $lot = $confirmation->confirm($preview, $payload['selected_rows']);
+        try {
+            $lot = $confirmation->confirm($preview, $payload['selected_rows']);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'message' => sprintf('Lot "%s" créé avec %d RDV.', $lot->name, $lot->appointments()->count()),
@@ -900,6 +903,36 @@ class ManagerLotController extends Controller
             Lot::STATUS_COMPLETED => ['color' => '#15803d', 'background' => '#dcfce7'],
             default => ['color' => '#b45309', 'background' => '#fef3c7'],
         };
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, array<string, mixed>> $lots
+     * @return array<int, array{status:string,label:string,count:int,percentage:int,color:string,background:string}>
+     */
+    private function lotStatusWidgets($lots): array
+    {
+        $total = max(1, $lots->count());
+
+        return collect([
+            Lot::STATUS_NOT_STARTED => 'Lots non commencés',
+            Lot::STATUS_IN_PROGRESS => 'Lots en cours',
+            Lot::STATUS_COMPLETED => 'Lots terminés',
+        ])
+            ->map(function (string $label, string $status) use ($lots, $total): array {
+                $count = $lots->where('status', $status)->count();
+                $meta = $this->statusMeta($status);
+
+                return [
+                    'status' => $status,
+                    'label' => $label,
+                    'count' => $count,
+                    'percentage' => (int) round(($count / $total) * 100),
+                    'color' => $meta['color'],
+                    'background' => $meta['background'],
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function canAccess(Request $request): bool
