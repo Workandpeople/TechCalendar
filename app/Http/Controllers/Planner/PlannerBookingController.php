@@ -1152,6 +1152,7 @@ class PlannerBookingController extends Controller
                 $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
                 $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
                 $statusMeta = $this->lotStatusMeta($status);
+                $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
 
                 return [
                     'id' => $lot->id,
@@ -1165,9 +1166,12 @@ class PlannerBookingController extends Controller
                     'status_color' => $statusMeta['color'],
                     'status_background' => $statusMeta['background'],
                     'imported_at' => $lot->imported_at,
-                    'auto_completion' => $autoCompletion->calculate($lot, $statsAppointments),
+                    'auto_completion' => $autoCompletionData,
                     'appointments_count' => $lot->appointments->count(),
                     'placeable_count' => $placeableAppointments->count(),
+                    'target_remaining_count' => $autoCompletionData['remaining_count'] ?? $placeableAppointments->count(),
+                    'target_count' => $autoCompletionData['target_count'] ?? $lot->appointments->count(),
+                    'completed_target_count' => $autoCompletionData['completed_count'] ?? ($placedAppointments->count() + $contactProcessedAppointments->count()),
                     'placed_count' => $placedAppointments->count(),
                     'contact_processed_count' => $contactProcessedAppointments->count(),
                     'supports_physical' => $lot->supportsPhysicalProcessing(),

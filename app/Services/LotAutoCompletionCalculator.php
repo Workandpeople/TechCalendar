@@ -13,6 +13,8 @@ class LotAutoCompletionCalculator
      * @return array{
      *     percentage:int,
      *     placed_count:int,
+     *     completed_count:int,
+     *     remaining_count:int,
      *     target_count:int,
      *     total_count:int,
      *     detail:string,
@@ -32,27 +34,7 @@ class LotAutoCompletionCalculator
         $placedCount = $appointments
             ->filter(fn (LotAppointment $appointment): bool => $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED)
             ->count();
-        $isSampling = Lot::requiresSamplingPercentageFor($lot->type);
-        $samplingPercentage = $isSampling && $lot->sampling_percentage !== null
-            ? max(0, min(100, (float) $lot->sampling_percentage))
-            : null;
-        $targetCount = $this->targetCount($totalCount, $isSampling, $samplingPercentage);
-        $completedCount = min($placedCount, $targetCount);
-        $percentage = $targetCount > 0
-            ? (int) min(100, round(($completedCount / $targetCount) * 100))
-            : 0;
-
-        $result = [
-            'percentage' => $percentage,
-            'placed_count' => $placedCount,
-            'target_count' => $targetCount,
-            'total_count' => $totalCount,
-            'detail' => $this->detail($completedCount, $targetCount, $placedCount, $isSampling, $samplingPercentage),
-            'is_sampling' => $isSampling,
-            'sampling_percentage' => $samplingPercentage,
-        ];
-
-        $result['physical'] = $lot->supportsPhysicalProcessing()
+        $physical = $lot->supportsPhysicalProcessing()
             ? $this->channelCompletion(
                 $appointments,
                 'physique',
@@ -63,7 +45,7 @@ class LotAutoCompletionCalculator
                     || $appointment->status === LotAppointment::STATUS_PLACED,
             )
             : null;
-        $result['contact'] = $lot->supportsContactProcessing()
+        $contact = $lot->supportsContactProcessing()
             ? $this->channelCompletion(
                 $appointments,
                 'contact',
@@ -73,6 +55,45 @@ class LotAutoCompletionCalculator
                     || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED,
             )
             : null;
+        $channels = collect([$physical, $contact])->filter();
+
+        if ($channels->isNotEmpty()) {
+            $targetCount = (int) $channels->sum('target_count');
+            $completedCount = min((int) $channels->sum('completed_count'), $targetCount);
+            $percentage = $targetCount > 0
+                ? (int) min(100, round(($completedCount / $targetCount) * 100))
+                : 0;
+            $isSampling = $channels->contains(fn (array $channel): bool => (bool) $channel['is_sampling']);
+            $samplingPercentage = $channels->count() === 1
+                ? $channels->first()['sampling_percentage']
+                : null;
+            $detail = $this->aggregateDetail($channels, $completedCount, $targetCount);
+        } else {
+            $isSampling = Lot::requiresSamplingPercentageFor($lot->type);
+            $samplingPercentage = $isSampling && $lot->sampling_percentage !== null
+                ? max(0, min(100, (float) $lot->sampling_percentage))
+                : null;
+            $targetCount = $this->targetCount($totalCount, $isSampling, $samplingPercentage);
+            $completedCount = min($placedCount, $targetCount);
+            $percentage = $targetCount > 0
+                ? (int) min(100, round(($completedCount / $targetCount) * 100))
+                : 0;
+            $detail = $this->detail($completedCount, $targetCount, $placedCount, $isSampling, $samplingPercentage);
+        }
+
+        $result = [
+            'percentage' => $percentage,
+            'placed_count' => $placedCount,
+            'completed_count' => $completedCount,
+            'remaining_count' => max(0, $targetCount - $completedCount),
+            'target_count' => $targetCount,
+            'total_count' => $totalCount,
+            'detail' => $detail,
+            'is_sampling' => $isSampling,
+            'sampling_percentage' => $samplingPercentage,
+            'physical' => $physical,
+            'contact' => $contact,
+        ];
 
         return $result;
     }
@@ -96,6 +117,7 @@ class LotAutoCompletionCalculator
      *     label:string,
      *     percentage:int,
      *     completed_count:int,
+     *     remaining_count:int,
      *     target_count:int,
      *     total_count:int,
      *     detail:string,
@@ -124,6 +146,7 @@ class LotAutoCompletionCalculator
             'label' => $label,
             'percentage' => $percentage,
             'completed_count' => $completedCount,
+            'remaining_count' => max(0, $targetCount - $completedCount),
             'target_count' => $targetCount,
             'total_count' => $totalCount,
             'detail' => $this->channelDetail($label, $completedCount, $targetCount, $isSampling, $safeSamplingPercentage),
@@ -145,6 +168,30 @@ class LotAutoCompletionCalculator
         }
 
         return sprintf('%d/%d %s', $completedCount, $targetCount, $label);
+    }
+
+    /**
+     * @param Collection<int, array<string, mixed>> $channels
+     */
+    private function aggregateDetail(Collection $channels, int $completedCount, int $targetCount): string
+    {
+        if ($channels->count() === 1) {
+            return (string) $channels->first()['detail'];
+        }
+
+        return sprintf(
+            '%d/%d traitements objectif · %s',
+            $completedCount,
+            $targetCount,
+            $channels
+                ->map(fn (array $channel): string => sprintf(
+                    '%d/%d %s',
+                    (int) $channel['completed_count'],
+                    (int) $channel['target_count'],
+                    (string) $channel['label'],
+                ))
+                ->join(' · '),
+        );
     }
 
     private function detail(int $completedCount, int $targetCount, int $placedCount, bool $isSampling, ?float $samplingPercentage): string

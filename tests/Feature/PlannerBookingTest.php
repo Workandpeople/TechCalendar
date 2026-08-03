@@ -1457,6 +1457,51 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertSee('appointment_id='.$placedAppointment->id, false);
 });
 
+it('renders lot booking stats against the sampling objective', function () {
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot contact échantillonné',
+        'type' => Lot::TYPE_SAMPLE_CONTACT_CONTROL,
+        'sampling_percentage' => 20,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+
+    foreach (range(1, 10) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client contact '.$index,
+            'customer_phone' => '06000000'.str_pad((string) $index, 2, '0', STR_PAD_LEFT),
+            'address' => '20 Place Bellecour',
+            'postal_code' => '69002',
+            'city' => 'Lyon',
+            'department_code' => '69',
+            'latitude' => 45.7578,
+            'longitude' => 4.832,
+            'status' => $index === 1 ? LotAppointment::STATUS_CONTACT_PROCESSED : LotAppointment::STATUS_PENDING,
+            'processing_mode' => $index === 1 ? LotAppointment::PROCESSING_MODE_CONTACT : null,
+            'contact_satisfaction' => $index === 1 ? true : null,
+            'contact_comment' => $index === 1 ? 'Contact traité' : null,
+            'contact_processed_at' => $index === 1 ? now() : null,
+        ]);
+    }
+
+    $this->actingAs($planner)
+        ->get(route('planner.book'))
+        ->assertOk()
+        ->assertSee('Lot contact échantillonné')
+        ->assertSee('10 RDV')
+        ->assertSee("1 à traiter pour l'objectif", false)
+        ->assertSee('0 placés')
+        ->assertSee('1 contacts')
+        ->assertSee('50%')
+        ->assertSee('1/2 contact (20%)');
+});
+
 it('does not render lot appointments excluded from lot statistics on the booking page', function () {
     $planner = User::factory()->create([
         'role' => 1,

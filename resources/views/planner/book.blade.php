@@ -378,7 +378,7 @@
                                     @endif
                                 </div>
                                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à traiter · {{ $lot['placed_count'] }} placés · {{ $lot['contact_processed_count'] }} contacts
+                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['target_remaining_count'] }} à traiter pour l'objectif · {{ $lot['placed_count'] }} placés · {{ $lot['contact_processed_count'] }} contacts
                                     @if ($lot['service_label'])
                                         · {{ $lot['service_label'] }}
                                     @endif
@@ -981,7 +981,7 @@
 
                 <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
                     <button id="booking-lot-contact-cancel" type="button" class="gc-btn-soft">Annuler</button>
-                    <button id="booking-lot-contact-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+                    <button id="booking-lot-contact-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled>
                         Enregistrer le contact
                     </button>
                 </div>
@@ -1301,6 +1301,7 @@
         const bookingReplacementSearchStatus = document.getElementById('booking-replacement-search-status');
         const bookingReplacementSearchResults = document.getElementById('booking-replacement-search-results');
         const bookingCrmPageSize = 10;
+        const bookingSourceModeStorageKey = 'techcalendar.planner.book.source_mode';
         let bookingCrmPage = 1;
         let bookingSourceMode = 'crm';
         let bookingReplacementSearchAbortController = null;
@@ -1915,9 +1916,31 @@
             renderBookingCrmPagination(matchingCards.length);
         };
 
-        const setBookingSourceMode = (mode) => {
+        const storedBookingSourceMode = () => {
+            try {
+                const mode = window.localStorage?.getItem(bookingSourceModeStorageKey);
+
+                return ['crm', 'lot'].includes(mode) ? mode : 'crm';
+            } catch (error) {
+                return 'crm';
+            }
+        };
+
+        const persistBookingSourceMode = (mode) => {
+            try {
+                window.localStorage?.setItem(bookingSourceModeStorageKey, mode);
+            } catch (error) {
+                // Stockage indisponible : on garde le comportement courant sans bloquer la page.
+            }
+        };
+
+        const setBookingSourceMode = (mode, { persist = true } = {}) => {
             bookingSourceMode = mode === 'lot' ? 'lot' : 'crm';
             const isLotMode = bookingSourceMode === 'lot';
+
+            if (persist) {
+                persistBookingSourceMode(bookingSourceMode);
+            }
 
             bookingCrmSource?.classList.toggle('hidden', isLotMode);
             bookingLotSource?.classList.toggle('hidden', !isLotMode);
@@ -5035,6 +5058,19 @@
         const lotContactSubmit = document.getElementById('booking-lot-contact-submit');
         let currentLotContactUrl = null;
 
+        const updateLotContactSubmitState = (isSubmitting = false) => {
+            if (!lotContactSubmit) return;
+
+            if (isSubmitting) {
+                lotContactSubmit.disabled = true;
+                return;
+            }
+
+            lotContactSubmit.disabled = !currentLotContactUrl
+                || !lotContactSatisfaction?.value
+                || !lotContactComment?.value.trim();
+        };
+
         const setLotContactStatus = (message, type = 'info') => {
             if (!lotContactStatus) return;
 
@@ -5051,6 +5087,7 @@
             if (lotContactSatisfaction) lotContactSatisfaction.value = '';
             if (lotContactComment) lotContactComment.value = '';
             lotContactStatus?.classList.add('hidden');
+            updateLotContactSubmitState();
             lotContactModal?.classList.remove('hidden');
             lotContactModal?.classList.add('flex');
         };
@@ -5059,10 +5096,13 @@
             lotContactModal?.classList.add('hidden');
             lotContactModal?.classList.remove('flex');
             currentLotContactUrl = null;
+            updateLotContactSubmitState();
         };
 
         document.getElementById('booking-lot-contact-close')?.addEventListener('click', closeLotContactModal);
         document.getElementById('booking-lot-contact-cancel')?.addEventListener('click', closeLotContactModal);
+        lotContactSatisfaction?.addEventListener('change', () => updateLotContactSubmitState());
+        lotContactComment?.addEventListener('input', () => updateLotContactSubmitState());
 
         lotContactForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -5073,10 +5113,11 @@
 
             if (!lotContactSatisfaction?.value || !lotContactComment?.value.trim()) {
                 setLotContactStatus('Sélectionne un résultat et saisis un commentaire.', 'error');
+                updateLotContactSubmitState();
                 return;
             }
 
-            lotContactSubmit.disabled = true;
+            updateLotContactSubmitState(true);
             lotContactSubmit.textContent = 'Enregistrement...';
             setLotContactStatus('Enregistrement du traitement téléphonique...');
 
@@ -5104,8 +5145,8 @@
             } catch (error) {
                 setLotContactStatus(error.message || 'Erreur réseau pendant l’enregistrement.', 'error');
             } finally {
-                lotContactSubmit.disabled = false;
                 lotContactSubmit.textContent = 'Enregistrer le contact';
+                updateLotContactSubmitState();
             }
         });
 
@@ -5124,7 +5165,7 @@
             startExternalSyncPolling();
         }
 
-        setBookingSourceMode('crm');
+        setBookingSourceMode(bookingInitialCrmAppointmentId ? 'crm' : storedBookingSourceMode());
 
         if (bookingInitialCrmAppointmentId) {
             const initialCard = Array.from(document.querySelectorAll('.crm-appointment-card'))
