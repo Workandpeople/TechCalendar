@@ -411,7 +411,7 @@ class PlannerBookingController extends Controller
 
         if (! $crmAppointment['service']) {
             $serviceErrorKey = match (true) {
-                ! empty($payload['lot_appointment_id']) => 'lot_service_id',
+                ! empty($payload['lot_appointment_id']) => 'lot_appointment_id',
                 ! empty($payload['replace_appointment_id']) => 'replace_appointment_id',
                 default => 'crm_service_id',
             };
@@ -997,7 +997,6 @@ class PlannerBookingController extends Controller
             'lot_service_id' => [
                 'nullable',
                 'integer',
-                'required_with:lot_appointment_id',
                 Rule::exists('services', 'id'),
             ],
             'replace_appointment_id' => [
@@ -1106,12 +1105,14 @@ class PlannerBookingController extends Controller
 
         return Lot::query()
             ->with([
+                'service:id,type,name,average_duration_minutes',
                 'appointments' => fn ($query) => $query
                     ->with([
                         'appointment:id,technician_id,service_id,starts_at,ends_at',
                         'appointment.service:id,type,name',
                         'appointment.technician:id,first_name,last_name,department_code,role',
                         'appointment.technician.departments:code',
+                        'service:id,type,name,average_duration_minutes',
                     ])
                     ->where(function ($query) use ($placeableStatus): void {
                         $query
@@ -1156,6 +1157,10 @@ class PlannerBookingController extends Controller
                     'id' => $lot->id,
                     'title' => $lot->name,
                     'type_label' => $lot->typeLabel(),
+                    'service_id' => $lot->service_id,
+                    'service_label' => $lot->service
+                        ? $lot->service->type.' - '.$lot->service->name
+                        : null,
                     'status_label' => Lot::statuses()[$status] ?? Lot::statuses()[Lot::STATUS_NOT_STARTED],
                     'status_color' => $statusMeta['color'],
                     'status_background' => $statusMeta['background'],
@@ -1181,7 +1186,10 @@ class PlannerBookingController extends Controller
                         'department_code' => $appointment->department_code,
                         'row_number' => $appointment->row_number,
                         'external_reference' => $appointment->external_reference,
-                        'service_id' => $appointment->service_id,
+                        'service_id' => $appointment->service_id ?: $lot->service_id,
+                        'service_label' => $appointment->service
+                            ? $appointment->service->type.' - '.$appointment->service->name
+                            : ($lot->service ? $lot->service->type.' - '.$lot->service->name : null),
                         'status' => $appointment->status,
                         'status_label' => $appointment->statusLabel(),
                         'appointment_id' => $appointment->appointment_id,
@@ -1201,6 +1209,7 @@ class PlannerBookingController extends Controller
                         'contact_url' => route('planner.book.lots.appointments.contact', $appointment),
                         'can_search' => $this->isPlaceableLotAppointment($appointment)
                             && $lot->supportsPhysicalProcessing()
+                            && ($appointment->service_id !== null || $lot->service_id !== null)
                             && filled($appointment->address)
                             && filled($appointment->department_code)
                             && $appointment->latitude !== null
@@ -1229,7 +1238,11 @@ class PlannerBookingController extends Controller
     private function lotAppointmentFromId(int $id, ?int $serviceId = null): ?array
     {
         $lotAppointment = LotAppointment::query()
-            ->with(['lot:id,name,type,status', 'service:id,type,name,average_duration_minutes'])
+            ->with([
+                'lot:id,name,type,status,delegataire,global_plus,service_id',
+                'lot.service:id,type,name,average_duration_minutes',
+                'service:id,type,name,average_duration_minutes',
+            ])
             ->whereNull('appointment_id')
             ->whereKey($id)
             ->first();
@@ -1248,9 +1261,9 @@ class PlannerBookingController extends Controller
         }
 
         [$firstName, $lastName] = $this->splitCustomerName($lotAppointment);
-        $service = $serviceId
-            ? Service::query()->find($serviceId)
-            : $lotAppointment->service;
+        $service = $lotAppointment->service
+            ?: $lotAppointment->lot?->service
+            ?: ($serviceId ? Service::query()->find($serviceId) : null);
 
         return [
             'id' => 'lot-'.$lotAppointment->id,
@@ -1269,6 +1282,8 @@ class PlannerBookingController extends Controller
             'site_name' => $lotAppointment->site_name,
             'phone' => $lotAppointment->customer_phone,
             'address' => $lotAppointment->address,
+            'postal_code' => $lotAppointment->postal_code,
+            'city' => $lotAppointment->city,
             'department_code' => strtoupper((string) $lotAppointment->department_code),
             'latitude' => (float) $lotAppointment->latitude,
             'longitude' => (float) $lotAppointment->longitude,
@@ -1278,7 +1293,12 @@ class PlannerBookingController extends Controller
             'external_payload' => [
                 'source_type' => 'lot',
                 'lot_id' => $lotAppointment->lot_id,
+                'lot_name' => $lotAppointment->lot?->name,
+                'lot_type' => $lotAppointment->lot?->type,
+                'lot_delegataire' => $lotAppointment->lot?->delegataire,
+                'lot_global_plus' => (bool) $lotAppointment->lot?->global_plus,
                 'lot_appointment_id' => $lotAppointment->id,
+                'row_number' => $lotAppointment->row_number,
                 'company_name' => $lotAppointment->company_name,
                 'site_name' => $lotAppointment->site_name,
                 'raw_payload' => $lotAppointment->raw_payload,

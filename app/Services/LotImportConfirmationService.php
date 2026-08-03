@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
+use App\Models\Service;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -41,9 +42,14 @@ class LotImportConfirmationService
         }
 
         return DB::transaction(function () use ($preview, $payload, $appointments): Lot {
+            $service = $preview->service_id
+                ? Service::query()->find((int) $preview->service_id)
+                : null;
+
             $lot = Lot::query()->create([
                 'name' => $preview->name ?: pathinfo($preview->original_filename, PATHINFO_FILENAME),
                 'type' => $preview->type,
+                'service_id' => $service?->id,
                 'status' => Lot::STATUS_NOT_STARTED,
                 'sampling_percentage' => $preview->sampling_percentage,
                 'physical_sampling_percentage' => $preview->physical_sampling_percentage,
@@ -76,7 +82,7 @@ class LotImportConfirmationService
 
                 LotAppointment::query()->create([
                     'lot_id' => $lot->id,
-                    'service_id' => null,
+                    'service_id' => $service?->id,
                     'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
                     'row_number' => (int) ($appointmentPayload['row_number'] ?? 0) ?: null,
                     'source' => null,
@@ -92,9 +98,9 @@ class LotImportConfirmationService
                     'department_code' => $this->nullableString($appointmentPayload['department_code'] ?? null),
                     'latitude' => $this->coordinate($appointmentPayload['latitude'] ?? null, -90, 90),
                     'longitude' => $this->coordinate($appointmentPayload['longitude'] ?? null, -180, 180),
-                    'service_type' => null,
-                    'service_name' => null,
-                    'duration_minutes' => null,
+                    'service_type' => $service?->type,
+                    'service_name' => $service?->name,
+                    'duration_minutes' => $service?->average_duration_minutes,
                     'status' => $this->statusForPayload($appointmentPayload, $warnings),
                     'ai_confidence' => $this->confidence($appointmentPayload['ai_confidence'] ?? null),
                     'ai_warnings' => $warnings->all(),
@@ -109,7 +115,7 @@ class LotImportConfirmationService
                 'confirmed_at' => now(),
             ]);
 
-            return $lot->load(['appointments']);
+            return $lot->load(['appointments', 'service']);
         });
     }
 

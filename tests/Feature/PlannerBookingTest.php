@@ -1384,7 +1384,7 @@ it('renders lot appointment requests on the booking page', function () {
         'role' => 1,
         'admin' => false,
     ]);
-    Service::query()->create([
+    $service = Service::query()->create([
         'type' => Service::TYPE_AUDIT,
         'name' => 'Audit interne',
         'average_duration_minutes' => 120,
@@ -1397,6 +1397,7 @@ it('renders lot appointment requests on the booking page', function () {
     $lot = Lot::query()->create([
         'name' => 'Lot Rhône',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $planner->id,
     ]);
@@ -1594,7 +1595,7 @@ it('searches additional booking technicians compatible with the requested servic
         ]);
 });
 
-it('analyzes a lot appointment request with a selected service', function () {
+it('analyzes a lot appointment request with the lot service', function () {
     config(['services.mapbox.token' => null]);
 
     $planner = User::factory()->create([
@@ -1623,8 +1624,9 @@ it('analyzes a lot appointment request with a selected service', function () {
     $technician->departments()->attach('69');
 
     $lot = Lot::query()->create([
-        'name' => 'Lot sans prestation',
+        'name' => 'Lot avec prestation',
         'type' => Lot::TYPE_SAMPLE_CONTROL,
+        'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $planner->id,
     ]);
@@ -1644,7 +1646,6 @@ it('analyzes a lot appointment request with a selected service', function () {
     $this->actingAs($planner)
         ->postJson(route('planner.book.analyze'), [
             'lot_appointment_id' => $lotAppointment->id,
-            'lot_service_id' => $service->id,
         ])
         ->assertOk()
         ->assertJsonPath('crm_appointment.id', 'lot-'.$lotAppointment->id)
@@ -2484,8 +2485,48 @@ it('does not rollback local coffrac placement when the remote api still rejects 
 });
 
 it('links a placed appointment back to its lot appointment', function () {
-    config(['services.mapbox.token' => null]);
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
     Mail::fake();
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+        if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments') {
+            return Http::response([
+                'result' => true,
+                'message' => 'Dossier Coffrac créé depuis TechCalendar.',
+                'data' => [
+                    'id' => 9101,
+                    'source' => 'Coffrac',
+                    'status_name' => 'RDV attente visite',
+                    'service_type' => Service::TYPE_AUDIT,
+                    'service_name' => 'Audit interne',
+                    'customer_first_name' => 'Client',
+                    'customer_last_name' => 'Lot',
+                    'customer_name' => 'Entreprise Lot',
+                    'company_name' => 'Entreprise Lot',
+                    'phone' => '0600000003',
+                    'address' => '20 Place Bellecour, 69002 Lyon, France',
+                    'address_line' => '20 Place Bellecour',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'technician_email' => 'tech.lot@example.test',
+                    'starts_at' => '2026-06-22T10:00:00+02:00',
+                    'duration_minutes' => 120,
+                    'comment' => 'Placement depuis lot',
+                    'documents' => [],
+                    'comments' => [],
+                ],
+            ], 201);
+        }
+
+        return Http::response(['message' => 'Unexpected request'], 500);
+    });
 
     $planner = User::factory()->create([
         'role' => 1,
@@ -2499,6 +2540,7 @@ it('links a placed appointment back to its lot appointment', function () {
     $technician = User::factory()->create([
         'role' => 2,
         'admin' => false,
+        'email' => 'tech.lot@example.test',
         'latitude' => 45.764,
         'longitude' => 4.8357,
     ]);
@@ -2506,15 +2548,22 @@ it('links a placed appointment back to its lot appointment', function () {
     $lot = Lot::query()->create([
         'name' => 'Lot à placer',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
+        'delegataire' => 'Délégataire test',
+        'global_plus' => true,
         'created_by' => $planner->id,
     ]);
     $lotAppointment = LotAppointment::query()->create([
         'lot_id' => $lot->id,
         'service_id' => $service->id,
         'customer_name' => 'Client Lot',
+        'company_name' => 'Entreprise Lot',
+        'site_name' => 'Site Bellecour',
         'customer_phone' => '0600000003',
-        'address' => '20 Place Bellecour, 69002 Lyon',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
         'department_code' => '69',
         'latitude' => 45.7578,
         'longitude' => 4.832,
@@ -2524,7 +2573,6 @@ it('links a placed appointment back to its lot appointment', function () {
     $this->actingAs($planner)
         ->postJson(route('planner.book.appointments.store'), [
             'lot_appointment_id' => $lotAppointment->id,
-            'lot_service_id' => $service->id,
             'technician_id' => $technician->id,
             'starts_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
             'duration_minutes' => 120,
@@ -2539,7 +2587,28 @@ it('links a placed appointment back to its lot appointment', function () {
     expect($lotAppointment->appointment_id)->not->toBeNull()
         ->and($lotAppointment->service_id)->toBe($service->id)
         ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PLACED)
+        ->and($lotAppointment->source)->toBe(CoffracAppointmentService::SOURCE)
+        ->and($lotAppointment->external_reference)->toBe('9101')
         ->and($lot->status)->toBe(Lot::STATUS_COMPLETED);
+
+    $appointment = Appointment::query()->findOrFail((int) $lotAppointment->appointment_id);
+    $externalRequest = ExternalAppointmentRequest::query()
+        ->where('source', CoffracAppointmentService::SOURCE)
+        ->where('external_reference', '9101')
+        ->firstOrFail();
+
+    expect($appointment->external_source)->toBe(CoffracAppointmentService::SOURCE)
+        ->and($appointment->external_reference)->toBe('9101')
+        ->and($externalRequest->appointment_id)->toBe($appointment->id);
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
+        && $request['service_name'] === 'Audit interne'
+        && $request['technician_email'] === 'tech.lot@example.test'
+        && $request['delegataire'] === 'Délégataire test'
+        && $request['lot_id'] === $lot->id
+        && $request['lot_appointment_id'] === $lotAppointment->id
+        && $request['global_plus'] === true);
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,

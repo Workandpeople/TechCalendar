@@ -93,9 +93,69 @@
 
         <section class="gc-card overflow-hidden">
             <div class="border-b p-5" style="border-color:var(--gc-border);">
-                <p class="text-sm" style="color:var(--gc-text-soft);">Suivi du lot</p>
-                <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Dossiers du fichier</h2>
+                <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Suivi du lot</p>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Dossiers du fichier</h2>
+                    </div>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">
+                        {{ $appointments->total() }} dossier(s) affiché(s)
+                        @if ($appointments->total() !== $lot['appointments_count'])
+                            sur {{ $lot['appointments_count'] }}
+                        @endif
+                    </p>
+                </div>
             </div>
+
+            <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_220px_220px_auto] xl:items-end">
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
+                        <input
+                            id="appointment_q"
+                            name="appointment_q"
+                            type="search"
+                            value="{{ $appointmentFilters['appointment_q'] }}"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                            placeholder="Client, site, téléphone, adresse, référence..."
+                        >
+                    </label>
+
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Statut</span>
+                        <select
+                            name="appointment_status"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                        >
+                            <option value="">Tous les statuts</option>
+                            @foreach ($lotAppointmentStatuses as $status => $label)
+                                <option value="{{ $status }}" @selected($appointmentFilters['appointment_status'] === $status)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Traitement</span>
+                        <select
+                            name="appointment_processing"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                        >
+                            <option value="">Tous les traitements</option>
+                            @foreach ($lotAppointmentProcessingFilters as $processing => $label)
+                                <option value="{{ $processing }}" @selected($appointmentFilters['appointment_processing'] === $processing)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <a href="{{ route('manager.lots.show', $lot['id']) }}" class="gc-btn-soft justify-center">
+                        Réinitialiser
+                    </a>
+                </div>
+                <p class="mt-3 text-xs" style="color:var(--gc-text-soft);">Les filtres se mettent à jour automatiquement.</p>
+            </form>
 
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y text-sm" style="border-color:var(--gc-border);">
@@ -114,7 +174,7 @@
                         @if ($lot['appointments']->isEmpty())
                             <tr>
                                 <td colspan="7" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
-                                    Aucun dossier dans ce lot.
+                                    Aucun dossier ne correspond aux filtres.
                                 </td>
                             </tr>
                         @else
@@ -203,6 +263,12 @@
                     </tbody>
                 </table>
             </div>
+
+            @if ($appointments->hasPages())
+                <div class="border-t px-5 py-4" style="border-color:var(--gc-border);">
+                    {{ $appointments->links() }}
+                </div>
+            @endif
         </section>
 
         @foreach ($lot['appointments'] as $appointment)
@@ -296,6 +362,20 @@
         const lotAppointmentDetails = new Map();
         let currentPhysicalLotAppointment = null;
         let currentContactLotAppointment = null;
+        const lotAppointmentFiltersForm = document.getElementById('manager-lot-appointment-filters-form');
+        const lotAppointmentSearchInput = document.getElementById('appointment_q');
+        let lotAppointmentSearchTimer = null;
+
+        if (lotAppointmentFiltersForm) {
+            lotAppointmentFiltersForm.querySelectorAll('select').forEach((select) => {
+                select.addEventListener('change', () => lotAppointmentFiltersForm.submit());
+            });
+
+            lotAppointmentSearchInput?.addEventListener('input', () => {
+                window.clearTimeout(lotAppointmentSearchTimer);
+                lotAppointmentSearchTimer = window.setTimeout(() => lotAppointmentFiltersForm.submit(), 450);
+            });
+        }
 
         document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
             try {

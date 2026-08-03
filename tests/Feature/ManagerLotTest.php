@@ -129,12 +129,23 @@ it('updates a lot from the manager lot action modal', function () {
         'role' => 0,
         'admin' => false,
     ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
     $lot = Lot::query()->create([
         'name' => 'Lot initial',
         'type' => Lot::TYPE_FULL_CONTROL,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $manager->id,
         'imported_at' => now(),
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client ouvert',
+        'address' => '1 Rue de Test',
+        'status' => LotAppointment::STATUS_PENDING,
     ]);
 
     $this->actingAs($manager)
@@ -143,6 +154,7 @@ it('updates a lot from the manager lot action modal', function () {
             'name' => 'Lot corrigé',
             'delegataire' => 'Oblige Test',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
+            'service_id' => $service->id,
             'status' => Lot::STATUS_IN_PROGRESS,
             'sampling_percentage' => 35,
         ])
@@ -155,8 +167,16 @@ it('updates a lot from the manager lot action modal', function () {
         'name' => 'Lot corrigé',
         'delegataire' => 'Oblige Test',
         'type' => Lot::TYPE_SAMPLE_CONTROL,
+        'service_id' => $service->id,
         'status' => Lot::STATUS_IN_PROGRESS,
         'sampling_percentage' => 35,
+    ]);
+    $this->assertDatabaseHas('lot_appointments', [
+        'id' => $lotAppointment->id,
+        'service_id' => $service->id,
+        'service_type' => Service::TYPE_AUDIT,
+        'service_name' => 'Audit qualité site client',
+        'duration_minutes' => 120,
     ]);
 });
 
@@ -416,6 +436,107 @@ it('paginates manager lots by nine cards', function () {
         ->assertDontSee('Lot pagination 02');
 });
 
+it('paginates lot detail appointments', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot detail pagine',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 26) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => sprintf('Client dossier %02d', $index),
+            'address' => sprintf('%d Rue du Test', $index),
+            'status' => LotAppointment::STATUS_PENDING,
+        ]);
+    }
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('Client dossier 01')
+        ->assertSee('Client dossier 25')
+        ->assertDontSee('Client dossier 26')
+        ->assertSee('appointments_page=2', false);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointments_page' => 2]))
+        ->assertOk()
+        ->assertSee('Client dossier 26')
+        ->assertDontSee('Client dossier 01');
+});
+
+it('filters lot detail appointments dynamically', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot filtres detail',
+        'type' => Lot::TYPE_HYBRID_LOCATION_CONTACT,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'row_number' => 1,
+        'customer_name' => 'Alpha Industrie',
+        'company_name' => 'Alpha Industrie',
+        'address' => '10 Rue Alpha',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'row_number' => 2,
+        'customer_name' => 'Beta Contact',
+        'address' => '20 Rue Beta',
+        'city' => 'Villeurbanne',
+        'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_CONTACT,
+        'contact_satisfaction' => true,
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'row_number' => 3,
+        'customer_name' => 'Gamma Hors Stats',
+        'address' => '30 Rue Gamma',
+        'city' => 'Bron',
+        'status' => LotAppointment::STATUS_PENDING,
+        'excluded_from_lot_stats' => true,
+    ]);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_q' => 'Alpha']))
+        ->assertOk()
+        ->assertSee('Alpha Industrie')
+        ->assertDontSee('Beta Contact')
+        ->assertDontSee('Gamma Hors Stats');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_status' => LotAppointment::STATUS_CONTACT_PROCESSED]))
+        ->assertOk()
+        ->assertSee('Beta Contact')
+        ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Gamma Hors Stats');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_processing' => 'excluded']))
+        ->assertOk()
+        ->assertSee('Gamma Hors Stats')
+        ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Beta Contact');
+});
+
 it('renders lot auto completion based on sampling target', function () {
     $manager = User::factory()->create([
         'role' => 0,
@@ -541,11 +662,18 @@ it('renders lot type select in the import form', function () {
         'email' => 'delegataire-sync@example.test',
         'is_active' => true,
     ]);
+    Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
 
     $this->actingAs($manager)
         ->get(route('manager.lots'))
         ->assertOk()
         ->assertSee('Type de lot')
+        ->assertSee('Prestation')
+        ->assertSee('Audit qualité site client')
         ->assertSee('Délégataire')
         ->assertSee('Délégataire synchronisé')
         ->assertSee('name="delegataire_id"', false)
@@ -566,6 +694,11 @@ it('starts a manager lot import preview through the upload endpoint', function (
         'role' => 0,
         'admin' => false,
     ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
     $delegataire = ExternalDelegataire::query()->create([
         'source' => 'coffrac',
         'external_id' => '7',
@@ -579,6 +712,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
             'name' => 'Lot importe',
             'delegataire_id' => $delegataire->id,
             'type' => Lot::TYPE_FULL_CONTROL,
+            'service_id' => $service->id,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
         ], ['Accept' => 'application/json'])
         ->assertAccepted()
@@ -591,6 +725,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
         'name' => 'Lot importe',
         'delegataire' => 'Délégataire A',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
         'stage' => 'Import en attente dans la file.',
         'created_by' => $manager->id,
     ]);
@@ -977,12 +1112,18 @@ it('requires sampling percentage for sampling lot types', function () {
         'role' => 0,
         'admin' => false,
     ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
 
     $this->actingAs($manager)
         ->post(route('manager.lots.imports.store'), [
             'name' => 'Lot échantillon',
             'delegataire' => 'Délégataire A',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
+            'service_id' => $service->id,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
         ], ['Accept' => 'application/json'])
         ->assertUnprocessable()
@@ -996,7 +1137,7 @@ it('stores the original spreadsheet when importing a lot', function () {
         'role' => 0,
         'admin' => false,
     ]);
-    Service::query()->create([
+    $service = Service::query()->create([
         'type' => Service::TYPE_AUDIT,
         'name' => 'Audit qualité site client',
         'average_duration_minutes' => 120,
@@ -1052,20 +1193,27 @@ it('stores the original spreadsheet when importing a lot', function () {
         ]);
 
     $lot = (new LotExcelImportService($extractor, $normalizer))
-        ->import($file, $manager->id, 'Lot client', Lot::TYPE_FULL_CONTACT_CONTROL);
+        ->import(
+            file: $file,
+            userId: $manager->id,
+            requestedLotName: 'Lot client',
+            lotType: Lot::TYPE_FULL_CONTACT_CONTROL,
+            serviceId: $service->id,
+        );
 
     expect($lot->original_filename)->toBe('lot-client.csv')
         ->and($lot->type)->toBe(Lot::TYPE_FULL_CONTACT_CONTROL)
+        ->and($lot->service_id)->toBe($service->id)
         ->and($lot->original_file_disk)->toBe('local')
         ->and($lot->original_file_path)->not->toBeNull()
         ->and($lot->appointments)->toHaveCount(1);
 
     $appointment = $lot->appointments->first();
 
-    expect($appointment->service_id)->toBeNull()
-        ->and($appointment->service_type)->toBeNull()
-        ->and($appointment->service_name)->toBeNull()
-        ->and($appointment->duration_minutes)->toBeNull()
+    expect($appointment->service_id)->toBe($service->id)
+        ->and($appointment->service_type)->toBe(Service::TYPE_AUDIT)
+        ->and($appointment->service_name)->toBe('Audit qualité site client')
+        ->and($appointment->duration_minutes)->toBe(120)
         ->and($appointment->status)->toBe(LotAppointment::STATUS_PENDING);
 
     Storage::disk('local')->assertExists($lot->original_file_path);
@@ -1076,12 +1224,18 @@ it('confirms selected preview rows and creates a lot', function () {
         'role' => 0,
         'admin' => false,
     ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
     $preview = LotImportPreview::query()->create([
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
         'original_filename' => 'preview.xlsx',
         'original_file_disk' => 'local',
         'original_file_path' => 'lot-import-previews/preview.xlsx',
@@ -1135,6 +1289,7 @@ it('confirms selected preview rows and creates a lot', function () {
     $this->assertDatabaseHas('lots', [
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'imported_rows' => 1,
     ]);
@@ -1143,10 +1298,10 @@ it('confirms selected preview rows and creates a lot', function () {
         'postal_code' => '69002',
         'city' => 'Lyon',
         'department_code' => '69',
-        'service_id' => null,
-        'service_type' => null,
-        'service_name' => null,
-        'duration_minutes' => null,
+        'service_id' => $service->id,
+        'service_type' => Service::TYPE_AUDIT,
+        'service_name' => 'Audit qualité site client',
+        'duration_minutes' => 120,
         'status' => LotAppointment::STATUS_PENDING,
     ]);
     $this->assertDatabaseMissing('lot_appointments', [

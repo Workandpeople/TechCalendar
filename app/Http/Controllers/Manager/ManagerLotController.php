@@ -7,6 +7,7 @@ use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
+use App\Models\Service;
 use App\Services\CoffracAppointmentService;
 use App\Services\LotExcelImportService;
 use App\Services\LotAutoCompletionCalculator;
@@ -62,6 +63,10 @@ class ManagerLotController extends Controller
             ],
             'activeImportPreview' => $this->activeImportPreview($request),
             'mapboxToken' => config('services.mapbox.token'),
+            'services' => Service::query()
+                ->orderBy('type')
+                ->orderBy('name')
+                ->get(['id', 'type', 'name', 'average_duration_minutes']),
             'delegataires' => ExternalDelegataire::query()
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->where('is_active', true)
@@ -74,27 +79,44 @@ class ManagerLotController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
+        $appointmentFilters = $this->validatedLotAppointmentFilters($request);
         $lot->load([
             'creator:id,first_name,last_name',
+            'service:id,type,name,average_duration_minutes',
             'appointments' => fn ($query) => $query
-                ->with([
-                    'appointment:id,technician_id,service_id,starts_at,ends_at',
-                    'appointment.service:id,type,name',
-                    'appointment.technician:id,first_name,last_name,department_code,role',
-                    'appointment.technician.departments:code',
-                    'contactProcessor:id,first_name,last_name',
-                    'statsExcluder:id,first_name,last_name',
-                ])
+                ->with($this->lotAppointmentRelations())
                 ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                 ->orderBy('row_number')
                 ->orderBy('customer_name'),
         ]);
 
+        $appointments = $this->lotAppointmentQuery($lot, $appointmentFilters)
+            ->paginate(25, ['*'], 'appointments_page')
+            ->withQueryString();
+
+        $appointments->setCollection(
+            $appointments
+                ->getCollection()
+                ->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))
+        );
+
         return view('manager.lots.show', [
-            'lot' => $this->serializeLot($lot, $autoCompletion),
+            'lot' => $this->serializeLot($lot, $autoCompletion, $appointments->getCollection()),
+            'appointments' => $appointments,
+            'appointmentFilters' => [
+                'appointment_q' => $appointmentFilters['appointment_q'] ?? '',
+                'appointment_status' => $appointmentFilters['appointment_status'] ?? '',
+                'appointment_processing' => $appointmentFilters['appointment_processing'] ?? '',
+            ],
+            'lotAppointmentStatuses' => LotAppointment::statuses(),
+            'lotAppointmentProcessingFilters' => $this->lotAppointmentProcessingFilters(),
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
             'mapboxToken' => config('services.mapbox.token'),
+            'services' => Service::query()
+                ->orderBy('type')
+                ->orderBy('name')
+                ->get(['id', 'type', 'name', 'average_duration_minutes']),
         ]);
     }
 
@@ -113,6 +135,7 @@ class ManagerLotController extends Controller
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
+            'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
                 'nullable',
@@ -152,6 +175,7 @@ class ManagerLotController extends Controller
                 physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
                 contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
                 globalPlus: (bool) ($payload['global_plus'] ?? false),
+                serviceId: (int) $payload['service_id'],
             );
         } catch (Throwable $exception) {
             return back()
@@ -180,7 +204,10 @@ class ManagerLotController extends Controller
             'contact_sampling_percentage' => $samplingPayload['contact_sampling_percentage'],
             'delegataire' => filled($payload['delegataire'] ?? null) ? trim((string) $payload['delegataire']) : null,
             'global_plus' => (bool) ($payload['global_plus'] ?? false),
+            'service_id' => (int) $payload['service_id'],
         ])->save();
+
+        $this->syncOpenLotAppointmentsService($lot, (int) $payload['service_id']);
 
         return back()->with('status', sprintf('Lot "%s" mis à jour.', $lot->name));
     }
@@ -237,6 +264,7 @@ class ManagerLotController extends Controller
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
+            'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
                 'nullable',
@@ -268,6 +296,7 @@ class ManagerLotController extends Controller
             file: $payload['file'],
             userId: (int) $request->user()->id,
             lotType: $payload['type'],
+            serviceId: (int) $payload['service_id'],
             samplingPercentage: $samplingPayload['sampling_percentage'],
             physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
             contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
@@ -494,12 +523,25 @@ class ManagerLotController extends Controller
         ]);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedLotAppointmentFilters(Request $request): array
+    {
+        return $request->validate([
+            'appointment_q' => ['nullable', 'string', 'max:120'],
+            'appointment_status' => ['nullable', 'string', Rule::in(array_keys(LotAppointment::statuses()))],
+            'appointment_processing' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentProcessingFilters()))],
+        ]);
+    }
+
     private function validatedLotPayload(Request $request): array
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:190'],
             'delegataire' => ['nullable', 'string', 'max:190'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
+            'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'status' => ['required', 'string', Rule::in(array_keys(Lot::statuses()))],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
@@ -572,6 +614,29 @@ class ManagerLotController extends Controller
         return trim((string) ($payload['delegataire'] ?? ''));
     }
 
+    private function syncOpenLotAppointmentsService(Lot $lot, int $serviceId): void
+    {
+        $service = Service::query()->find($serviceId);
+
+        if (! $service) {
+            return;
+        }
+
+        $lot->appointments()
+            ->whereNull('appointment_id')
+            ->whereIn('status', [
+                LotAppointment::STATUS_PENDING,
+                LotAppointment::STATUS_NEEDS_REVIEW,
+                LotAppointment::STATUS_CONTACT_PROCESSED,
+            ])
+            ->update([
+                'service_id' => $service->id,
+                'service_type' => $service->type,
+                'service_name' => $service->name,
+                'duration_minutes' => $service->average_duration_minutes,
+            ]);
+    }
+
     /**
      * @param array<string, mixed> $filters
      * @return Builder<Lot>
@@ -581,15 +646,9 @@ class ManagerLotController extends Controller
         return Lot::query()
             ->with([
                 'creator:id,first_name,last_name',
+                'service:id,type,name,average_duration_minutes',
                 'appointments' => fn ($query) => $query
-                    ->with([
-                        'appointment:id,technician_id,service_id,starts_at,ends_at',
-                        'appointment.service:id,type,name',
-                        'appointment.technician:id,first_name,last_name,department_code,role',
-                        'appointment.technician.departments:code',
-                        'contactProcessor:id,first_name,last_name',
-                        'statsExcluder:id,first_name,last_name',
-                    ])
+                    ->with($this->lotAppointmentRelations())
                     ->when(! empty($filters['q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['q'])))
                     ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
                     ->orderBy('row_number')
@@ -608,9 +667,74 @@ class ManagerLotController extends Controller
                         ->orWhere('source', 'like', "%{$search}%")
                         ->orWhere('delegataire', 'like', "%{$search}%")
                         ->orWhere('original_filename', 'like', "%{$search}%")
+                        ->orWhereHas('service', function (Builder $query) use ($search): void {
+                            $query
+                                ->where('type', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%");
+                        })
                         ->orWhereHas('appointments', fn (Builder $query) => $this->applySearchFilter($query, $search));
                 });
             });
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     */
+    private function lotAppointmentQuery(Lot $lot, array $filters)
+    {
+        return $lot->appointments()
+            ->with($this->lotAppointmentRelations())
+            ->when(! empty($filters['appointment_q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['appointment_q'])))
+            ->when(! empty($filters['appointment_status']), fn ($query) => $query->where('status', $filters['appointment_status']))
+            ->when(! empty($filters['appointment_processing']), function ($query) use ($filters): void {
+                match ($filters['appointment_processing']) {
+                    'physical' => $query->where(function ($query): void {
+                        $query
+                            ->where('processing_mode', LotAppointment::PROCESSING_MODE_PHYSICAL)
+                            ->orWhereNotNull('appointment_id')
+                            ->orWhere('status', LotAppointment::STATUS_PLACED);
+                    }),
+                    'contact' => $query->where(function ($query): void {
+                        $query
+                            ->where('processing_mode', LotAppointment::PROCESSING_MODE_CONTACT)
+                            ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED)
+                            ->orWhereNotNull('contact_satisfaction');
+                    }),
+                    'excluded' => $query->where('excluded_from_lot_stats', true),
+                    default => null,
+                };
+            })
+            ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('row_number')
+            ->orderBy('customer_name');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function lotAppointmentRelations(): array
+    {
+        return [
+            'appointment:id,technician_id,service_id,starts_at,ends_at',
+            'service:id,type,name,average_duration_minutes',
+            'appointment.service:id,type,name',
+            'appointment.technician:id,first_name,last_name,department_code,role',
+            'appointment.technician.departments:code',
+            'contactProcessor:id,first_name,last_name',
+            'statsExcluder:id,first_name,last_name',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function lotAppointmentProcessingFilters(): array
+    {
+        return [
+            'physical' => 'RDV physique',
+            'contact' => 'Traitement téléphone',
+            'excluded' => 'Hors statistiques',
+        ];
     }
 
     private function applySearchFilter($query, string $search)
@@ -634,7 +758,7 @@ class ManagerLotController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function serializeLot(Lot $lot, LotAutoCompletionCalculator $autoCompletion): array
+    private function serializeLot(Lot $lot, LotAutoCompletionCalculator $autoCompletion, $displayAppointments = null): array
     {
         $appointments = $lot->appointments;
         $statsAppointments = $appointments->reject(fn (LotAppointment $appointment): bool => $this->isExcludedFromLotStats($appointment));
@@ -653,6 +777,10 @@ class ManagerLotController extends Controller
             'title' => $lot->name,
             'type' => $lot->type,
             'type_label' => $lot->typeLabel(),
+            'service_id' => $lot->service_id,
+            'service_label' => $lot->service
+                ? $lot->service->type.' - '.$lot->service->name
+                : null,
             'status' => $status,
             'status_label' => Lot::statuses()[$status] ?? Lot::statuses()[Lot::STATUS_NOT_STARTED],
             'status_color' => $statusMeta['color'],
@@ -673,7 +801,7 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
-            'appointments' => $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
+            'appointments' => $displayAppointments ?? $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
             'stats_excluded_count' => $appointments->count() - $statsAppointments->count(),
             'placed_count' => $placedAppointments->count(),
@@ -710,6 +838,10 @@ class ManagerLotController extends Controller
             'department_code' => $appointment->department_code,
             'latitude' => $appointment->latitude,
             'longitude' => $appointment->longitude,
+            'service_id' => $appointment->service_id ?: $lot->service_id,
+            'service_label' => $appointment->service
+                ? $appointment->service->type.' - '.$appointment->service->name
+                : ($lot->service ? $lot->service->type.' - '.$lot->service->name : null),
             'comment' => $appointment->comment,
             'status' => $appointment->status,
             'status_label' => $appointment->statusLabel(),
@@ -855,6 +987,10 @@ class ManagerLotController extends Controller
             'error_message' => $preview->error_message,
             'type' => $preview->type,
             'type_label' => Lot::types()[$preview->type] ?? $preview->type,
+            'service_id' => $preview->service_id,
+            'service_label' => $preview->service
+                ? $preview->service->type.' - '.$preview->service->name
+                : null,
             'sampling_percentage' => $preview->sampling_percentage,
             'physical_sampling_percentage' => $preview->physical_sampling_percentage,
             'contact_sampling_percentage' => $preview->contact_sampling_percentage,

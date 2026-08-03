@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'name',
     'type',
+    'service_id',
     'status',
     'sampling_percentage',
     'physical_sampling_percentage',
@@ -149,6 +150,11 @@ class Lot extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(LotAppointment::class);
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
     }
 
     public function typeLabel(): ?string

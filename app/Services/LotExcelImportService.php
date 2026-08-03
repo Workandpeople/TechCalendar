@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\Service;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -30,18 +31,21 @@ class LotExcelImportService
         ?float $physicalSamplingPercentage = null,
         ?float $contactSamplingPercentage = null,
         bool $globalPlus = false,
+        ?int $serviceId = null,
     ): Lot
     {
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
         $rawRowsByNumber = $rows->keyBy('row_number');
         $storedFile = $this->storeOriginalFile($file);
+        $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $globalPlus, $rows, $normalized, $rawRowsByNumber, $storedFile): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $globalPlus, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
+                    'service_id' => $service?->id,
                     'status' => Lot::STATUS_NOT_STARTED,
                     'sampling_percentage' => $samplingPercentage,
                     'physical_sampling_percentage' => $physicalSamplingPercentage,
@@ -77,7 +81,7 @@ class LotExcelImportService
 
                     LotAppointment::query()->create([
                         'lot_id' => $lot->id,
-                        'service_id' => null,
+                        'service_id' => $service?->id,
                         'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
                         'row_number' => $rowNumber > 0 ? $rowNumber : null,
                         'source' => $lot->source,
@@ -93,9 +97,9 @@ class LotExcelImportService
                         'department_code' => $this->nullableString($appointmentPayload['department_code'] ?? null),
                         'latitude' => $this->coordinate($appointmentPayload['latitude'] ?? null, -90, 90),
                         'longitude' => $this->coordinate($appointmentPayload['longitude'] ?? null, -180, 180),
-                        'service_type' => null,
-                        'service_name' => null,
-                        'duration_minutes' => null,
+                        'service_type' => $service?->type,
+                        'service_name' => $service?->name,
+                        'duration_minutes' => $service?->average_duration_minutes,
                         'status' => $status,
                         'ai_confidence' => $this->confidence($appointmentPayload['confidence'] ?? null),
                         'ai_warnings' => $warnings->all(),

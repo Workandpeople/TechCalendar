@@ -762,6 +762,10 @@ class CoffracAppointmentService
     public function markPlaced(Appointment $appointment, array $crmAppointment): void
     {
         if (($crmAppointment['external_source'] ?? null) !== self::SOURCE) {
+            if ($this->shouldCreateRemoteAppointmentFromLot($crmAppointment)) {
+                $this->createRemoteAppointmentFromLot($appointment, $crmAppointment);
+            }
+
             return;
         }
 
@@ -829,6 +833,150 @@ class CoffracAppointmentService
             'duration_minutes' => $appointment->duration_minutes,
             'comment' => $appointment->comment,
             'fetched_at' => now(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $crmAppointment
+     */
+    private function shouldCreateRemoteAppointmentFromLot(array $crmAppointment): bool
+    {
+        return (bool) ($crmAppointment['is_lot'] ?? false)
+            && data_get($crmAppointment, 'external_payload.source_type') === 'lot';
+    }
+
+    /**
+     * @param array<string, mixed> $crmAppointment
+     */
+    private function createRemoteAppointmentFromLot(Appointment $appointment, array $crmAppointment): void
+    {
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée, impossible de créer le dossier depuis le lot.');
+        }
+
+        $appointment->loadMissing([
+            'service:id,type,name',
+            'technician:id,email,first_name,last_name',
+        ]);
+
+        if (! $appointment->service) {
+            throw new RuntimeException('Prestation absente, impossible de créer le dossier Coffrac depuis le lot.');
+        }
+
+        $response = $this->request()->post($this->endpoint('appointments'), $this->remoteLotCreationPayload($appointment, $crmAppointment));
+
+        if ($response->failed()) {
+            $payload = $response->json();
+
+            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de créer le dossier Coffrac depuis le lot.'));
+        }
+
+        $remotePayload = $response->json('data');
+
+        if (! is_array($remotePayload)) {
+            throw new RuntimeException('Coffrac a créé le dossier, mais la réponse API ne contient pas de dossier exploitable.');
+        }
+
+        $externalReference = trim((string) ($remotePayload['id'] ?? ''));
+
+        if ($externalReference === '') {
+            throw new RuntimeException('Coffrac a créé le dossier, mais la référence distante est absente.');
+        }
+
+        $appointment->update([
+            'external_source' => self::SOURCE,
+            'external_reference' => $externalReference,
+            'external_payload' => $remotePayload,
+        ]);
+
+        $storedRequest = $this->persistRemoteAppointment($remotePayload);
+        $storedRequest?->update([
+            'appointment_id' => $appointment->id,
+            'technician_email' => $appointment->technician?->email,
+            'starts_at' => $appointment->starts_at,
+            'duration_minutes' => $appointment->duration_minutes,
+            'comment' => $appointment->comment,
+            'fetched_at' => now(),
+        ]);
+
+        $this->markLotAppointmentAsRemoteLinked($appointment, $crmAppointment, $externalReference, $remotePayload);
+    }
+
+    /**
+     * @param array<string, mixed> $crmAppointment
+     * @return array<string, mixed>
+     */
+    private function remoteLotCreationPayload(Appointment $appointment, array $crmAppointment): array
+    {
+        $externalPayload = is_array($crmAppointment['external_payload'] ?? null) ? $crmAppointment['external_payload'] : [];
+        $rawPayload = data_get($externalPayload, 'raw_payload', []);
+        $rawPayload = is_array($rawPayload) ? $rawPayload : [];
+        $lotAppointmentId = (int) ($crmAppointment['lot_appointment_id'] ?? data_get($externalPayload, 'lot_appointment_id', 0));
+
+        return [
+            'service_type' => $appointment->service?->type,
+            'service_name' => $appointment->service?->name,
+            'technician_email' => $appointment->technician?->email,
+            'technician_name' => $appointment->technician?->full_name,
+            'starts_at' => $appointment->starts_at?->toIso8601String(),
+            'duration_minutes' => $appointment->duration_minutes,
+            'comment' => $appointment->comment,
+            'customer_first_name' => $crmAppointment['first_name'] ?? null,
+            'customer_last_name' => $crmAppointment['last_name'] ?? null,
+            'customer_name' => $crmAppointment['customer_name'] ?? null,
+            'company_name' => $crmAppointment['company_name'] ?? data_get($externalPayload, 'company_name'),
+            'site_name' => $crmAppointment['site_name'] ?? data_get($externalPayload, 'site_name'),
+            'phone' => $crmAppointment['phone'] ?? null,
+            'address' => $crmAppointment['address'] ?? null,
+            'address_line' => $crmAppointment['address_line'] ?? ($rawPayload['address_line'] ?? null),
+            'postal_code' => $crmAppointment['postal_code'] ?? ($rawPayload['postal_code'] ?? null),
+            'city' => $crmAppointment['city'] ?? ($rawPayload['city'] ?? null),
+            'latitude' => $crmAppointment['latitude'] ?? null,
+            'longitude' => $crmAppointment['longitude'] ?? null,
+            'delegataire' => data_get($externalPayload, 'lot_delegataire'),
+            'lot_id' => data_get($externalPayload, 'lot_id'),
+            'lot_name' => data_get($externalPayload, 'lot_name'),
+            'lot_type' => data_get($externalPayload, 'lot_type'),
+            'lot_appointment_id' => $lotAppointmentId > 0 ? $lotAppointmentId : null,
+            'row_number' => data_get($externalPayload, 'row_number'),
+            'global_plus' => data_get($externalPayload, 'lot_global_plus', false),
+            'techcalendar_appointment_id' => $appointment->id,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $crmAppointment
+     * @param array<string, mixed> $remotePayload
+     */
+    private function markLotAppointmentAsRemoteLinked(Appointment $appointment, array $crmAppointment, string $externalReference, array $remotePayload): void
+    {
+        $lotAppointmentId = (int) ($crmAppointment['lot_appointment_id'] ?? data_get($crmAppointment, 'external_payload.lot_appointment_id', 0));
+
+        if ($lotAppointmentId <= 0) {
+            return;
+        }
+
+        $lotAppointment = LotAppointment::query()->find($lotAppointmentId);
+
+        if (! $lotAppointment) {
+            return;
+        }
+
+        $rawPayload = is_array($lotAppointment->raw_payload) ? $lotAppointment->raw_payload : [];
+
+        $lotAppointment->update([
+            'appointment_id' => $appointment->id,
+            'external_reference' => $externalReference,
+            'source' => self::SOURCE,
+            'service_id' => $appointment->service_id,
+            'service_type' => $appointment->service?->type,
+            'service_name' => $appointment->service?->name,
+            'status' => LotAppointment::STATUS_PLACED,
+            'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+            'raw_payload' => [
+                ...$rawPayload,
+                'coffrac_created_payload' => $remotePayload,
+            ],
         ]);
     }
 

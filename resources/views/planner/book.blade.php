@@ -379,6 +379,9 @@
                                 </div>
                                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                                     {{ $lot['appointments_count'] }} RDV · {{ $lot['placeable_count'] }} à traiter · {{ $lot['placed_count'] }} placés · {{ $lot['contact_processed_count'] }} contacts
+                                    @if ($lot['service_label'])
+                                        · {{ $lot['service_label'] }}
+                                    @endif
                                     @if ($lot['imported_at'])
                                         · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                     @endif
@@ -502,65 +505,49 @@
                                         </div>
                                     @else
                                         <div class="space-y-3">
-                                            @if ($lot['is_hybrid'])
-                                                <label class="inline-flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">Traitement physique</span>
-                                                    <span class="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-200 transition">
-                                                        <input type="checkbox" class="lot-processing-mode-switch peer sr-only" data-lot-appointment-id="{{ $appointment['id'] }}">
-                                                        <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-5 peer-checked:bg-[color:var(--gc-primary)]"></span>
-                                                    </span>
-                                                    <span class="text-sm font-semibold" style="color:var(--gc-text);">Téléphone</span>
-                                                </label>
-                                            @endif
-
-                                            @if ($lot['supports_physical'])
-                                                <div class="lot-processing-panel lot-processing-physical-panel grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-lot-appointment-id="{{ $appointment['id'] }}">
-                                                    <div>
-                                                        <label class="gc-label" for="lot_appointment_service_{{ $appointment['id'] }}">Prestation</label>
-                                                        <select
-                                                            id="lot_appointment_service_{{ $appointment['id'] }}"
-                                                            class="gc-input lot-appointment-service-select"
-                                                            data-lot-appointment-id="{{ $appointment['id'] }}"
-                                                            data-can-search="{{ $canSearch ? '1' : '0' }}"
-                                                            @disabled(! $canSearch)
-                                                        >
-                                                            <option value="">Sélectionner</option>
-                                                            @foreach ($services as $service)
-                                                                <option value="{{ $service->id }}" @selected((int) ($appointment['service_id'] ?? 0) === $service->id)>
-                                                                    {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
-                                                                </option>
-                                                            @endforeach
-                                                        </select>
-                                                        @unless ($canSearch)
-                                                            <p class="mt-1 text-xs" style="color:#be123c;">Adresse/GPS incomplet: corrige le dossier avant placement physique.</p>
-                                                        @endunless
-                                                    </div>
-
-                                                    <button
-                                                        type="button"
-                                                        class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+                                            @php
+                                                $defaultProcessingMode = $canSearch ? 'physical' : ($canContact ? 'contact' : 'physical');
+                                            @endphp
+                                            <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                                <div>
+                                                    <label class="gc-label" for="lot_appointment_processing_{{ $appointment['id'] }}">Mode de traitement</label>
+                                                    <select
+                                                        id="lot_appointment_processing_{{ $appointment['id'] }}"
+                                                        class="gc-input lot-processing-mode-select"
                                                         data-lot-appointment-id="{{ $appointment['id'] }}"
                                                         data-can-search="{{ $canSearch ? '1' : '0' }}"
-                                                        disabled
+                                                        data-can-contact="{{ $canContact ? '1' : '0' }}"
                                                     >
-                                                        Placer le RDV
-                                                    </button>
+                                                        @if ($lot['supports_physical'])
+                                                            <option value="physical" @selected($defaultProcessingMode === 'physical') @disabled(! $canSearch)>RDV sur place</option>
+                                                        @endif
+                                                        @if ($lot['supports_contact'])
+                                                            <option value="contact" @selected($defaultProcessingMode === 'contact') @disabled(! $canContact)>RDV téléphonique</option>
+                                                        @endif
+                                                    </select>
+                                                    @if ($appointment['service_label'])
+                                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Prestation du lot : {{ $appointment['service_label'] }}</p>
+                                                    @endif
+                                                    @unless ($canSearch)
+                                                        <p class="lot-processing-help lot-processing-physical-help {{ $defaultProcessingMode === 'physical' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:#be123c;">Adresse/GPS ou prestation incomplet: corrige le dossier avant placement sur place.</p>
+                                                    @endunless
+                                                    @if ($canContact)
+                                                        <p class="lot-processing-help lot-processing-contact-help {{ $defaultProcessingMode === 'contact' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:var(--gc-text-soft);">Téléphonique : commentaire et résultat uniquement, sans création Coffrac.</p>
+                                                    @endif
                                                 </div>
-                                            @endif
 
-                                            @if ($lot['supports_contact'])
-                                                <div class="lot-processing-panel lot-processing-contact-panel {{ $lot['supports_physical'] ? 'hidden' : '' }} rounded-xl border p-3" data-lot-appointment-id="{{ $appointment['id'] }}" style="border-color:#bae6fd;background:#f0f9ff;">
-                                                    <p class="text-sm" style="color:var(--gc-text);">Traitement téléphonique: commentaire et résultat uniquement, sans création Coffrac.</p>
-                                                    <button
-                                                        type="button"
-                                                        class="lot-appointment-contact-button gc-btn-soft mt-3 justify-center"
-                                                        data-contact-url="{{ $appointment['contact_url'] }}"
-                                                        data-customer-name="{{ $appointment['company_name'] ?: $appointment['customer_name'] }}"
-                                                    >
-                                                        Traiter par téléphone
-                                                    </button>
-                                                </div>
-                                            @endif
+                                                <button
+                                                    type="button"
+                                                    class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+                                                    data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                    data-can-search="{{ $canSearch ? '1' : '0' }}"
+                                                    data-can-contact="{{ $canContact ? '1' : '0' }}"
+                                                    data-contact-url="{{ $appointment['contact_url'] }}"
+                                                    data-customer-name="{{ $appointment['company_name'] ?: $appointment['customer_name'] }}"
+                                                >
+                                                    Placer le RDV
+                                                </button>
+                                            </div>
                                         </div>
                                     @endif
                                 </article>
@@ -4773,9 +4760,9 @@
                 if (data.technicians.length === 0) {
                     showFeedback(`Aucun technicien éligible pour ce ${sourceLabel}.`, 'error');
                 } else if (suggestions.length === 0) {
-                    showFeedback('Aucune proposition de placement calculee avec les contraintes actuelles.', 'error');
+                    showFeedback('Aucune proposition de placement calculée avec les contraintes actuelles.', 'error');
                 } else if (sourceLabel === 'RDV manuel' || sourceLabel === 'RDV lot') {
-                    showFeedback(`${suggestions.length} proposition(s) de placement calculee(s) pour ce ${sourceLabel.toLowerCase()}.`);
+                    showFeedback(`${suggestions.length} proposition(s) de placement calculée(s) pour ce ${sourceLabel.toLowerCase()}.`);
                 }
 
                 return true;
@@ -4787,31 +4774,54 @@
         };
 
         const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, 'RDV Coffrac');
-        const lotServiceSelectFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-service-select[data-lot-appointment-id="${lotAppointmentId}"]`);
+        const lotProcessingSelectFor = (lotAppointmentId) => document.querySelector(`.lot-processing-mode-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
 
         const updateLotBookButtonState = (lotAppointmentId) => {
-            const select = lotServiceSelectFor(lotAppointmentId);
+            const select = lotProcessingSelectFor(lotAppointmentId);
             const button = lotBookButtonFor(lotAppointmentId);
 
             if (!button) return;
 
+            const mode = select?.value || '';
             const canSearch = button.dataset.canSearch === '1' && select?.dataset.canSearch === '1';
-            button.disabled = !canSearch || !select?.value;
+            const canContact = button.dataset.canContact === '1' && select?.dataset.canContact === '1';
+
+            button.disabled = (mode === 'physical' && !canSearch)
+                || (mode === 'contact' && !canContact)
+                || !mode;
+        };
+
+        const closeLotAppointmentDetails = (lotAppointmentId) => {
+            const row = document.querySelector(`[data-lot-appointment-row="${lotAppointmentId}"]`);
+            row?.closest('details.booking-lot-details')?.removeAttribute('open');
         };
 
         const analyzeLotAppointment = async (lotAppointmentId) => {
-            const select = lotServiceSelectFor(lotAppointmentId);
-            const serviceId = select?.value;
+            const select = lotProcessingSelectFor(lotAppointmentId);
+            const mode = select?.value;
 
-            if (!serviceId) {
+            if (!mode) {
                 select?.focus();
                 return false;
             }
 
+            closeLotAppointmentDetails(lotAppointmentId);
+
+            if (mode === 'contact') {
+                const button = lotBookButtonFor(lotAppointmentId);
+
+                if (button?.dataset.canContact !== '1') {
+                    select?.focus();
+                    return false;
+                }
+
+                openLotContactModal(button);
+                return true;
+            }
+
             return analyzeAppointment({
                 lot_appointment_id: Number(lotAppointmentId),
-                lot_service_id: Number(serviceId),
             }, 'RDV lot');
         };
 
@@ -4997,25 +5007,22 @@
             button.addEventListener('click', () => analyzeLotAppointment(button.dataset.lotAppointmentId));
         });
 
-        document.querySelectorAll('.lot-appointment-service-select').forEach((select) => {
-            updateLotBookButtonState(select.dataset.lotAppointmentId);
-            select.addEventListener('change', () => updateLotBookButtonState(select.dataset.lotAppointmentId));
-        });
-
         const setLotProcessingMode = (lotAppointmentId, mode) => {
             const row = document.querySelector(`[data-lot-appointment-row="${lotAppointmentId}"]`);
 
-            row?.querySelectorAll('.lot-processing-panel').forEach((panel) => {
-                const isPhysicalPanel = panel.classList.contains('lot-processing-physical-panel');
-                const shouldShow = mode === 'physical' ? isPhysicalPanel : !isPhysicalPanel;
-                panel.classList.toggle('hidden', !shouldShow);
+            row?.querySelectorAll('.lot-processing-help').forEach((help) => {
+                const isPhysicalHelp = help.classList.contains('lot-processing-physical-help');
+                const shouldShow = mode === 'physical' ? isPhysicalHelp : !isPhysicalHelp;
+                help.classList.toggle('hidden', !shouldShow);
             });
+
+            updateLotBookButtonState(lotAppointmentId);
         };
 
-        document.querySelectorAll('.lot-processing-mode-switch').forEach((switchInput) => {
-            setLotProcessingMode(switchInput.dataset.lotAppointmentId, switchInput.checked ? 'contact' : 'physical');
-            switchInput.addEventListener('change', () => {
-                setLotProcessingMode(switchInput.dataset.lotAppointmentId, switchInput.checked ? 'contact' : 'physical');
+        document.querySelectorAll('.lot-processing-mode-select').forEach((select) => {
+            setLotProcessingMode(select.dataset.lotAppointmentId, select.value);
+            select.addEventListener('change', () => {
+                setLotProcessingMode(select.dataset.lotAppointmentId, select.value);
             });
         });
 
@@ -5056,10 +5063,6 @@
 
         document.getElementById('booking-lot-contact-close')?.addEventListener('click', closeLotContactModal);
         document.getElementById('booking-lot-contact-cancel')?.addEventListener('click', closeLotContactModal);
-
-        document.querySelectorAll('.lot-appointment-contact-button').forEach((button) => {
-            button.addEventListener('click', () => openLotContactModal(button));
-        });
 
         lotContactForm?.addEventListener('submit', async (event) => {
             event.preventDefault();

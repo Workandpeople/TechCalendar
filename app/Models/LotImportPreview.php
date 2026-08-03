@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'stage',
     'name',
     'type',
+    'service_id',
     'sampling_percentage',
     'physical_sampling_percentage',
     'contact_sampling_percentage',
@@ -59,6 +60,11 @@ class LotImportPreview extends Model
     public function confirmedLot(): BelongsTo
     {
         return $this->belongsTo(Lot::class, 'confirmed_lot_id');
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
     }
 
     protected function casts(): array

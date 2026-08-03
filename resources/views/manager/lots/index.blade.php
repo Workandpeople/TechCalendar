@@ -83,6 +83,8 @@
                         'id' => $lot['id'],
                         'title' => $lot['title'],
                         'type' => $lot['type'],
+                        'service_id' => $lot['service_id'],
+                        'service_label' => $lot['service_label'],
                         'status' => $lot['status'],
                         'sampling_percentage' => $lot['sampling_percentage'],
                         'physical_sampling_percentage' => $lot['physical_sampling_percentage'],
@@ -125,6 +127,9 @@
                                 </div>
                                 <h2 class="truncate text-xl font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h2>
                                 <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $lot['type_label'] }}</p>
+                                @if ($lot['service_label'])
+                                    <p class="mt-1 truncate text-xs font-semibold" style="color:var(--gc-text);">Prestation : {{ $lot['service_label'] }}</p>
+                                @endif
                                 @if ($lot['delegataire'])
                                     <p class="mt-1 truncate text-xs" style="color:var(--gc-text-soft);">Délégataire : {{ $lot['delegataire'] }}</p>
                                 @endif
@@ -228,6 +233,17 @@
                                 <select id="lot_action_type" name="type" class="gc-input" required>
                                     @foreach ($lotTypes as $typeValue => $typeLabel)
                                         <option value="{{ $typeValue }}">{{ $typeLabel }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_action_service_id">Prestation</label>
+                                <select id="lot_action_service_id" name="service_id" class="gc-input" required>
+                                    <option value="">Sélectionner</option>
+                                    @foreach ($services as $service)
+                                        <option value="{{ $service->id }}">
+                                            {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -407,6 +423,17 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label class="gc-label" for="lot_service_id">Prestation</label>
+                            <select id="lot_service_id" name="service_id" class="gc-input" required>
+                                <option value="">Sélectionner</option>
+                                @foreach ($services as $service)
+                                    <option value="{{ $service->id }}" @selected((string) old('service_id') === (string) $service->id)>
+                                        {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
                         <label class="inline-flex items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
                             <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
                             <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
@@ -463,7 +490,7 @@
                     <div id="lot-import-error" class="hidden rounded-xl border p-4 text-sm" style="border-color:#fecaca;background:#fff1f2;color:#9f1239;">
                         <p id="lot-import-error-message"></p>
                         <button id="lot-import-retry" type="button" class="mt-3 hidden rounded-xl border px-4 py-2 text-sm font-semibold transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50" style="border-color:#fecaca;background:#fff7f8;color:#9f1239;">
-                            Relancér l'import
+                            Relancer l'import
                         </button>
                     </div>
 
@@ -549,6 +576,7 @@
         const lotActionDeleteNote = document.getElementById('lot-action-delete-note');
         const lotActionName = document.getElementById('lot_action_name');
         const lotActionType = document.getElementById('lot_action_type');
+        const lotActionServiceId = document.getElementById('lot_action_service_id');
         const lotActionStatus = document.getElementById('lot_action_status');
         const lotActionSamplingPercentage = document.getElementById('lot_action_sampling_percentage');
         const lotActionPhysicalSamplingPercentage = document.getElementById('lot_action_physical_sampling_percentage');
@@ -566,6 +594,7 @@
         const lotFileSelected = document.getElementById('lot-file-selected');
         const lotImportDelegataire = document.getElementById('lot_delegataire');
         const lotImportType = document.getElementById('lot_type');
+        const lotImportServiceId = document.getElementById('lot_service_id');
         const lotSamplingPercentage = document.getElementById('lot_sampling_percentage');
         const lotSingleSamplingWrap = document.getElementById('lot-single-sampling-wrap');
         const lotPhysicalSamplingWrap = document.getElementById('lot-physical-sampling-wrap');
@@ -752,6 +781,7 @@
             lotActionDeleteForm.action = lot.delete_url;
             lotActionName.value = lot.title || '';
             lotActionType.value = lot.type || '';
+            if (lotActionServiceId) lotActionServiceId.value = lot.service_id || '';
             lotActionStatus.value = lot.status || '';
             lotActionSamplingPercentage.value = lot.sampling_percentage ?? '';
             if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
@@ -819,6 +849,7 @@
             const selectedFile = hasFile ? lotImportFile.files[0] : null;
             const hasDelegataire = Boolean(lotImportDelegataire?.value?.trim());
             const hasType = Boolean(lotImportType?.value);
+            const hasService = Boolean(lotImportServiceId?.value);
             const hasSampling = needsHybridSampling
                 ? Number(lotPhysicalSamplingPercentage?.value || 0) > 0 && Number(lotContactSamplingPercentage?.value || 0) > 0
                 : (!needsSampling || Number(lotSamplingPercentage?.value || 0) > 0);
@@ -832,7 +863,7 @@
             }
 
             if (lotImportSubmit) {
-                lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasType && hasSampling);
+                lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasType && hasService && hasSampling);
             }
         }
 
@@ -977,7 +1008,7 @@
             lotImportRetry?.classList.add('hidden');
             if (lotImportRetry) {
                 lotImportRetry.disabled = false;
-                lotImportRetry.textContent = 'Relancér l\'import';
+                lotImportRetry.textContent = 'Relancer l\'import';
             }
         }
 
@@ -1839,6 +1870,7 @@
         lotImportFile?.addEventListener('change', updateLotImportState);
         lotImportDelegataire?.addEventListener('change', updateLotImportState);
         lotImportType?.addEventListener('change', updateLotImportState);
+        lotImportServiceId?.addEventListener('change', updateLotImportState);
         lotSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotPhysicalSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotContactSamplingPercentage?.addEventListener('input', updateLotImportState);
