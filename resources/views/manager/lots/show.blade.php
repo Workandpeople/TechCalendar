@@ -37,9 +37,21 @@
                 'satisfied_count' => 0,
                 'total_count' => 0,
             ];
+            $dissatisfaction = $lot['auto_completion']['dissatisfaction'] ?? [
+                'percentage' => 0,
+                'dissatisfied_count' => 0,
+                'processed_count' => 0,
+            ];
+            $dissatisfactionScope = match (true) {
+                $lot['is_hybrid'] => 'sur RDV pris + appels',
+                $lot['supports_contact'] && ! $lot['supports_physical'] => 'sur appels traités',
+                $lot['supports_physical'] && ! $lot['supports_contact'] => 'sur RDV pris',
+                default => 'sur dossiers traités',
+            };
+            $formatRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
         @endphp
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Dossiers</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['appointments_count'] }}</p>
@@ -61,9 +73,16 @@
             </article>
             <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">Taux de satisfaction total</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:#166534;">{{ $totalSatisfaction['percentage'] }}%</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:#166534;">{{ $formatRate($totalSatisfaction['percentage']) }}%</p>
                 <p class="mt-1 text-xs" style="color:#14532d;">
                     {{ $totalSatisfaction['satisfied_count'] }} / {{ $totalSatisfaction['total_count'] }} dossiers du lot
+                </p>
+            </article>
+            <article class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff7f7;">
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#991b1b;">Taux d’insatisfaction</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:#991b1b;">{{ $formatRate($dissatisfaction['percentage']) }}%</p>
+                <p class="mt-1 text-xs" style="color:#7f1d1d;">
+                    {{ $dissatisfaction['dissatisfied_count'] }} / {{ $dissatisfaction['processed_count'] }} {{ $dissatisfactionScope }}
                 </p>
             </article>
         </section>

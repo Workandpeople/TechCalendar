@@ -123,14 +123,14 @@ class LotAutoCompletionCalculator
                 : 0,
             'dissatisfaction' => [
                 'percentage' => $dissatisfactionProcessedCount > 0
-                    ? (int) min(100, round(($dissatisfiedCount / $dissatisfactionProcessedCount) * 100))
+                    ? min(100, round(($dissatisfiedCount / $dissatisfactionProcessedCount) * 100, 2))
                     : 0,
                 'dissatisfied_count' => $dissatisfiedCount,
                 'processed_count' => $dissatisfactionProcessedCount,
             ],
             'total_satisfaction' => [
                 'percentage' => $totalCount > 0
-                    ? (int) min(100, round(($totalSatisfiedCount / $totalCount) * 100))
+                    ? min(100, round(($totalSatisfiedCount / $totalCount) * 100, 2))
                     : 0,
                 'satisfied_count' => $totalSatisfiedCount,
                 'total_count' => $totalCount,
