@@ -23,6 +23,7 @@ class LotAutoCompletionCalculator
      *     satisfaction_remaining_count:int,
      *     satisfaction_percentage:int,
      *     dissatisfaction:array<string, mixed>,
+     *     total_satisfaction:array<string, mixed>,
      *     detail:string,
      *     is_sampling:bool,
      *     sampling_percentage:float|null,
@@ -37,6 +38,13 @@ class LotAutoCompletionCalculator
             ->values();
 
         $totalCount = $appointments->count();
+        $totalSatisfiedCount = $appointments
+            ->filter(fn (LotAppointment $appointment): bool => (
+                $lot->supportsPhysicalProcessing() && $appointment->physical_satisfaction === true
+            ) || (
+                $lot->supportsContactProcessing() && $appointment->contact_satisfaction === true
+            ))
+            ->count();
         $placedCount = $appointments
             ->filter(fn (LotAppointment $appointment): bool => $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED)
             ->count();
@@ -119,6 +127,13 @@ class LotAutoCompletionCalculator
                     : 0,
                 'dissatisfied_count' => $dissatisfiedCount,
                 'processed_count' => $dissatisfactionProcessedCount,
+            ],
+            'total_satisfaction' => [
+                'percentage' => $totalCount > 0
+                    ? (int) min(100, round(($totalSatisfiedCount / $totalCount) * 100))
+                    : 0,
+                'satisfied_count' => $totalSatisfiedCount,
+                'total_count' => $totalCount,
             ],
             'detail' => $detail,
             'is_sampling' => $isSampling,
