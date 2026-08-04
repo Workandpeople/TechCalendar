@@ -31,7 +31,21 @@
             @endif
         </div>
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        @php
+            $dissatisfaction = $lot['auto_completion']['dissatisfaction'] ?? [
+                'percentage' => 0,
+                'dissatisfied_count' => 0,
+                'processed_count' => 0,
+            ];
+            $dissatisfactionScope = match (true) {
+                $lot['is_hybrid'] => 'sur RDV pris + appels',
+                $lot['supports_contact'] && ! $lot['supports_physical'] => 'sur appels traités',
+                $lot['supports_physical'] && ! $lot['supports_contact'] => 'sur RDV pris',
+                default => 'sur dossiers traités',
+            };
+        @endphp
+
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Dossiers</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['appointments_count'] }}</p>
@@ -51,6 +65,13 @@
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Contacts traités</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['contact_processed_count'] }}</p>
             </article>
+            <article class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff7f7;">
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#991b1b;">Taux d’insatisfaction</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:#991b1b;">{{ $dissatisfaction['percentage'] }}%</p>
+                <p class="mt-1 text-xs" style="color:#7f1d1d;">
+                    {{ $dissatisfaction['dissatisfied_count'] }} / {{ $dissatisfaction['processed_count'] }} {{ $dissatisfactionScope }}
+                </p>
+            </article>
         </section>
 
         @php
@@ -67,24 +88,50 @@
         <section class="grid grid-cols-1 gap-4 {{ $chartItems->count() > 1 ? 'xl:grid-cols-2' : '' }}">
             @foreach ($chartItems as $chart)
                 @php
-                    $percentage = (int) ($chart['percentage'] ?? 0);
+                    $targetCount = max(0, (int) ($chart['target_count'] ?? 0));
+                    $satisfiedCount = max(0, (int) ($chart['satisfied_count'] ?? 0));
+                    $unsatisfiedCount = max(0, (int) ($chart['unsatisfied_count'] ?? 0));
+                    $satisfactionAnsweredCount = min($targetCount, $satisfiedCount + $unsatisfiedCount);
+                    $satisfactionPercentage = (int) ($chart['satisfaction_percentage'] ?? ($targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100)) : 0));
+                    $satisfiedShare = $targetCount > 0 ? min(100, round(($satisfiedCount / $targetCount) * 100, 2)) : 0;
+                    $answeredShare = $targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100, 2)) : 0;
                 @endphp
                 <article class="gc-card p-5">
                     <div class="flex flex-col gap-5 md:flex-row md:items-center">
-                        <div class="lot-chart-ring shrink-0" style="--value:{{ $percentage }};">
-                            <span>{{ $percentage }}%</span>
+                        <div
+                            class="lot-chart-ring shrink-0"
+                            style="--satisfied:{{ $satisfiedShare }};--answered:{{ $answeredShare }};"
+                            aria-label="{{ $satisfiedCount }} satisfaisant(s), {{ $unsatisfiedCount }} non satisfaisant(s)"
+                        >
+                            <span>{{ $satisfactionPercentage }}%</span>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $chart['label'] ?? 'Lot' }}</p>
                             <h2 class="mt-1 text-lg font-semibold" style="color:var(--gc-text);">{{ $chart['detail'] ?? 'Suivi du lot' }}</h2>
                             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                {{ $chart['completed_count'] ?? 0 }} dossier(s) terminé(s)
+                                {{ $satisfactionAnsweredCount }} réponse(s) de satisfaction
                                 @if (! empty($chart['is_sampling']))
-                                    sur un objectif de {{ $chart['target_count'] ?? 0 }}.
+                                    sur un objectif de {{ $targetCount }}.
                                 @else
                                     sur {{ $chart['total_count'] ?? $lot['appointments_count'] }}.
                                 @endif
                             </p>
+                            <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                                <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#dcfce7;color:#166534;">
+                                    <span class="h-2 w-2 rounded-full" style="background:#16a34a;"></span>
+                                    {{ $satisfiedCount }} satisfaisant(s)
+                                </span>
+                                <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#fee2e2;color:#991b1b;">
+                                    <span class="h-2 w-2 rounded-full" style="background:#dc2626;"></span>
+                                    {{ $unsatisfiedCount }} non satisfaisant(s)
+                                </span>
+                                @if (($chart['satisfaction_remaining_count'] ?? 0) > 0)
+                                    <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#f1f5f9;color:#475569;">
+                                        <span class="h-2 w-2 rounded-full" style="background:#cbd5e1;"></span>
+                                        {{ $chart['satisfaction_remaining_count'] }} en attente
+                                    </span>
+                                @endif
+                            </div>
                         </div>
                     </div>
                 </article>
@@ -685,7 +732,11 @@
             align-items: center;
             background:
                 radial-gradient(circle at center, #ffffff 0 58%, transparent 59%),
-                conic-gradient(var(--gc-primary) calc(var(--value) * 1%), #e2e8f0 0);
+                conic-gradient(
+                    #16a34a 0 calc(var(--satisfied) * 1%),
+                    #dc2626 calc(var(--satisfied) * 1%) calc(var(--answered) * 1%),
+                    #e2e8f0 calc(var(--answered) * 1%) 100%
+                );
             border-radius: 9999px;
             display: flex;
             height: 104px;

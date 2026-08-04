@@ -17,6 +17,12 @@ class LotAutoCompletionCalculator
      *     remaining_count:int,
      *     target_count:int,
      *     total_count:int,
+     *     satisfied_count:int,
+     *     unsatisfied_count:int,
+     *     satisfaction_answered_count:int,
+     *     satisfaction_remaining_count:int,
+     *     satisfaction_percentage:int,
+     *     dissatisfaction:array<string, mixed>,
      *     detail:string,
      *     is_sampling:bool,
      *     sampling_percentage:float|null,
@@ -43,6 +49,7 @@ class LotAutoCompletionCalculator
                 fn (LotAppointment $appointment): bool => $appointment->physical_satisfaction !== null
                     || $appointment->appointment_id !== null
                     || $appointment->status === LotAppointment::STATUS_PLACED,
+                fn (LotAppointment $appointment): ?bool => $appointment->physical_satisfaction,
             )
             : null;
         $contact = $lot->supportsContactProcessing()
@@ -53,6 +60,7 @@ class LotAutoCompletionCalculator
                 $lot->type === Lot::TYPE_SAMPLE_CONTACT_CONTROL || $lot->isHybrid(),
                 fn (LotAppointment $appointment): bool => $appointment->contact_satisfaction !== null
                     || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED,
+                fn (LotAppointment $appointment): ?bool => $appointment->contact_satisfaction,
             )
             : null;
         $channels = collect([$physical, $contact])->filter();
@@ -60,6 +68,10 @@ class LotAutoCompletionCalculator
         if ($channels->isNotEmpty()) {
             $targetCount = (int) $channels->sum('target_count');
             $completedCount = min((int) $channels->sum('completed_count'), $targetCount);
+            $satisfiedCount = min((int) $channels->sum('satisfied_count'), $targetCount);
+            $unsatisfiedCount = min((int) $channels->sum('unsatisfied_count'), max(0, $targetCount - $satisfiedCount));
+            $dissatisfactionProcessedCount = (int) $channels->sum('dissatisfaction_processed_count');
+            $dissatisfiedCount = (int) $channels->sum('dissatisfied_count');
             $percentage = $targetCount > 0
                 ? (int) min(100, round(($completedCount / $targetCount) * 100))
                 : 0;
@@ -75,11 +87,17 @@ class LotAutoCompletionCalculator
                 : null;
             $targetCount = $this->targetCount($totalCount, $isSampling, $samplingPercentage);
             $completedCount = min($placedCount, $targetCount);
+            $satisfiedCount = 0;
+            $unsatisfiedCount = 0;
+            $dissatisfactionProcessedCount = $placedCount;
+            $dissatisfiedCount = 0;
             $percentage = $targetCount > 0
                 ? (int) min(100, round(($completedCount / $targetCount) * 100))
                 : 0;
             $detail = $this->detail($completedCount, $targetCount, $placedCount, $isSampling, $samplingPercentage);
         }
+
+        $satisfactionAnsweredCount = min($satisfiedCount + $unsatisfiedCount, $targetCount);
 
         $result = [
             'percentage' => $percentage,
@@ -88,6 +106,20 @@ class LotAutoCompletionCalculator
             'remaining_count' => max(0, $targetCount - $completedCount),
             'target_count' => $targetCount,
             'total_count' => $totalCount,
+            'satisfied_count' => $satisfiedCount,
+            'unsatisfied_count' => $unsatisfiedCount,
+            'satisfaction_answered_count' => $satisfactionAnsweredCount,
+            'satisfaction_remaining_count' => max(0, $targetCount - $satisfactionAnsweredCount),
+            'satisfaction_percentage' => $targetCount > 0
+                ? (int) min(100, round(($satisfactionAnsweredCount / $targetCount) * 100))
+                : 0,
+            'dissatisfaction' => [
+                'percentage' => $dissatisfactionProcessedCount > 0
+                    ? (int) min(100, round(($dissatisfiedCount / $dissatisfactionProcessedCount) * 100))
+                    : 0,
+                'dissatisfied_count' => $dissatisfiedCount,
+                'processed_count' => $dissatisfactionProcessedCount,
+            ],
             'detail' => $detail,
             'is_sampling' => $isSampling,
             'sampling_percentage' => $samplingPercentage,
@@ -120,6 +152,14 @@ class LotAutoCompletionCalculator
      *     remaining_count:int,
      *     target_count:int,
      *     total_count:int,
+     *     satisfied_count:int,
+     *     unsatisfied_count:int,
+     *     satisfaction_answered_count:int,
+     *     satisfaction_remaining_count:int,
+     *     satisfaction_percentage:int,
+     *     dissatisfaction_processed_count:int,
+     *     dissatisfied_count:int,
+     *     dissatisfaction_percentage:int,
      *     detail:string,
      *     is_sampling:bool,
      *     sampling_percentage:float|null
@@ -131,13 +171,38 @@ class LotAutoCompletionCalculator
         ?float $samplingPercentage,
         bool $isSampling,
         callable $isCompleted,
+        ?callable $satisfactionValue,
     ): array {
         $totalCount = $appointments->count();
         $safeSamplingPercentage = $isSampling && $samplingPercentage !== null
             ? max(0, min(100, (float) $samplingPercentage))
             : null;
         $targetCount = $this->targetCount($totalCount, $isSampling, $safeSamplingPercentage);
-        $completedCount = min($appointments->filter($isCompleted)->count(), $targetCount);
+        $processedCount = $appointments->filter($isCompleted)->count();
+        $completedCount = min($processedCount, $targetCount);
+        $satisfiedCount = 0;
+        $unsatisfiedCount = 0;
+
+        if ($satisfactionValue !== null) {
+            foreach ($appointments as $appointment) {
+                $satisfaction = $satisfactionValue($appointment);
+
+                if ($satisfaction === true) {
+                    $satisfiedCount++;
+                }
+
+                if ($satisfaction === false) {
+                    $unsatisfiedCount++;
+                }
+            }
+        }
+
+        $satisfiedCount = min($satisfiedCount, $targetCount);
+        $unsatisfiedCount = min($unsatisfiedCount, max(0, $targetCount - $satisfiedCount));
+        $satisfactionAnsweredCount = min($satisfiedCount + $unsatisfiedCount, $targetCount);
+        $rawUnsatisfiedCount = $appointments
+            ->filter(fn (LotAppointment $appointment): bool => $satisfactionValue !== null && $satisfactionValue($appointment) === false)
+            ->count();
         $percentage = $targetCount > 0
             ? (int) min(100, round(($completedCount / $targetCount) * 100))
             : 0;
@@ -149,6 +214,18 @@ class LotAutoCompletionCalculator
             'remaining_count' => max(0, $targetCount - $completedCount),
             'target_count' => $targetCount,
             'total_count' => $totalCount,
+            'satisfied_count' => $satisfiedCount,
+            'unsatisfied_count' => $unsatisfiedCount,
+            'satisfaction_answered_count' => $satisfactionAnsweredCount,
+            'satisfaction_remaining_count' => max(0, $targetCount - $satisfactionAnsweredCount),
+            'satisfaction_percentage' => $targetCount > 0
+                ? (int) min(100, round(($satisfactionAnsweredCount / $targetCount) * 100))
+                : 0,
+            'dissatisfaction_processed_count' => $processedCount,
+            'dissatisfied_count' => $rawUnsatisfiedCount,
+            'dissatisfaction_percentage' => $processedCount > 0
+                ? (int) min(100, round(($rawUnsatisfiedCount / $processedCount) * 100))
+                : 0,
             'detail' => $this->channelDetail($label, $completedCount, $targetCount, $isSampling, $safeSamplingPercentage),
             'is_sampling' => $isSampling,
             'sampling_percentage' => $safeSamplingPercentage,

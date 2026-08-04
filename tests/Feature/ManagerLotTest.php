@@ -628,6 +628,46 @@ it('renders lot auto completion based on sampling target', function () {
         ->assertSee('1/2 physique (50%)');
 });
 
+it('renders lot detail satisfaction split in circular charts', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot satisfaction',
+        'type' => Lot::TYPE_SAMPLE_CONTACT_CONTROL,
+        'sampling_percentage' => 50,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 4) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client satisfaction '.$index,
+            'address' => 'Adresse satisfaction '.$index,
+            'status' => $index <= 2 ? LotAppointment::STATUS_CONTACT_PROCESSED : LotAppointment::STATUS_PENDING,
+            'contact_satisfaction' => match ($index) {
+                1 => true,
+                2 => false,
+                default => null,
+            },
+        ]);
+    }
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('Taux d’insatisfaction')
+        ->assertSee('1 / 2 sur appels traités')
+        ->assertSee('2 réponse(s) de satisfaction')
+        ->assertSee('1 satisfaisant(s)')
+        ->assertSee('1 non satisfaisant(s)')
+        ->assertSee('--satisfied:50', false)
+        ->assertSee('--answered:100', false);
+});
+
 it('excludes and reintegrates a lot appointment from lot statistics', function () {
     $manager = User::factory()->create([
         'role' => 0,

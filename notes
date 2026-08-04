@@ -14,3 +14,5 @@ ajouter un bool "ajouté sur global +" dans detail d'un rdv physique
 rdv -> satisfaisant/non-satisfaisant telephone, satisfaisant/ sur lieu, porte (cummulable avec un autre status), sorti du lot
 
 gerer le nombre de rdv a prendre sur la gestion du lot
+
+
