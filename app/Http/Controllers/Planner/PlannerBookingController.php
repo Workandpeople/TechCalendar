@@ -1101,7 +1101,6 @@ class PlannerBookingController extends Controller
         $placeableStatus = [
             LotAppointment::STATUS_PENDING,
             LotAppointment::STATUS_NEEDS_REVIEW,
-            LotAppointment::STATUS_NOT_PLACED,
         ];
 
         return Lot::query()
@@ -2489,7 +2488,6 @@ class PlannerBookingController extends Controller
             && in_array($appointment->status, [
                 LotAppointment::STATUS_PENDING,
                 LotAppointment::STATUS_NEEDS_REVIEW,
-                LotAppointment::STATUS_NOT_PLACED,
             ], true);
     }
 

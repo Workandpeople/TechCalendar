@@ -488,12 +488,9 @@
                                             style="border-color:var(--gc-border);color:var(--gc-text);"
                                             data-lot-filter="status"
                                         >
-                                            <option value="">Tous</option>
                                             <option value="pending">À placer</option>
-                                            <option value="needs_review">À vérifier</option>
                                             <option value="placed">RDV placé</option>
                                             <option value="contact_processed">Contact traité</option>
-                                            <option value="missing_gps">GPS à corriger</option>
                                         </select>
                                     </label>
 
@@ -551,8 +548,6 @@
                                     $lotAppointmentFilterStatus = match (true) {
                                         $isPlaced => 'placed',
                                         $isContactProcessed => 'contact_processed',
-                                        $appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW => 'needs_review',
-                                        ! $canSearch && ! $isPlaced && ! $isContactProcessed && $lot['supports_physical'] => 'missing_gps',
                                         default => 'pending',
                                     };
                                     $lotAppointmentFilterProcessing = trim(implode(' ', array_filter([
@@ -578,9 +573,6 @@
                                             @endif
                                             @if ($isContactProcessed)
                                                 <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;">Contact traité</span>
-                                            @endif
-                                            @if ($appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">A vérifier</span>
                                             @endif
                                         </div>
                                         @php
@@ -5168,8 +5160,19 @@
         bindBookingCrmCards();
 
         const bookingLotFilterStoragePrefix = 'techcalendar.planner.book.lot_filters.';
+        const bookingLotDefaultStatusFilter = 'pending';
+        const bookingLotAllowedStatusFilters = new Set([
+            bookingLotDefaultStatusFilter,
+            'placed',
+            'contact_processed',
+        ]);
 
         const normalizeLotFilterValue = (value) => String(value || '').trim().toLowerCase();
+        const normalizeBookingLotStatusFilter = (value) => {
+            const normalized = normalizeLotFilterValue(value);
+
+            return bookingLotAllowedStatusFilters.has(normalized) ? normalized : bookingLotDefaultStatusFilter;
+        };
 
         const bookingLotFilterStorageKey = (lotId) => `${bookingLotFilterStoragePrefix}${lotId}`;
 
@@ -5212,7 +5215,7 @@
             return {
                 search: normalizeLotFilterValue(controls.search?.value),
                 department: String(controls.department?.value || ''),
-                status: String(controls.status?.value || ''),
+                status: normalizeBookingLotStatusFilter(controls.status?.value),
                 processing: String(controls.processing?.value || ''),
             };
         };
@@ -5259,7 +5262,17 @@
             const filters = lotId ? readBookingLotFilters(lotId) : {};
 
             Object.entries(controls).forEach(([key, control]) => {
-                if (!control || filters[key] === undefined) {
+                if (!control) {
+                    return;
+                }
+
+                if (key === 'status') {
+                    control.value = normalizeBookingLotStatusFilter(filters[key]);
+
+                    return;
+                }
+
+                if (filters[key] === undefined) {
                     return;
                 }
 
@@ -5282,9 +5295,9 @@
             });
 
             details.querySelector('.booking-lot-filter-reset')?.addEventListener('click', () => {
-                Object.values(controls).forEach((control) => {
+                Object.entries(controls).forEach(([key, control]) => {
                     if (control) {
-                        control.value = '';
+                        control.value = key === 'status' ? bookingLotDefaultStatusFilter : '';
                     }
                 });
 

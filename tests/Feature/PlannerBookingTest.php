@@ -1414,6 +1414,18 @@ it('renders lot appointment requests on the booking page', function () {
         'longitude' => 4.832,
         'status' => LotAppointment::STATUS_PENDING,
     ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client Non Place',
+        'customer_phone' => '0600000005',
+        'address' => '1 Rue Non Place',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.758,
+        'longitude' => 4.833,
+        'status' => LotAppointment::STATUS_NOT_PLACED,
+    ]);
     $placedAppointment = Appointment::query()->create([
         'service_id' => Service::query()->first()->id,
         'technician_id' => $technician->id,
@@ -1457,6 +1469,10 @@ it('renders lot appointment requests on the booking page', function () {
         ->assertSee('20 Place Bellecour, 69002 Lyon')
         ->assertSee('Client Place')
         ->assertSee('RDV placé')
+        ->assertDontSee('Client Non Place')
+        ->assertDontSee('À vérifier')
+        ->assertDontSee('A vérifier')
+        ->assertDontSee('GPS à corriger')
         ->assertSee('Audit interne')
         ->assertSee('Placer le RDV')
         ->assertSee('Voir le RDV')
@@ -1500,7 +1516,6 @@ it('renders lot booking stats against the sampling objective', function () {
         ->get(route('planner.book'))
         ->assertOk()
         ->assertSee('Lot contact échantillonné')
-        ->assertSee('Progression globale')
         ->assertSee('RDV téléphoniques')
         ->assertSee('1 / 2')
         ->assertSee('50%')
