@@ -382,26 +382,26 @@
                 </div>
             </div>
 
-            <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
-                <div class="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_170px_190px_190px_190px_150px_auto] 2xl:items-end">
-                    <label class="block">
+            <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-4 md:p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6 xl:grid-cols-12 xl:items-end">
+                    <label class="block md:col-span-2 lg:col-span-3 xl:col-span-3">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
                         <input
                             id="appointment_q"
                             name="appointment_q"
                             type="search"
                             value="{{ $appointmentFilters['appointment_q'] }}"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                             placeholder="Client, site, téléphone, adresse, référence..."
                         >
                     </label>
 
-                    <label class="block">
+                    <label class="block lg:col-span-1 xl:col-span-2">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Statut</span>
                         <select
                             name="appointment_status"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                         >
                             <option value="">Tous les statuts</option>
@@ -411,11 +411,11 @@
                         </select>
                     </label>
 
-                    <label class="block">
+                    <label class="block lg:col-span-1 xl:col-span-2">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Traitement</span>
                         <select
                             name="appointment_processing"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                         >
                             <option value="">Tous les traitements</option>
@@ -425,11 +425,11 @@
                         </select>
                     </label>
 
-                    <label class="block">
+                    <label class="block lg:col-span-1 xl:col-span-2">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Résultat</span>
                         <select
                             name="appointment_satisfaction"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                         >
                             <option value="">Tous les résultats</option>
@@ -439,11 +439,11 @@
                         </select>
                     </label>
 
-                    <label class="block">
+                    <label class="block lg:col-span-1 xl:col-span-1">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Global +</span>
                         <select
                             name="appointment_global_plus"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                         >
                             <option value="">Tous</option>
@@ -453,12 +453,12 @@
                         </select>
                     </label>
 
-                    <label class="block">
+                    <label class="block lg:col-span-1 xl:col-span-1">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Lignes</span>
                         <select
                             id="lot_appointment_per_page"
                             name="per_page"
-                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            class="mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
                             style="border-color:var(--gc-border);color:var(--gc-text);"
                         >
                             @foreach ($lotAppointmentPerPageOptions as $perPage => $label)
@@ -467,7 +467,7 @@
                         </select>
                     </label>
 
-                    <a href="{{ route('manager.lots.show', $lot['id']) }}" class="gc-btn-soft justify-center">
+                    <a href="{{ route('manager.lots.show', $lot['id']) }}" class="gc-btn-soft min-h-[42px] justify-center self-end md:col-span-2 lg:col-span-2 xl:col-span-1">
                         Réinitialiser
                     </a>
                 </div>
