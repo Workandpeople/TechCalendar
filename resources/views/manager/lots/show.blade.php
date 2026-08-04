@@ -260,7 +260,11 @@
                                     default => 'En attente',
                                 };
                             @endphp
-                            <tr @class(['opacity-60' => $appointment['excluded_from_lot_stats']])>
+                            <tr
+                                @class(['lot-appointment-row transition hover:bg-[color:var(--gc-accent-soft)]' => true, 'opacity-60' => $appointment['excluded_from_lot_stats']])
+                                data-lot-appointment-row
+                                data-lot-appointment-id="{{ $appointment['id'] }}"
+                            >
                                 <td class="whitespace-nowrap px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['row_number'] ?: '-' }}</td>
                                 <td class="min-w-[220px] px-4 py-3">
                                     <p class="font-semibold" style="color:var(--gc-text);">{{ $clientLabel ?: 'Client à qualifier' }}</p>
@@ -471,6 +475,7 @@
         const contactComment = document.getElementById('lot-contact-detail-comment');
         const contactStatsExclusionStatus = document.getElementById('lot-contact-stats-exclusion-status');
         const contactStatsExclusionToggle = document.getElementById('lot-contact-stats-exclusion-toggle');
+        let lotAppointmentTooltip = null;
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -520,6 +525,104 @@
 
         function customerLabel(appointment) {
             return appointment.company_name || appointment.customer_name || 'Client à qualifier';
+        }
+
+        function limitTooltipText(value, maxLength = 260) {
+            const text = String(value || '').replace(/\s+/g, ' ').trim();
+
+            return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
+        }
+
+        function lotAppointmentCommentItems(appointment) {
+            if (!appointment) return [];
+
+            const items = [];
+            const mainComment = limitTooltipText(appointment.comment || '');
+
+            if (mainComment) {
+                items.push({
+                    title: 'Commentaire du dossier',
+                    text: mainComment,
+                });
+            }
+
+            const contactComment = limitTooltipText(appointment.contact_comment || '');
+
+            if (contactComment && contactComment !== mainComment) {
+                items.push({
+                    title: 'Commentaire contact',
+                    text: contactComment,
+                });
+            }
+
+            return items;
+        }
+
+        function ensureLotAppointmentTooltip() {
+            if (lotAppointmentTooltip) {
+                return lotAppointmentTooltip;
+            }
+
+            lotAppointmentTooltip = document.createElement('div');
+            lotAppointmentTooltip.style.cssText = [
+                'position:fixed',
+                'z-index:95',
+                'display:none',
+                'pointer-events:none',
+                'max-width:420px',
+                'border-radius:16px',
+                'padding:12px 14px',
+                'background:#31424c',
+                'color:#ffffff',
+                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
+                'font-size:12px',
+                'line-height:1.45',
+                'transform:translate(-50%, calc(-100% - 14px))',
+            ].join(';');
+            document.body.appendChild(lotAppointmentTooltip);
+
+            return lotAppointmentTooltip;
+        }
+
+        function moveLotAppointmentTooltip(event) {
+            const tooltip = ensureLotAppointmentTooltip();
+            const safeLeft = Math.min(Math.max(event.clientX, 210), window.innerWidth - 210);
+            const safeTop = Math.max(event.clientY, 130);
+
+            tooltip.style.left = `${safeLeft}px`;
+            tooltip.style.top = `${safeTop}px`;
+        }
+
+        function showLotAppointmentTooltip(event, appointment) {
+            const comments = lotAppointmentCommentItems(appointment);
+
+            if (comments.length === 0) {
+                hideLotAppointmentTooltip();
+                return;
+            }
+
+            const tooltip = ensureLotAppointmentTooltip();
+            const commentsHtml = comments.map((comment, index) => `
+                <div style="${index === 0 ? 'margin-top:10px;' : 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;'}">
+                    <p style="font-weight:700;">${escapeHtml(comment.title)}</p>
+                    <p style="margin-top:5px;color:rgba(255,255,255,.9);">${escapeHtml(comment.text)}</p>
+                </div>
+            `).join('');
+
+            tooltip.innerHTML = `
+                <div>
+                    <p style="font-weight:800;letter-spacing:.02em;">Commentaires du dossier</p>
+                    ${commentsHtml}
+                </div>
+            `;
+            tooltip.style.display = 'block';
+            moveLotAppointmentTooltip(event);
+        }
+
+        function hideLotAppointmentTooltip() {
+            if (lotAppointmentTooltip) {
+                lotAppointmentTooltip.style.display = 'none';
+            }
         }
 
         function infoGrid(items) {
@@ -682,6 +785,16 @@
 
                 openPhysicalDetail(appointment);
             });
+        });
+
+        document.querySelectorAll('[data-lot-appointment-row]').forEach((row) => {
+            row.addEventListener('mouseenter', (event) => {
+                const appointment = lotAppointmentDetails.get(String(row.dataset.lotAppointmentId));
+
+                showLotAppointmentTooltip(event, appointment);
+            });
+            row.addEventListener('mousemove', moveLotAppointmentTooltip);
+            row.addEventListener('mouseleave', hideLotAppointmentTooltip);
         });
 
         physicalClose?.addEventListener('click', () => closeModal(physicalModal));

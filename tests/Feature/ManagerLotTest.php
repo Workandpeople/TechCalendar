@@ -648,6 +648,8 @@ it('renders lot detail satisfaction split in circular charts', function () {
             'customer_name' => 'Client satisfaction '.$index,
             'address' => 'Adresse satisfaction '.$index,
             'status' => $index <= 2 ? LotAppointment::STATUS_CONTACT_PROCESSED : LotAppointment::STATUS_PENDING,
+            'comment' => $index === 1 ? 'Commentaire général du dossier' : null,
+            'contact_comment' => $index === 1 ? 'Commentaire de qualification contact' : null,
             'contact_satisfaction' => match ($index) {
                 1 => true,
                 2 => false,
@@ -668,6 +670,10 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->assertSee('2 réponse(s) de satisfaction')
         ->assertSee('1 satisfaisant(s)')
         ->assertSee('1 non satisfaisant(s)')
+        ->assertSee('data-lot-appointment-row', false)
+        ->assertSee('Commentaires du dossier')
+        ->assertSee('Commentaire g\\u00e9n\\u00e9ral du dossier', false)
+        ->assertSee('Commentaire de qualification contact', false)
         ->assertSee('--satisfied:50', false)
         ->assertSee('--answered:100', false);
 });
