@@ -1148,7 +1148,7 @@ class PlannerBookingController extends Controller
             ->get()
             ->map(function (Lot $lot) use ($autoCompletion): array {
                 $statsAppointments = $lot->appointments->reject(fn (LotAppointment $appointment): bool => $this->isExcludedFromLotStats($appointment));
-                $placedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+                $physicalProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPhysicalProcessedLotAppointment($appointment));
                 $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
                 $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
                 $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
@@ -1179,12 +1179,12 @@ class PlannerBookingController extends Controller
                     'appointment_targets' => [
                         'physical' => [
                             'enabled' => $lot->supportsPhysicalProcessing(),
-                            'completed_count' => $placedAppointments->count(),
+                            'completed_count' => $physicalProcessedAppointments->count(),
                             'target_count' => max(0, $physicalTarget),
                             'default_target_count' => max(0, $physicalDefaultTarget),
-                            'remaining_count' => max(0, $physicalTarget - $placedAppointments->count()),
+                            'remaining_count' => max(0, $physicalTarget - $physicalProcessedAppointments->count()),
                             'percentage' => $physicalTarget > 0
-                                ? (int) min(100, round(($placedAppointments->count() / $physicalTarget) * 100))
+                                ? (int) min(100, round(($physicalProcessedAppointments->count() / $physicalTarget) * 100))
                                 : 0,
                             'is_manual' => $lot->physical_appointment_target_count !== null,
                         ],
@@ -1204,8 +1204,8 @@ class PlannerBookingController extends Controller
                     'placeable_count' => $placeableAppointments->count(),
                     'target_remaining_count' => $autoCompletionData['remaining_count'] ?? $placeableAppointments->count(),
                     'target_count' => $autoCompletionData['target_count'] ?? $lot->appointments->count(),
-                    'completed_target_count' => $autoCompletionData['completed_count'] ?? ($placedAppointments->count() + $contactProcessedAppointments->count()),
-                    'placed_count' => $placedAppointments->count(),
+                    'completed_target_count' => $autoCompletionData['completed_count'] ?? ($physicalProcessedAppointments->count() + $contactProcessedAppointments->count()),
+                    'placed_count' => $physicalProcessedAppointments->count(),
                     'contact_processed_count' => $contactProcessedAppointments->count(),
                     'supports_physical' => $lot->supportsPhysicalProcessing(),
                     'supports_contact' => $lot->supportsContactProcessing(),
@@ -2453,9 +2453,26 @@ class PlannerBookingController extends Controller
         return $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED;
     }
 
+    private function isPhysicalProcessedLotAppointment(LotAppointment $appointment): bool
+    {
+        if ($appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT) {
+            return false;
+        }
+
+        return $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+            || $this->isPlacedLotAppointment($appointment)
+            || $appointment->physical_satisfaction !== null
+            || $appointment->physical_satisfaction_synced_at !== null;
+    }
+
     private function isContactProcessedLotAppointment(LotAppointment $appointment): bool
     {
-        return $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED
+        if ($appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL) {
+            return false;
+        }
+
+        return $appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT
+            || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED
             || $appointment->contact_satisfaction !== null;
     }
 

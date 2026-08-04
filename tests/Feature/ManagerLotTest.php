@@ -714,6 +714,54 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->assertSee('--answered:100', false);
 });
 
+it('keeps hybrid lot physical and contact appointment targets separated', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot hybride séparé',
+        'type' => Lot::TYPE_HYBRID_LOCATION_CONTACT,
+        'physical_sampling_percentage' => 20,
+        'contact_sampling_percentage' => 30,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 10) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client hybride '.$index,
+            'address' => 'Adresse hybride '.$index,
+            'status' => match ($index) {
+                1 => LotAppointment::STATUS_PLACED,
+                2 => LotAppointment::STATUS_CONTACT_PROCESSED,
+                default => LotAppointment::STATUS_PENDING,
+            },
+            'processing_mode' => match ($index) {
+                1 => LotAppointment::PROCESSING_MODE_PHYSICAL,
+                2 => LotAppointment::PROCESSING_MODE_CONTACT,
+                default => null,
+            },
+            // Ces valeurs croisées protègent contre le mélange des canaux dans les widgets.
+            'contact_satisfaction' => $index === 1 ? true : ($index === 2 ? false : null),
+            'physical_satisfaction' => $index === 2 ? true : null,
+        ]);
+    }
+
+    $response = $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk();
+
+    expect($response->getContent())
+        ->toMatch('/RDV physiques.*?1\\s*\\/\\s*2/s')
+        ->and($response->getContent())
+        ->toMatch('/Contacts traités.*?1\\s*\\/\\s*3/s')
+        ->and($response->getContent())
+        ->not->toMatch('/Contacts traités.*?2\\s*\\/\\s*3/s');
+});
+
 it('updates manual appointment targets without changing satisfaction targets', function () {
     $manager = User::factory()->create([
         'role' => 0,

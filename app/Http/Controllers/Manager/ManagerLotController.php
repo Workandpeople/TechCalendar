@@ -924,17 +924,17 @@ class ManagerLotController extends Controller
     {
         $appointments = $lot->appointments;
         $statsAppointments = $appointments->reject(fn (LotAppointment $appointment): bool => $this->isExcludedFromLotStats($appointment));
-        $placedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
+        $physicalProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPhysicalProcessedLotAppointment($appointment));
         $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
         $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
-        $processedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment) || $this->isContactProcessedLotAppointment($appointment));
+        $processedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPhysicalProcessedLotAppointment($appointment) || $this->isContactProcessedLotAppointment($appointment));
         $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
         $statusMeta = $this->statusMeta($status);
         $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
         $appointmentTargets = $this->lotAppointmentTargets(
             $lot,
             $autoCompletionData,
-            $placedAppointments->count(),
+            $physicalProcessedAppointments->count(),
             $contactProcessedAppointments->count(),
             $appointments->count(),
         );
@@ -979,7 +979,7 @@ class ManagerLotController extends Controller
             'appointments_count' => $appointments->count(),
             'processed_count' => $processedAppointments->count(),
             'stats_excluded_count' => $appointments->count() - $statsAppointments->count(),
-            'placed_count' => $placedAppointments->count(),
+            'placed_count' => $physicalProcessedAppointments->count(),
             'placeable_count' => $placeableAppointments->count(),
             'contact_processed_count' => $contactProcessedAppointments->count(),
             'departments' => $appointments->pluck('department_code')->filter()->unique()->sort()->values(),
@@ -1174,9 +1174,26 @@ class ManagerLotController extends Controller
         return $appointment->appointment_id !== null || $appointment->status === LotAppointment::STATUS_PLACED;
     }
 
+    private function isPhysicalProcessedLotAppointment(LotAppointment $appointment): bool
+    {
+        if ($appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT) {
+            return false;
+        }
+
+        return $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+            || $this->isPlacedLotAppointment($appointment)
+            || $appointment->physical_satisfaction !== null
+            || $appointment->physical_satisfaction_synced_at !== null;
+    }
+
     private function isContactProcessedLotAppointment(LotAppointment $appointment): bool
     {
-        return $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED
+        if ($appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL) {
+            return false;
+        }
+
+        return $appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT
+            || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED
             || $appointment->contact_satisfaction !== null;
     }
 

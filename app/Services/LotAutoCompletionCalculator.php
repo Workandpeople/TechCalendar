@@ -55,9 +55,13 @@ class LotAutoCompletionCalculator
                 $lot->physicalSamplingPercentage(),
                 $lot->type === Lot::TYPE_SAMPLE_CONTROL || $lot->isHybrid(),
                 fn (LotAppointment $appointment): bool => $appointment->physical_satisfaction !== null
+                    || $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
                     || $appointment->appointment_id !== null
                     || $appointment->status === LotAppointment::STATUS_PLACED,
-                fn (LotAppointment $appointment): ?bool => $appointment->physical_satisfaction,
+                fn (LotAppointment $appointment): ?bool => $appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT
+                    ? null
+                    : $appointment->physical_satisfaction,
+                fn (LotAppointment $appointment): bool => $appointment->processing_mode !== LotAppointment::PROCESSING_MODE_CONTACT,
             )
             : null;
         $contact = $lot->supportsContactProcessing()
@@ -67,8 +71,12 @@ class LotAutoCompletionCalculator
                 $lot->contactSamplingPercentage(),
                 $lot->type === Lot::TYPE_SAMPLE_CONTACT_CONTROL || $lot->isHybrid(),
                 fn (LotAppointment $appointment): bool => $appointment->contact_satisfaction !== null
+                    || $appointment->processing_mode === LotAppointment::PROCESSING_MODE_CONTACT
                     || $appointment->status === LotAppointment::STATUS_CONTACT_PROCESSED,
-                fn (LotAppointment $appointment): ?bool => $appointment->contact_satisfaction,
+                fn (LotAppointment $appointment): ?bool => $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+                    ? null
+                    : $appointment->contact_satisfaction,
+                fn (LotAppointment $appointment): bool => $appointment->processing_mode !== LotAppointment::PROCESSING_MODE_PHYSICAL,
             )
             : null;
         $channels = collect([$physical, $contact])->filter();
@@ -187,19 +195,23 @@ class LotAutoCompletionCalculator
         bool $isSampling,
         callable $isCompleted,
         ?callable $satisfactionValue,
+        ?callable $isEligible = null,
     ): array {
+        $eligibleAppointments = $isEligible === null
+            ? $appointments
+            : $appointments->filter($isEligible)->values();
         $totalCount = $appointments->count();
         $safeSamplingPercentage = $isSampling && $samplingPercentage !== null
             ? max(0, min(100, (float) $samplingPercentage))
             : null;
         $targetCount = $this->targetCount($totalCount, $isSampling, $safeSamplingPercentage);
-        $processedCount = $appointments->filter($isCompleted)->count();
+        $processedCount = $eligibleAppointments->filter($isCompleted)->count();
         $completedCount = min($processedCount, $targetCount);
         $satisfiedCount = 0;
         $unsatisfiedCount = 0;
 
         if ($satisfactionValue !== null) {
-            foreach ($appointments as $appointment) {
+            foreach ($eligibleAppointments as $appointment) {
                 $satisfaction = $satisfactionValue($appointment);
 
                 if ($satisfaction === true) {
@@ -215,7 +227,7 @@ class LotAutoCompletionCalculator
         $satisfiedCount = min($satisfiedCount, $targetCount);
         $unsatisfiedCount = min($unsatisfiedCount, max(0, $targetCount - $satisfiedCount));
         $satisfactionAnsweredCount = min($satisfiedCount + $unsatisfiedCount, $targetCount);
-        $rawUnsatisfiedCount = $appointments
+        $rawUnsatisfiedCount = $eligibleAppointments
             ->filter(fn (LotAppointment $appointment): bool => $satisfactionValue !== null && $satisfactionValue($appointment) === false)
             ->count();
         $percentage = $targetCount > 0
