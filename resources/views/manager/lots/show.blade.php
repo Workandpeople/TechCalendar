@@ -9,9 +9,6 @@
                     <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
                         {{ $lot['status_label'] }}
                     </span>
-                    @if ($lot['global_plus'])
-                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">Global +</span>
-                    @endif
                 </div>
                 <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                     {{ $lot['type_label'] }}
@@ -24,11 +21,181 @@
                 </p>
             </div>
 
-            @if ($lot['can_download_original_file'])
-                <a href="{{ $lot['download_url'] }}" class="gc-btn-soft justify-center">
-                    Télécharger le fichier source
-                </a>
-            @endif
+            <div class="flex flex-wrap items-center gap-2">
+                @if ($lot['can_download_original_file'])
+                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft justify-center">
+                        Télécharger le fichier source
+                    </a>
+                @endif
+                <button id="lot-detail-edit-open" type="button" class="gc-btn-primary justify-center">
+                    Modifier
+                </button>
+            </div>
+        </div>
+
+        @php
+            $lotDelegataireNames = $delegataires->pluck('name');
+        @endphp
+
+        <div id="lot-detail-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Lot</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Modifier le lot {{ $lot['title'] }}</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ces informations pilotent les objectifs et le traitement des dossiers du lot.</p>
+                    </div>
+                    <button id="lot-detail-edit-close" type="button" class="gc-link">Fermer</button>
+                </div>
+
+                <form id="lot-detail-edit-form" method="POST" action="{{ $lot['update_url'] }}" class="space-y-4 overflow-y-auto p-5">
+                    @csrf
+                    @method('PATCH')
+
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="md:col-span-2">
+                            <label class="gc-label" for="lot_detail_edit_name">Nom du lot</label>
+                            <input id="lot_detail_edit_name" name="name" type="text" value="{{ $lot['title'] }}" class="gc-input" maxlength="190" required>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="gc-label" for="lot_detail_edit_delegataire">Délégataire</label>
+                            <select id="lot_detail_edit_delegataire" name="delegataire" class="gc-input">
+                                <option value="">Sélectionner</option>
+                                @foreach ($delegataires as $delegataire)
+                                    <option value="{{ $delegataire->name }}" @selected($lot['delegataire'] === $delegataire->name)>
+                                        {{ $delegataire->name }}
+                                        @if ($delegataire->company_name)
+                                            · {{ $delegataire->company_name }}
+                                        @endif
+                                    </option>
+                                @endforeach
+                                @if ($lot['delegataire'] && ! $lotDelegataireNames->contains($lot['delegataire']))
+                                    <option value="{{ $lot['delegataire'] }}" selected>{{ $lot['delegataire'] }}</option>
+                                @endif
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="gc-label" for="lot_detail_edit_received_at">Date de réception du lot</label>
+                            <input id="lot_detail_edit_received_at" name="received_at" type="date" value="{{ $lot['received_at_input'] }}" class="gc-input">
+                        </div>
+
+                        <div>
+                            <label class="gc-label" for="lot_detail_edit_type">Type de lot</label>
+                            <select id="lot_detail_edit_type" name="type" class="gc-input" required>
+                                @foreach ($lotTypes as $typeValue => $typeLabel)
+                                    <option value="{{ $typeValue }}" @selected($lot['type'] === $typeValue)>{{ $typeLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="gc-label" for="lot_detail_edit_service_id">Prestation</label>
+                            <select id="lot_detail_edit_service_id" name="service_id" class="gc-input" required>
+                                <option value="">Sélectionner</option>
+                                @foreach ($services as $service)
+                                    <option value="{{ $service->id }}" @selected((int) $lot['service_id'] === (int) $service->id)>
+                                        {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="gc-label" for="lot_detail_edit_status">Statut du lot</label>
+                            <select id="lot_detail_edit_status" name="status" class="gc-input" required>
+                                @foreach ($lotStatuses as $statusValue => $statusLabel)
+                                    <option value="{{ $statusValue }}" @selected($lot['status'] === $statusValue)>{{ $statusLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div id="lot-detail-edit-single-sampling-wrap" class="hidden md:col-span-2">
+                            <label class="gc-label" for="lot_detail_edit_sampling_percentage">% d'échantillonnage</label>
+                            <input id="lot_detail_edit_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ $lot['sampling_percentage'] }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Uniquement pour les lots échantillonnés">
+                        </div>
+
+                        <div id="lot-detail-edit-physical-sampling-wrap" class="hidden">
+                            <label class="gc-label" for="lot_detail_edit_physical_sampling_percentage">% physique</label>
+                            <input id="lot_detail_edit_physical_sampling_percentage" name="physical_sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ $lot['physical_sampling_percentage'] }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled>
+                        </div>
+
+                        <div id="lot-detail-edit-contact-sampling-wrap" class="hidden">
+                            <label class="gc-label" for="lot_detail_edit_contact_sampling_percentage">% contact</label>
+                            <input id="lot_detail_edit_contact_sampling_percentage" name="contact_sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ $lot['contact_sampling_percentage'] }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                        <button id="lot-detail-edit-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                        <button type="submit" class="gc-btn-primary">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="lot-appointment-targets-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Objectifs de RDV à prendre</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Modifier les objectifs opérationnels</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ces valeurs modifient uniquement l’objectif de RDV à prendre. Elles ne changent pas les cibles de satisfaction du lot.</p>
+                    </div>
+                    <button id="lot-appointment-targets-close" type="button" class="gc-link">Fermer</button>
+                </div>
+
+                <form method="POST" action="{{ $lot['appointment_targets_update_url'] }}" class="space-y-4 overflow-y-auto p-5">
+                    @csrf
+                    @method('PATCH')
+
+                    @if ($lot['supports_physical'])
+                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <label class="gc-label" for="physical_appointment_target_count">Objectif RDV physiques</label>
+                            <input
+                                id="physical_appointment_target_count"
+                                name="physical_appointment_target_count"
+                                type="number"
+                                min="0"
+                                max="100000"
+                                step="1"
+                                value="{{ ($lot['appointment_targets']['physical']['is_manual'] ?? false) ? $lot['appointment_targets']['physical']['target_count'] : '' }}"
+                                class="gc-input"
+                                placeholder="{{ $lot['appointment_targets']['physical']['default_target_count'] ?? 0 }}"
+                            >
+                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">
+                                Laisser vide pour revenir à l’objectif calculé automatiquement : {{ $lot['appointment_targets']['physical']['default_target_count'] ?? 0 }}.
+                            </p>
+                        </div>
+                    @endif
+
+                    @if ($lot['supports_contact'])
+                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <label class="gc-label" for="contact_appointment_target_count">Objectif contacts téléphoniques</label>
+                            <input
+                                id="contact_appointment_target_count"
+                                name="contact_appointment_target_count"
+                                type="number"
+                                min="0"
+                                max="100000"
+                                step="1"
+                                value="{{ ($lot['appointment_targets']['contact']['is_manual'] ?? false) ? $lot['appointment_targets']['contact']['target_count'] : '' }}"
+                                class="gc-input"
+                                placeholder="{{ $lot['appointment_targets']['contact']['default_target_count'] ?? 0 }}"
+                            >
+                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">
+                                Laisser vide pour revenir à l’objectif calculé automatiquement : {{ $lot['appointment_targets']['contact']['default_target_count'] ?? 0 }}.
+                            </p>
+                        </div>
+                    @endif
+
+                    <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                        <button id="lot-appointment-targets-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                        <button type="submit" class="gc-btn-primary">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         @php
@@ -49,27 +216,65 @@
                 default => 'sur dossiers traités',
             };
             $formatRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
+            $physicalAppointmentTarget = $lot['appointment_targets']['physical'] ?? [
+                'enabled' => false,
+                'completed_count' => 0,
+                'target_count' => 0,
+                'percentage' => 0,
+                'is_manual' => false,
+            ];
+            $contactAppointmentTarget = $lot['appointment_targets']['contact'] ?? [
+                'enabled' => false,
+                'completed_count' => 0,
+                'target_count' => 0,
+                'percentage' => 0,
+                'is_manual' => false,
+            ];
         @endphp
 
         <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Dossiers</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['appointments_count'] }}</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['processed_count'] }} / {{ $lot['appointments_count'] }}</p>
+                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">traités / total</p>
                 @if (($lot['stats_excluded_count'] ?? 0) > 0)
                     <p class="mt-1 text-xs" style="color:#991b1b;">{{ $lot['stats_excluded_count'] }} hors statistiques</p>
                 @endif
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">À traiter</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['placeable_count'] }}</p>
+                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Réception du lot</p>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['received_at_formatted'] ?: '-' }}</p>
+                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">date de réception</p>
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV physiques</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['placed_count'] }}</p>
+                <div class="flex items-start justify-between gap-3">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">RDV physiques</p>
+                    @if ($physicalAppointmentTarget['enabled'])
+                        <button type="button" class="lot-appointment-targets-open inline-flex h-7 w-7 items-center justify-center rounded-full border text-sm font-semibold transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" aria-label="Modifier l’objectif de RDV physiques">+</button>
+                    @endif
+                </div>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $physicalAppointmentTarget['completed_count'] }} / {{ $physicalAppointmentTarget['target_count'] }}</p>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full" style="width:{{ $physicalAppointmentTarget['percentage'] }}%;background:#15803d;"></div>
+                </div>
+                @if ($physicalAppointmentTarget['is_manual'])
+                    <p class="mt-1 text-xs" style="color:#15803d;">objectif manuel</p>
+                @endif
             </article>
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Contacts traités</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['contact_processed_count'] }}</p>
+                <div class="flex items-start justify-between gap-3">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Contacts traités</p>
+                    @if ($contactAppointmentTarget['enabled'])
+                        <button type="button" class="lot-appointment-targets-open inline-flex h-7 w-7 items-center justify-center rounded-full border text-sm font-semibold transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" aria-label="Modifier l’objectif de contacts">+</button>
+                    @endif
+                </div>
+                <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $contactAppointmentTarget['completed_count'] }} / {{ $contactAppointmentTarget['target_count'] }}</p>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full" style="width:{{ $contactAppointmentTarget['percentage'] }}%;background:#0369a1;"></div>
+                </div>
+                @if ($contactAppointmentTarget['is_manual'])
+                    <p class="mt-1 text-xs" style="color:#0369a1;">objectif manuel</p>
+                @endif
             </article>
             <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">Taux de satisfaction total</p>
@@ -168,7 +373,7 @@
             </div>
 
             <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
-                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_220px_220px_auto] xl:items-end">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_200px_220px_220px_auto] xl:items-end">
                     <label class="block">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
                         <input
@@ -206,6 +411,20 @@
                             <option value="">Tous les traitements</option>
                             @foreach ($lotAppointmentProcessingFilters as $processing => $label)
                                 <option value="{{ $processing }}" @selected($appointmentFilters['appointment_processing'] === $processing)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Résultat</span>
+                        <select
+                            name="appointment_satisfaction"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                        >
+                            <option value="">Tous les résultats</option>
+                            @foreach ($lotAppointmentSatisfactionFilters as $satisfaction => $label)
+                                <option value="{{ $satisfaction }}" @selected($appointmentFilters['appointment_satisfaction'] === $satisfaction)>{{ $label }}</option>
                             @endforeach
                         </select>
                     </label>
@@ -281,6 +500,16 @@
                                     <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
                                         {{ $appointment['status_label'] }}
                                     </span>
+                                    <span
+                                        @class([
+                                            'mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold' => true,
+                                            'hidden' => ! $appointment['added_to_global_plus'],
+                                        ])
+                                        style="background:#fef3c7;color:#b45309;"
+                                        data-lot-appointment-global-plus-badge="{{ $appointment['id'] }}"
+                                    >
+                                        Global +
+                                    </span>
                                     @if ($appointment['excluded_from_lot_stats'])
                                         <span class="mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:#fee2e2;color:#991b1b;">
                                             Hors stats
@@ -292,7 +521,7 @@
                                 </td>
                                 <td class="min-w-[180px] px-4 py-3" style="color:var(--gc-text);">
                                     {{ $resultLabel }}
-                                    @if ($appointment['is_placed'])
+                                    @if ($appointment['can_update_visits'])
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);" data-lot-appointment-portes="{{ $appointment['id'] }}">
                                             Portes : {{ $appointment['unsuccessful_visits_count'] ?? 0 }}
                                         </p>
@@ -377,10 +606,32 @@
                     </div>
 
                     <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
+                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#ffffff;">
+                            <input id="lot-physical-global-plus" type="checkbox" class="gc-check mt-1" />
+                            <span>
+                                <span class="block text-sm font-semibold" style="color:var(--gc-text);">Ajouter au Global +</span>
+                                <span class="block text-xs" style="color:var(--gc-text-soft);">Option portée par ce dossier uniquement.</span>
+                            </span>
+                        </label>
+                        <p id="lot-physical-global-plus-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                    </div>
+
+                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
                         <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
                         <p id="lot-physical-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 w-full justify-center">
                             Sortir des stats du lot
+                        </button>
+                    </div>
+
+                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
+                        <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
+                        <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
+                            Remet le dossier en statut « n'a pas placé » et supprime son état de traitement.
+                        </p>
+                        <p id="lot-physical-reset-processing-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                        <button id="lot-physical-reset-processing" type="button" class="gc-btn-danger mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                            Remettre en non placé
                         </button>
                     </div>
                 </section>
@@ -411,10 +662,32 @@
                 </section>
 
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#ffffff;">
+                        <input id="lot-contact-global-plus" type="checkbox" class="gc-check mt-1" />
+                        <span>
+                            <span class="block text-sm font-semibold" style="color:var(--gc-text);">Ajouter au Global +</span>
+                            <span class="block text-xs" style="color:var(--gc-text-soft);">Option portée par ce dossier uniquement.</span>
+                        </span>
+                    </label>
+                    <p id="lot-contact-global-plus-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                </section>
+
+                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
                     <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
                     <p id="lot-contact-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                     <button id="lot-contact-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 justify-center">
                         Sortir des stats du lot
+                    </button>
+                </section>
+
+                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                    <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
+                        Remet le dossier en statut « n'a pas placé » et supprime son état de satisfaction.
+                    </p>
+                    <p id="lot-contact-reset-processing-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                    <button id="lot-contact-reset-processing" type="button" class="gc-btn-danger mt-3 justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                        Remettre en non placé
                     </button>
                 </section>
             </div>
@@ -429,6 +702,22 @@
         const lotAppointmentFiltersForm = document.getElementById('manager-lot-appointment-filters-form');
         const lotAppointmentSearchInput = document.getElementById('appointment_q');
         let lotAppointmentSearchTimer = null;
+        const lotDetailEditOpen = document.getElementById('lot-detail-edit-open');
+        const lotDetailEditModal = document.getElementById('lot-detail-edit-modal');
+        const lotDetailEditClose = document.getElementById('lot-detail-edit-close');
+        const lotDetailEditCancel = document.getElementById('lot-detail-edit-cancel');
+        const lotDetailEditType = document.getElementById('lot_detail_edit_type');
+        const lotDetailEditSamplingPercentage = document.getElementById('lot_detail_edit_sampling_percentage');
+        const lotDetailEditPhysicalSamplingPercentage = document.getElementById('lot_detail_edit_physical_sampling_percentage');
+        const lotDetailEditContactSamplingPercentage = document.getElementById('lot_detail_edit_contact_sampling_percentage');
+        const lotDetailEditSingleSamplingWrap = document.getElementById('lot-detail-edit-single-sampling-wrap');
+        const lotDetailEditPhysicalSamplingWrap = document.getElementById('lot-detail-edit-physical-sampling-wrap');
+        const lotDetailEditContactSamplingWrap = document.getElementById('lot-detail-edit-contact-sampling-wrap');
+        const lotDetailSamplingTypes = @json(\App\Models\Lot::samplingTypes());
+        const lotDetailHybridType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
+        const lotAppointmentTargetsModal = document.getElementById('lot-appointment-targets-modal');
+        const lotAppointmentTargetsClose = document.getElementById('lot-appointment-targets-close');
+        const lotAppointmentTargetsCancel = document.getElementById('lot-appointment-targets-cancel');
 
         if (lotAppointmentFiltersForm) {
             lotAppointmentFiltersForm.querySelectorAll('select').forEach((select) => {
@@ -453,6 +742,30 @@
             }
         });
 
+        lotDetailEditOpen?.addEventListener('click', () => {
+            updateLotDetailEditSamplingState();
+            openModal(lotDetailEditModal);
+        });
+        lotDetailEditClose?.addEventListener('click', () => closeModal(lotDetailEditModal));
+        lotDetailEditCancel?.addEventListener('click', () => closeModal(lotDetailEditModal));
+        lotDetailEditModal?.addEventListener('click', (event) => {
+            if (event.target === lotDetailEditModal) {
+                closeModal(lotDetailEditModal);
+            }
+        });
+        lotDetailEditType?.addEventListener('change', updateLotDetailEditSamplingState);
+        updateLotDetailEditSamplingState();
+        document.querySelectorAll('.lot-appointment-targets-open').forEach((button) => {
+            button.addEventListener('click', () => openModal(lotAppointmentTargetsModal));
+        });
+        lotAppointmentTargetsClose?.addEventListener('click', () => closeModal(lotAppointmentTargetsModal));
+        lotAppointmentTargetsCancel?.addEventListener('click', () => closeModal(lotAppointmentTargetsModal));
+        lotAppointmentTargetsModal?.addEventListener('click', (event) => {
+            if (event.target === lotAppointmentTargetsModal) {
+                closeModal(lotAppointmentTargetsModal);
+            }
+        });
+
         const physicalModal = document.getElementById('lot-physical-detail-modal');
         const physicalClose = document.getElementById('lot-physical-detail-close');
         const physicalTitle = document.getElementById('lot-physical-detail-title');
@@ -466,6 +779,10 @@
         const physicalTrackingLink = document.getElementById('lot-physical-tracking-link');
         const physicalStatsExclusionStatus = document.getElementById('lot-physical-stats-exclusion-status');
         const physicalStatsExclusionToggle = document.getElementById('lot-physical-stats-exclusion-toggle');
+        const physicalResetProcessingStatus = document.getElementById('lot-physical-reset-processing-status');
+        const physicalResetProcessingButton = document.getElementById('lot-physical-reset-processing');
+        const physicalGlobalPlusCheckbox = document.getElementById('lot-physical-global-plus');
+        const physicalGlobalPlusStatus = document.getElementById('lot-physical-global-plus-status');
 
         const contactModal = document.getElementById('lot-contact-detail-modal');
         const contactClose = document.getElementById('lot-contact-detail-close');
@@ -475,6 +792,10 @@
         const contactComment = document.getElementById('lot-contact-detail-comment');
         const contactStatsExclusionStatus = document.getElementById('lot-contact-stats-exclusion-status');
         const contactStatsExclusionToggle = document.getElementById('lot-contact-stats-exclusion-toggle');
+        const contactResetProcessingStatus = document.getElementById('lot-contact-reset-processing-status');
+        const contactResetProcessingButton = document.getElementById('lot-contact-reset-processing');
+        const contactGlobalPlusCheckbox = document.getElementById('lot-contact-global-plus');
+        const contactGlobalPlusStatus = document.getElementById('lot-contact-global-plus-status');
         let lotAppointmentTooltip = null;
 
         function escapeHtml(value) {
@@ -634,6 +955,51 @@
             `).join('');
         }
 
+        function isLotDetailSamplingType(type) {
+            return lotDetailSamplingTypes.includes(type);
+        }
+
+        function isLotDetailHybridType(type) {
+            return type === lotDetailHybridType;
+        }
+
+        function updateLotDetailEditSamplingState() {
+            if (!lotDetailEditType || !lotDetailEditSamplingPercentage) {
+                return;
+            }
+
+            const currentType = lotDetailEditType.value;
+            const needsSampling = isLotDetailSamplingType(currentType);
+            const needsHybridSampling = isLotDetailHybridType(currentType);
+            const needsSingleSampling = needsSampling && !needsHybridSampling;
+
+            lotDetailEditSingleSamplingWrap?.classList.toggle('hidden', !needsSingleSampling);
+            lotDetailEditPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+            lotDetailEditContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+
+            lotDetailEditSamplingPercentage.disabled = !needsSingleSampling;
+            lotDetailEditSamplingPercentage.required = needsSingleSampling;
+
+            if (lotDetailEditPhysicalSamplingPercentage) {
+                lotDetailEditPhysicalSamplingPercentage.disabled = !needsHybridSampling;
+                lotDetailEditPhysicalSamplingPercentage.required = needsHybridSampling;
+            }
+
+            if (lotDetailEditContactSamplingPercentage) {
+                lotDetailEditContactSamplingPercentage.disabled = !needsHybridSampling;
+                lotDetailEditContactSamplingPercentage.required = needsHybridSampling;
+            }
+
+            if (!needsSingleSampling) {
+                lotDetailEditSamplingPercentage.value = '';
+            }
+
+            if (!needsHybridSampling) {
+                if (lotDetailEditPhysicalSamplingPercentage) lotDetailEditPhysicalSamplingPercentage.value = '';
+                if (lotDetailEditContactSamplingPercentage) lotDetailEditContactSamplingPercentage.value = '';
+            }
+        }
+
         function openModal(modal) {
             modal?.classList.remove('hidden');
             modal?.classList.add('flex');
@@ -650,6 +1016,79 @@
             physicalVisitsStatus.textContent = message;
             physicalVisitsStatus.style.color = color;
             physicalVisitsStatus.classList.remove('hidden');
+        }
+
+        function configureGlobalPlusControls(appointment, checkboxElement, statusElement) {
+            if (!checkboxElement || !statusElement) {
+                return;
+            }
+
+            const addedToGlobalPlus = Boolean(appointment?.added_to_global_plus);
+
+            checkboxElement.checked = addedToGlobalPlus;
+            checkboxElement.disabled = !appointment?.global_plus_update_url;
+            statusElement.textContent = addedToGlobalPlus
+                ? 'Ce dossier est ajouté au Global +.'
+                : 'Ce dossier n’est pas ajouté au Global +.';
+            statusElement.style.color = addedToGlobalPlus ? '#b45309' : 'var(--gc-text-soft)';
+        }
+
+        function updateGlobalPlusBadge(appointment) {
+            document.querySelectorAll(`[data-lot-appointment-global-plus-badge="${appointment.id}"]`).forEach((badge) => {
+                badge.classList.toggle('hidden', !appointment.added_to_global_plus);
+            });
+        }
+
+        async function updateLotAppointmentGlobalPlus(appointment, checkboxElement, statusElement) {
+            if (!appointment?.global_plus_update_url || !checkboxElement || !statusElement) {
+                return;
+            }
+
+            const requestedState = checkboxElement.checked;
+            checkboxElement.disabled = true;
+            statusElement.textContent = 'Mise à jour du Global +...';
+            statusElement.style.color = 'var(--gc-text-soft)';
+
+            try {
+                const response = await fetch(appointment.global_plus_update_url, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        added_to_global_plus: requestedState,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Mise à jour impossible.');
+                }
+
+                const updatedAppointment = payload.appointment;
+                lotAppointmentDetails.set(String(updatedAppointment.id), updatedAppointment);
+
+                if (currentPhysicalLotAppointment?.id === updatedAppointment.id) {
+                    currentPhysicalLotAppointment = updatedAppointment;
+                }
+
+                if (currentContactLotAppointment?.id === updatedAppointment.id) {
+                    currentContactLotAppointment = updatedAppointment;
+                }
+
+                checkboxElement.checked = Boolean(updatedAppointment.added_to_global_plus);
+                checkboxElement.disabled = !updatedAppointment.global_plus_update_url;
+                statusElement.textContent = payload.message || 'Global + mis à jour.';
+                statusElement.style.color = '#15803d';
+                updateGlobalPlusBadge(updatedAppointment);
+            } catch (error) {
+                checkboxElement.checked = !requestedState;
+                checkboxElement.disabled = false;
+                statusElement.textContent = error.message || 'Mise à jour impossible.';
+                statusElement.style.color = '#be123c';
+            }
         }
 
         function statsExclusionStatusText(appointment) {
@@ -717,6 +1156,57 @@
             }
         }
 
+        function configureResetProcessingControls(appointment, statusElement, buttonElement) {
+            if (!statusElement || !buttonElement) {
+                return;
+            }
+
+            const canReset = Boolean(appointment?.can_reset_processing && appointment?.reset_processing_url);
+
+            statusElement.textContent = canReset
+                ? 'Le dossier peut être remis dans le flux de traitement du lot.'
+                : 'Aucun traitement à annuler pour ce dossier.';
+            statusElement.style.color = canReset ? 'var(--gc-text-soft)' : '#64748b';
+            buttonElement.disabled = !canReset;
+            buttonElement.textContent = 'Remettre en non placé';
+        }
+
+        async function resetLotAppointmentProcessing(appointment, statusElement, buttonElement) {
+            if (!appointment?.reset_processing_url || !buttonElement || buttonElement.disabled) {
+                return;
+            }
+
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Remise à traiter...';
+            statusElement.textContent = 'Suppression de l’état de traitement et recalcul des statistiques...';
+            statusElement.style.color = 'var(--gc-text-soft)';
+
+            try {
+                const response = await fetch(appointment.reset_processing_url, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Remise à traiter impossible.');
+                }
+
+                statusElement.textContent = `${payload.message || 'Dossier remis à traiter.'} Rechargement des statistiques...`;
+                statusElement.style.color = '#15803d';
+                window.setTimeout(() => window.location.reload(), 650);
+            } catch (error) {
+                statusElement.textContent = error.message || 'Remise à traiter impossible.';
+                statusElement.style.color = '#be123c';
+                buttonElement.disabled = false;
+                buttonElement.textContent = 'Remettre en non placé';
+            }
+        }
+
         function openPhysicalDetail(appointment) {
             currentPhysicalLotAppointment = appointment;
             physicalTitle.textContent = customerLabel(appointment);
@@ -735,8 +1225,8 @@
             ]);
 
             physicalVisitsInput.value = appointment.unsuccessful_visits_count ?? 0;
-            physicalVisitsInput.disabled = !appointment.is_placed;
-            physicalVisitsSubmit.disabled = !appointment.is_placed;
+            physicalVisitsInput.disabled = !appointment.can_update_visits;
+            physicalVisitsSubmit.disabled = !appointment.can_update_visits;
             physicalVisitsStatus.classList.add('hidden');
 
             if (appointment.tracking_url) {
@@ -747,6 +1237,8 @@
             }
 
             configureStatsExclusionControls(appointment, physicalStatsExclusionStatus, physicalStatsExclusionToggle);
+            configureGlobalPlusControls(appointment, physicalGlobalPlusCheckbox, physicalGlobalPlusStatus);
+            configureResetProcessingControls(appointment, physicalResetProcessingStatus, physicalResetProcessingButton);
             openModal(physicalModal);
         }
 
@@ -767,6 +1259,8 @@
             contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
 
             configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
+            configureGlobalPlusControls(appointment, contactGlobalPlusCheckbox, contactGlobalPlusStatus);
+            configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);
             openModal(contactModal);
         }
 
@@ -804,6 +1298,18 @@
         });
         contactStatsExclusionToggle?.addEventListener('click', () => {
             toggleStatsExclusion(currentContactLotAppointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
+        });
+        physicalResetProcessingButton?.addEventListener('click', () => {
+            resetLotAppointmentProcessing(currentPhysicalLotAppointment, physicalResetProcessingStatus, physicalResetProcessingButton);
+        });
+        contactResetProcessingButton?.addEventListener('click', () => {
+            resetLotAppointmentProcessing(currentContactLotAppointment, contactResetProcessingStatus, contactResetProcessingButton);
+        });
+        physicalGlobalPlusCheckbox?.addEventListener('change', () => {
+            updateLotAppointmentGlobalPlus(currentPhysicalLotAppointment, physicalGlobalPlusCheckbox, physicalGlobalPlusStatus);
+        });
+        contactGlobalPlusCheckbox?.addEventListener('change', () => {
+            updateLotAppointmentGlobalPlus(currentContactLotAppointment, contactGlobalPlusCheckbox, contactGlobalPlusStatus);
         });
 
         physicalVisitsForm?.addEventListener('submit', async (event) => {
@@ -847,7 +1353,7 @@
             } catch (error) {
                 setPhysicalVisitsStatus(error.message || 'Mise à jour impossible.', '#be123c');
             } finally {
-                physicalVisitsSubmit.disabled = !currentPhysicalLotAppointment?.is_placed;
+                physicalVisitsSubmit.disabled = !currentPhysicalLotAppointment?.can_update_visits;
                 physicalVisitsSubmit.textContent = 'Enregistrer les portes';
             }
         });

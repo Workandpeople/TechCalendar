@@ -68,7 +68,7 @@ class LotImportConfirmationService
                 'physical_sampling_percentage' => $preview->physical_sampling_percentage,
                 'contact_sampling_percentage' => $preview->contact_sampling_percentage,
                 'delegataire' => $preview->delegataire,
-                'global_plus' => (bool) $preview->global_plus,
+                'received_at' => $preview->received_at,
                 'original_filename' => $preview->original_filename,
                 'original_file_disk' => $preview->original_file_disk,
                 'original_file_path' => $preview->original_file_path,

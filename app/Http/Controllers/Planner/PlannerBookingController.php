@@ -1101,6 +1101,7 @@ class PlannerBookingController extends Controller
         $placeableStatus = [
             LotAppointment::STATUS_PENDING,
             LotAppointment::STATUS_NEEDS_REVIEW,
+            LotAppointment::STATUS_NOT_PLACED,
         ];
 
         return Lot::query()
@@ -1153,6 +1154,14 @@ class PlannerBookingController extends Controller
                 $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
                 $statusMeta = $this->lotStatusMeta($status);
                 $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
+                $physicalDefaultTarget = $lot->supportsPhysicalProcessing()
+                    ? (int) data_get($autoCompletionData, 'physical.target_count', $lot->appointments->count())
+                    : 0;
+                $contactDefaultTarget = $lot->supportsContactProcessing()
+                    ? (int) data_get($autoCompletionData, 'contact.target_count', $lot->appointments->count())
+                    : 0;
+                $physicalTarget = (int) ($lot->physical_appointment_target_count ?? $physicalDefaultTarget);
+                $contactTarget = (int) ($lot->contact_appointment_target_count ?? $contactDefaultTarget);
 
                 return [
                     'id' => $lot->id,
@@ -1167,6 +1176,30 @@ class PlannerBookingController extends Controller
                     'status_background' => $statusMeta['background'],
                     'imported_at' => $lot->imported_at,
                     'auto_completion' => $autoCompletionData,
+                    'appointment_targets' => [
+                        'physical' => [
+                            'enabled' => $lot->supportsPhysicalProcessing(),
+                            'completed_count' => $placedAppointments->count(),
+                            'target_count' => max(0, $physicalTarget),
+                            'default_target_count' => max(0, $physicalDefaultTarget),
+                            'remaining_count' => max(0, $physicalTarget - $placedAppointments->count()),
+                            'percentage' => $physicalTarget > 0
+                                ? (int) min(100, round(($placedAppointments->count() / $physicalTarget) * 100))
+                                : 0,
+                            'is_manual' => $lot->physical_appointment_target_count !== null,
+                        ],
+                        'contact' => [
+                            'enabled' => $lot->supportsContactProcessing(),
+                            'completed_count' => $contactProcessedAppointments->count(),
+                            'target_count' => max(0, $contactTarget),
+                            'default_target_count' => max(0, $contactDefaultTarget),
+                            'remaining_count' => max(0, $contactTarget - $contactProcessedAppointments->count()),
+                            'percentage' => $contactTarget > 0
+                                ? (int) min(100, round(($contactProcessedAppointments->count() / $contactTarget) * 100))
+                                : 0,
+                            'is_manual' => $lot->contact_appointment_target_count !== null,
+                        ],
+                    ],
                     'appointments_count' => $lot->appointments->count(),
                     'placeable_count' => $placeableAppointments->count(),
                     'target_remaining_count' => $autoCompletionData['remaining_count'] ?? $placeableAppointments->count(),
@@ -1243,7 +1276,7 @@ class PlannerBookingController extends Controller
     {
         $lotAppointment = LotAppointment::query()
             ->with([
-                'lot:id,name,type,status,delegataire,global_plus,service_id',
+                'lot:id,name,type,status,delegataire,service_id',
                 'lot.service:id,type,name,average_duration_minutes',
                 'service:id,type,name,average_duration_minutes',
             ])
@@ -1300,7 +1333,7 @@ class PlannerBookingController extends Controller
                 'lot_name' => $lotAppointment->lot?->name,
                 'lot_type' => $lotAppointment->lot?->type,
                 'lot_delegataire' => $lotAppointment->lot?->delegataire,
-                'lot_global_plus' => (bool) $lotAppointment->lot?->global_plus,
+                'lot_global_plus' => (bool) $lotAppointment->added_to_global_plus,
                 'lot_appointment_id' => $lotAppointment->id,
                 'row_number' => $lotAppointment->row_number,
                 'company_name' => $lotAppointment->company_name,
@@ -2436,7 +2469,11 @@ class PlannerBookingController extends Controller
         return ! $this->isExcludedFromLotStats($appointment)
             && ! $this->isPlacedLotAppointment($appointment)
             && ! $this->isContactProcessedLotAppointment($appointment)
-            && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
+            && in_array($appointment->status, [
+                LotAppointment::STATUS_PENDING,
+                LotAppointment::STATUS_NEEDS_REVIEW,
+                LotAppointment::STATUS_NOT_PLACED,
+            ], true);
     }
 
     private function trackingUrlForLotAppointment(LotAppointment $lotAppointment, string $routeName): ?string

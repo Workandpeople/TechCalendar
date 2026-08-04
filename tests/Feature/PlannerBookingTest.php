@@ -1494,12 +1494,11 @@ it('renders lot booking stats against the sampling objective', function () {
         ->get(route('planner.book'))
         ->assertOk()
         ->assertSee('Lot contact échantillonné')
-        ->assertSee('10 RDV')
-        ->assertSee("1 à traiter pour l'objectif", false)
-        ->assertSee('0 placés')
-        ->assertSee('1 contacts')
+        ->assertSee('Progression globale')
+        ->assertSee('RDV téléphoniques')
+        ->assertSee('1 / 2')
         ->assertSee('50%')
-        ->assertSee('1/2 contact (20%)');
+        ->assertSee('Client contact 1');
 });
 
 it('does not render lot appointments excluded from lot statistics on the booking page', function () {
@@ -2596,7 +2595,6 @@ it('links a placed appointment back to its lot appointment', function () {
         'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'delegataire' => 'Délégataire test',
-        'global_plus' => true,
         'created_by' => $planner->id,
     ]);
     $lotAppointment = LotAppointment::query()->create([
@@ -2613,6 +2611,7 @@ it('links a placed appointment back to its lot appointment', function () {
         'latitude' => 45.7578,
         'longitude' => 4.832,
         'status' => LotAppointment::STATUS_PENDING,
+        'added_to_global_plus' => true,
     ]);
 
     $this->actingAs($planner)

@@ -85,22 +85,90 @@
                         'sampling_percentage' => $lot['sampling_percentage'],
                         'physical_sampling_percentage' => $lot['physical_sampling_percentage'],
                         'contact_sampling_percentage' => $lot['contact_sampling_percentage'],
-                        'global_plus' => $lot['global_plus'],
+                        'received_at' => $lot['received_at_input'],
                         'delegataire' => $lot['delegataire'],
                         'appointments_count' => $lot['appointments_count'],
                         'placed_count' => $lot['placed_count'],
                         'contact_processed_count' => $lot['contact_processed_count'],
+                        'appointment_targets' => $lot['appointment_targets'],
                         'update_url' => $lot['update_url'],
                         'delete_url' => $lot['delete_url'],
                     ];
-                    $chartItems = collect([
-                        $lot['auto_completion']['physical'] ?? null,
-                        $lot['auto_completion']['contact'] ?? null,
-                    ])->filter()->values();
+                    $physicalCompletion = is_array($lot['auto_completion']['physical'] ?? null)
+                        ? $lot['auto_completion']['physical']
+                        : null;
+                    $contactCompletion = is_array($lot['auto_completion']['contact'] ?? null)
+                        ? $lot['auto_completion']['contact']
+                        : null;
+                    $lotMetricItems = [[
+                        'label' => 'Total',
+                        'value' => (string) $lot['appointments_count'],
+                        'hint' => 'dossiers',
+                    ]];
 
-                    if ($chartItems->isEmpty()) {
-                        $chartItems = collect([$lot['auto_completion']]);
+                    if ($lot['supports_physical']) {
+                        $physicalTarget = $lot['appointment_targets']['physical'] ?? [];
+                        $lotMetricItems[] = [
+                            'label' => 'Physiques',
+                            'value' => sprintf(
+                                '%d / %d',
+                                (int) ($physicalTarget['completed_count'] ?? $physicalCompletion['completed_count'] ?? $lot['placed_count']),
+                                (int) ($physicalTarget['target_count'] ?? $physicalCompletion['target_count'] ?? $lot['appointments_count']),
+                            ),
+                            'hint' => 'pris / cible',
+                        ];
                     }
+
+                    if ($lot['supports_contact']) {
+                        $contactTarget = $lot['appointment_targets']['contact'] ?? [];
+                        $lotMetricItems[] = [
+                            'label' => 'Contacts',
+                            'value' => sprintf(
+                                '%d / %d',
+                                (int) ($contactTarget['completed_count'] ?? $contactCompletion['completed_count'] ?? $lot['contact_processed_count']),
+                                (int) ($contactTarget['target_count'] ?? $contactCompletion['target_count'] ?? $lot['appointments_count']),
+                            ),
+                            'hint' => 'traités / cible',
+                        ];
+                    }
+
+                    $totalSatisfaction = $lot['auto_completion']['total_satisfaction'] ?? [
+                        'percentage' => 0,
+                        'satisfied_count' => 0,
+                        'total_count' => 0,
+                    ];
+                    $dissatisfaction = $lot['auto_completion']['dissatisfaction'] ?? [
+                        'percentage' => 0,
+                        'dissatisfied_count' => 0,
+                        'processed_count' => 0,
+                    ];
+                    $formatLotRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
+                    $satisfactionPercentage = max(0, min(100, (float) ($totalSatisfaction['percentage'] ?? 0)));
+                    $dissatisfactionPercentage = max(0, min(100, (float) ($dissatisfaction['percentage'] ?? 0)));
+                    $satisfactionCharts = [
+                        [
+                            'label' => 'Satisfaction générale',
+                            'percentage' => $satisfactionPercentage,
+                            'display' => $formatLotRate($satisfactionPercentage).'%',
+                            'color' => '#16a34a',
+                            'detail' => sprintf(
+                                '%d / %d dossiers satisfaisants',
+                                (int) ($totalSatisfaction['satisfied_count'] ?? 0),
+                                (int) ($totalSatisfaction['total_count'] ?? 0),
+                            ),
+                        ],
+                        [
+                            'label' => 'Insatisfaction générale',
+                            'percentage' => $dissatisfactionPercentage,
+                            'display' => $formatLotRate($dissatisfactionPercentage).'%',
+                            'color' => '#dc2626',
+                            'detail' => sprintf(
+                                '%d / %d dossiers traités',
+                                (int) ($dissatisfaction['dissatisfied_count'] ?? 0),
+                                (int) ($dissatisfaction['processed_count'] ?? 0),
+                            ),
+                        ],
+                    ];
                 @endphp
                 <article
                     class="lot-card group relative cursor-pointer overflow-hidden rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--gc-primary)] focus:ring-offset-2"
@@ -117,9 +185,6 @@
                                     <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
                                         {{ $lot['status_label'] }}
                                     </span>
-                                    @if ($lot['global_plus'])
-                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">Global +</span>
-                                    @endif
                                 </div>
                                 <h2 class="truncate text-xl font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h2>
                                 <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $lot['type_label'] }}</p>
@@ -139,38 +204,34 @@
                             </button>
                         </div>
 
-                        <div class="grid grid-cols-3 gap-3 text-center">
-                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <p class="text-xs" style="color:var(--gc-text-soft);">Total</p>
-                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['appointments_count'] }}</p>
-                            </div>
-                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <p class="text-xs" style="color:var(--gc-text-soft);">Physiques</p>
-                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['placed_count'] }}</p>
-                            </div>
-                            <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <p class="text-xs" style="color:var(--gc-text-soft);">Contacts</p>
-                                <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['contact_processed_count'] }}</p>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-{{ $chartItems->count() > 1 ? '2' : '1' }} gap-4">
-                            @foreach ($chartItems as $chart)
-                                @php
-                                    $percentage = (int) ($chart['percentage'] ?? 0);
-                                @endphp
-                                <div class="rounded-2xl border p-4 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
-                                    <div class="lot-chart-ring mx-auto" style="--value:{{ $percentage }};">
-                                        <span>{{ $percentage }}%</span>
-                                    </div>
-                                    <p class="mt-3 text-sm font-semibold capitalize" style="color:var(--gc-text);">{{ $chart['label'] ?? 'Lot' }}</p>
-                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $chart['detail'] ?? '' }}</p>
+                        <div class="grid gap-3 text-center" style="grid-template-columns:repeat({{ count($lotMetricItems) }},minmax(0,1fr));">
+                            @foreach ($lotMetricItems as $metric)
+                                <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                    <p class="text-xs" style="color:var(--gc-text-soft);">{{ $metric['label'] }}</p>
+                                    <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $metric['value'] }}</p>
+                                    <p class="mt-0.5 text-[0.68rem]" style="color:var(--gc-text-soft);">{{ $metric['hint'] }}</p>
                                 </div>
                             @endforeach
                         </div>
 
-                        <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t pt-4" style="border-color:var(--gc-border);">
+                        <div class="grid grid-cols-2 gap-4">
+                            @foreach ($satisfactionCharts as $chart)
+                                <div class="rounded-2xl border p-4 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
+                                    <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
+                                        <span>{{ $chart['display'] }}</span>
+                                    </div>
+                                    <p class="mt-3 text-sm font-semibold" style="color:var(--gc-text);">{{ $chart['label'] }}</p>
+                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $chart['detail'] }}</p>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-auto border-t pt-4" style="border-color:var(--gc-border);">
                             <div class="min-w-0 text-xs" style="color:var(--gc-text-soft);">
+                                @if ($lot['received_at_formatted'])
+                                    <span>Reçu le {{ $lot['received_at_formatted'] }}</span>
+                                    <span> · </span>
+                                @endif
                                 @if ($lot['original_filename'])
                                     <span class="truncate">{{ $lot['original_filename'] }}</span>
                                 @else
@@ -180,7 +241,6 @@
                                     <span> · {{ $lot['imported_at']->format('d/m/Y H:i') }}</span>
                                 @endif
                             </div>
-                            <span class="text-sm font-semibold" style="color:var(--gc-primary);">Voir le détail</span>
                         </div>
                     </div>
                     <script type="application/json" data-lot-json="{{ $lot['id'] }}">
@@ -235,6 +295,10 @@
                                 </select>
                             </div>
                             <div>
+                                <label class="gc-label" for="lot_action_received_at">Date de réception du lot</label>
+                                <input id="lot_action_received_at" name="received_at" type="date" class="gc-input" />
+                            </div>
+                            <div>
                                 <label class="gc-label" for="lot_action_type">Type de lot</label>
                                 <select id="lot_action_type" name="type" class="gc-input" required>
                                     @foreach ($lotTypes as $typeValue => $typeLabel)
@@ -273,10 +337,6 @@
                                 <label class="gc-label" for="lot_action_contact_sampling_percentage">% contact</label>
                                 <input id="lot_action_contact_sampling_percentage" name="contact_sampling_percentage" type="number" min="0.01" max="100" step="0.01" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Hybride" disabled />
                             </div>
-                            <label class="md:col-span-2 inline-flex items-center gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <input id="lot_action_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" />
-                                <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
-                            </label>
                         </div>
                         <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
                             <button id="lot-action-cancel" type="button" class="gc-btn-soft">Annuler</button>
@@ -407,6 +467,10 @@
                             <input id="lot_name" name="name" type="text" value="{{ old('name') }}" class="gc-input" placeholder="Optionnel" />
                         </div>
                         <div>
+                            <label class="gc-label" for="lot_received_at">Date de réception du lot</label>
+                            <input id="lot_received_at" name="received_at" type="date" value="{{ old('received_at') }}" class="gc-input" required />
+                        </div>
+                        <div>
                             <label class="gc-label" for="lot_delegataire">Délégataire</label>
                             <select id="lot_delegataire" name="delegataire_id" class="gc-input" required>
                                 <option value="">Sélectionner</option>
@@ -439,13 +503,6 @@
                                     </option>
                                 @endforeach
                             </select>
-                        </div>
-                        <div>
-                            <label class="gc-label" for="lot_global_plus">Option</label>
-                            <label class="inline-flex w-full items-center gap-3 rounded-xl border px-4 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                <input id="lot_global_plus" name="global_plus" value="1" type="checkbox" class="gc-check" @checked(old('global_plus')) />
-                                <span class="text-sm font-semibold" style="color:var(--gc-text);">Global +</span>
-                            </label>
                         </div>
                         <div id="lot-single-sampling-wrap">
                             <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
@@ -568,8 +625,13 @@
 
         .lot-chart-ring span {
             color: var(--gc-text);
-            font-size: 0.95rem;
+            font-size: 0.78rem;
             font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .lot-widget-ring span {
+            font-size: 0.9rem;
         }
     </style>
 
@@ -604,8 +666,8 @@
         const lotActionSamplingPercentage = document.getElementById('lot_action_sampling_percentage');
         const lotActionPhysicalSamplingPercentage = document.getElementById('lot_action_physical_sampling_percentage');
         const lotActionContactSamplingPercentage = document.getElementById('lot_action_contact_sampling_percentage');
-        const lotActionGlobalPlus = document.getElementById('lot_action_global_plus');
         const lotActionDelegataire = document.getElementById('lot_action_delegataire');
+        const lotActionReceivedAt = document.getElementById('lot_action_received_at');
         let currentLotAction = null;
 
         const lotImportFormOpen = document.getElementById('lot-import-form-open');
@@ -615,6 +677,7 @@
         const lotImportForm = document.getElementById('lot-import-form');
         const lotImportFile = document.getElementById('lot_file');
         const lotFileSelected = document.getElementById('lot-file-selected');
+        const lotImportReceivedAt = document.getElementById('lot_received_at');
         const lotImportDelegataire = document.getElementById('lot_delegataire');
         const lotImportType = document.getElementById('lot_type');
         const lotImportServiceId = document.getElementById('lot_service_id');
@@ -827,7 +890,7 @@
             lotActionSamplingPercentage.value = lot.sampling_percentage ?? '';
             if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
             if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
-            if (lotActionGlobalPlus) lotActionGlobalPlus.checked = Boolean(lot.global_plus);
+            if (lotActionReceivedAt) lotActionReceivedAt.value = lot.received_at || '';
             ensureSelectOption(lotActionDelegataire, lot.delegataire || '');
             lotActionDelegataire.value = lot.delegataire || '';
             updateLotActionSamplingState();
@@ -893,6 +956,7 @@
             const hasFile = lotImportFile?.files?.length > 0;
             const selectedFile = hasFile ? lotImportFile.files[0] : null;
             const hasDelegataire = Boolean(lotImportDelegataire?.value?.trim());
+            const hasReceivedAt = Boolean(lotImportReceivedAt?.value);
             const hasType = Boolean(lotImportType?.value);
             const hasService = Boolean(lotImportServiceId?.value);
             const hasSampling = needsHybridSampling
@@ -908,7 +972,7 @@
             }
 
             if (lotImportSubmit) {
-                lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasType && hasService && hasSampling);
+                lotImportSubmit.disabled = !(hasFile && hasDelegataire && hasReceivedAt && hasType && hasService && hasSampling);
             }
         }
 
@@ -1982,6 +2046,7 @@
         }
 
         lotImportFile?.addEventListener('change', updateLotImportState);
+        lotImportReceivedAt?.addEventListener('change', updateLotImportState);
         lotImportDelegataire?.addEventListener('change', updateLotImportState);
         lotImportType?.addEventListener('change', updateLotImportState);
         lotImportServiceId?.addEventListener('change', updateLotImportState);

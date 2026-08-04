@@ -356,49 +356,67 @@
 
             <div id="booking-lot-source" class="hidden space-y-3">
                 @forelse ($lotRequests as $lot)
+                    @php
+                        $lotAutoCompletion = $lot['auto_completion'] ?? [];
+                        $lotGeneralCompletionPercentage = (int) max(0, min(100, round((float) ($lotAutoCompletion['percentage'] ?? 0))));
+                        $lotProgressItems = [];
+                        $lotProgressBuilder = function (string $channel, string $label, string $color, int $fallbackCompleted) use ($lot, $lotAutoCompletion): array {
+                            $channelCompletion = $lotAutoCompletion[$channel] ?? [];
+                            $channelCompletion = is_array($channelCompletion) ? $channelCompletion : [];
+                            $appointmentTarget = $lot['appointment_targets'][$channel] ?? [];
+                            $appointmentTarget = is_array($appointmentTarget) ? $appointmentTarget : [];
+                            $targetCount = (int) ($appointmentTarget['target_count'] ?? $channelCompletion['target_count'] ?? $lot['target_count'] ?? 0);
+                            $completedCount = (int) ($appointmentTarget['completed_count'] ?? $channelCompletion['completed_count'] ?? $fallbackCompleted);
+                            $percentage = (int) ($appointmentTarget['percentage'] ?? $channelCompletion['percentage'] ?? ($targetCount > 0 ? round(($completedCount / $targetCount) * 100) : 0));
+
+                            return [
+                                'label' => $label,
+                                'color' => $color,
+                                'completed_count' => max(0, $completedCount),
+                                'target_count' => max(0, $targetCount),
+                                'percentage' => max(0, min(100, $percentage)),
+                            ];
+                        };
+
+                        if ($lot['supports_physical']) {
+                            $lotProgressItems[] = $lotProgressBuilder('physical', 'RDV physiques', '#15803d', (int) $lot['placed_count']);
+                        }
+
+                        if ($lot['supports_contact']) {
+                            $lotProgressItems[] = $lotProgressBuilder('contact', 'RDV téléphoniques', '#0369a1', (int) $lot['contact_processed_count']);
+                        }
+                    @endphp
                     <details class="booking-lot-details overflow-hidden rounded-2xl border bg-white shadow-sm" style="border-color:var(--gc-border);">
-                        <summary class="flex cursor-pointer list-none flex-col gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] lg:flex-row lg:items-center lg:justify-between">
+                        <summary class="grid cursor-pointer list-none gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[minmax(0,1fr)_minmax(320px,460px)_auto] lg:items-center">
                             <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
-                                    @if ($lot['type_label'])
-                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">
-                                            {{ $lot['type_label'] }}
-                                        </span>
-                                    @endif
-                                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
-                                        {{ $lot['status_label'] }}
-                                    </span>
-                                    @if ($lot['is_hybrid'])
-                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#fef3c7;color:#b45309;">Hybride</span>
-                                    @elseif ($lot['supports_contact'])
-                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;">Contact</span>
-                                    @else
-                                        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">Physique</span>
-                                    @endif
-                                </div>
-                                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                    {{ $lot['appointments_count'] }} RDV · {{ $lot['target_remaining_count'] }} à traiter pour l'objectif · {{ $lot['placed_count'] }} placés · {{ $lot['contact_processed_count'] }} contacts
+                                <h3 class="truncate text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
+                                <p class="mt-1 truncate text-sm" style="color:var(--gc-text-soft);">
+                                    {{ $lot['type_label'] ?: 'Type non renseigné' }}
                                     @if ($lot['service_label'])
                                         · {{ $lot['service_label'] }}
-                                    @endif
-                                    @if ($lot['imported_at'])
-                                        · Importe {{ $lot['imported_at']->format('d/m/Y H:i') }}
                                     @endif
                                 </p>
                             </div>
 
-                            <div class="flex w-full shrink-0 items-center gap-3 lg:w-auto">
-                                <div class="min-w-[220px] flex-1 lg:w-64 lg:flex-none">
-                                    <div class="mb-1 flex items-center justify-between gap-3">
-                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Auto-completion</span>
-                                        <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $lot['auto_completion']['percentage'] }}%</span>
-                                    </div>
-                                    <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-                                        <div class="h-full rounded-full transition-all" style="width:{{ $lot['auto_completion']['percentage'] }}%;background:var(--gc-primary);"></div>
-                                    </div>
-                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lot['auto_completion']['detail'] }}</p>
+                            <div class="grid gap-3">
+                                <div class="flex items-center justify-between gap-3 rounded-xl border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                                    <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Progression globale</span>
+                                    <span class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lotGeneralCompletionPercentage }}%</span>
                                 </div>
+                                @foreach ($lotProgressItems as $progressItem)
+                                    <div>
+                                        <div class="mb-1 flex items-center justify-between gap-3">
+                                            <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $progressItem['label'] }}</span>
+                                            <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $progressItem['completed_count'] }} / {{ $progressItem['target_count'] }}</span>
+                                        </div>
+                                        <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+                                            <div class="h-full rounded-full transition-all" style="width:{{ $progressItem['percentage'] }}%;background:{{ $progressItem['color'] }};"></div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            <div class="flex justify-end">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
                                     <path d="m6 9 6 6 6-6" />
                                 </svg>

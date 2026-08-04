@@ -107,9 +107,11 @@ class ManagerLotController extends Controller
                 'appointment_q' => $appointmentFilters['appointment_q'] ?? '',
                 'appointment_status' => $appointmentFilters['appointment_status'] ?? '',
                 'appointment_processing' => $appointmentFilters['appointment_processing'] ?? '',
+                'appointment_satisfaction' => $appointmentFilters['appointment_satisfaction'] ?? '',
             ],
             'lotAppointmentStatuses' => LotAppointment::statuses(),
             'lotAppointmentProcessingFilters' => $this->lotAppointmentProcessingFilters(),
+            'lotAppointmentSatisfactionFilters' => $this->lotAppointmentSatisfactionFilters(),
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
             'mapboxToken' => config('services.mapbox.token'),
@@ -117,6 +119,11 @@ class ManagerLotController extends Controller
                 ->orderBy('type')
                 ->orderBy('name')
                 ->get(['id', 'type', 'name', 'average_duration_minutes']),
+            'delegataires' => ExternalDelegataire::query()
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'company_name', 'email']),
         ]);
     }
 
@@ -134,6 +141,7 @@ class ManagerLotController extends Controller
                     ->where('is_active', true)),
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
+            'received_at' => ['required', 'date'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
@@ -157,7 +165,6 @@ class ManagerLotController extends Controller
                 'min:0.01',
                 'max:100',
             ],
-            'global_plus' => ['nullable', 'boolean'],
             'file' => ['required', 'file', 'max:5120', 'extensions:xlsx,csv,txt'],
         ]);
         $delegataireName = $this->delegataireNameFromPayload($payload);
@@ -174,8 +181,8 @@ class ManagerLotController extends Controller
                 delegataire: $delegataireName,
                 physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
                 contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
-                globalPlus: (bool) ($payload['global_plus'] ?? false),
                 serviceId: (int) $payload['service_id'],
+                receivedAt: $payload['received_at'] ?? null,
             );
         } catch (Throwable $exception) {
             return back()
@@ -203,13 +210,54 @@ class ManagerLotController extends Controller
             'physical_sampling_percentage' => $samplingPayload['physical_sampling_percentage'],
             'contact_sampling_percentage' => $samplingPayload['contact_sampling_percentage'],
             'delegataire' => filled($payload['delegataire'] ?? null) ? trim((string) $payload['delegataire']) : null,
-            'global_plus' => (bool) ($payload['global_plus'] ?? false),
+            'received_at' => $payload['received_at'] ?? null,
             'service_id' => (int) $payload['service_id'],
         ])->save();
 
         $this->syncOpenLotAppointmentsService($lot, (int) $payload['service_id']);
 
         return back()->with('status', sprintf('Lot "%s" mis à jour.', $lot->name));
+    }
+
+    public function updateAppointmentTargets(Request $request, Lot $lot): RedirectResponse|JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'physical_appointment_target_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'contact_appointment_target_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
+        ]);
+
+        $lot->fill([
+            'physical_appointment_target_count' => $lot->supportsPhysicalProcessing()
+                ? $this->nullableIntegerPayloadValue($payload, 'physical_appointment_target_count')
+                : null,
+            'contact_appointment_target_count' => $lot->supportsContactProcessing()
+                ? $this->nullableIntegerPayloadValue($payload, 'contact_appointment_target_count')
+                : null,
+        ])->save();
+
+        $message = sprintf('Objectifs de RDV du lot "%s" mis à jour.', $lot->name);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+            ]);
+        }
+
+        return back()->with('status', $message);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function nullableIntegerPayloadValue(array $payload, string $key): ?int
+    {
+        if (! array_key_exists($key, $payload) || $payload[$key] === null || $payload[$key] === '') {
+            return null;
+        }
+
+        return (int) $payload[$key];
     }
 
     public function destroy(Request $request, Lot $lot): RedirectResponse
@@ -280,6 +328,7 @@ class ManagerLotController extends Controller
                     ->where('is_active', true)),
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
+            'received_at' => ['required', 'date'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
@@ -303,7 +352,6 @@ class ManagerLotController extends Controller
                 'min:0.01',
                 'max:100',
             ],
-            'global_plus' => ['nullable', 'boolean'],
             'file' => ['required', 'file', 'max:5120', 'extensions:xlsx,csv,txt'],
         ]);
         $delegataireName = $this->delegataireNameFromPayload($payload);
@@ -317,9 +365,9 @@ class ManagerLotController extends Controller
             samplingPercentage: $samplingPayload['sampling_percentage'],
             physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
             contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
-            globalPlus: (bool) ($payload['global_plus'] ?? false),
             requestedLotName: $payload['name'] ?? null,
             delegataire: $delegataireName,
+            receivedAt: $payload['received_at'] ?? null,
         );
 
         return response()->json([
@@ -471,7 +519,7 @@ class ManagerLotController extends Controller
     public function updateAppointmentVisits(Request $request, LotAppointment $lotAppointment): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
-        abort_unless($this->isPlacedLotAppointment($lotAppointment), 422, 'Le nombre de portes concerne uniquement les RDV en déplacement.');
+        abort_unless($this->canUpdateLotAppointmentVisits($lotAppointment), 422, 'Le nombre de portes concerne uniquement les dossiers traités en déplacement.');
 
         $payload = $request->validate([
             'unsuccessful_visits_count' => ['required', 'integer', 'min:0', 'max:65535'],
@@ -534,6 +582,69 @@ class ManagerLotController extends Controller
         ]);
     }
 
+    public function updateAppointmentGlobalPlus(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'added_to_global_plus' => ['required', 'boolean'],
+        ]);
+
+        $lotAppointment->update([
+            'added_to_global_plus' => (bool) $payload['added_to_global_plus'],
+        ]);
+
+        $lotAppointment->loadMissing($this->lotAppointmentRelations());
+
+        return response()->json([
+            'message' => $lotAppointment->added_to_global_plus
+                ? 'Dossier ajouté au Global +.'
+                : 'Dossier retiré du Global +.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
+    public function resetAppointmentProcessing(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+        abort_unless($this->canResetLotAppointmentProcessing($lotAppointment), 422, "Ce dossier n'a pas encore été traité.");
+
+        $lotAppointment = DB::transaction(function () use ($lotAppointment): LotAppointment {
+            $lotAppointment->loadMissing('appointment');
+
+            if ($lotAppointment->appointment) {
+                $lotAppointment->appointment->delete();
+            }
+
+            $lotAppointment->update([
+                'appointment_id' => null,
+                'status' => LotAppointment::STATUS_NOT_PLACED,
+                'processing_mode' => null,
+                'contact_satisfaction' => null,
+                'contact_comment' => null,
+                'contact_processed_at' => null,
+                'contact_processed_by' => null,
+                'physical_satisfaction' => null,
+                'physical_satisfaction_synced_at' => null,
+                'unsuccessful_visits_count' => 0,
+            ]);
+
+            $lotAppointment->refresh();
+            $lotAppointment->load($this->lotAppointmentRelations());
+
+            return $lotAppointment;
+        });
+
+        $lotAppointment->loadMissing('lot');
+        $this->refreshLotStatus($lotAppointment->lot);
+
+        return response()->json([
+            'message' => "Dossier remis en statut « n'a pas placé ».",
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+            'reload_required' => true,
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -555,6 +666,7 @@ class ManagerLotController extends Controller
             'appointment_q' => ['nullable', 'string', 'max:120'],
             'appointment_status' => ['nullable', 'string', Rule::in(array_keys(LotAppointment::statuses()))],
             'appointment_processing' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentProcessingFilters()))],
+            'appointment_satisfaction' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentSatisfactionFilters()))],
         ]);
     }
 
@@ -563,6 +675,7 @@ class ManagerLotController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:190'],
             'delegataire' => ['nullable', 'string', 'max:190'],
+            'received_at' => ['nullable', 'date'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'status' => ['required', 'string', Rule::in(array_keys(Lot::statuses()))],
@@ -587,7 +700,6 @@ class ManagerLotController extends Controller
                 'min:0.01',
                 'max:100',
             ],
-            'global_plus' => ['nullable', 'boolean'],
         ]);
     }
 
@@ -650,6 +762,7 @@ class ManagerLotController extends Controller
             ->whereIn('status', [
                 LotAppointment::STATUS_PENDING,
                 LotAppointment::STATUS_NEEDS_REVIEW,
+                LotAppointment::STATUS_NOT_PLACED,
                 LotAppointment::STATUS_CONTACT_PROCESSED,
             ])
             ->update([
@@ -727,6 +840,21 @@ class ManagerLotController extends Controller
                     default => null,
                 };
             })
+            ->when(! empty($filters['appointment_satisfaction']), function ($query) use ($filters): void {
+                match ($filters['appointment_satisfaction']) {
+                    'satisfied' => $query->where(function ($query): void {
+                        $query
+                            ->where('physical_satisfaction', true)
+                            ->orWhere('contact_satisfaction', true);
+                    }),
+                    'unsatisfied' => $query->where(function ($query): void {
+                        $query
+                            ->where('physical_satisfaction', false)
+                            ->orWhere('contact_satisfaction', false);
+                    }),
+                    default => null,
+                };
+            })
             ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
             ->orderBy('row_number')
             ->orderBy('customer_name');
@@ -760,6 +888,17 @@ class ManagerLotController extends Controller
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    private function lotAppointmentSatisfactionFilters(): array
+    {
+        return [
+            'satisfied' => 'Satisfaisants',
+            'unsatisfied' => 'Non satisfaisants',
+        ];
+    }
+
     private function applySearchFilter($query, string $search)
     {
         return $query->where(function ($query) use ($search): void {
@@ -788,15 +927,24 @@ class ManagerLotController extends Controller
         $placedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment));
         $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
         $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
+        $processedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPlacedLotAppointment($appointment) || $this->isContactProcessedLotAppointment($appointment));
         $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
         $statusMeta = $this->statusMeta($status);
         $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
+        $appointmentTargets = $this->lotAppointmentTargets(
+            $lot,
+            $autoCompletionData,
+            $placedAppointments->count(),
+            $contactProcessedAppointments->count(),
+            $appointments->count(),
+        );
 
         return [
             'id' => $lot->id,
             'show_url' => route('manager.lots.show', $lot),
             'update_url' => route('manager.lots.update', $lot),
             'delete_url' => route('manager.lots.destroy', $lot),
+            'appointment_targets_update_url' => route('manager.lots.appointment-targets.update', $lot),
             'title' => $lot->name,
             'type' => $lot->type,
             'type_label' => $lot->typeLabel(),
@@ -811,11 +959,13 @@ class ManagerLotController extends Controller
             'sampling_percentage' => $lot->sampling_percentage,
             'physical_sampling_percentage' => $lot->physical_sampling_percentage,
             'contact_sampling_percentage' => $lot->contact_sampling_percentage,
-            'global_plus' => (bool) $lot->global_plus,
             'supports_physical' => $lot->supportsPhysicalProcessing(),
             'supports_contact' => $lot->supportsContactProcessing(),
             'is_hybrid' => $lot->isHybrid(),
             'delegataire' => $lot->delegataire,
+            'received_at' => $lot->received_at,
+            'received_at_formatted' => $lot->received_at?->format('d/m/Y'),
+            'received_at_input' => $lot->received_at?->format('Y-m-d'),
             'source' => $lot->source,
             'original_filename' => $lot->original_filename,
             'original_file_size' => $lot->original_file_size,
@@ -824,13 +974,80 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
+            'appointment_targets' => $appointmentTargets,
             'appointments' => $displayAppointments ?? $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
+            'processed_count' => $processedAppointments->count(),
             'stats_excluded_count' => $appointments->count() - $statsAppointments->count(),
             'placed_count' => $placedAppointments->count(),
             'placeable_count' => $placeableAppointments->count(),
             'contact_processed_count' => $contactProcessedAppointments->count(),
             'departments' => $appointments->pluck('department_code')->filter()->unique()->sort()->values(),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $autoCompletionData
+     * @return array{physical:array<string, mixed>,contact:array<string, mixed>}
+     */
+    private function lotAppointmentTargets(
+        Lot $lot,
+        array $autoCompletionData,
+        int $placedCount,
+        int $contactProcessedCount,
+        int $appointmentsCount,
+    ): array {
+        $physicalDefaultTarget = $lot->supportsPhysicalProcessing()
+            ? (int) data_get($autoCompletionData, 'physical.target_count', $appointmentsCount)
+            : 0;
+        $contactDefaultTarget = $lot->supportsContactProcessing()
+            ? (int) data_get($autoCompletionData, 'contact.target_count', $appointmentsCount)
+            : 0;
+
+        $physicalTarget = $lot->physical_appointment_target_count ?? $physicalDefaultTarget;
+        $contactTarget = $lot->contact_appointment_target_count ?? $contactDefaultTarget;
+
+        return [
+            'physical' => $this->appointmentTargetPayload(
+                enabled: $lot->supportsPhysicalProcessing(),
+                completedCount: $placedCount,
+                targetCount: (int) $physicalTarget,
+                defaultTargetCount: $physicalDefaultTarget,
+                isManual: $lot->physical_appointment_target_count !== null,
+            ),
+            'contact' => $this->appointmentTargetPayload(
+                enabled: $lot->supportsContactProcessing(),
+                completedCount: $contactProcessedCount,
+                targetCount: (int) $contactTarget,
+                defaultTargetCount: $contactDefaultTarget,
+                isManual: $lot->contact_appointment_target_count !== null,
+            ),
+        ];
+    }
+
+    /**
+     * @return array{enabled:bool,completed_count:int,target_count:int,default_target_count:int,remaining_count:int,percentage:int,is_manual:bool}
+     */
+    private function appointmentTargetPayload(
+        bool $enabled,
+        int $completedCount,
+        int $targetCount,
+        int $defaultTargetCount,
+        bool $isManual,
+    ): array {
+        $safeTargetCount = max(0, $targetCount);
+        $safeCompletedCount = max(0, $completedCount);
+
+        return [
+            'enabled' => $enabled,
+            'completed_count' => $safeCompletedCount,
+            'target_count' => $safeTargetCount,
+            'default_target_count' => max(0, $defaultTargetCount),
+            'remaining_count' => max(0, $safeTargetCount - $safeCompletedCount),
+            'percentage' => $safeTargetCount > 0
+                ? (int) min(100, round(($safeCompletedCount / $safeTargetCount) * 100))
+                : 0,
+            'is_manual' => $isManual,
         ];
     }
 
@@ -846,6 +1063,8 @@ class ManagerLotController extends Controller
             'update_url' => route('manager.lots.appointments.update', $appointment),
             'visits_update_url' => route('manager.lots.appointments.visits.update', $appointment),
             'stats_exclusion_update_url' => route('manager.lots.appointments.stats-exclusion.update', $appointment),
+            'global_plus_update_url' => route('manager.lots.appointments.global-plus.update', $appointment),
+            'reset_processing_url' => route('manager.lots.appointments.reset-processing', $appointment),
             'external_reference' => $appointment->external_reference,
             'row_number' => $appointment->row_number,
             'source' => $appointment->source ?: $lot->source,
@@ -876,12 +1095,15 @@ class ManagerLotController extends Controller
             'physical_satisfaction' => $appointment->physical_satisfaction,
             'physical_satisfaction_synced_at' => $appointment->physical_satisfaction_synced_at,
             'unsuccessful_visits_count' => $appointment->unsuccessful_visits_count ?? 0,
+            'added_to_global_plus' => (bool) $appointment->added_to_global_plus,
             'excluded_from_lot_stats' => (bool) $appointment->excluded_from_lot_stats,
             'excluded_from_lot_stats_at' => $appointment->excluded_from_lot_stats_at,
             'excluded_from_lot_stats_by_name' => $appointment->statsExcluder?->full_name,
             'appointment_id' => $appointment->appointment_id,
             'is_placed' => $this->isPlacedLotAppointment($appointment),
             'is_contact_processed' => $this->isContactProcessedLotAppointment($appointment),
+            'can_update_visits' => $this->canUpdateLotAppointmentVisits($appointment),
+            'can_reset_processing' => $this->canResetLotAppointmentProcessing($appointment),
             'placed_at' => $appointment->appointment?->starts_at,
             'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
             'placed_service_label' => $appointment->appointment?->service
@@ -968,7 +1190,38 @@ class ManagerLotController extends Controller
         return ! $this->isExcludedFromLotStats($appointment)
             && ! $this->isPlacedLotAppointment($appointment)
             && ! $this->isContactProcessedLotAppointment($appointment)
-            && in_array($appointment->status, [LotAppointment::STATUS_PENDING, LotAppointment::STATUS_NEEDS_REVIEW], true);
+            && in_array($appointment->status, $this->placeableLotAppointmentStatuses(), true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function placeableLotAppointmentStatuses(): array
+    {
+        return [
+            LotAppointment::STATUS_PENDING,
+            LotAppointment::STATUS_NEEDS_REVIEW,
+            LotAppointment::STATUS_NOT_PLACED,
+        ];
+    }
+
+    private function canResetLotAppointmentProcessing(LotAppointment $appointment): bool
+    {
+        return $this->isPlacedLotAppointment($appointment)
+            || $this->isContactProcessedLotAppointment($appointment)
+            || $appointment->processing_mode !== null
+            || $appointment->contact_processed_at !== null
+            || $appointment->physical_satisfaction !== null
+            || $appointment->physical_satisfaction_synced_at !== null
+            || ($appointment->unsuccessful_visits_count ?? 0) > 0;
+    }
+
+    private function canUpdateLotAppointmentVisits(LotAppointment $appointment): bool
+    {
+        return $this->isPlacedLotAppointment($appointment)
+            || $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+            || $appointment->physical_satisfaction !== null
+            || $appointment->physical_satisfaction_synced_at !== null;
     }
 
     private function refreshLotStatus(?Lot $lot): void
@@ -1052,8 +1305,8 @@ class ManagerLotController extends Controller
             'sampling_percentage' => $preview->sampling_percentage,
             'physical_sampling_percentage' => $preview->physical_sampling_percentage,
             'contact_sampling_percentage' => $preview->contact_sampling_percentage,
-            'global_plus' => (bool) $preview->global_plus,
             'delegataire' => $preview->delegataire,
+            'received_at' => $preview->received_at?->format('Y-m-d'),
             'total_rows' => $preview->total_rows,
             'normalized_rows' => $preview->normalized_rows,
             'rejected_rows' => $preview->rejected_rows,

@@ -125,7 +125,10 @@ it('renders manager lots from database', function () {
         ->assertSee('Voir dans la gestion des RDV')
         ->assertSee('Portes : 0')
         ->assertSee('appointment_id='.$placedAppointment->id, false)
-        ->assertSee('Détail physique');
+        ->assertSee('Détail physique')
+        ->assertSee('id="lot-detail-edit-open"', false)
+        ->assertSee('Modifier le lot Lot Audit Juin')
+        ->assertSee('Date de réception du lot');
 });
 
 it('updates a lot from the manager lot action modal', function () {
@@ -157,6 +160,7 @@ it('updates a lot from the manager lot action modal', function () {
         ->patch(route('manager.lots.update', $lot), [
             'name' => 'Lot corrigé',
             'delegataire' => 'Oblige Test',
+            'received_at' => '2026-08-03',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
             'service_id' => $service->id,
             'status' => Lot::STATUS_IN_PROGRESS,
@@ -175,6 +179,7 @@ it('updates a lot from the manager lot action modal', function () {
         'status' => Lot::STATUS_IN_PROGRESS,
         'sampling_percentage' => 35,
     ]);
+    expect($lot->refresh()->received_at?->format('Y-m-d'))->toBe('2026-08-03');
     $this->assertDatabaseHas('lot_appointments', [
         'id' => $lotAppointment->id,
         'service_id' => $service->id,
@@ -575,6 +580,16 @@ it('filters lot detail appointments dynamically', function () {
         'status' => LotAppointment::STATUS_PENDING,
         'excluded_from_lot_stats' => true,
     ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'row_number' => 4,
+        'customer_name' => 'Delta Non Satisfait',
+        'address' => '40 Rue Delta',
+        'city' => 'Oullins',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'physical_satisfaction' => false,
+    ]);
 
     $this->actingAs($manager)
         ->get(route('manager.lots.show', [$lot, 'appointment_q' => 'Alpha']))
@@ -595,6 +610,23 @@ it('filters lot detail appointments dynamically', function () {
         ->assertOk()
         ->assertSee('Gamma Hors Stats')
         ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Delta Non Satisfait')
+        ->assertDontSee('Beta Contact');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_satisfaction' => 'satisfied']))
+        ->assertOk()
+        ->assertSee('Beta Contact')
+        ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Gamma Hors Stats')
+        ->assertDontSee('Delta Non Satisfait');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_satisfaction' => 'unsatisfied']))
+        ->assertOk()
+        ->assertSee('Delta Non Satisfait')
+        ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Gamma Hors Stats')
         ->assertDontSee('Beta Contact');
 });
 
@@ -624,8 +656,12 @@ it('renders lot auto completion based on sampling target', function () {
     $this->actingAs($manager)
         ->get(route('manager.lots'))
         ->assertOk()
-        ->assertSee('50%')
-        ->assertSee('1/2 physique (50%)');
+        ->assertSee('Physiques')
+        ->assertSee('1 / 2')
+        ->assertSee('pris / cible')
+        ->assertSee('Satisfaction générale')
+        ->assertSee('Insatisfaction générale')
+        ->assertSee('0,00%');
 });
 
 it('renders lot detail satisfaction split in circular charts', function () {
@@ -676,6 +712,68 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->assertSee('Commentaire de qualification contact', false)
         ->assertSee('--satisfied:50', false)
         ->assertSee('--answered:100', false);
+});
+
+it('updates manual appointment targets without changing satisfaction targets', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot objectifs RDV',
+        'type' => Lot::TYPE_HYBRID_LOCATION_CONTACT,
+        'physical_sampling_percentage' => 50,
+        'contact_sampling_percentage' => 25,
+        'received_at' => '2026-08-04',
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 4) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client objectif '.$index,
+            'address' => 'Adresse objectif '.$index,
+            'status' => match ($index) {
+                1 => LotAppointment::STATUS_PLACED,
+                2 => LotAppointment::STATUS_CONTACT_PROCESSED,
+                default => LotAppointment::STATUS_PENDING,
+            },
+            'processing_mode' => match ($index) {
+                1 => LotAppointment::PROCESSING_MODE_PHYSICAL,
+                2 => LotAppointment::PROCESSING_MODE_CONTACT,
+                default => null,
+            },
+            'contact_satisfaction' => $index === 2 ? true : null,
+        ]);
+    }
+
+    $this->actingAs($manager)
+        ->patch(route('manager.lots.appointment-targets.update', $lot), [
+            'physical_appointment_target_count' => 3,
+            'contact_appointment_target_count' => 2,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('status', 'Objectifs de RDV du lot "Lot objectifs RDV" mis à jour.');
+
+    $lot->refresh();
+
+    expect($lot->physical_appointment_target_count)->toBe(3)
+        ->and($lot->contact_appointment_target_count)->toBe(2);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('2 / 4')
+        ->assertSee('traités / total')
+        ->assertSee('04/08/2026')
+        ->assertSee('1 / 3')
+        ->assertSee('1 / 2')
+        ->assertSee('objectif manuel')
+        ->assertSee('1 réponse(s) de satisfaction')
+        ->assertSee('sur un objectif de 2.')
+        ->assertSee('sur un objectif de 1.');
 });
 
 it('excludes and reintegrates a lot appointment from lot statistics', function () {
@@ -761,6 +859,212 @@ it('excludes and reintegrates a lot appointment from lot statistics', function (
         ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
 });
 
+it('toggles global plus on a lot appointment through ajax', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot Global Plus',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client Global',
+        'customer_phone' => '0600000022',
+        'address' => '20 Place Bellecour, 69002 Lyon',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_PENDING,
+        'added_to_global_plus' => false,
+    ]);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.global-plus.update', $lotAppointment), [
+            'added_to_global_plus' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.added_to_global_plus', true)
+        ->assertJsonPath('message', 'Dossier ajouté au Global +.');
+
+    expect($lotAppointment->refresh()->added_to_global_plus)->toBeTrue();
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.global-plus.update', $lotAppointment), [
+            'added_to_global_plus' => false,
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.added_to_global_plus', false)
+        ->assertJsonPath('message', 'Dossier retiré du Global +.');
+
+    expect($lotAppointment->refresh()->added_to_global_plus)->toBeFalse();
+});
+
+it('resets a processed contact lot appointment to not placed', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot contact à reprendre',
+        'type' => Lot::TYPE_SAMPLE_CONTACT_CONTROL,
+        'status' => Lot::STATUS_COMPLETED,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client à reprendre',
+        'customer_phone' => '0600000099',
+        'address' => '20 Place Bellecour',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_CONTACT,
+        'contact_satisfaction' => false,
+        'contact_comment' => 'Client non satisfaisant',
+        'contact_processed_at' => now(),
+        'contact_processed_by' => $manager->id,
+    ]);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.reset-processing', $lotAppointment))
+        ->assertOk()
+        ->assertJsonPath('appointment.status', LotAppointment::STATUS_NOT_PLACED)
+        ->assertJsonPath('appointment.status_label', "N'a pas placé")
+        ->assertJsonPath('appointment.processing_mode', null)
+        ->assertJsonPath('appointment.contact_satisfaction', null)
+        ->assertJsonPath('appointment.contact_comment', null)
+        ->assertJsonPath('appointment.can_reset_processing', false)
+        ->assertJsonPath('reload_required', true);
+
+    $lotAppointment->refresh();
+    $lot->refresh();
+
+    expect($lotAppointment->status)->toBe(LotAppointment::STATUS_NOT_PLACED)
+        ->and($lotAppointment->processing_mode)->toBeNull()
+        ->and($lotAppointment->contact_satisfaction)->toBeNull()
+        ->and($lotAppointment->contact_comment)->toBeNull()
+        ->and($lotAppointment->contact_processed_at)->toBeNull()
+        ->and($lotAppointment->contact_processed_by)->toBeNull()
+        ->and($lot->status)->toBe(Lot::STATUS_NOT_STARTED);
+});
+
+it('resets a placed physical lot appointment and removes the local calendar appointment', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit interne',
+        'average_duration_minutes' => 120,
+    ]);
+    $startsAt = now()->copy()->addDay()->setTime(10, 0);
+    $calendarAppointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Physique',
+        'customer_phone' => '0600000088',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 120,
+        'ends_at' => $startsAt->copy()->addMinutes(120),
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot physique à reprendre',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_COMPLETED,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $calendarAppointment->id,
+        'customer_name' => 'Client Physique',
+        'customer_phone' => '0600000088',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'physical_satisfaction' => false,
+        'physical_satisfaction_synced_at' => now(),
+        'unsuccessful_visits_count' => 2,
+    ]);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.reset-processing', $lotAppointment))
+        ->assertOk()
+        ->assertJsonPath('appointment.status', LotAppointment::STATUS_NOT_PLACED)
+        ->assertJsonPath('appointment.appointment_id', null)
+        ->assertJsonPath('appointment.is_placed', false)
+        ->assertJsonPath('appointment.physical_satisfaction', null)
+        ->assertJsonPath('appointment.unsuccessful_visits_count', 0)
+        ->assertJsonPath('appointment.can_reset_processing', false)
+        ->assertJsonPath('reload_required', true);
+
+    $lotAppointment->refresh();
+    $lot->refresh();
+
+    expect($lotAppointment->status)->toBe(LotAppointment::STATUS_NOT_PLACED)
+        ->and($lotAppointment->appointment_id)->toBeNull()
+        ->and($lotAppointment->processing_mode)->toBeNull()
+        ->and($lotAppointment->physical_satisfaction)->toBeNull()
+        ->and($lotAppointment->physical_satisfaction_synced_at)->toBeNull()
+        ->and($lotAppointment->unsuccessful_visits_count)->toBe(0)
+        ->and($lot->status)->toBe(Lot::STATUS_NOT_STARTED);
+
+    $this->assertSoftDeleted('appointments', [
+        'id' => $calendarAppointment->id,
+    ]);
+});
+
+it('updates unsuccessful visits on a physical lot appointment without local calendar appointment', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot physique sans RDV local',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client terrain',
+        'customer_phone' => '0600000077',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_PENDING,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'unsuccessful_visits_count' => 1,
+    ]);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('data-lot-appointment-portes="'.$lotAppointment->id.'"', false)
+        ->assertSee('"can_update_visits":true', false);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.visits.update', $lotAppointment), [
+            'unsuccessful_visits_count' => 3,
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.can_update_visits', true)
+        ->assertJsonPath('appointment.unsuccessful_visits_count', 3);
+
+    expect($lotAppointment->refresh()->unsuccessful_visits_count)->toBe(3);
+});
+
 it('renders lot type select in the import form', function () {
     $manager = User::factory()->create([
         'role' => 0,
@@ -825,6 +1129,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
         ->post(route('manager.lots.imports.store'), [
             'name' => 'Lot importe',
             'delegataire_id' => $delegataire->id,
+            'received_at' => '2026-08-04',
             'type' => Lot::TYPE_FULL_CONTROL,
             'service_id' => $service->id,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
@@ -843,6 +1148,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
         'stage' => 'Import en attente dans la file.',
         'created_by' => $manager->id,
     ]);
+    expect(LotImportPreview::query()->where('name', 'Lot importe')->first()?->received_at?->format('Y-m-d'))->toBe('2026-08-04');
 });
 
 it('retries a failed manager lot import preview from the stored original file', function () {
@@ -1236,6 +1542,7 @@ it('requires sampling percentage for sampling lot types', function () {
         ->post(route('manager.lots.imports.store'), [
             'name' => 'Lot échantillon',
             'delegataire' => 'Délégataire A',
+            'received_at' => '2026-08-04',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
             'service_id' => $service->id,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
@@ -1350,6 +1657,7 @@ it('confirms selected preview rows and creates a lot', function () {
         'name' => 'Lot preview',
         'type' => Lot::TYPE_FULL_CONTROL,
         'service_id' => $service->id,
+        'received_at' => '2026-08-01',
         'original_filename' => 'preview.xlsx',
         'original_file_disk' => 'local',
         'original_file_path' => 'lot-import-previews/preview.xlsx',
@@ -1407,6 +1715,7 @@ it('confirms selected preview rows and creates a lot', function () {
         'status' => Lot::STATUS_NOT_STARTED,
         'imported_rows' => 1,
     ]);
+    expect(Lot::query()->where('name', 'Lot preview')->first()?->received_at?->format('Y-m-d'))->toBe('2026-08-01');
     $this->assertDatabaseHas('lot_appointments', [
         'customer_name' => 'Camille Martin',
         'postal_code' => '69002',

@@ -37,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'physical_satisfaction',
     'physical_satisfaction_synced_at',
     'unsuccessful_visits_count',
+    'added_to_global_plus',
     'excluded_from_lot_stats',
     'excluded_from_lot_stats_at',
     'excluded_from_lot_stats_by',
@@ -50,6 +51,8 @@ class LotAppointment extends Model
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_NEEDS_REVIEW = 'needs_review';
+
+    public const STATUS_NOT_PLACED = 'not_placed';
 
     public const STATUS_PLACED = 'placed';
 
@@ -67,6 +70,7 @@ class LotAppointment extends Model
         return [
             self::STATUS_PENDING => 'A placer',
             self::STATUS_NEEDS_REVIEW => 'A verifier',
+            self::STATUS_NOT_PLACED => "N'a pas placé",
             self::STATUS_PLACED => 'Place',
             self::STATUS_CONTACT_PROCESSED => 'Traité par téléphone',
         ];
@@ -114,6 +118,7 @@ class LotAppointment extends Model
             'physical_satisfaction' => 'boolean',
             'physical_satisfaction_synced_at' => 'datetime',
             'unsuccessful_visits_count' => 'integer',
+            'added_to_global_plus' => 'boolean',
             'excluded_from_lot_stats' => 'boolean',
             'excluded_from_lot_stats_at' => 'datetime',
             'ai_confidence' => 'float',
