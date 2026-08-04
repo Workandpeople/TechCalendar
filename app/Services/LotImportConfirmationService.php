@@ -69,6 +69,7 @@ class LotImportConfirmationService
                 'contact_sampling_percentage' => $preview->contact_sampling_percentage,
                 'delegataire' => $preview->delegataire,
                 'received_at' => $preview->received_at,
+                'comment' => $preview->comment,
                 'original_filename' => $preview->original_filename,
                 'original_file_disk' => $preview->original_file_disk,
                 'original_file_path' => $preview->original_file_path,

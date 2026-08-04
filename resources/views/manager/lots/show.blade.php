@@ -19,6 +19,11 @@
                         · Importé le {{ $lot['imported_at']->format('d/m/Y H:i') }}
                     @endif
                 </p>
+                @if ($lot['comment'])
+                    <p class="mt-3 max-w-4xl whitespace-pre-line rounded-2xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                        {{ $lot['comment'] }}
+                    </p>
+                @endif
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
@@ -74,6 +79,11 @@
                                     <option value="{{ $lot['delegataire'] }}" selected>{{ $lot['delegataire'] }}</option>
                                 @endif
                             </select>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="gc-label" for="lot_detail_edit_comment">Commentaires du lot</label>
+                            <textarea id="lot_detail_edit_comment" name="comment" class="gc-input min-h-28" maxlength="5000" placeholder="Note interne, consignes de traitement, contexte client...">{{ $lot['comment'] }}</textarea>
                         </div>
 
                         <div>
@@ -373,7 +383,7 @@
             </div>
 
             <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
-                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_180px_200px_200px_150px_auto] xl:items-end">
+                <div class="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_170px_190px_190px_190px_150px_auto] 2xl:items-end">
                     <label class="block">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
                         <input
@@ -425,6 +435,20 @@
                             <option value="">Tous les résultats</option>
                             @foreach ($lotAppointmentSatisfactionFilters as $satisfaction => $label)
                                 <option value="{{ $satisfaction }}" @selected($appointmentFilters['appointment_satisfaction'] === $satisfaction)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Global +</span>
+                        <select
+                            name="appointment_global_plus"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                        >
+                            <option value="">Tous</option>
+                            @foreach ($lotAppointmentGlobalPlusFilters as $globalPlus => $label)
+                                <option value="{{ $globalPlus }}" @selected($appointmentFilters['appointment_global_plus'] === $globalPlus)>{{ $label }}</option>
                             @endforeach
                         </select>
                     </label>
@@ -513,16 +537,6 @@
                                 <td class="px-4 py-3">
                                     <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
                                         {{ $appointment['status_label'] }}
-                                    </span>
-                                    <span
-                                        @class([
-                                            'mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold' => true,
-                                            'hidden' => ! $appointment['added_to_global_plus'],
-                                        ])
-                                        style="background:#fef3c7;color:#b45309;"
-                                        data-lot-appointment-global-plus-badge="{{ $appointment['id'] }}"
-                                    >
-                                        Global +
                                     </span>
                                     @if ($appointment['excluded_from_lot_stats'])
                                         <span class="mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:#fee2e2;color:#991b1b;">
@@ -641,7 +655,7 @@
                     <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
                         <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
                         <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                            Remet le dossier en statut « n'a pas placé » et supprime son état de traitement.
+                            Remet le dossier en statut « ne pas placer » et supprime son état de traitement.
                         </p>
                         <p id="lot-physical-reset-processing-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-reset-processing" type="button" class="gc-btn-danger mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
@@ -697,7 +711,7 @@
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
                     <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                        Remet le dossier en statut « n'a pas placé » et supprime son état de satisfaction.
+                        Remet le dossier en statut « ne pas placer » et supprime son état de satisfaction.
                     </p>
                     <p id="lot-contact-reset-processing-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                     <button id="lot-contact-reset-processing" type="button" class="gc-btn-danger mt-3 justify-center disabled:cursor-not-allowed disabled:opacity-50">
@@ -1103,12 +1117,6 @@
             statusElement.style.color = addedToGlobalPlus ? '#b45309' : 'var(--gc-text-soft)';
         }
 
-        function updateGlobalPlusBadge(appointment) {
-            document.querySelectorAll(`[data-lot-appointment-global-plus-badge="${appointment.id}"]`).forEach((badge) => {
-                badge.classList.toggle('hidden', !appointment.added_to_global_plus);
-            });
-        }
-
         async function updateLotAppointmentGlobalPlus(appointment, checkboxElement, statusElement) {
             if (!appointment?.global_plus_update_url || !checkboxElement || !statusElement) {
                 return;
@@ -1152,7 +1160,15 @@
                 checkboxElement.disabled = !updatedAppointment.global_plus_update_url;
                 statusElement.textContent = payload.message || 'Global + mis à jour.';
                 statusElement.style.color = '#15803d';
-                updateGlobalPlusBadge(updatedAppointment);
+
+                const currentGlobalPlusFilter = new URLSearchParams(window.location.search).get('appointment_global_plus');
+
+                if (
+                    (currentGlobalPlusFilter === '1' && !updatedAppointment.added_to_global_plus)
+                    || (currentGlobalPlusFilter === '0' && updatedAppointment.added_to_global_plus)
+                ) {
+                    window.location.reload();
+                }
             } catch (error) {
                 checkboxElement.checked = !requestedState;
                 checkboxElement.disabled = false;

@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'source',
     'delegataire',
     'received_at',
+    'comment',
     'original_filename',
     'original_file_disk',
     'original_file_path',

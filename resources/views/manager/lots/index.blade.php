@@ -86,6 +86,7 @@
                         'physical_sampling_percentage' => $lot['physical_sampling_percentage'],
                         'contact_sampling_percentage' => $lot['contact_sampling_percentage'],
                         'received_at' => $lot['received_at_input'],
+                        'comment' => $lot['comment'],
                         'delegataire' => $lot['delegataire'],
                         'appointments_count' => $lot['appointments_count'],
                         'placed_count' => $lot['placed_count'],
@@ -194,6 +195,11 @@
                                 @if ($lot['delegataire'])
                                     <p class="mt-1 truncate text-xs" style="color:var(--gc-text-soft);">Délégataire : {{ $lot['delegataire'] }}</p>
                                 @endif
+                                @if ($lot['comment'])
+                                    <p class="mt-3 overflow-hidden rounded-xl border px-3 py-2 text-xs" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                                        {{ $lot['comment'] }}
+                                    </p>
+                                @endif
                             </div>
                             <button
                                 type="button"
@@ -293,6 +299,10 @@
                                         </option>
                                     @endforeach
                                 </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="gc-label" for="lot_action_comment">Commentaires du lot</label>
+                                <textarea id="lot_action_comment" name="comment" class="gc-input min-h-28" maxlength="5000" placeholder="Note interne, consignes de traitement, contexte client..."></textarea>
                             </div>
                             <div>
                                 <label class="gc-label" for="lot_action_received_at">Date de réception du lot</label>
@@ -465,6 +475,10 @@
                         <div>
                             <label class="gc-label" for="lot_name">Nom du lot</label>
                             <input id="lot_name" name="name" type="text" value="{{ old('name') }}" class="gc-input" placeholder="Optionnel" />
+                        </div>
+                        <div class="md:col-span-2 xl:col-span-3">
+                            <label class="gc-label" for="lot_comment">Commentaires du lot</label>
+                            <textarea id="lot_comment" name="comment" class="gc-input min-h-28" maxlength="5000" placeholder="Optionnel : consignes de traitement, contexte, points d’attention...">{{ old('comment') }}</textarea>
                         </div>
                         <div>
                             <label class="gc-label" for="lot_received_at">Date de réception du lot</label>
@@ -668,6 +682,7 @@
         const lotActionContactSamplingPercentage = document.getElementById('lot_action_contact_sampling_percentage');
         const lotActionDelegataire = document.getElementById('lot_action_delegataire');
         const lotActionReceivedAt = document.getElementById('lot_action_received_at');
+        const lotActionComment = document.getElementById('lot_action_comment');
         let currentLotAction = null;
 
         const lotImportFormOpen = document.getElementById('lot-import-form-open');
@@ -891,6 +906,7 @@
             if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
             if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
             if (lotActionReceivedAt) lotActionReceivedAt.value = lot.received_at || '';
+            if (lotActionComment) lotActionComment.value = lot.comment || '';
             ensureSelectOption(lotActionDelegataire, lot.delegataire || '');
             lotActionDelegataire.value = lot.delegataire || '';
             updateLotActionSamplingState();

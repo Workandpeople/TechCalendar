@@ -32,6 +32,7 @@ class LotExcelImportService
         ?float $contactSamplingPercentage = null,
         ?int $serviceId = null,
         ?string $receivedAt = null,
+        ?string $comment = null,
     ): Lot
     {
         $rows = $this->extractor->extract($file);
@@ -41,7 +42,7 @@ class LotExcelImportService
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $receivedAt, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
@@ -53,6 +54,7 @@ class LotExcelImportService
                     'source' => filled($source) ? trim((string) $source) : null,
                     'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
                     'received_at' => $receivedAt,
+                    'comment' => filled($comment) ? trim((string) $comment) : null,
                     'original_filename' => $file->getClientOriginalName(),
                     'original_file_disk' => $storedFile['disk'],
                     'original_file_path' => $storedFile['path'],

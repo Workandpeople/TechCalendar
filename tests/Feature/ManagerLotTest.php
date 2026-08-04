@@ -42,6 +42,7 @@ it('renders manager lots from database', function () {
         'name' => 'Lot Audit Juin',
         'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
         'source' => 'Export AuditPro',
+        'comment' => 'Commentaires internes du lot.',
         'original_filename' => 'audit-juin.xlsx',
         'total_rows' => 1,
         'imported_rows' => 1,
@@ -106,6 +107,8 @@ it('renders manager lots from database', function () {
         ->assertSee('Lots en cours')
         ->assertSee('Lots terminés')
         ->assertSee('Modifier le lot')
+        ->assertSee('Commentaires du lot')
+        ->assertSee('Commentaires internes du lot.')
         ->assertSee('Modifier')
         ->assertSee('Supprimer le lot')
         ->assertDontSee('RDV total')
@@ -128,7 +131,9 @@ it('renders manager lots from database', function () {
         ->assertSee('Détail physique')
         ->assertSee('id="lot-detail-edit-open"', false)
         ->assertSee('Modifier le lot Lot Audit Juin')
-        ->assertSee('Date de réception du lot');
+        ->assertSee('Date de réception du lot')
+        ->assertSee('name="appointment_global_plus"', false)
+        ->assertDontSee('data-lot-appointment-global-plus-badge', false);
 });
 
 it('updates a lot from the manager lot action modal', function () {
@@ -161,6 +166,7 @@ it('updates a lot from the manager lot action modal', function () {
             'name' => 'Lot corrigé',
             'delegataire' => 'Oblige Test',
             'received_at' => '2026-08-03',
+            'comment' => 'Consignes spécifiques pour ce lot.',
             'type' => Lot::TYPE_SAMPLE_CONTROL,
             'service_id' => $service->id,
             'status' => Lot::STATUS_IN_PROGRESS,
@@ -174,6 +180,7 @@ it('updates a lot from the manager lot action modal', function () {
         'id' => $lot->id,
         'name' => 'Lot corrigé',
         'delegataire' => 'Oblige Test',
+        'comment' => 'Consignes spécifiques pour ce lot.',
         'type' => Lot::TYPE_SAMPLE_CONTROL,
         'service_id' => $service->id,
         'status' => Lot::STATUS_IN_PROGRESS,
@@ -585,6 +592,7 @@ it('filters lot detail appointments dynamically', function () {
         'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
         'processing_mode' => LotAppointment::PROCESSING_MODE_CONTACT,
         'contact_satisfaction' => true,
+        'added_to_global_plus' => true,
     ]);
     LotAppointment::query()->create([
         'lot_id' => $lot->id,
@@ -642,6 +650,22 @@ it('filters lot detail appointments dynamically', function () {
         ->assertSee('Delta Non Satisfait')
         ->assertDontSee('Alpha Industrie')
         ->assertDontSee('Gamma Hors Stats')
+        ->assertDontSee('Beta Contact');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_global_plus' => '1']))
+        ->assertOk()
+        ->assertSee('Beta Contact')
+        ->assertDontSee('Alpha Industrie')
+        ->assertDontSee('Gamma Hors Stats')
+        ->assertDontSee('Delta Non Satisfait');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'appointment_global_plus' => '0']))
+        ->assertOk()
+        ->assertSee('Alpha Industrie')
+        ->assertSee('Gamma Hors Stats')
+        ->assertSee('Delta Non Satisfait')
         ->assertDontSee('Beta Contact');
 });
 
@@ -993,7 +1017,7 @@ it('resets a processed contact lot appointment to not placed', function () {
         ->patchJson(route('manager.lots.appointments.reset-processing', $lotAppointment))
         ->assertOk()
         ->assertJsonPath('appointment.status', LotAppointment::STATUS_NOT_PLACED)
-        ->assertJsonPath('appointment.status_label', "N'a pas placé")
+        ->assertJsonPath('appointment.status_label', 'Ne pas placer')
         ->assertJsonPath('appointment.processing_mode', null)
         ->assertJsonPath('appointment.contact_satisfaction', null)
         ->assertJsonPath('appointment.contact_comment', null)
@@ -1193,6 +1217,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
             'name' => 'Lot importe',
             'delegataire_id' => $delegataire->id,
             'received_at' => '2026-08-04',
+            'comment' => 'Commentaire conservé pendant la preview.',
             'type' => Lot::TYPE_FULL_CONTROL,
             'service_id' => $service->id,
             'file' => UploadedFile::fake()->create('lot.xlsx', 12, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
@@ -1206,6 +1231,7 @@ it('starts a manager lot import preview through the upload endpoint', function (
     $this->assertDatabaseHas('lot_import_previews', [
         'name' => 'Lot importe',
         'delegataire' => 'Délégataire A',
+        'comment' => 'Commentaire conservé pendant la preview.',
         'type' => Lot::TYPE_FULL_CONTROL,
         'service_id' => $service->id,
         'stage' => 'Import en attente dans la file.',
@@ -1683,11 +1709,13 @@ it('stores the original spreadsheet when importing a lot', function () {
             requestedLotName: 'Lot client',
             lotType: Lot::TYPE_FULL_CONTACT_CONTROL,
             serviceId: $service->id,
+            comment: 'Consignes import direct',
         );
 
     expect($lot->original_filename)->toBe('lot-client.csv')
         ->and($lot->type)->toBe(Lot::TYPE_FULL_CONTACT_CONTROL)
         ->and($lot->service_id)->toBe($service->id)
+        ->and($lot->comment)->toBe('Consignes import direct')
         ->and($lot->original_file_disk)->toBe('local')
         ->and($lot->original_file_path)->not->toBeNull()
         ->and($lot->appointments)->toHaveCount(1);
@@ -1721,6 +1749,7 @@ it('confirms selected preview rows and creates a lot', function () {
         'type' => Lot::TYPE_FULL_CONTROL,
         'service_id' => $service->id,
         'received_at' => '2026-08-01',
+        'comment' => 'Commentaire du lot preview',
         'original_filename' => 'preview.xlsx',
         'original_file_disk' => 'local',
         'original_file_path' => 'lot-import-previews/preview.xlsx',
@@ -1777,6 +1806,7 @@ it('confirms selected preview rows and creates a lot', function () {
         'service_id' => $service->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'imported_rows' => 1,
+        'comment' => 'Commentaire du lot preview',
     ]);
     expect(Lot::query()->where('name', 'Lot preview')->first()?->received_at?->format('Y-m-d'))->toBe('2026-08-01');
     $this->assertDatabaseHas('lot_appointments', [

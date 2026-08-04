@@ -70,7 +70,7 @@ class LotAppointment extends Model
         return [
             self::STATUS_PENDING => 'A placer',
             self::STATUS_NEEDS_REVIEW => 'A verifier',
-            self::STATUS_NOT_PLACED => "N'a pas placé",
+            self::STATUS_NOT_PLACED => 'Ne pas placer',
             self::STATUS_PLACED => 'Place',
             self::STATUS_CONTACT_PROCESSED => 'Traité par téléphone',
         ];

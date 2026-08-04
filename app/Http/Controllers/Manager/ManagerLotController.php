@@ -108,11 +108,13 @@ class ManagerLotController extends Controller
                 'appointment_status' => $appointmentFilters['appointment_status'] ?? '',
                 'appointment_processing' => $appointmentFilters['appointment_processing'] ?? '',
                 'appointment_satisfaction' => $appointmentFilters['appointment_satisfaction'] ?? '',
+                'appointment_global_plus' => $appointmentFilters['appointment_global_plus'] ?? '',
                 'per_page' => (int) ($appointmentFilters['per_page'] ?? 25),
             ],
             'lotAppointmentStatuses' => LotAppointment::statuses(),
             'lotAppointmentProcessingFilters' => $this->lotAppointmentProcessingFilters(),
             'lotAppointmentSatisfactionFilters' => $this->lotAppointmentSatisfactionFilters(),
+            'lotAppointmentGlobalPlusFilters' => $this->lotAppointmentGlobalPlusFilters(),
             'lotAppointmentPerPageOptions' => $this->lotAppointmentPerPageOptions(),
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
@@ -144,6 +146,7 @@ class ManagerLotController extends Controller
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'received_at' => ['required', 'date'],
+            'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
@@ -185,6 +188,7 @@ class ManagerLotController extends Controller
                 contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
                 serviceId: (int) $payload['service_id'],
                 receivedAt: $payload['received_at'] ?? null,
+                comment: $payload['comment'] ?? null,
             );
         } catch (Throwable $exception) {
             return back()
@@ -213,6 +217,7 @@ class ManagerLotController extends Controller
             'contact_sampling_percentage' => $samplingPayload['contact_sampling_percentage'],
             'delegataire' => filled($payload['delegataire'] ?? null) ? trim((string) $payload['delegataire']) : null,
             'received_at' => $payload['received_at'] ?? null,
+            'comment' => filled($payload['comment'] ?? null) ? trim((string) $payload['comment']) : null,
             'service_id' => (int) $payload['service_id'],
         ])->save();
 
@@ -331,6 +336,7 @@ class ManagerLotController extends Controller
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
             'received_at' => ['required', 'date'],
+            'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'sampling_percentage' => [
@@ -370,6 +376,7 @@ class ManagerLotController extends Controller
             requestedLotName: $payload['name'] ?? null,
             delegataire: $delegataireName,
             receivedAt: $payload['received_at'] ?? null,
+            comment: $payload['comment'] ?? null,
         );
 
         return response()->json([
@@ -641,7 +648,7 @@ class ManagerLotController extends Controller
         $this->refreshLotStatus($lotAppointment->lot);
 
         return response()->json([
-            'message' => "Dossier remis en statut « n'a pas placé ».",
+            'message' => 'Dossier remis en statut « ne pas placer ».',
             'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
             'reload_required' => true,
         ]);
@@ -669,6 +676,7 @@ class ManagerLotController extends Controller
             'appointment_status' => ['nullable', 'string', Rule::in(array_keys(LotAppointment::statuses()))],
             'appointment_processing' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentProcessingFilters()))],
             'appointment_satisfaction' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentSatisfactionFilters()))],
+            'appointment_global_plus' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentGlobalPlusFilters()))],
             'per_page' => ['nullable', 'integer', Rule::in(array_keys($this->lotAppointmentPerPageOptions()))],
         ]);
     }
@@ -679,6 +687,7 @@ class ManagerLotController extends Controller
             'name' => ['required', 'string', 'max:190'],
             'delegataire' => ['nullable', 'string', 'max:190'],
             'received_at' => ['nullable', 'date'],
+            'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
             'status' => ['required', 'string', Rule::in(array_keys(Lot::statuses()))],
@@ -858,6 +867,9 @@ class ManagerLotController extends Controller
                     default => null,
                 };
             })
+            ->when(($filters['appointment_global_plus'] ?? '') !== '', function ($query) use ($filters): void {
+                $query->where('added_to_global_plus', $filters['appointment_global_plus'] === '1');
+            })
             ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
             ->orderBy('row_number')
             ->orderBy('customer_name');
@@ -899,6 +911,17 @@ class ManagerLotController extends Controller
         return [
             'satisfied' => 'Satisfaisants',
             'unsatisfied' => 'Non satisfaisants',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function lotAppointmentGlobalPlusFilters(): array
+    {
+        return [
+            '1' => 'Ajoutés au Global +',
+            '0' => 'Non ajoutés au Global +',
         ];
     }
 
@@ -983,6 +1006,7 @@ class ManagerLotController extends Controller
             'received_at' => $lot->received_at,
             'received_at_formatted' => $lot->received_at?->format('d/m/Y'),
             'received_at_input' => $lot->received_at?->format('Y-m-d'),
+            'comment' => $lot->comment,
             'source' => $lot->source,
             'original_filename' => $lot->original_filename,
             'original_file_size' => $lot->original_file_size,
