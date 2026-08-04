@@ -91,7 +91,7 @@ class ManagerLotController extends Controller
         ]);
 
         $appointments = $this->lotAppointmentQuery($lot, $appointmentFilters)
-            ->paginate(25, ['*'], 'appointments_page')
+            ->paginate((int) ($appointmentFilters['per_page'] ?? 25), ['*'], 'appointments_page')
             ->withQueryString();
 
         $appointments->setCollection(
@@ -108,10 +108,12 @@ class ManagerLotController extends Controller
                 'appointment_status' => $appointmentFilters['appointment_status'] ?? '',
                 'appointment_processing' => $appointmentFilters['appointment_processing'] ?? '',
                 'appointment_satisfaction' => $appointmentFilters['appointment_satisfaction'] ?? '',
+                'per_page' => (int) ($appointmentFilters['per_page'] ?? 25),
             ],
             'lotAppointmentStatuses' => LotAppointment::statuses(),
             'lotAppointmentProcessingFilters' => $this->lotAppointmentProcessingFilters(),
             'lotAppointmentSatisfactionFilters' => $this->lotAppointmentSatisfactionFilters(),
+            'lotAppointmentPerPageOptions' => $this->lotAppointmentPerPageOptions(),
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
             'mapboxToken' => config('services.mapbox.token'),
@@ -667,6 +669,7 @@ class ManagerLotController extends Controller
             'appointment_status' => ['nullable', 'string', Rule::in(array_keys(LotAppointment::statuses()))],
             'appointment_processing' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentProcessingFilters()))],
             'appointment_satisfaction' => ['nullable', 'string', Rule::in(array_keys($this->lotAppointmentSatisfactionFilters()))],
+            'per_page' => ['nullable', 'integer', Rule::in(array_keys($this->lotAppointmentPerPageOptions()))],
         ]);
     }
 
@@ -896,6 +899,20 @@ class ManagerLotController extends Controller
         return [
             'satisfied' => 'Satisfaisants',
             'unsatisfied' => 'Non satisfaisants',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function lotAppointmentPerPageOptions(): array
+    {
+        return [
+            10 => '10 lignes',
+            25 => '25 lignes',
+            50 => '50 lignes',
+            100 => '100 lignes',
+            200 => '200 lignes',
         ];
     }
 

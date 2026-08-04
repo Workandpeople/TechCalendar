@@ -373,7 +373,7 @@
             </div>
 
             <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
-                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_200px_220px_220px_auto] xl:items-end">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_180px_200px_200px_150px_auto] xl:items-end">
                     <label class="block">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
                         <input
@@ -425,6 +425,20 @@
                             <option value="">Tous les résultats</option>
                             @foreach ($lotAppointmentSatisfactionFilters as $satisfaction => $label)
                                 <option value="{{ $satisfaction }}" @selected($appointmentFilters['appointment_satisfaction'] === $satisfaction)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Lignes</span>
+                        <select
+                            id="lot_appointment_per_page"
+                            name="per_page"
+                            class="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                        >
+                            @foreach ($lotAppointmentPerPageOptions as $perPage => $label)
+                                <option value="{{ $perPage }}" @selected((int) $appointmentFilters['per_page'] === (int) $perPage)>{{ $label }}</option>
                             @endforeach
                         </select>
                     </label>
@@ -701,6 +715,9 @@
         let currentContactLotAppointment = null;
         const lotAppointmentFiltersForm = document.getElementById('manager-lot-appointment-filters-form');
         const lotAppointmentSearchInput = document.getElementById('appointment_q');
+        const lotAppointmentPerPageSelect = document.getElementById('lot_appointment_per_page');
+        const lotAppointmentPerPageStorageKey = 'manager_lot_detail_per_page';
+        const lotAppointmentPerPageAllowedValues = @json(array_map('strval', array_keys($lotAppointmentPerPageOptions)));
         let lotAppointmentSearchTimer = null;
         const lotDetailEditOpen = document.getElementById('lot-detail-edit-open');
         const lotDetailEditModal = document.getElementById('lot-detail-edit-modal');
@@ -719,9 +736,62 @@
         const lotAppointmentTargetsClose = document.getElementById('lot-appointment-targets-close');
         const lotAppointmentTargetsCancel = document.getElementById('lot-appointment-targets-cancel');
 
+        function getStoredLotAppointmentPerPage() {
+            try {
+                return window.localStorage.getItem(lotAppointmentPerPageStorageKey);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function storeLotAppointmentPerPage(value) {
+            if (!lotAppointmentPerPageAllowedValues.includes(String(value))) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(lotAppointmentPerPageStorageKey, String(value));
+            } catch (error) {
+                // Le stockage local est un confort UX, pas une dépendance fonctionnelle.
+            }
+        }
+
+        function syncLotAppointmentPerPageFromStorage() {
+            if (!lotAppointmentFiltersForm || !lotAppointmentPerPageSelect) {
+                return;
+            }
+
+            const currentUrl = new URL(window.location.href);
+            const urlPerPage = currentUrl.searchParams.get('per_page');
+
+            if (lotAppointmentPerPageAllowedValues.includes(String(urlPerPage))) {
+                storeLotAppointmentPerPage(urlPerPage);
+                return;
+            }
+
+            const storedPerPage = getStoredLotAppointmentPerPage();
+
+            if (!lotAppointmentPerPageAllowedValues.includes(String(storedPerPage))) {
+                return;
+            }
+
+            if (lotAppointmentPerPageSelect.value !== String(storedPerPage)) {
+                lotAppointmentPerPageSelect.value = String(storedPerPage);
+                lotAppointmentFiltersForm.submit();
+            }
+        }
+
+        syncLotAppointmentPerPageFromStorage();
+
         if (lotAppointmentFiltersForm) {
             lotAppointmentFiltersForm.querySelectorAll('select').forEach((select) => {
-                select.addEventListener('change', () => lotAppointmentFiltersForm.submit());
+                select.addEventListener('change', () => {
+                    if (select === lotAppointmentPerPageSelect) {
+                        storeLotAppointmentPerPage(select.value);
+                    }
+
+                    lotAppointmentFiltersForm.submit();
+                });
             });
 
             lotAppointmentSearchInput?.addEventListener('input', () => {

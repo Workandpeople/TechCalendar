@@ -537,6 +537,21 @@ it('paginates lot detail appointments', function () {
         ->assertOk()
         ->assertSee('Client dossier 26')
         ->assertDontSee('Client dossier 01');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'per_page' => 10]))
+        ->assertOk()
+        ->assertSee('Client dossier 01')
+        ->assertSee('Client dossier 10')
+        ->assertDontSee('Client dossier 11')
+        ->assertSee('per_page=10', false);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', [$lot, 'per_page' => 10, 'appointments_page' => 2]))
+        ->assertOk()
+        ->assertSee('Client dossier 11')
+        ->assertSee('Client dossier 20')
+        ->assertDontSee('Client dossier 21');
 });
 
 it('filters lot detail appointments dynamically', function () {

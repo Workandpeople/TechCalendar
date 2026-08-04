@@ -385,46 +385,139 @@
                         if ($lot['supports_contact']) {
                             $lotProgressItems[] = $lotProgressBuilder('contact', 'RDV téléphoniques', '#0369a1', (int) $lot['contact_processed_count']);
                         }
+
+                        $lotFilterDepartments = collect($lot['appointments'])
+                            ->pluck('department_code')
+                            ->filter()
+                            ->unique()
+                            ->sort()
+                            ->values();
                     @endphp
-                    <details class="booking-lot-details overflow-hidden rounded-2xl border bg-white shadow-sm" style="border-color:var(--gc-border);">
-                        <summary class="grid cursor-pointer list-none gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[minmax(0,1fr)_minmax(320px,460px)_auto] lg:items-center">
+                    <details class="booking-lot-details group overflow-hidden rounded-2xl border bg-white shadow-sm" style="border-color:var(--gc-border);" data-booking-lot-id="{{ $lot['id'] }}">
+                        <summary class="grid cursor-pointer list-none gap-4 p-4 transition hover:bg-[color:var(--gc-accent-soft)] xl:grid-cols-[minmax(0,1fr)_minmax(430px,560px)_44px] xl:items-center">
                             <div class="min-w-0">
-                                <h3 class="truncate text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="min-w-0 flex-1 truncate text-lg font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h3>
+                                    <span class="shrink-0 text-xs font-semibold" style="color:{{ $lot['status_color'] }};">{{ $lot['status_label'] }}</span>
+                                </div>
                                 <p class="mt-1 truncate text-sm" style="color:var(--gc-text-soft);">
                                     {{ $lot['type_label'] ?: 'Type non renseigné' }}
                                     @if ($lot['service_label'])
                                         · {{ $lot['service_label'] }}
                                     @endif
                                 </p>
+                                <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style="color:var(--gc-text-soft);">
+                                    <span>{{ $lot['appointments_count'] }} dossier(s)</span>
+                                    <span>{{ $lot['completed_target_count'] }} / {{ $lot['target_count'] }} objectif</span>
+                                    <span>{{ $lot['placeable_count'] }} à traiter</span>
+                                </div>
                             </div>
 
-                            <div class="grid gap-3">
-                                <div class="flex items-center justify-between gap-3 rounded-xl border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
-                                    <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Progression globale</span>
-                                    <span class="text-lg font-semibold" style="color:var(--gc-text);">{{ $lotGeneralCompletionPercentage }}%</span>
-                                </div>
-                                @foreach ($lotProgressItems as $progressItem)
+                            <div class="rounded-2xl border p-3" style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%);">
+                                <div class="flex items-center justify-between gap-3">
                                     <div>
-                                        <div class="mb-1 flex items-center justify-between gap-3">
-                                            <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $progressItem['label'] }}</span>
-                                            <span class="text-sm font-semibold" style="color:var(--gc-text);">{{ $progressItem['completed_count'] }} / {{ $progressItem['target_count'] }}</span>
-                                        </div>
-                                        <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-                                            <div class="h-full rounded-full transition-all" style="width:{{ $progressItem['percentage'] }}%;background:{{ $progressItem['color'] }};"></div>
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Avancement</span>
+                                        <div class="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+                                            <div class="h-full rounded-full transition-all" style="width:{{ $lotGeneralCompletionPercentage }}%;background:var(--gc-primary);"></div>
                                         </div>
                                     </div>
-                                @endforeach
+                                    <span class="shrink-0 rounded-xl px-3 py-2 text-xl font-bold tabular-nums" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $lotGeneralCompletionPercentage }}%</span>
+                                </div>
+
+                                @if (count($lotProgressItems) > 0)
+                                    <div class="mt-3 grid gap-2 {{ count($lotProgressItems) > 1 ? 'sm:grid-cols-2' : '' }}">
+                                        @foreach ($lotProgressItems as $progressItem)
+                                            <div class="rounded-xl border bg-white px-3 py-2" style="border-color:var(--gc-border);">
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <span class="inline-flex min-w-0 items-center gap-2 text-xs font-semibold" style="color:var(--gc-text);">
+                                                        <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{{ $progressItem['color'] }};"></span>
+                                                        <span class="truncate">{{ $progressItem['label'] }}</span>
+                                                    </span>
+                                                    <span class="shrink-0 text-xs font-semibold tabular-nums" style="color:var(--gc-text-soft);">{{ $progressItem['completed_count'] }}/{{ $progressItem['target_count'] }}</span>
+                                                </div>
+                                                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                                    <div class="h-full rounded-full transition-all" style="width:{{ $progressItem['percentage'] }}%;background:{{ $progressItem['color'] }};"></div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </div>
 
-                            <div class="flex justify-end">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
-                                    <path d="m6 9 6 6 6-6" />
-                                </svg>
+                            <div class="flex justify-end xl:justify-center">
+                                <span class="inline-flex h-10 w-10 items-center justify-center rounded-full border bg-white transition group-open:bg-slate-50" style="border-color:var(--gc-border);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="booking-lot-chevron h-5 w-5 transition-transform" style="color:var(--gc-text-soft);">
+                                        <path d="m6 9 6 6 6-6" />
+                                    </svg>
+                                </span>
                             </div>
                         </summary>
 
                         <div class="border-t" style="border-color:var(--gc-border);">
-                            <div class="grid grid-cols-1">
+                            <div class="border-b p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_160px_190px_190px_auto] xl:items-end">
+                                    <label class="block">
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
+                                        <input
+                                            type="search"
+                                            class="booking-lot-filter-search mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                                            placeholder="Client, site, téléphone, adresse, référence..."
+                                            data-lot-filter="search"
+                                        >
+                                    </label>
+
+                                    <label class="block">
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Département</span>
+                                        <select
+                                            class="booking-lot-filter-select mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                                            data-lot-filter="department"
+                                        >
+                                            <option value="">Tous</option>
+                                            @foreach ($lotFilterDepartments as $departmentCode)
+                                                <option value="{{ $departmentCode }}">{{ $departmentCode }}</option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+
+                                    <label class="block">
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">État</span>
+                                        <select
+                                            class="booking-lot-filter-select mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                                            data-lot-filter="status"
+                                        >
+                                            <option value="">Tous</option>
+                                            <option value="pending">À placer</option>
+                                            <option value="needs_review">À vérifier</option>
+                                            <option value="placed">RDV placé</option>
+                                            <option value="contact_processed">Contact traité</option>
+                                            <option value="missing_gps">GPS à corriger</option>
+                                        </select>
+                                    </label>
+
+                                    <label class="block">
+                                        <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Traitement</span>
+                                        <select
+                                            class="booking-lot-filter-select mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-900/10"
+                                            style="border-color:var(--gc-border);color:var(--gc-text);"
+                                            data-lot-filter="processing"
+                                        >
+                                            <option value="">Tous</option>
+                                            <option value="physical">Sur place</option>
+                                            <option value="contact">Téléphonique</option>
+                                        </select>
+                                    </label>
+
+                                    <button type="button" class="booking-lot-filter-reset gc-btn-soft justify-center">
+                                        Réinitialiser
+                                    </button>
+                                </div>
+                                <p class="booking-lot-filter-summary mt-3 text-xs" style="color:var(--gc-text-soft);"></p>
+                            </div>
+
+                            <div class="booking-lot-appointments-grid grid grid-cols-1">
                             @foreach ($lot['appointments'] as $appointment)
                                 @php
                                     $isPlaced = (bool) $appointment['is_placed'];
@@ -443,11 +536,38 @@
                                     if ($appointmentPostalCity !== '' && ! str_contains(mb_strtolower($appointmentFullAddress), mb_strtolower($appointmentPostalCity))) {
                                         $appointmentFullAddress .= ', '.$appointmentPostalCity;
                                     }
+
+                                    $lotAppointmentSearchText = trim(implode(' ', array_filter([
+                                        $appointment['customer_name'] ?? null,
+                                        $appointment['company_name'] ?? null,
+                                        $appointment['site_name'] ?? null,
+                                        $appointment['customer_phone'] ?? null,
+                                        $appointmentFullAddress,
+                                        $appointment['department_code'] ?? null,
+                                        $appointment['external_reference'] ?? null,
+                                        $appointment['row_number'] ?? null,
+                                        $appointment['service_label'] ?? null,
+                                    ])));
+                                    $lotAppointmentFilterStatus = match (true) {
+                                        $isPlaced => 'placed',
+                                        $isContactProcessed => 'contact_processed',
+                                        $appointment['status'] === \App\Models\LotAppointment::STATUS_NEEDS_REVIEW => 'needs_review',
+                                        ! $canSearch && ! $isPlaced && ! $isContactProcessed && $lot['supports_physical'] => 'missing_gps',
+                                        default => 'pending',
+                                    };
+                                    $lotAppointmentFilterProcessing = trim(implode(' ', array_filter([
+                                        ($isPlaced || $canSearch) ? 'physical' : null,
+                                        ($isContactProcessed || $canContact) ? 'contact' : null,
+                                    ])));
                                 @endphp
                                 <article
                                     class="lot-appointment-row grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(320px,auto)] xl:items-center"
                                     style="border-color:{{ $isPlaced ? '#bbf7d0' : ($isContactProcessed ? '#bae6fd' : 'var(--gc-border)') }};background:{{ $isPlaced ? '#f0fdf4' : ($isContactProcessed ? '#f0f9ff' : '#ffffff') }};"
                                     data-lot-appointment-row="{{ $appointment['id'] }}"
+                                    data-lot-filter-search="{{ str($lotAppointmentSearchText)->lower() }}"
+                                    data-lot-filter-department="{{ $appointment['department_code'] }}"
+                                    data-lot-filter-status="{{ $lotAppointmentFilterStatus }}"
+                                    data-lot-filter-processing="{{ $lotAppointmentFilterProcessing }}"
                                     data-default-processing-mode="{{ $lot['supports_physical'] ? 'physical' : 'contact' }}"
                                 >
                                     <div class="min-w-0">
@@ -570,6 +690,9 @@
                                     @endif
                                 </article>
                             @endforeach
+                            </div>
+                            <div class="booking-lot-filter-empty hidden p-6 text-center text-sm" style="color:var(--gc-text-soft);">
+                                Aucun dossier du lot ne correspond aux filtres.
                             </div>
                         </div>
                     </details>
@@ -5043,6 +5166,141 @@
         };
 
         bindBookingCrmCards();
+
+        const bookingLotFilterStoragePrefix = 'techcalendar.planner.book.lot_filters.';
+
+        const normalizeLotFilterValue = (value) => String(value || '').trim().toLowerCase();
+
+        const bookingLotFilterStorageKey = (lotId) => `${bookingLotFilterStoragePrefix}${lotId}`;
+
+        const readBookingLotFilters = (lotId) => {
+            try {
+                const parsed = JSON.parse(window.localStorage?.getItem(bookingLotFilterStorageKey(lotId)) || '{}');
+
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch (error) {
+                return {};
+            }
+        };
+
+        const writeBookingLotFilters = (lotId, filters) => {
+            try {
+                window.localStorage?.setItem(bookingLotFilterStorageKey(lotId), JSON.stringify(filters));
+            } catch (error) {
+                // Le stockage local améliore l'UX mais ne doit jamais bloquer la prise de RDV.
+            }
+        };
+
+        const clearBookingLotFilters = (lotId) => {
+            try {
+                window.localStorage?.removeItem(bookingLotFilterStorageKey(lotId));
+            } catch (error) {
+                // Rien à faire si le stockage local est indisponible.
+            }
+        };
+
+        const bookingLotFilterControls = (details) => ({
+            search: details.querySelector('[data-lot-filter="search"]'),
+            department: details.querySelector('[data-lot-filter="department"]'),
+            status: details.querySelector('[data-lot-filter="status"]'),
+            processing: details.querySelector('[data-lot-filter="processing"]'),
+        });
+
+        const currentBookingLotFilters = (details) => {
+            const controls = bookingLotFilterControls(details);
+
+            return {
+                search: normalizeLotFilterValue(controls.search?.value),
+                department: String(controls.department?.value || ''),
+                status: String(controls.status?.value || ''),
+                processing: String(controls.processing?.value || ''),
+            };
+        };
+
+        const applyBookingLotFilters = (details, { persist = true } = {}) => {
+            const lotId = details.dataset.bookingLotId;
+            const filters = currentBookingLotFilters(details);
+            const rows = Array.from(details.querySelectorAll('.lot-appointment-row'));
+            const summary = details.querySelector('.booking-lot-filter-summary');
+            const emptyState = details.querySelector('.booking-lot-filter-empty');
+            let visibleCount = 0;
+
+            rows.forEach((row) => {
+                const rowSearch = row.dataset.lotFilterSearch || '';
+                const rowDepartment = row.dataset.lotFilterDepartment || '';
+                const rowStatus = row.dataset.lotFilterStatus || '';
+                const rowProcessing = row.dataset.lotFilterProcessing || '';
+                const matches = (!filters.search || rowSearch.includes(filters.search))
+                    && (!filters.department || rowDepartment === filters.department)
+                    && (!filters.status || rowStatus === filters.status)
+                    && (!filters.processing || rowProcessing.split(' ').includes(filters.processing));
+
+                row.classList.toggle('hidden', !matches);
+
+                if (matches) {
+                    visibleCount++;
+                }
+            });
+
+            if (summary) {
+                summary.textContent = `${visibleCount} dossier(s) affiché(s) sur ${rows.length}.`;
+            }
+
+            emptyState?.classList.toggle('hidden', visibleCount > 0);
+
+            if (persist && lotId) {
+                writeBookingLotFilters(lotId, filters);
+            }
+        };
+
+        const hydrateBookingLotFilters = (details) => {
+            const lotId = details.dataset.bookingLotId;
+            const controls = bookingLotFilterControls(details);
+            const filters = lotId ? readBookingLotFilters(lotId) : {};
+
+            Object.entries(controls).forEach(([key, control]) => {
+                if (!control || filters[key] === undefined) {
+                    return;
+                }
+
+                control.value = String(filters[key] || '');
+            });
+
+            applyBookingLotFilters(details, { persist: false });
+        };
+
+        document.querySelectorAll('.booking-lot-details').forEach((details) => {
+            hydrateBookingLotFilters(details);
+
+            const lotId = details.dataset.bookingLotId;
+            const controls = bookingLotFilterControls(details);
+
+            Object.values(controls).forEach((control) => {
+                control?.addEventListener(control.matches('input') ? 'input' : 'change', () => {
+                    applyBookingLotFilters(details);
+                });
+            });
+
+            details.querySelector('.booking-lot-filter-reset')?.addEventListener('click', () => {
+                Object.values(controls).forEach((control) => {
+                    if (control) {
+                        control.value = '';
+                    }
+                });
+
+                if (lotId) {
+                    clearBookingLotFilters(lotId);
+                }
+
+                applyBookingLotFilters(details, { persist: false });
+            });
+
+            details.addEventListener('toggle', () => {
+                if (details.open) {
+                    applyBookingLotFilters(details, { persist: false });
+                }
+            });
+        });
 
         document.querySelectorAll('.lot-appointment-book-button').forEach((button) => {
             button.addEventListener('click', () => analyzeLotAppointment(button.dataset.lotAppointmentId));
