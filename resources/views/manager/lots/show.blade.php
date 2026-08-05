@@ -474,13 +474,14 @@
                             <th class="px-4 py-3 text-left font-semibold">Adresse</th>
                             <th class="px-4 py-3 text-left font-semibold">Traitement</th>
                             <th class="px-4 py-3 text-left font-semibold">Résultat</th>
+                            <th class="px-4 py-3 text-center font-semibold">Global +</th>
                             <th class="px-4 py-3 text-left font-semibold">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y" style="border-color:var(--gc-border);">
                         @if ($lot['appointments']->isEmpty())
                             <tr>
-                                <td colspan="7" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
+                                <td colspan="8" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
                                     Aucun dossier ne correspond aux filtres.
                                 </td>
                             </tr>
@@ -506,9 +507,19 @@
                                     $appointment['is_contact_processed'] => 'Contact traité',
                                     default => 'En attente',
                                 };
+                                $rowTone = match (true) {
+                                    $appointment['contact_satisfaction'] === false || $appointment['physical_satisfaction'] === false => 'unsatisfied',
+                                    $appointment['contact_satisfaction'] === true || $appointment['physical_satisfaction'] === true => 'satisfied',
+                                    default => null,
+                                };
                             @endphp
                             <tr
-                                @class(['lot-appointment-row transition hover:bg-[color:var(--gc-accent-soft)]' => true, 'opacity-60' => $appointment['excluded_from_lot_stats']])
+                                @class([
+                                    'lot-appointment-row transition hover:bg-[color:var(--gc-accent-soft)]' => true,
+                                    'bg-emerald-50/70' => $rowTone === 'satisfied',
+                                    'bg-rose-50/80' => $rowTone === 'unsatisfied',
+                                    'opacity-60' => $appointment['excluded_from_lot_stats'],
+                                ])
                                 data-lot-appointment-row
                                 data-lot-appointment-id="{{ $appointment['id'] }}"
                             >
@@ -552,6 +563,16 @@
                                             @endif
                                         </p>
                                     @endif
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-3 text-center">
+                                    <input
+                                        type="checkbox"
+                                        class="gc-check lot-appointment-global-plus-checkbox"
+                                        data-lot-appointment-id="{{ $appointment['id'] }}"
+                                        @checked($appointment['added_to_global_plus'])
+                                        @disabled(! $appointment['global_plus_update_url'])
+                                        aria-label="Ajouter le dossier {{ $clientLabel ?: 'client' }} au Global +"
+                                    />
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3">
                                     <button
@@ -624,17 +645,6 @@
                     </div>
 
                     <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
-                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#ffffff;">
-                            <input id="lot-physical-global-plus" type="checkbox" class="gc-check mt-1" />
-                            <span>
-                                <span class="block text-sm font-semibold" style="color:var(--gc-text);">Ajouter au Global +</span>
-                                <span class="block text-xs" style="color:var(--gc-text-soft);">Option portée par ce dossier uniquement.</span>
-                            </span>
-                        </label>
-                        <p id="lot-physical-global-plus-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
-                    </div>
-
-                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
                         <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
                         <p id="lot-physical-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 w-full justify-center">
@@ -677,17 +687,6 @@
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#f0f9ff;">
                     <h3 class="font-semibold" style="color:var(--gc-text);">Commentaire</h3>
                     <p id="lot-contact-detail-comment" class="mt-2 whitespace-pre-line text-sm" style="color:var(--gc-text);"></p>
-                </section>
-
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
-                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3" style="border-color:var(--gc-border);background:#ffffff;">
-                        <input id="lot-contact-global-plus" type="checkbox" class="gc-check mt-1" />
-                        <span>
-                            <span class="block text-sm font-semibold" style="color:var(--gc-text);">Ajouter au Global +</span>
-                            <span class="block text-xs" style="color:var(--gc-text-soft);">Option portée par ce dossier uniquement.</span>
-                        </span>
-                    </label>
-                    <p id="lot-contact-global-plus-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                 </section>
 
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
@@ -855,8 +854,6 @@
         const physicalStatsExclusionToggle = document.getElementById('lot-physical-stats-exclusion-toggle');
         const physicalResetProcessingStatus = document.getElementById('lot-physical-reset-processing-status');
         const physicalResetProcessingButton = document.getElementById('lot-physical-reset-processing');
-        const physicalGlobalPlusCheckbox = document.getElementById('lot-physical-global-plus');
-        const physicalGlobalPlusStatus = document.getElementById('lot-physical-global-plus-status');
 
         const contactModal = document.getElementById('lot-contact-detail-modal');
         const contactClose = document.getElementById('lot-contact-detail-close');
@@ -868,8 +865,6 @@
         const contactStatsExclusionToggle = document.getElementById('lot-contact-stats-exclusion-toggle');
         const contactResetProcessingStatus = document.getElementById('lot-contact-reset-processing-status');
         const contactResetProcessingButton = document.getElementById('lot-contact-reset-processing');
-        const contactGlobalPlusCheckbox = document.getElementById('lot-contact-global-plus');
-        const contactGlobalPlusStatus = document.getElementById('lot-contact-global-plus-status');
         let lotAppointmentTooltip = null;
 
         function escapeHtml(value) {
@@ -1092,30 +1087,17 @@
             physicalVisitsStatus.classList.remove('hidden');
         }
 
-        function configureGlobalPlusControls(appointment, checkboxElement, statusElement) {
-            if (!checkboxElement || !statusElement) {
-                return;
-            }
-
-            const addedToGlobalPlus = Boolean(appointment?.added_to_global_plus);
-
-            checkboxElement.checked = addedToGlobalPlus;
-            checkboxElement.disabled = !appointment?.global_plus_update_url;
-            statusElement.textContent = addedToGlobalPlus
-                ? 'Ce dossier est ajouté au Global +.'
-                : 'Ce dossier n’est pas ajouté au Global +.';
-            statusElement.style.color = addedToGlobalPlus ? '#b45309' : 'var(--gc-text-soft)';
+        function globalPlusCheckboxesFor(appointmentId) {
+            return document.querySelectorAll(`.lot-appointment-global-plus-checkbox[data-lot-appointment-id="${appointmentId}"]`);
         }
 
-        async function updateLotAppointmentGlobalPlus(appointment, checkboxElement, statusElement) {
-            if (!appointment?.global_plus_update_url || !checkboxElement || !statusElement) {
+        async function updateLotAppointmentGlobalPlus(appointment, checkboxElement) {
+            if (!appointment?.global_plus_update_url || !checkboxElement) {
                 return;
             }
 
             const requestedState = checkboxElement.checked;
             checkboxElement.disabled = true;
-            statusElement.textContent = 'Mise à jour du Global +...';
-            statusElement.style.color = 'var(--gc-text-soft)';
 
             try {
                 const response = await fetch(appointment.global_plus_update_url, {
@@ -1146,10 +1128,10 @@
                     currentContactLotAppointment = updatedAppointment;
                 }
 
-                checkboxElement.checked = Boolean(updatedAppointment.added_to_global_plus);
-                checkboxElement.disabled = !updatedAppointment.global_plus_update_url;
-                statusElement.textContent = payload.message || 'Global + mis à jour.';
-                statusElement.style.color = '#15803d';
+                globalPlusCheckboxesFor(updatedAppointment.id).forEach((checkbox) => {
+                    checkbox.checked = Boolean(updatedAppointment.added_to_global_plus);
+                    checkbox.disabled = !updatedAppointment.global_plus_update_url;
+                });
 
                 const currentGlobalPlusFilter = new URLSearchParams(window.location.search).get('appointment_global_plus');
 
@@ -1162,8 +1144,7 @@
             } catch (error) {
                 checkboxElement.checked = !requestedState;
                 checkboxElement.disabled = false;
-                statusElement.textContent = error.message || 'Mise à jour impossible.';
-                statusElement.style.color = '#be123c';
+                window.alert(error.message || 'Mise à jour Global + impossible.');
             }
         }
 
@@ -1313,7 +1294,6 @@
             }
 
             configureStatsExclusionControls(appointment, physicalStatsExclusionStatus, physicalStatsExclusionToggle);
-            configureGlobalPlusControls(appointment, physicalGlobalPlusCheckbox, physicalGlobalPlusStatus);
             configureResetProcessingControls(appointment, physicalResetProcessingStatus, physicalResetProcessingButton);
             openModal(physicalModal);
         }
@@ -1335,7 +1315,6 @@
             contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
 
             configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
-            configureGlobalPlusControls(appointment, contactGlobalPlusCheckbox, contactGlobalPlusStatus);
             configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);
             openModal(contactModal);
         }
@@ -1381,11 +1360,14 @@
         contactResetProcessingButton?.addEventListener('click', () => {
             resetLotAppointmentProcessing(currentContactLotAppointment, contactResetProcessingStatus, contactResetProcessingButton);
         });
-        physicalGlobalPlusCheckbox?.addEventListener('change', () => {
-            updateLotAppointmentGlobalPlus(currentPhysicalLotAppointment, physicalGlobalPlusCheckbox, physicalGlobalPlusStatus);
-        });
-        contactGlobalPlusCheckbox?.addEventListener('change', () => {
-            updateLotAppointmentGlobalPlus(currentContactLotAppointment, contactGlobalPlusCheckbox, contactGlobalPlusStatus);
+
+        document.querySelectorAll('.lot-appointment-global-plus-checkbox').forEach((checkbox) => {
+            checkbox.addEventListener('click', (event) => event.stopPropagation());
+            checkbox.addEventListener('change', () => {
+                const appointment = lotAppointmentDetails.get(String(checkbox.dataset.lotAppointmentId));
+
+                updateLotAppointmentGlobalPlus(appointment, checkbox);
+            });
         });
 
         physicalVisitsForm?.addEventListener('submit', async (event) => {

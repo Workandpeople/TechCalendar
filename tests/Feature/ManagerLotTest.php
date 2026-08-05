@@ -133,6 +133,9 @@ it('renders manager lots from database', function () {
         ->assertSee('Modifier le lot Lot Audit Juin')
         ->assertSee('Date de réception du lot')
         ->assertSee('name="appointment_global_plus"', false)
+        ->assertSee('lot-appointment-global-plus-checkbox', false)
+        ->assertDontSee('id="lot-physical-global-plus"', false)
+        ->assertDontSee('id="lot-contact-global-plus"', false)
         ->assertDontSee('data-lot-appointment-global-plus-badge', false);
 });
 
@@ -648,9 +651,17 @@ it('filters lot detail appointments dynamically', function () {
         ->get(route('manager.lots.show', [$lot, 'appointment_satisfaction' => 'unsatisfied']))
         ->assertOk()
         ->assertSee('Delta Non Satisfait')
+        ->assertSee('bg-rose-50/80', false)
         ->assertDontSee('Alpha Industrie')
         ->assertDontSee('Gamma Hors Stats')
         ->assertDontSee('Beta Contact');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('lot-appointment-global-plus-checkbox', false)
+        ->assertSee('bg-emerald-50/70', false)
+        ->assertSee('bg-rose-50/80', false);
 
     $this->actingAs($manager)
         ->get(route('manager.lots.show', [$lot, 'appointment_global_plus' => '1']))
