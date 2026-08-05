@@ -113,13 +113,24 @@
                         </div>
 
                         <div>
-                            <label class="gc-label" for="lot_detail_edit_status">Statut du lot</label>
-                            <select id="lot_detail_edit_status" name="status" class="gc-input" required>
-                                @foreach ($lotStatuses as $statusValue => $statusLabel)
-                                    <option value="{{ $statusValue }}" @selected($lot['status'] === $statusValue)>{{ $statusLabel }}</option>
-                                @endforeach
-                            </select>
+                            <span class="gc-label">Statut du lot</span>
+                            <div class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                                {{ $lot['status_label'] }}
+                            </div>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Statut recalculé automatiquement selon les objectifs de satisfaction.</p>
                         </div>
+
+                        @if ($lot['can_archive'])
+                            <div class="rounded-xl border p-4 md:col-span-2" style="border-color:#bbf7d0;background:#f0fdf4;">
+                                <label class="flex items-start gap-3 text-sm font-semibold" style="color:#166534;">
+                                    <input name="archive_lot" type="checkbox" value="1" class="gc-check mt-1">
+                                    <span>
+                                        Passer le lot en « Complet archivé »
+                                        <span class="mt-1 block text-xs font-normal" style="color:#15803d;">Disponible uniquement lorsque le lot est à facturer.</span>
+                                    </span>
+                                </label>
+                            </div>
+                        @endif
 
                         <div id="lot-detail-edit-single-sampling-wrap" class="hidden md:col-span-2">
                             <label class="gc-label" for="lot_detail_edit_sampling_percentage">% d'échantillonnage</label>

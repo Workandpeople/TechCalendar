@@ -43,9 +43,15 @@ class Lot extends Model
     public const TYPE_SAMPLE_CONTROL = 'echantillonage controle';
     public const TYPE_HYBRID_LOCATION_CONTACT = 'hybride sur lieu/contact';
 
-    public const STATUS_NOT_STARTED = 'a_commencer';
     public const STATUS_IN_PROGRESS = 'en_cours';
-    public const STATUS_COMPLETED = 'complet';
+    public const STATUS_TO_INVOICE = 'a_facturer';
+    public const STATUS_ARCHIVED = 'complet_archive';
+
+    public const LEGACY_STATUS_NOT_STARTED = 'a_commencer';
+    public const LEGACY_STATUS_COMPLETED = 'complet';
+
+    public const STATUS_NOT_STARTED = self::STATUS_IN_PROGRESS;
+    public const STATUS_COMPLETED = self::STATUS_ARCHIVED;
 
     /**
      * @return array<string, string>
@@ -67,10 +73,31 @@ class Lot extends Model
     public static function statuses(): array
     {
         return [
-            self::STATUS_NOT_STARTED => 'A commencer',
             self::STATUS_IN_PROGRESS => 'En cours',
-            self::STATUS_COMPLETED => 'Complet',
+            self::STATUS_TO_INVOICE => 'À facturer',
+            self::STATUS_ARCHIVED => 'Complet archivé',
         ];
+    }
+
+    public static function normalizedStatus(?string $status): string
+    {
+        return match ($status) {
+            self::STATUS_TO_INVOICE, self::LEGACY_STATUS_COMPLETED => self::STATUS_TO_INVOICE,
+            self::STATUS_ARCHIVED => self::STATUS_ARCHIVED,
+            default => self::STATUS_IN_PROGRESS,
+        };
+    }
+
+    public static function isArchivedStatus(?string $status): bool
+    {
+        return self::normalizedStatus($status) === self::STATUS_ARCHIVED;
+    }
+
+    public static function statusLabelFor(?string $status): string
+    {
+        $normalizedStatus = self::normalizedStatus($status);
+
+        return self::statuses()[$normalizedStatus] ?? self::statuses()[self::STATUS_IN_PROGRESS];
     }
 
     /**
@@ -167,7 +194,7 @@ class Lot extends Model
 
     public function statusLabel(): string
     {
-        return self::statuses()[$this->status] ?? self::statuses()[self::STATUS_NOT_STARTED];
+        return self::statusLabelFor($this->status);
     }
 
     public function creator(): BelongsTo

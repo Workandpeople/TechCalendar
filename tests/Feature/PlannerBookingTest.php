@@ -2654,7 +2654,7 @@ it('links a placed appointment back to its lot appointment', function () {
         ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PLACED)
         ->and($lotAppointment->source)->toBe(CoffracAppointmentService::SOURCE)
         ->and($lotAppointment->external_reference)->toBe('9101')
-        ->and($lot->status)->toBe(Lot::STATUS_COMPLETED);
+        ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
 
     $appointment = Appointment::query()->findOrFail((int) $lotAppointment->appointment_id);
     $externalRequest = ExternalAppointmentRequest::query()

@@ -18,6 +18,7 @@ use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\ExternalAppointmentSourceRegistry;
 use App\Services\LotAutoCompletionCalculator;
+use App\Services\LotStatusService;
 use App\Services\MapboxDrivingRouteService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -1150,7 +1151,7 @@ class PlannerBookingController extends Controller
                 $physicalProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPhysicalProcessedLotAppointment($appointment));
                 $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
                 $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
-                $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
+                $status = Lot::normalizedStatus($lot->status);
                 $statusMeta = $this->lotStatusMeta($status);
                 $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
                 $physicalDefaultTarget = $lot->supportsPhysicalProcessing()
@@ -1170,7 +1171,7 @@ class PlannerBookingController extends Controller
                     'service_label' => $lot->service
                         ? $lot->service->type.' - '.$lot->service->name
                         : null,
-                    'status_label' => Lot::statuses()[$status] ?? Lot::statuses()[Lot::STATUS_NOT_STARTED],
+                    'status_label' => Lot::statusLabelFor($status),
                     'status_color' => $statusMeta['color'],
                     'status_background' => $statusMeta['background'],
                     'imported_at' => $lot->imported_at,
@@ -1261,10 +1262,10 @@ class PlannerBookingController extends Controller
      */
     private function lotStatusMeta(string $status): array
     {
-        return match ($status) {
-            Lot::STATUS_IN_PROGRESS => ['color' => '#1d4ed8', 'background' => '#dbeafe'],
-            Lot::STATUS_COMPLETED => ['color' => '#15803d', 'background' => '#dcfce7'],
-            default => ['color' => '#b45309', 'background' => '#fef3c7'],
+        return match (Lot::normalizedStatus($status)) {
+            Lot::STATUS_TO_INVOICE => ['color' => '#b45309', 'background' => '#fef3c7'],
+            Lot::STATUS_ARCHIVED => ['color' => '#15803d', 'background' => '#dcfce7'],
+            default => ['color' => '#1d4ed8', 'background' => '#dbeafe'],
         };
     }
 
@@ -1473,33 +1474,7 @@ class PlannerBookingController extends Controller
 
     private function refreshLotStatus(?Lot $lot): void
     {
-        if (! $lot) {
-            return;
-        }
-
-        $baseQuery = $lot->appointments()
-            ->where('excluded_from_lot_stats', false);
-
-        $totalAppointments = (clone $baseQuery)->count();
-        $completedAppointments = (clone $baseQuery)
-            ->where(function ($query): void {
-                $query
-                    ->whereNotNull('appointment_id')
-                    ->orWhere('status', LotAppointment::STATUS_PLACED)
-                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED)
-                    ->orWhereNotNull('contact_satisfaction');
-            })
-            ->count();
-
-        $status = match (true) {
-            $totalAppointments > 0 && $completedAppointments >= $totalAppointments => Lot::STATUS_COMPLETED,
-            $completedAppointments > 0 => Lot::STATUS_IN_PROGRESS,
-            default => Lot::STATUS_NOT_STARTED,
-        };
-
-        if ($lot->status !== $status) {
-            $lot->update(['status' => $status]);
-        }
+        app(LotStatusService::class)->refresh($lot);
     }
 
     private function forgetRouteMetricsForAppointmentChange(

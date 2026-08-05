@@ -16,6 +16,7 @@ use App\Services\LotAppointmentUpdateService;
 use App\Services\LotImportConfirmationService;
 use App\Services\LotImportPreviewService;
 use App\Services\LotImportPreviewRowUpdateService;
+use App\Services\LotStatusService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -207,11 +208,11 @@ class ManagerLotController extends Controller
 
         $payload = $this->validatedLotPayload($request);
         $samplingPayload = $this->normalizedSamplingPayload($payload);
+        $currentStatus = Lot::normalizedStatus($lot->status);
 
         $lot->fill([
             'name' => trim((string) $payload['name']),
             'type' => $payload['type'],
-            'status' => $payload['status'],
             'sampling_percentage' => $samplingPayload['sampling_percentage'],
             'physical_sampling_percentage' => $samplingPayload['physical_sampling_percentage'],
             'contact_sampling_percentage' => $samplingPayload['contact_sampling_percentage'],
@@ -222,6 +223,12 @@ class ManagerLotController extends Controller
         ])->save();
 
         $this->syncOpenLotAppointmentsService($lot, (int) $payload['service_id']);
+
+        if ($currentStatus === Lot::STATUS_TO_INVOICE && (bool) ($payload['archive_lot'] ?? false)) {
+            $lot->update(['status' => Lot::STATUS_ARCHIVED]);
+        } else {
+            $this->refreshLotStatus($lot->fresh('appointments'));
+        }
 
         return back()->with('status', sprintf('Lot "%s" mis à jour.', $lot->name));
     }
@@ -243,6 +250,8 @@ class ManagerLotController extends Controller
                 ? $this->nullableIntegerPayloadValue($payload, 'contact_appointment_target_count')
                 : null,
         ])->save();
+
+        $this->refreshLotStatus($lot->fresh('appointments'));
 
         $message = sprintf('Objectifs de RDV du lot "%s" mis à jour.', $lot->name);
 
@@ -690,7 +699,7 @@ class ManagerLotController extends Controller
             'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
-            'status' => ['required', 'string', Rule::in(array_keys(Lot::statuses()))],
+            'archive_lot' => ['nullable', 'boolean'],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
                 'nullable',
@@ -968,7 +977,7 @@ class ManagerLotController extends Controller
         $placeableAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isPlaceableLotAppointment($appointment));
         $contactProcessedAppointments = $statsAppointments->filter(fn (LotAppointment $appointment): bool => $this->isContactProcessedLotAppointment($appointment));
         $processedAppointments = $appointments->filter(fn (LotAppointment $appointment): bool => $this->isPhysicalProcessedLotAppointment($appointment) || $this->isContactProcessedLotAppointment($appointment));
-        $status = $lot->status ?: Lot::STATUS_NOT_STARTED;
+        $status = Lot::normalizedStatus($lot->status);
         $statusMeta = $this->statusMeta($status);
         $autoCompletionData = $autoCompletion->calculate($lot, $statsAppointments);
         $appointmentTargets = $this->lotAppointmentTargets(
@@ -993,9 +1002,10 @@ class ManagerLotController extends Controller
                 ? $lot->service->type.' - '.$lot->service->name
                 : null,
             'status' => $status,
-            'status_label' => Lot::statuses()[$status] ?? Lot::statuses()[Lot::STATUS_NOT_STARTED],
+            'status_label' => Lot::statusLabelFor($status),
             'status_color' => $statusMeta['color'],
             'status_background' => $statusMeta['background'],
+            'can_archive' => $status === Lot::STATUS_TO_INVOICE,
             'sampling_percentage' => $lot->sampling_percentage,
             'physical_sampling_percentage' => $lot->physical_sampling_percentage,
             'contact_sampling_percentage' => $lot->contact_sampling_percentage,
@@ -1331,10 +1341,10 @@ class ManagerLotController extends Controller
      */
     private function statusMeta(string $status): array
     {
-        return match ($status) {
-            Lot::STATUS_IN_PROGRESS => ['color' => '#1d4ed8', 'background' => '#dbeafe'],
-            Lot::STATUS_COMPLETED => ['color' => '#15803d', 'background' => '#dcfce7'],
-            default => ['color' => '#b45309', 'background' => '#fef3c7'],
+        return match (Lot::normalizedStatus($status)) {
+            Lot::STATUS_TO_INVOICE => ['color' => '#b45309', 'background' => '#fef3c7'],
+            Lot::STATUS_ARCHIVED => ['color' => '#15803d', 'background' => '#dcfce7'],
+            default => ['color' => '#1d4ed8', 'background' => '#dbeafe'],
         };
     }
 
@@ -1347,9 +1357,9 @@ class ManagerLotController extends Controller
         $total = max(1, $lots->count());
 
         return collect([
-            Lot::STATUS_NOT_STARTED => 'Lots non commencés',
             Lot::STATUS_IN_PROGRESS => 'Lots en cours',
-            Lot::STATUS_COMPLETED => 'Lots terminés',
+            Lot::STATUS_TO_INVOICE => 'Lots à facturer',
+            Lot::STATUS_ARCHIVED => 'Lots archivés',
         ])
             ->map(function (string $label, string $status) use ($lots, $total): array {
                 $count = $lots->where('status', $status)->count();
@@ -1454,33 +1464,7 @@ class ManagerLotController extends Controller
 
     private function refreshLotStatus(?Lot $lot): void
     {
-        if (! $lot) {
-            return;
-        }
-
-        $baseQuery = $lot->appointments()
-            ->where('excluded_from_lot_stats', false);
-
-        $totalAppointments = (clone $baseQuery)->count();
-        $completedAppointments = (clone $baseQuery)
-            ->where(function ($query): void {
-                $query
-                    ->whereNotNull('appointment_id')
-                    ->orWhere('status', LotAppointment::STATUS_PLACED)
-                    ->orWhere('status', LotAppointment::STATUS_CONTACT_PROCESSED)
-                    ->orWhereNotNull('contact_satisfaction');
-            })
-            ->count();
-
-        $status = match (true) {
-            $totalAppointments > 0 && $completedAppointments >= $totalAppointments => Lot::STATUS_COMPLETED,
-            $completedAppointments > 0 => Lot::STATUS_IN_PROGRESS,
-            default => Lot::STATUS_NOT_STARTED,
-        };
-
-        if ($lot->status !== $status) {
-            $lot->update(['status' => $status]);
-        }
+        app(LotStatusService::class)->refresh($lot);
     }
 
     private function trackingUrlForLotAppointment(LotAppointment $lotAppointment, string $routeName): ?string

@@ -103,9 +103,9 @@ it('renders manager lots from database', function () {
         ->assertSee('audit-juin.xlsx')
         ->assertSee('Voir le détail')
         ->assertSee(route('manager.lots.show', $lot), false)
-        ->assertSee('Lots non commencés')
         ->assertSee('Lots en cours')
-        ->assertSee('Lots terminés')
+        ->assertSee('Lots à facturer')
+        ->assertSee('Lots archivés')
         ->assertSee('Modifier le lot')
         ->assertSee('Commentaires du lot')
         ->assertSee('Commentaires internes du lot.')
@@ -197,6 +197,53 @@ it('updates a lot from the manager lot action modal', function () {
         'service_name' => 'Audit qualité site client',
         'duration_minutes' => 120,
     ]);
+});
+
+it('archives an invoice-ready lot from the manager lot edit modal', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot à facturer',
+        'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
+        'service_id' => $service->id,
+        'status' => Lot::STATUS_TO_INVOICE,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'customer_name' => 'Client terminé',
+        'customer_phone' => '0600000011',
+        'address' => '1 Rue Test',
+        'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_CONTACT,
+        'contact_satisfaction' => true,
+        'contact_comment' => 'Client satisfait',
+        'contact_processed_at' => now(),
+        'contact_processed_by' => $manager->id,
+    ]);
+
+    $this->actingAs($manager)
+        ->from(route('manager.lots'))
+        ->patch(route('manager.lots.update', $lot), [
+            'name' => 'Lot à facturer',
+            'delegataire' => 'Oblige Test',
+            'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
+            'service_id' => $service->id,
+            'archive_lot' => '1',
+        ])
+        ->assertRedirect(route('manager.lots'))
+        ->assertSessionHasNoErrors();
+
+    expect($lot->refresh()->status)->toBe(Lot::STATUS_ARCHIVED);
 });
 
 it('deletes an unplaced lot and its original file', function () {
@@ -940,6 +987,8 @@ it('excludes and reintegrates a lot appointment from lot statistics', function (
         'address' => '10 Rue de la Barre, 69002 Lyon',
         'department_code' => '69',
         'status' => LotAppointment::STATUS_PLACED,
+        'physical_satisfaction' => true,
+        'physical_satisfaction_synced_at' => now(),
     ]);
     $pendingAppointment = LotAppointment::query()->create([
         'lot_id' => $lot->id,
@@ -962,7 +1011,7 @@ it('excludes and reintegrates a lot appointment from lot statistics', function (
 
     expect($pendingAppointment->excluded_from_lot_stats)->toBeTrue()
         ->and($pendingAppointment->excluded_from_lot_stats_by)->toBe($manager->id)
-        ->and($lot->status)->toBe(Lot::STATUS_COMPLETED);
+        ->and($lot->status)->toBe(Lot::STATUS_TO_INVOICE);
 
     $this->actingAs($manager)
         ->patchJson(route('manager.lots.appointments.stats-exclusion.update', $pendingAppointment), [
@@ -1030,7 +1079,7 @@ it('resets a processed contact lot appointment to not placed', function () {
     $lot = Lot::query()->create([
         'name' => 'Lot contact à reprendre',
         'type' => Lot::TYPE_SAMPLE_CONTACT_CONTROL,
-        'status' => Lot::STATUS_COMPLETED,
+        'status' => Lot::STATUS_TO_INVOICE,
         'created_by' => $manager->id,
     ]);
     $lotAppointment = LotAppointment::query()->create([
@@ -1067,7 +1116,7 @@ it('resets a processed contact lot appointment to not placed', function () {
         ->and($lotAppointment->contact_comment)->toBeNull()
         ->and($lotAppointment->contact_processed_at)->toBeNull()
         ->and($lotAppointment->contact_processed_by)->toBeNull()
-        ->and($lot->status)->toBe(Lot::STATUS_NOT_STARTED);
+        ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
 });
 
 it('resets a placed physical lot appointment and removes the local calendar appointment', function () {
@@ -1102,7 +1151,7 @@ it('resets a placed physical lot appointment and removes the local calendar appo
     $lot = Lot::query()->create([
         'name' => 'Lot physique à reprendre',
         'type' => Lot::TYPE_FULL_CONTROL,
-        'status' => Lot::STATUS_COMPLETED,
+        'status' => Lot::STATUS_TO_INVOICE,
         'created_by' => $manager->id,
     ]);
     $lotAppointment = LotAppointment::query()->create([
@@ -1140,7 +1189,7 @@ it('resets a placed physical lot appointment and removes the local calendar appo
         ->and($lotAppointment->physical_satisfaction)->toBeNull()
         ->and($lotAppointment->physical_satisfaction_synced_at)->toBeNull()
         ->and($lotAppointment->unsuccessful_visits_count)->toBe(0)
-        ->and($lot->status)->toBe(Lot::STATUS_NOT_STARTED);
+        ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
 
     $this->assertSoftDeleted('appointments', [
         'id' => $calendarAppointment->id,
@@ -1217,9 +1266,9 @@ it('renders lot type select in the import form', function () {
         ->assertSee("% d'échantillonnage", false)
         ->assertSee('Échantillonnage contrôle contact')
         ->assertSee('100% contrôle')
-        ->assertSee('Lots non commencés')
         ->assertSee('Lots en cours')
-        ->assertSee('Lots terminés')
+        ->assertSee('Lots à facturer')
+        ->assertSee('Lots archivés')
         ->assertDontSee('RDV placés')
         ->assertDontSee('RDV total')
         ->assertDontSee('Statut service');

@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\ExternalServiceAlias;
+use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\User;
@@ -1709,12 +1710,28 @@ class CoffracAppointmentService
             return;
         }
 
+        $lotIds = LotAppointment::query()
+            ->where('appointment_id', $request->appointment_id)
+            ->pluck('lot_id')
+            ->filter()
+            ->unique()
+            ->values();
+
         LotAppointment::query()
             ->where('appointment_id', $request->appointment_id)
             ->update([
                 'physical_satisfaction' => $satisfaction,
                 'physical_satisfaction_synced_at' => now(),
             ]);
+
+        if ($lotIds->isNotEmpty()) {
+            $statusService = app(LotStatusService::class);
+
+            Lot::query()
+                ->whereIn('id', $lotIds)
+                ->get()
+                ->each(fn (Lot $lot): mixed => $statusService->refresh($lot));
+        }
     }
 
     /**

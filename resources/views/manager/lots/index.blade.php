@@ -82,6 +82,8 @@
                         'service_id' => $lot['service_id'],
                         'service_label' => $lot['service_label'],
                         'status' => $lot['status'],
+                        'status_label' => $lot['status_label'],
+                        'can_archive' => $lot['can_archive'],
                         'sampling_percentage' => $lot['sampling_percentage'],
                         'physical_sampling_percentage' => $lot['physical_sampling_percentage'],
                         'contact_sampling_percentage' => $lot['contact_sampling_percentage'],
@@ -344,12 +346,18 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="gc-label" for="lot_action_status">Statut du lot</label>
-                                <select id="lot_action_status" name="status" class="gc-input" required>
-                                    @foreach ($lotStatuses as $statusValue => $statusLabel)
-                                        <option value="{{ $statusValue }}">{{ $statusLabel }}</option>
-                                    @endforeach
-                                </select>
+                                <span class="gc-label">Statut du lot</span>
+                                <div id="lot_action_status_text" class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);"></div>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Statut recalculé automatiquement selon les objectifs de satisfaction.</p>
+                            </div>
+                            <div id="lot-action-archive-section" class="hidden rounded-xl border p-4 md:col-span-2" style="border-color:#bbf7d0;background:#f0fdf4;">
+                                <label class="flex items-start gap-3 text-sm font-semibold" style="color:#166534;">
+                                    <input id="lot_action_archive_lot" name="archive_lot" type="checkbox" value="1" class="gc-check mt-1">
+                                    <span>
+                                        Passer le lot en « Complet archivé »
+                                        <span class="mt-1 block text-xs font-normal" style="color:#15803d;">Disponible uniquement lorsque le lot est à facturer.</span>
+                                    </span>
+                                </label>
                             </div>
                             <div id="lot-action-single-sampling-wrap" class="hidden md:col-span-2">
                                 <label class="gc-label" for="lot_action_sampling_percentage">% d'échantillonnage</label>
@@ -689,7 +697,9 @@
         const lotActionName = document.getElementById('lot_action_name');
         const lotActionType = document.getElementById('lot_action_type');
         const lotActionServiceId = document.getElementById('lot_action_service_id');
-        const lotActionStatus = document.getElementById('lot_action_status');
+        const lotActionStatusText = document.getElementById('lot_action_status_text');
+        const lotActionArchiveSection = document.getElementById('lot-action-archive-section');
+        const lotActionArchiveCheckbox = document.getElementById('lot_action_archive_lot');
         const lotActionSingleSamplingWrap = document.getElementById('lot-action-single-sampling-wrap');
         const lotActionPhysicalSamplingWrap = document.getElementById('lot-action-physical-sampling-wrap');
         const lotActionContactSamplingWrap = document.getElementById('lot-action-contact-sampling-wrap');
@@ -917,7 +927,9 @@
             lotActionName.value = lot.title || '';
             lotActionType.value = lot.type || '';
             if (lotActionServiceId) lotActionServiceId.value = lot.service_id || '';
-            lotActionStatus.value = lot.status || '';
+            if (lotActionStatusText) lotActionStatusText.textContent = lot.status_label || lot.status || 'En cours';
+            if (lotActionArchiveCheckbox) lotActionArchiveCheckbox.checked = false;
+            lotActionArchiveSection?.classList.toggle('hidden', !lot.can_archive);
             lotActionSamplingPercentage.value = lot.sampling_percentage ?? '';
             if (lotActionPhysicalSamplingPercentage) lotActionPhysicalSamplingPercentage.value = lot.physical_sampling_percentage ?? '';
             if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
