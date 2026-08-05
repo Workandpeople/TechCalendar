@@ -18,7 +18,9 @@ class LotAutoCompletionCalculator
      *     target_count:int,
      *     total_count:int,
      *     satisfied_count:int,
+     *     raw_satisfied_count:int,
      *     unsatisfied_count:int,
+     *     raw_unsatisfied_count:int,
      *     satisfaction_answered_count:int,
      *     satisfaction_remaining_count:int,
      *     satisfaction_percentage:int,
@@ -84,6 +86,8 @@ class LotAutoCompletionCalculator
         if ($channels->isNotEmpty()) {
             $targetCount = (int) $channels->sum('target_count');
             $completedCount = min((int) $channels->sum('completed_count'), $targetCount);
+            $rawSatisfiedCount = (int) $channels->sum('raw_satisfied_count');
+            $rawUnsatisfiedCount = (int) $channels->sum('raw_unsatisfied_count');
             $satisfiedCount = min((int) $channels->sum('satisfied_count'), $targetCount);
             $unsatisfiedCount = min((int) $channels->sum('unsatisfied_count'), max(0, $targetCount - $satisfiedCount));
             $dissatisfactionProcessedCount = (int) $channels->sum('dissatisfaction_processed_count');
@@ -105,6 +109,8 @@ class LotAutoCompletionCalculator
             $completedCount = min($placedCount, $targetCount);
             $satisfiedCount = 0;
             $unsatisfiedCount = 0;
+            $rawSatisfiedCount = 0;
+            $rawUnsatisfiedCount = 0;
             $dissatisfactionProcessedCount = $placedCount;
             $dissatisfiedCount = 0;
             $percentage = $targetCount > 0
@@ -123,7 +129,9 @@ class LotAutoCompletionCalculator
             'target_count' => $targetCount,
             'total_count' => $totalCount,
             'satisfied_count' => $satisfiedCount,
+            'raw_satisfied_count' => $rawSatisfiedCount,
             'unsatisfied_count' => $unsatisfiedCount,
+            'raw_unsatisfied_count' => $rawUnsatisfiedCount,
             'satisfaction_answered_count' => $satisfactionAnsweredCount,
             'satisfaction_remaining_count' => max(0, $targetCount - $satisfactionAnsweredCount),
             'satisfaction_percentage' => $targetCount > 0
@@ -176,7 +184,9 @@ class LotAutoCompletionCalculator
      *     target_count:int,
      *     total_count:int,
      *     satisfied_count:int,
+     *     raw_satisfied_count:int,
      *     unsatisfied_count:int,
+     *     raw_unsatisfied_count:int,
      *     satisfaction_answered_count:int,
      *     satisfaction_remaining_count:int,
      *     satisfaction_percentage:int,
@@ -224,6 +234,7 @@ class LotAutoCompletionCalculator
             }
         }
 
+        $rawSatisfiedCount = $satisfiedCount;
         $satisfiedCount = min($satisfiedCount, $targetCount);
         $unsatisfiedCount = min($unsatisfiedCount, max(0, $targetCount - $satisfiedCount));
         $satisfactionAnsweredCount = min($satisfiedCount + $unsatisfiedCount, $targetCount);
@@ -242,7 +253,9 @@ class LotAutoCompletionCalculator
             'target_count' => $targetCount,
             'total_count' => $totalCount,
             'satisfied_count' => $satisfiedCount,
+            'raw_satisfied_count' => $rawSatisfiedCount,
             'unsatisfied_count' => $unsatisfiedCount,
+            'raw_unsatisfied_count' => $rawUnsatisfiedCount,
             'satisfaction_answered_count' => $satisfactionAnsweredCount,
             'satisfaction_remaining_count' => max(0, $targetCount - $satisfactionAnsweredCount),
             'satisfaction_percentage' => $targetCount > 0

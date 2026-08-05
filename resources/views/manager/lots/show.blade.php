@@ -297,7 +297,7 @@
                             {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
                         </p>
                         <p class="mt-1 text-xs font-semibold" style="color:#166534;">
-                            Cible satisfaction : {{ $chart['target_count'] }} dossier(s)
+                            Cible satisfaction : {{ $chart['target_percentage_display'] }}
                         </p>
                         @if (($chart['unsatisfied_count'] ?? 0) > 0)
                             <p class="mt-1 text-xs" style="color:#991b1b;">{{ $chart['unsatisfied_count'] }} non satisfaisant(s)</p>
@@ -334,15 +334,10 @@
                             <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $chart['label'] ?? 'Lot' }}</p>
                             <h2 class="mt-1 text-lg font-semibold" style="color:var(--gc-text);">{{ $chart['detail'] ?? 'Suivi du lot' }}</h2>
                             <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                                {{ $satisfactionAnsweredCount }} réponse(s) de satisfaction
-                                @if (! empty($chart['is_sampling']))
-                                    sur un objectif de {{ $targetCount }}.
-                                @else
-                                    sur {{ $chart['total_count'] ?? $lot['appointments_count'] }}.
-                                @endif
+                                {{ $satisfactionAnsweredCount }} réponse(s) de satisfaction sur {{ $chart['total_count'] ?? $lot['appointments_count'] }} dossier(s) du lot.
                             </p>
                             <p class="mt-1 text-sm font-semibold" style="color:#166534;">
-                                Cible satisfaction : {{ $targetCount }} dossier(s)
+                                Cible satisfaction : {{ $chart['target_percentage_display'] }} · objectif {{ $targetCount }} dossier(s)
                             </p>
                             <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                                 <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#dcfce7;color:#166534;">

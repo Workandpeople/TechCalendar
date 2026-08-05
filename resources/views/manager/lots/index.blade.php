@@ -201,7 +201,7 @@
                                                 {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
                                             </p>
                                             <p class="mt-1 text-[0.68rem] font-semibold" style="color:#166534;">
-                                                Cible satisfaction : {{ $chart['target_count'] }} dossier(s)
+                                                Cible satisfaction : {{ $chart['target_percentage_display'] }}
                                             </p>
                                         </div>
                                     @endforeach
@@ -240,7 +240,7 @@
                                         </p>
                                         @unless ($isDissatisfactionChart)
                                             <p class="mt-1 text-[0.68rem] font-semibold" style="color:#166534;">
-                                                Cible satisfaction : {{ $chart['target_count'] }} dossier(s)
+                                                Cible satisfaction : {{ $chart['target_percentage_display'] }}
                                             </p>
                                         @endunless
                                     </div>

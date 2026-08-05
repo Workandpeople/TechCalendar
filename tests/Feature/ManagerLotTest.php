@@ -748,21 +748,21 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->get(route('manager.lots.show', $lot))
         ->assertOk()
         ->assertSee('Satisfaction générale')
-        ->assertSee('50,00%')
+        ->assertSee('25,00%')
         ->assertDontSee('Taux de satisfaction total')
         ->assertSee('Insatisfaction contacts')
         ->assertSee('1 / 2 dossier(s) traité(s)')
         ->assertSee('1 / 2 satisfaisant(s)')
-        ->assertSee('Cible satisfaction : 2')
-        ->assertSee('2 réponse(s) de satisfaction')
+        ->assertSee('Cible satisfaction : 50,00%')
+        ->assertSee('2 réponse(s) de satisfaction sur 4 dossier(s) du lot.')
         ->assertSee('1 satisfaisant(s)')
         ->assertSee('1 non satisfaisant(s)')
         ->assertSee('data-lot-appointment-row', false)
         ->assertSee('Commentaires du dossier')
         ->assertSee('Commentaire g\\u00e9n\\u00e9ral du dossier', false)
         ->assertSee('Commentaire de qualification contact', false)
-        ->assertSee('--satisfied:50', false)
-        ->assertSee('--answered:100', false);
+        ->assertSee('--satisfied:25', false)
+        ->assertSee('--answered:50', false);
 });
 
 it('keeps hybrid lot physical and contact appointment targets separated', function () {
@@ -797,7 +797,7 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
             },
             // Ces valeurs croisées protègent contre le mélange des canaux dans les widgets.
             'contact_satisfaction' => $index === 1 ? true : ($index === 2 ? false : null),
-            'physical_satisfaction' => $index === 2 ? true : null,
+            'physical_satisfaction' => $index === 1 ? true : ($index === 2 ? true : null),
         ]);
     }
 
@@ -830,8 +830,8 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
         ->assertSee('Insatisfaction RDV physiques')
         ->assertSee('Insatisfaction contacts')
         ->assertSee('100,00%')
-        ->assertSee('Cible satisfaction : 2')
-        ->assertSee('Cible satisfaction : 3');
+        ->assertSee('Cible satisfaction : 20,00%')
+        ->assertSee('Cible satisfaction : 30,00%');
 });
 
 it('updates manual appointment targets without changing satisfaction targets', function () {
@@ -892,8 +892,9 @@ it('updates manual appointment targets without changing satisfaction targets', f
         ->assertSee('1 / 2')
         ->assertSee('objectif manuel')
         ->assertSee('1 réponse(s) de satisfaction')
-        ->assertSee('sur un objectif de 2.')
-        ->assertSee('sur un objectif de 1.');
+        ->assertSee('sur 4 dossier(s) du lot.')
+        ->assertSee('Cible satisfaction : 50,00% · objectif 2 dossier(s)')
+        ->assertSee('Cible satisfaction : 25,00% · objectif 1 dossier(s)');
 });
 
 it('excludes and reintegrates a lot appointment from lot statistics', function () {

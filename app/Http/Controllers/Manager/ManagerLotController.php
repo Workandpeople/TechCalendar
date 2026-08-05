@@ -1080,15 +1080,20 @@ class ManagerLotController extends Controller
     {
         $targetCount = max(0, (int) ($completion['target_count'] ?? $completion['total_count'] ?? 0));
         $totalCount = max(0, (int) ($completion['total_count'] ?? $targetCount));
-        $satisfiedCount = max(0, (int) ($completion['satisfied_count'] ?? 0));
-        $unsatisfiedCount = max(0, (int) ($completion['unsatisfied_count'] ?? 0));
-        $answeredCount = min($targetCount, $satisfiedCount + $unsatisfiedCount);
-        $percentage = $targetCount > 0
-            ? min(100, round(($satisfiedCount / $targetCount) * 100, 2))
+        $satisfiedCount = max(0, (int) ($completion['raw_satisfied_count'] ?? $completion['satisfied_count'] ?? 0));
+        $unsatisfiedCount = max(0, (int) ($completion['raw_unsatisfied_count'] ?? $completion['unsatisfied_count'] ?? 0));
+        $answeredCount = min($totalCount, $satisfiedCount + $unsatisfiedCount);
+        $answeredForTarget = min($targetCount, $satisfiedCount + $unsatisfiedCount);
+        $percentage = $totalCount > 0
+            ? min(100, round(($satisfiedCount / $totalCount) * 100, 2))
             : 0;
-        $answeredPercentage = $targetCount > 0
-            ? min(100, round(($answeredCount / $targetCount) * 100, 2))
+        $answeredPercentage = $totalCount > 0
+            ? min(100, round(($answeredCount / $totalCount) * 100, 2))
             : 0;
+        $isSampling = (bool) ($completion['is_sampling'] ?? false);
+        $targetPercentage = $isSampling
+            ? (is_numeric($completion['sampling_percentage'] ?? null) ? max(0, min(100, (float) $completion['sampling_percentage'])) : null)
+            : 100.0;
 
         return [
             'key' => $key,
@@ -1099,14 +1104,18 @@ class ManagerLotController extends Controller
             'answered_percentage' => $answeredPercentage,
             'satisfied_share' => $percentage,
             'answered_share' => $answeredPercentage,
-            'satisfied_count' => min($satisfiedCount, $targetCount),
-            'unsatisfied_count' => min($unsatisfiedCount, max(0, $targetCount - $satisfiedCount)),
+            'satisfied_count' => $satisfiedCount,
+            'unsatisfied_count' => $unsatisfiedCount,
             'answered_count' => $answeredCount,
-            'remaining_count' => max(0, $targetCount - $answeredCount),
+            'remaining_count' => max(0, $targetCount - $answeredForTarget),
             'target_count' => $targetCount,
+            'target_percentage' => $targetPercentage,
+            'target_percentage_display' => $targetPercentage === null
+                ? 'non définie'
+                : number_format($targetPercentage, 2, ',', ' ').'%',
             'total_count' => $totalCount,
             'detail' => $completion['detail'] ?? 'Suivi de la satisfaction',
-            'is_sampling' => (bool) ($completion['is_sampling'] ?? false),
+            'is_sampling' => $isSampling,
         ];
     }
 
