@@ -1016,6 +1016,7 @@ class ManagerLotController extends Controller
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
             'satisfaction_charts' => $this->lotSatisfactionCharts($lot, $autoCompletionData),
+            'dissatisfaction_charts' => $this->lotDissatisfactionCharts($lot, $autoCompletionData),
             'dissatisfaction_chart' => $this->lotDissatisfactionChart($autoCompletionData),
             'appointment_targets' => $appointmentTargets,
             'appointments' => $displayAppointments ?? $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
@@ -1106,6 +1107,59 @@ class ManagerLotController extends Controller
             'total_count' => $totalCount,
             'detail' => $completion['detail'] ?? 'Suivi de la satisfaction',
             'is_sampling' => (bool) ($completion['is_sampling'] ?? false),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $autoCompletionData
+     * @return array<int, array<string, mixed>>
+     */
+    private function lotDissatisfactionCharts(Lot $lot, array $autoCompletionData): array
+    {
+        $charts = [];
+
+        if ($lot->supportsPhysicalProcessing() && is_array($autoCompletionData['physical'] ?? null)) {
+            $charts[] = $this->lotDissatisfactionChartPayload(
+                key: 'physical_dissatisfaction',
+                label: 'Insatisfaction RDV physiques',
+                completion: $autoCompletionData['physical'],
+            );
+        }
+
+        if ($lot->supportsContactProcessing() && is_array($autoCompletionData['contact'] ?? null)) {
+            $charts[] = $this->lotDissatisfactionChartPayload(
+                key: 'contact_dissatisfaction',
+                label: 'Insatisfaction contacts',
+                completion: $autoCompletionData['contact'],
+            );
+        }
+
+        if ($charts === []) {
+            $charts[] = $this->lotDissatisfactionChart($autoCompletionData);
+        }
+
+        return $charts;
+    }
+
+    /**
+     * @param array<string, mixed> $completion
+     * @return array<string, mixed>
+     */
+    private function lotDissatisfactionChartPayload(string $key, string $label, array $completion): array
+    {
+        $percentage = min(100, max(0, (float) ($completion['dissatisfaction_percentage'] ?? 0)));
+        $dissatisfiedCount = max(0, (int) ($completion['dissatisfied_count'] ?? 0));
+        $processedCount = max(0, (int) ($completion['dissatisfaction_processed_count'] ?? 0));
+
+        return [
+            'key' => $key,
+            'label' => $label,
+            'color' => '#dc2626',
+            'percentage' => $percentage,
+            'display' => number_format($percentage, 2, ',', ' ').'%',
+            'dissatisfied_count' => $dissatisfiedCount,
+            'processed_count' => $processedCount,
+            'detail' => 'Calculée sur les dossiers traités de ce canal, hors dossiers sortis des statistiques.',
         ];
     }
 

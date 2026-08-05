@@ -750,9 +750,10 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->assertSee('Satisfaction générale')
         ->assertSee('50,00%')
         ->assertDontSee('Taux de satisfaction total')
-        ->assertSee('Taux d’insatisfaction')
+        ->assertSee('Insatisfaction contacts')
         ->assertSee('1 / 2 dossier(s) traité(s)')
         ->assertSee('1 / 2 satisfaisant(s)')
+        ->assertSee('Cible satisfaction : 2')
         ->assertSee('2 réponse(s) de satisfaction')
         ->assertSee('1 satisfaisant(s)')
         ->assertSee('1 non satisfaisant(s)')
@@ -815,7 +816,9 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
         ->and($response->getContent())
         ->toContain('Satisfaction contacts')
         ->and($response->getContent())
-        ->toContain('Taux d’insatisfaction')
+        ->toContain('Insatisfaction RDV physiques')
+        ->and($response->getContent())
+        ->toContain('Insatisfaction contacts')
         ->and($response->getContent())
         ->not->toContain('Satisfaction générale');
 
@@ -824,8 +827,11 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
         ->assertOk()
         ->assertSee('Satisfaction RDV physiques')
         ->assertSee('Satisfaction contacts')
-        ->assertSee('Insatisfaction générale')
-        ->assertSee('50,00%');
+        ->assertSee('Insatisfaction RDV physiques')
+        ->assertSee('Insatisfaction contacts')
+        ->assertSee('100,00%')
+        ->assertSee('Cible satisfaction : 2')
+        ->assertSee('Cible satisfaction : 3');
 });
 
 it('updates manual appointment targets without changing satisfaction targets', function () {

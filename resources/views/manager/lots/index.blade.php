@@ -134,14 +134,11 @@
                     }
 
                     $satisfactionCharts = collect($lot['satisfaction_charts'] ?? [])->values();
-                    $dissatisfactionChart = $lot['dissatisfaction_chart'] ?? null;
-                    $lotCardCharts = $satisfactionCharts;
-
-                    if ($lot['is_hybrid'] && is_array($dissatisfactionChart)) {
-                        $lotCardCharts = $lotCardCharts->push($dissatisfactionChart);
-                    }
+                    $dissatisfactionCharts = collect($lot['dissatisfaction_charts'] ?? [])->values();
+                    $lotCardCharts = $satisfactionCharts->concat($dissatisfactionCharts)->values();
 
                     $lotCardChartGridClass = match (true) {
+                        $lotCardCharts->count() >= 4 => 'grid-cols-2 xl:grid-cols-4',
                         $lotCardCharts->count() >= 3 => 'grid-cols-3',
                         $lotCardCharts->count() === 2 => 'grid-cols-2',
                         default => 'grid-cols-1',
@@ -193,18 +190,26 @@
 
                         <div class="grid gap-3 {{ $lotCardChartGridClass }}">
                             @foreach ($lotCardCharts as $chart)
+                                @php
+                                    $isDissatisfactionChart = str_contains((string) ($chart['key'] ?? ''), 'dissatisfaction');
+                                @endphp
                                 <div class="rounded-2xl border p-3 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
                                     <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
                                         <span>{{ $chart['display'] }}</span>
                                     </div>
                                     <p class="mt-3 text-xs font-semibold" style="color:var(--gc-text);">{{ $chart['label'] }}</p>
                                     <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
-                                        @if (($chart['key'] ?? '') === 'dissatisfaction')
+                                        @if ($isDissatisfactionChart)
                                             {{ $chart['dissatisfied_count'] }} / {{ $chart['processed_count'] }} non satisfaisant(s)
                                         @else
                                             {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
                                         @endif
                                     </p>
+                                    @unless ($isDissatisfactionChart)
+                                        <p class="mt-1 text-[0.68rem] font-semibold" style="color:#166534;">
+                                            Cible satisfaction : {{ $chart['target_count'] }} dossier(s)
+                                        </p>
+                                    @endunless
                                 </div>
                             @endforeach
                         </div>

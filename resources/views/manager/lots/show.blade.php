@@ -211,7 +211,8 @@
         @php
             $formatRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
             $satisfactionCharts = collect($lot['satisfaction_charts'] ?? [])->values();
-            $dissatisfactionChart = $lot['dissatisfaction_chart'] ?? null;
+            $dissatisfactionCharts = collect($lot['dissatisfaction_charts'] ?? [])->values();
+            $summaryCharts = $satisfactionCharts->concat($dissatisfactionCharts)->values();
             $physicalAppointmentTarget = $lot['appointment_targets']['physical'] ?? [
                 'enabled' => false,
                 'completed_count' => 0,
@@ -275,29 +276,35 @@
         @if ($lot['is_hybrid'])
         </section>
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         @endif
-            @foreach ($satisfactionCharts as $chart)
-                <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
-                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">{{ $chart['label'] }}</p>
-                    <p class="mt-2 text-2xl font-semibold" style="color:#166534;">{{ $chart['display'] }}</p>
-                    <p class="mt-1 text-xs" style="color:#14532d;">
-                        {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
-                    </p>
-                    @if (($chart['unsatisfied_count'] ?? 0) > 0)
-                        <p class="mt-1 text-xs" style="color:#991b1b;">{{ $chart['unsatisfied_count'] }} non satisfaisant(s)</p>
+            @foreach ($summaryCharts as $chart)
+                @php
+                    $isDissatisfactionChart = str_contains((string) ($chart['key'] ?? ''), 'dissatisfaction');
+                @endphp
+                <article
+                    class="rounded-2xl border p-4"
+                    style="{{ $isDissatisfactionChart ? 'border-color:#fecaca;background:#fff1f2;' : 'border-color:#bbf7d0;background:#f0fdf4;' }}"
+                >
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:{{ $isDissatisfactionChart ? '#991b1b' : '#166534' }};">{{ $chart['label'] }}</p>
+                    <p class="mt-2 text-2xl font-semibold" style="color:{{ $isDissatisfactionChart ? '#991b1b' : '#166534' }};">{{ $chart['display'] }}</p>
+                    @if ($isDissatisfactionChart)
+                        <p class="mt-1 text-xs" style="color:#7f1d1d;">
+                            {{ $chart['dissatisfied_count'] }} / {{ $chart['processed_count'] }} dossier(s) traité(s)
+                        </p>
+                    @else
+                        <p class="mt-1 text-xs" style="color:#14532d;">
+                            {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
+                        </p>
+                        <p class="mt-1 text-xs font-semibold" style="color:#166534;">
+                            Cible satisfaction : {{ $chart['target_count'] }} dossier(s)
+                        </p>
+                        @if (($chart['unsatisfied_count'] ?? 0) > 0)
+                            <p class="mt-1 text-xs" style="color:#991b1b;">{{ $chart['unsatisfied_count'] }} non satisfaisant(s)</p>
+                        @endif
                     @endif
                 </article>
             @endforeach
-            @if (is_array($dissatisfactionChart))
-                <article class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff1f2;">
-                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#991b1b;">Taux d’insatisfaction</p>
-                    <p class="mt-2 text-2xl font-semibold" style="color:#991b1b;">{{ $dissatisfactionChart['display'] }}</p>
-                    <p class="mt-1 text-xs" style="color:#7f1d1d;">
-                        {{ $dissatisfactionChart['dissatisfied_count'] }} / {{ $dissatisfactionChart['processed_count'] }} dossier(s) traité(s)
-                    </p>
-                </article>
-            @endif
         </section>
 
         @php
@@ -333,6 +340,9 @@
                                 @else
                                     sur {{ $chart['total_count'] ?? $lot['appointments_count'] }}.
                                 @endif
+                            </p>
+                            <p class="mt-1 text-sm font-semibold" style="color:#166534;">
+                                Cible satisfaction : {{ $targetCount }} dossier(s)
                             </p>
                             <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                                 <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#dcfce7;color:#166534;">
