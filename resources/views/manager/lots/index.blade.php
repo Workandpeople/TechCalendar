@@ -171,11 +171,6 @@
                                 @if ($lot['delegataire'])
                                     <p class="mt-1 truncate text-xs" style="color:var(--gc-text-soft);">Délégataire : {{ $lot['delegataire'] }}</p>
                                 @endif
-                                @if ($lot['comment'])
-                                    <p class="mt-3 overflow-hidden rounded-xl border px-3 py-2 text-xs" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
-                                        {{ $lot['comment'] }}
-                                    </p>
-                                @endif
                             </div>
                             <button
                                 type="button"

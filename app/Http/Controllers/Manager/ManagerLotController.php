@@ -1050,7 +1050,7 @@ class ManagerLotController extends Controller
             $charts[] = $this->lotSatisfactionChartPayload(
                 key: 'contact',
                 label: 'Satisfaction contacts',
-                color: '#0369a1',
+                color: '#16a34a',
                 completion: $autoCompletionData['contact'],
             );
         }

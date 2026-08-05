@@ -228,7 +228,7 @@
             ];
         @endphp
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-2 {{ $lot['is_hybrid'] ? 'xl:grid-cols-4' : 'xl:grid-cols-3' }}">
             <article class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
                 <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Dossiers</p>
                 <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['processed_count'] }} / {{ $lot['appointments_count'] }}</p>
@@ -272,6 +272,11 @@
                     <p class="mt-1 text-xs" style="color:#0369a1;">objectif manuel</p>
                 @endif
             </article>
+        @if ($lot['is_hybrid'])
+        </section>
+
+        <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        @endif
             @foreach ($satisfactionCharts as $chart)
                 <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
                     <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">{{ $chart['label'] }}</p>
