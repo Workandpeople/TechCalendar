@@ -133,43 +133,7 @@
                         ];
                     }
 
-                    $totalSatisfaction = $lot['auto_completion']['total_satisfaction'] ?? [
-                        'percentage' => 0,
-                        'satisfied_count' => 0,
-                        'total_count' => 0,
-                    ];
-                    $dissatisfaction = $lot['auto_completion']['dissatisfaction'] ?? [
-                        'percentage' => 0,
-                        'dissatisfied_count' => 0,
-                        'processed_count' => 0,
-                    ];
-                    $formatLotRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
-                    $satisfactionPercentage = max(0, min(100, (float) ($totalSatisfaction['percentage'] ?? 0)));
-                    $dissatisfactionPercentage = max(0, min(100, (float) ($dissatisfaction['percentage'] ?? 0)));
-                    $satisfactionCharts = [
-                        [
-                            'label' => 'Satisfaction générale',
-                            'percentage' => $satisfactionPercentage,
-                            'display' => $formatLotRate($satisfactionPercentage).'%',
-                            'color' => '#16a34a',
-                            'detail' => sprintf(
-                                '%d / %d dossiers satisfaisants',
-                                (int) ($totalSatisfaction['satisfied_count'] ?? 0),
-                                (int) ($totalSatisfaction['total_count'] ?? 0),
-                            ),
-                        ],
-                        [
-                            'label' => 'Insatisfaction générale',
-                            'percentage' => $dissatisfactionPercentage,
-                            'display' => $formatLotRate($dissatisfactionPercentage).'%',
-                            'color' => '#dc2626',
-                            'detail' => sprintf(
-                                '%d / %d dossiers traités',
-                                (int) ($dissatisfaction['dissatisfied_count'] ?? 0),
-                                (int) ($dissatisfaction['processed_count'] ?? 0),
-                            ),
-                        ],
-                    ];
+                    $satisfactionCharts = collect($lot['satisfaction_charts'] ?? [])->values();
                 @endphp
                 <article
                     class="lot-card group relative cursor-pointer overflow-hidden rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--gc-primary)] focus:ring-offset-2"
@@ -220,14 +184,16 @@
                             @endforeach
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid gap-4 {{ $satisfactionCharts->count() > 1 ? 'grid-cols-2' : 'grid-cols-1' }}">
                             @foreach ($satisfactionCharts as $chart)
                                 <div class="rounded-2xl border p-4 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
                                     <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
                                         <span>{{ $chart['display'] }}</span>
                                     </div>
                                     <p class="mt-3 text-sm font-semibold" style="color:var(--gc-text);">{{ $chart['label'] }}</p>
-                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $chart['detail'] }}</p>
+                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
+                                        {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
+                                    </p>
                                 </div>
                             @endforeach
                         </div>

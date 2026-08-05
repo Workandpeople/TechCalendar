@@ -209,23 +209,8 @@
         </div>
 
         @php
-            $totalSatisfaction = $lot['auto_completion']['total_satisfaction'] ?? [
-                'percentage' => 0,
-                'satisfied_count' => 0,
-                'total_count' => 0,
-            ];
-            $dissatisfaction = $lot['auto_completion']['dissatisfaction'] ?? [
-                'percentage' => 0,
-                'dissatisfied_count' => 0,
-                'processed_count' => 0,
-            ];
-            $dissatisfactionScope = match (true) {
-                $lot['is_hybrid'] => 'sur RDV pris + appels',
-                $lot['supports_contact'] && ! $lot['supports_physical'] => 'sur appels traités',
-                $lot['supports_physical'] && ! $lot['supports_contact'] => 'sur RDV pris',
-                default => 'sur dossiers traités',
-            };
             $formatRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
+            $satisfactionCharts = collect($lot['satisfaction_charts'] ?? [])->values();
             $physicalAppointmentTarget = $lot['appointment_targets']['physical'] ?? [
                 'enabled' => false,
                 'completed_count' => 0,
@@ -286,31 +271,22 @@
                     <p class="mt-1 text-xs" style="color:#0369a1;">objectif manuel</p>
                 @endif
             </article>
-            <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">Taux de satisfaction total</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:#166534;">{{ $formatRate($totalSatisfaction['percentage']) }}%</p>
-                <p class="mt-1 text-xs" style="color:#14532d;">
-                    {{ $totalSatisfaction['satisfied_count'] }} / {{ $totalSatisfaction['total_count'] }} dossiers du lot
-                </p>
-            </article>
-            <article class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff7f7;">
-                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#991b1b;">Taux d’insatisfaction</p>
-                <p class="mt-2 text-2xl font-semibold" style="color:#991b1b;">{{ $formatRate($dissatisfaction['percentage']) }}%</p>
-                <p class="mt-1 text-xs" style="color:#7f1d1d;">
-                    {{ $dissatisfaction['dissatisfied_count'] }} / {{ $dissatisfaction['processed_count'] }} {{ $dissatisfactionScope }}
-                </p>
-            </article>
+            @foreach ($satisfactionCharts as $chart)
+                <article class="rounded-2xl border p-4" style="border-color:#bbf7d0;background:#f0fdf4;">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#166534;">{{ $chart['label'] }}</p>
+                    <p class="mt-2 text-2xl font-semibold" style="color:#166534;">{{ $chart['display'] }}</p>
+                    <p class="mt-1 text-xs" style="color:#14532d;">
+                        {{ $chart['satisfied_count'] }} / {{ $chart['target_count'] }} satisfaisant(s)
+                    </p>
+                    @if (($chart['unsatisfied_count'] ?? 0) > 0)
+                        <p class="mt-1 text-xs" style="color:#991b1b;">{{ $chart['unsatisfied_count'] }} non satisfaisant(s)</p>
+                    @endif
+                </article>
+            @endforeach
         </section>
 
         @php
-            $chartItems = collect([
-                $lot['auto_completion']['physical'] ?? null,
-                $lot['auto_completion']['contact'] ?? null,
-            ])->filter()->values();
-
-            if ($chartItems->isEmpty()) {
-                $chartItems = collect([$lot['auto_completion']]);
-            }
+            $chartItems = $satisfactionCharts;
         @endphp
 
         <section class="grid grid-cols-1 gap-4 {{ $chartItems->count() > 1 ? 'xl:grid-cols-2' : '' }}">
@@ -319,10 +295,9 @@
                     $targetCount = max(0, (int) ($chart['target_count'] ?? 0));
                     $satisfiedCount = max(0, (int) ($chart['satisfied_count'] ?? 0));
                     $unsatisfiedCount = max(0, (int) ($chart['unsatisfied_count'] ?? 0));
-                    $satisfactionAnsweredCount = min($targetCount, $satisfiedCount + $unsatisfiedCount);
-                    $satisfactionPercentage = (int) ($chart['satisfaction_percentage'] ?? ($targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100)) : 0));
-                    $satisfiedShare = $targetCount > 0 ? min(100, round(($satisfiedCount / $targetCount) * 100, 2)) : 0;
-                    $answeredShare = $targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100, 2)) : 0;
+                    $satisfactionAnsweredCount = max(0, (int) ($chart['answered_count'] ?? min($targetCount, $satisfiedCount + $unsatisfiedCount)));
+                    $satisfiedShare = (float) ($chart['satisfied_share'] ?? ($targetCount > 0 ? min(100, round(($satisfiedCount / $targetCount) * 100, 2)) : 0));
+                    $answeredShare = (float) ($chart['answered_share'] ?? ($targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100, 2)) : 0));
                 @endphp
                 <article class="gc-card p-5">
                     <div class="flex flex-col gap-5 md:flex-row md:items-center">
@@ -331,7 +306,7 @@
                             style="--satisfied:{{ $satisfiedShare }};--answered:{{ $answeredShare }};"
                             aria-label="{{ $satisfiedCount }} satisfaisant(s), {{ $unsatisfiedCount }} non satisfaisant(s)"
                         >
-                            <span>{{ $satisfactionPercentage }}%</span>
+                            <span>{{ $chart['display'] }}</span>
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $chart['label'] ?? 'Lot' }}</p>
@@ -353,10 +328,10 @@
                                     <span class="h-2 w-2 rounded-full" style="background:#dc2626;"></span>
                                     {{ $unsatisfiedCount }} non satisfaisant(s)
                                 </span>
-                                @if (($chart['satisfaction_remaining_count'] ?? 0) > 0)
+                                @if (($chart['remaining_count'] ?? 0) > 0)
                                     <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#f1f5f9;color:#475569;">
                                         <span class="h-2 w-2 rounded-full" style="background:#cbd5e1;"></span>
-                                        {{ $chart['satisfaction_remaining_count'] }} en attente
+                                        {{ $chart['remaining_count'] }} en attente
                                     </span>
                                 @endif
                             </div>

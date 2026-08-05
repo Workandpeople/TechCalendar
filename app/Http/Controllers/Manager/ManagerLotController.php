@@ -1015,6 +1015,7 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
+            'satisfaction_charts' => $this->lotSatisfactionCharts($lot, $autoCompletionData),
             'appointment_targets' => $appointmentTargets,
             'appointments' => $displayAppointments ?? $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
@@ -1024,6 +1025,86 @@ class ManagerLotController extends Controller
             'placeable_count' => $placeableAppointments->count(),
             'contact_processed_count' => $contactProcessedAppointments->count(),
             'departments' => $appointments->pluck('department_code')->filter()->unique()->sort()->values(),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $autoCompletionData
+     * @return array<int, array<string, mixed>>
+     */
+    private function lotSatisfactionCharts(Lot $lot, array $autoCompletionData): array
+    {
+        $charts = [];
+
+        if ($lot->supportsPhysicalProcessing() && is_array($autoCompletionData['physical'] ?? null)) {
+            $charts[] = $this->lotSatisfactionChartPayload(
+                key: 'physical',
+                label: 'Satisfaction RDV physiques',
+                color: '#15803d',
+                completion: $autoCompletionData['physical'],
+            );
+        }
+
+        if ($lot->supportsContactProcessing() && is_array($autoCompletionData['contact'] ?? null)) {
+            $charts[] = $this->lotSatisfactionChartPayload(
+                key: 'contact',
+                label: 'Satisfaction contacts',
+                color: '#0369a1',
+                completion: $autoCompletionData['contact'],
+            );
+        }
+
+        if ($charts === []) {
+            $charts[] = $this->lotSatisfactionChartPayload(
+                key: 'general',
+                label: 'Satisfaction générale',
+                color: '#16a34a',
+                completion: $autoCompletionData,
+            );
+        }
+
+        if (count($charts) === 1) {
+            $charts[0]['label'] = 'Satisfaction générale';
+        }
+
+        return $charts;
+    }
+
+    /**
+     * @param array<string, mixed> $completion
+     * @return array<string, mixed>
+     */
+    private function lotSatisfactionChartPayload(string $key, string $label, string $color, array $completion): array
+    {
+        $targetCount = max(0, (int) ($completion['target_count'] ?? $completion['total_count'] ?? 0));
+        $totalCount = max(0, (int) ($completion['total_count'] ?? $targetCount));
+        $satisfiedCount = max(0, (int) ($completion['satisfied_count'] ?? 0));
+        $unsatisfiedCount = max(0, (int) ($completion['unsatisfied_count'] ?? 0));
+        $answeredCount = min($targetCount, $satisfiedCount + $unsatisfiedCount);
+        $percentage = $targetCount > 0
+            ? min(100, round(($satisfiedCount / $targetCount) * 100, 2))
+            : 0;
+        $answeredPercentage = $targetCount > 0
+            ? min(100, round(($answeredCount / $targetCount) * 100, 2))
+            : 0;
+
+        return [
+            'key' => $key,
+            'label' => $label,
+            'color' => $color,
+            'percentage' => $percentage,
+            'display' => number_format((float) $percentage, 2, ',', ' ').'%',
+            'answered_percentage' => $answeredPercentage,
+            'satisfied_share' => $percentage,
+            'answered_share' => $answeredPercentage,
+            'satisfied_count' => min($satisfiedCount, $targetCount),
+            'unsatisfied_count' => min($unsatisfiedCount, max(0, $targetCount - $satisfiedCount)),
+            'answered_count' => $answeredCount,
+            'remaining_count' => max(0, $targetCount - $answeredCount),
+            'target_count' => $targetCount,
+            'total_count' => $totalCount,
+            'detail' => $completion['detail'] ?? 'Suivi de la satisfaction',
+            'is_sampling' => (bool) ($completion['is_sampling'] ?? false),
         ];
     }
 
