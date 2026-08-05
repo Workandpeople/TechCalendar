@@ -211,6 +211,7 @@
         @php
             $formatRate = fn ($value): string => number_format((float) $value, 2, ',', ' ');
             $satisfactionCharts = collect($lot['satisfaction_charts'] ?? [])->values();
+            $dissatisfactionChart = $lot['dissatisfaction_chart'] ?? null;
             $physicalAppointmentTarget = $lot['appointment_targets']['physical'] ?? [
                 'enabled' => false,
                 'completed_count' => 0,
@@ -283,6 +284,15 @@
                     @endif
                 </article>
             @endforeach
+            @if (is_array($dissatisfactionChart))
+                <article class="rounded-2xl border p-4" style="border-color:#fecaca;background:#fff1f2;">
+                    <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:#991b1b;">Taux d’insatisfaction</p>
+                    <p class="mt-2 text-2xl font-semibold" style="color:#991b1b;">{{ $dissatisfactionChart['display'] }}</p>
+                    <p class="mt-1 text-xs" style="color:#7f1d1d;">
+                        {{ $dissatisfactionChart['dissatisfied_count'] }} / {{ $dissatisfactionChart['processed_count'] }} dossier(s) traité(s)
+                    </p>
+                </article>
+            @endif
         </section>
 
         @php

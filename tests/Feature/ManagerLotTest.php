@@ -739,7 +739,8 @@ it('renders lot detail satisfaction split in circular charts', function () {
         ->assertSee('Satisfaction générale')
         ->assertSee('50,00%')
         ->assertDontSee('Taux de satisfaction total')
-        ->assertDontSee('Taux d’insatisfaction')
+        ->assertSee('Taux d’insatisfaction')
+        ->assertSee('1 / 2 dossier(s) traité(s)')
         ->assertSee('1 / 2 satisfaisant(s)')
         ->assertSee('2 réponse(s) de satisfaction')
         ->assertSee('1 satisfaisant(s)')
@@ -803,7 +804,17 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
         ->and($response->getContent())
         ->toContain('Satisfaction contacts')
         ->and($response->getContent())
+        ->toContain('Taux d’insatisfaction')
+        ->and($response->getContent())
         ->not->toContain('Satisfaction générale');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots'))
+        ->assertOk()
+        ->assertSee('Satisfaction RDV physiques')
+        ->assertSee('Satisfaction contacts')
+        ->assertSee('Insatisfaction générale')
+        ->assertSee('50,00%');
 });
 
 it('updates manual appointment targets without changing satisfaction targets', function () {

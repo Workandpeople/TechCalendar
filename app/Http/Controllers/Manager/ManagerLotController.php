@@ -1016,6 +1016,7 @@ class ManagerLotController extends Controller
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
             'satisfaction_charts' => $this->lotSatisfactionCharts($lot, $autoCompletionData),
+            'dissatisfaction_chart' => $this->lotDissatisfactionChart($autoCompletionData),
             'appointment_targets' => $appointmentTargets,
             'appointments' => $displayAppointments ?? $appointments->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))->values(),
             'appointments_count' => $appointments->count(),
@@ -1105,6 +1106,31 @@ class ManagerLotController extends Controller
             'total_count' => $totalCount,
             'detail' => $completion['detail'] ?? 'Suivi de la satisfaction',
             'is_sampling' => (bool) ($completion['is_sampling'] ?? false),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $autoCompletionData
+     * @return array<string, mixed>
+     */
+    private function lotDissatisfactionChart(array $autoCompletionData): array
+    {
+        $dissatisfaction = is_array($autoCompletionData['dissatisfaction'] ?? null)
+            ? $autoCompletionData['dissatisfaction']
+            : [];
+        $percentage = min(100, max(0, (float) ($dissatisfaction['percentage'] ?? 0)));
+        $dissatisfiedCount = max(0, (int) ($dissatisfaction['dissatisfied_count'] ?? 0));
+        $processedCount = max(0, (int) ($dissatisfaction['processed_count'] ?? 0));
+
+        return [
+            'key' => 'dissatisfaction',
+            'label' => 'Insatisfaction générale',
+            'color' => '#dc2626',
+            'percentage' => $percentage,
+            'display' => number_format($percentage, 2, ',', ' ').'%',
+            'dissatisfied_count' => $dissatisfiedCount,
+            'processed_count' => $processedCount,
+            'detail' => 'Calculée sur les dossiers traités, hors dossiers sortis des statistiques.',
         ];
     }
 
