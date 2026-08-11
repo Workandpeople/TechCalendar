@@ -9,6 +9,7 @@ use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\LotAppointmentAiNormalizer;
+use App\Services\LotBusinessIdentityResolver;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportPreviewProcessor;
 use App\Services\LotSpreadsheetExtractor;
@@ -1826,7 +1827,7 @@ it('stores the original spreadsheet when importing a lot', function () {
             ],
         ]);
 
-    $lot = (new LotExcelImportService($extractor, $normalizer))
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
         ->import(
             file: $file,
             userId: $manager->id,
@@ -1853,6 +1854,95 @@ it('stores the original spreadsheet when importing a lot', function () {
         ->and($appointment->status)->toBe(LotAppointment::STATUS_PENDING);
 
     Storage::disk('local')->assertExists($lot->original_file_path);
+});
+
+it('keeps beneficiary company and installer separated from Coffrac raw columns', function () {
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+
+    $file = UploadedFile::fake()->createWithContent(
+        'lot-coffrac.csv',
+        implode(';', [
+            'RAISON SOCIALE du professionnel',
+            "RAISON SOCIALE du bénéficiaire de l'opération",
+            'Téléphone',
+            'Adresse',
+            'Code postal',
+            'Ville',
+        ])."\n".implode(';', [
+            'Installateur Travaux SAS',
+            'Bénéficiaire Industrie SA',
+            '0612345678',
+            '20 Rue Bellecordière',
+            '69002',
+            'Lyon',
+        ]),
+    );
+    $extractor = new LotSpreadsheetExtractor();
+    $rows = $extractor->extract($file);
+    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer
+        ->shouldReceive('normalize')
+        ->once()
+        ->with(
+            \Mockery::on(fn ($value): bool => $value instanceof \Illuminate\Support\Collection
+                && $value->toArray() === $rows->toArray()),
+            'Lot Coffrac',
+            Lot::TYPE_FULL_CONTROL,
+        )
+        ->andReturn([
+            'lot_name' => 'Lot Coffrac',
+            'summary' => 'Import de test',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 2,
+                    'external_reference' => 'EXT-COFFRAC',
+                    'customer_name' => 'Installateur Travaux SAS',
+                    'company_name' => 'Installateur Travaux SAS',
+                    'site_name' => null,
+                    'installer_name' => null,
+                    'customer_first_name' => null,
+                    'customer_last_name' => null,
+                    'customer_phone' => '0612345678',
+                    'address' => '20 Rue Bellecordière',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'comment' => null,
+                    'confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ]);
+
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+        ->import(
+            file: $file,
+            userId: $manager->id,
+            requestedLotName: 'Lot Coffrac',
+            lotType: Lot::TYPE_FULL_CONTROL,
+            serviceId: $service->id,
+        );
+
+    $appointment = $lot->appointments->first();
+
+    expect($appointment->customer_name)->toBe('Bénéficiaire Industrie SA')
+        ->and($appointment->company_name)->toBe('Bénéficiaire Industrie SA')
+        ->and($appointment->installer_name)->toBe('Installateur Travaux SAS')
+        ->and($appointment->raw_payload['RAISON SOCIALE du professionnel'])->toBe('Installateur Travaux SAS')
+        ->and($appointment->raw_payload["RAISON SOCIALE du bénéficiaire de l'opération"])->toBe('Bénéficiaire Industrie SA');
 });
 
 it('confirms selected preview rows and creates a lot', function () {

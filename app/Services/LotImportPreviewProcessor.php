@@ -17,6 +17,7 @@ class LotImportPreviewProcessor
         private readonly LotAppointmentAiNormalizer $normalizer,
         private readonly MapboxAddressGeocoder $geocoder,
         private readonly ImportedAddressCleaner $addressCleaner,
+        private readonly LotBusinessIdentityResolver $businessIdentityResolver,
     ) {
     }
 
@@ -53,6 +54,8 @@ class LotImportPreviewProcessor
             ->values()
             ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $totalAppointments): array {
                 $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
+                $rawPayload = $rawRowsByNumber->get($rowNumber)['data'] ?? null;
+                $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload);
                 $address = $this->fullAddress($appointmentPayload);
                 $geocoding = $this->geocoder->geocode($address);
                 $warnings = collect($appointmentPayload['warnings'] ?? [])
@@ -96,7 +99,7 @@ class LotImportPreviewProcessor
                     'ai_confidence' => $this->confidence($appointmentPayload['confidence'] ?? null),
                     'warnings' => $warnings,
                     'raw_address_parts' => $appointmentPayload['raw_address_parts'] ?? [],
-                    'raw_payload' => $rawRowsByNumber->get($rowNumber)['data'] ?? null,
+                    'raw_payload' => $rawPayload,
                 ];
             })
             ->all();

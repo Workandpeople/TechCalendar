@@ -17,6 +17,7 @@ class LotExcelImportService
     public function __construct(
         private readonly LotSpreadsheetExtractor $extractor,
         private readonly LotAppointmentAiNormalizer $normalizer,
+        private readonly LotBusinessIdentityResolver $businessIdentityResolver,
     ) {
     }
 
@@ -76,12 +77,13 @@ class LotExcelImportService
                 ]);
 
                 foreach (($normalized['appointments'] ?? []) as $appointmentPayload) {
+                    $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
+                    $rawPayload = $rawRowsByNumber->get($rowNumber)['data'] ?? null;
+                    $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload);
                     $warnings = collect($appointmentPayload['warnings'] ?? [])
                         ->filter()
                         ->values();
                     $status = $this->statusForPayload($appointmentPayload, $warnings);
-                    $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
-                    $rawPayload = $rawRowsByNumber->get($rowNumber)['data'] ?? null;
 
                     LotAppointment::query()->create([
                         'lot_id' => $lot->id,

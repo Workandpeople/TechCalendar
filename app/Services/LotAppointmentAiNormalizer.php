@@ -134,6 +134,8 @@ Pour un particulier, renseigne customer_first_name/customer_last_name/customer_n
 Pour une entreprise, company_name doit être la raison sociale du bénéficiaire/client final uniquement.
 Les colonnes "raison sociale bénéficiaire", "bénéficiaire", "client final", "maître d'ouvrage", "site bénéficiaire" vont dans company_name.
 Les colonnes "installateur", "raison sociale installateur", "professionnel", "entreprise travaux", "société installatrice", "artisan" vont dans installer_name.
+Règle prioritaire Coffrac: la colonne exacte "RAISON SOCIALE du professionnel" correspond toujours à l'installateur, donc à installer_name.
+Règle prioritaire Coffrac: la colonne exacte "RAISON SOCIALE du bénéficiaire de l'opération" correspond toujours au client bénéficiaire, donc à company_name.
 Ne mets jamais la raison sociale de l'installateur dans company_name sauf absence totale de bénéficiaire; dans ce cas, ajoute un warning explicite.
 site_name contient uniquement le nom du site/établissement/agence si présent, et company_name sert de customer_name si aucun contact nominatif n'existe.
 Ne crée pas de faux nom complet: les colonnes bénéficiaire vont dans company_name, les colonnes installateur vont dans installer_name, les colonnes "nom du site", "site", "établissement" vont dans site_name.
