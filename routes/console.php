@@ -83,7 +83,7 @@ Artisan::command('system-tests:schedule {--suite=all : Suite à lancer: all, fea
     return 0;
 })->purpose('Planifie une execution asynchrone des tests visibles dans le dashboard admin.');
 
-Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.} {--status=all : Statut Coffrac à récupérer: pending, placed, problem ou all.}', function (CoffracAppointmentService $coffracAppointments): int {
+Artisan::command('coffrac:sync {--incremental : Ne récupère que les changements depuis la dernière synchronisation réussie.} {--status=all : Statut Coffrac à récupérer: pending, placed, problem ou all.} {--page-size= : Nombre de dossiers récupérés par appel API Coffrac.}', function (CoffracAppointmentService $coffracAppointments): int {
     $status = (string) $this->option('status');
 
     if (! in_array($status, [
@@ -98,6 +98,7 @@ Artisan::command('coffrac:sync {--incremental : Ne récupère que les changement
     }
 
     $result = $coffracAppointments->sync(
+        pageSize: (int) ($this->option('page-size') ?: 0),
         incremental: (bool) $this->option('incremental'),
         status: $status,
     );

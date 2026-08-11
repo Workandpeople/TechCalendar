@@ -56,9 +56,12 @@ return [
     'coffrac' => [
         'api_url' => env('COFFRAC_API_URL'),
         'api_token' => env('COFFRAC_API_TOKEN'),
-        'timeout' => env('COFFRAC_API_TIMEOUT', 15),
+        'timeout' => env('COFFRAC_API_TIMEOUT', 45),
         'upload_timeout' => env('COFFRAC_API_UPLOAD_TIMEOUT', 60),
         'connect_timeout' => env('COFFRAC_API_CONNECT_TIMEOUT', 5),
+        'page_size' => env('COFFRAC_API_PAGE_SIZE', 100),
+        'placed_page_size' => env('COFFRAC_API_PLACED_PAGE_SIZE', 100),
+        'pending_page_size' => env('COFFRAC_API_PENDING_PAGE_SIZE', 100),
         'incremental_overlap_minutes' => env('COFFRAC_INCREMENTAL_OVERLAP_MINUTES', 10),
         'placed_sync_past_years' => env('COFFRAC_PLACED_SYNC_PAST_YEARS', 1),
         'placed_sync_future_months' => env('COFFRAC_PLACED_SYNC_FUTURE_MONTHS', 2),

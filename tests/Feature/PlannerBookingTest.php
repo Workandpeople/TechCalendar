@@ -1428,6 +1428,97 @@ it('scopes full placed coffrac sync to the configured date window without archiv
     }
 });
 
+it('splits a coffrac page automatically when a placed sync page times out', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.placed_page_size' => 100,
+        'services.coffrac.timeout' => 45,
+    ]);
+
+    $requestedQueries = [];
+
+    $remoteAppointment = function (string $id): array {
+        return [
+            'id' => $id,
+            'source' => 'Coffrac',
+            'status_name' => 'RDV attente visite',
+            'service_type' => Service::TYPE_COFFRAC,
+            'service_name' => 'Inspection Coffrac',
+            'customer_first_name' => 'Client',
+            'customer_last_name' => $id,
+            'phone' => '0600000000',
+            'address' => '1 Rue de Paris, 75001 Paris, France',
+            'department_code' => '75',
+            'latitude' => 48.8566,
+            'longitude' => 2.3522,
+            'technician_email' => 'tech-'.$id.'@example.test',
+            'starts_at' => '2026-09-01T10:00:00+02:00',
+            'duration_minutes' => 90,
+        ];
+    };
+
+    Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedQueries, $remoteAppointment) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $requestedQueries[] = $query;
+
+        $limit = (int) ($query['limit'] ?? 0);
+        $offset = (int) ($query['offset'] ?? 0);
+
+        if ($limit === 100 && $offset === 100) {
+            throw new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out after 45000 milliseconds with 2618569 bytes received');
+        }
+
+        return match (true) {
+            $limit === 100 && $offset === 0 => Http::response([
+                'result' => true,
+                'data' => [$remoteAppointment('first-page')],
+                'fetched_count' => 100,
+                'skipped_count' => 0,
+            ]),
+            $limit === 50 && $offset === 100 => Http::response([
+                'result' => true,
+                'data' => [$remoteAppointment('split-page-a')],
+                'fetched_count' => 50,
+                'skipped_count' => 0,
+            ]),
+            $limit === 50 && $offset === 150 => Http::response([
+                'result' => true,
+                'data' => [$remoteAppointment('split-page-b')],
+                'fetched_count' => 0,
+                'skipped_count' => 0,
+            ]),
+            default => Http::response([
+                'result' => true,
+                'data' => [],
+                'fetched_count' => 0,
+                'skipped_count' => 0,
+            ]),
+        };
+    });
+
+    $this->artisan('coffrac:sync --status=placed')
+        ->assertSuccessful();
+
+    $containsRequest = fn (int $limit, int $offset): bool => collect($requestedQueries)
+        ->contains(fn (array $query): bool => ($query['status'] ?? null) === CoffracAppointmentService::REMOTE_STATUS_PLACED
+            && (int) ($query['limit'] ?? 0) === $limit
+            && (int) ($query['offset'] ?? 0) === $offset);
+
+    expect($containsRequest(100, 0))->toBeTrue()
+        ->and($containsRequest(100, 100))->toBeTrue()
+        ->and($containsRequest(50, 100))->toBeTrue()
+        ->and($containsRequest(50, 150))->toBeTrue();
+
+    foreach (['first-page', 'split-page-a', 'split-page-b'] as $reference) {
+        $this->assertDatabaseHas('external_appointment_requests', [
+            'source' => 'coffrac',
+            'external_reference' => $reference,
+            'status' => ExternalAppointmentRequest::STATUS_PLACED,
+        ]);
+    }
+});
+
 it('renders lot appointment requests on the booking page', function () {
     $planner = User::factory()->create([
         'role' => 1,

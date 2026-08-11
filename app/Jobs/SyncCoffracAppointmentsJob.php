@@ -27,6 +27,7 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
     public function __construct(
         public bool $incremental = true,
         public string $status = CoffracAppointmentService::REMOTE_STATUS_ALL,
+        public int $pageSize = 0,
     )
     {
     }
@@ -42,7 +43,7 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
 
     public function handle(CoffracAppointmentService $coffracAppointments): void
     {
-        $coffracAppointments->sync(incremental: $this->incremental, status: $this->status);
+        $coffracAppointments->sync($this->pageSize, incremental: $this->incremental, status: $this->status);
     }
 
     public function failed(Throwable $exception): void
