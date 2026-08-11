@@ -527,11 +527,20 @@ class CoffracAppointmentService
             $updatedAfter = $incremental ? $this->incrementalUpdatedAfter() : null;
             $isIncrementalSync = $updatedAfter !== null;
 
-            $this->markSyncQueued($isPendingOnlySync
-                ? 'Récupération des RDV à placer Coffrac en cours...'
-                : ($isIncrementalSync
-                    ? 'Synchronisation incrémentale Coffrac en cours...'
-                    : 'Synchronisation complète Coffrac en cours...')
+            $syncMode = $this->syncMode($status, $isIncrementalSync);
+            $this->markSyncQueued(
+                $isPendingOnlySync
+                    ? 'Récupération des RDV à placer Coffrac en cours...'
+                    : ($isIncrementalSync
+                        ? 'Synchronisation incrémentale Coffrac en cours...'
+                        : 'Synchronisation complète Coffrac en cours...'),
+                [
+                    'mode' => $syncMode,
+                    'remote_status' => $status,
+                    'updated_after' => $updatedAfter?->toIso8601String(),
+                    'date_from' => $placedSyncWindow['from']?->toDateString(),
+                    'date_to' => $placedSyncWindow['to']?->toDateString(),
+                ],
             );
             $this->markSyncProgress(5, 'Connexion à Coffrac...');
             $this->skippedRemoteAppointmentCount = 0;
@@ -559,7 +568,7 @@ class CoffracAppointmentService
                 ), [
                     'total' => $remoteAppointments->count(),
                     'processed' => 0,
-                    'mode' => $this->syncMode($status, $isIncrementalSync),
+                    'mode' => $syncMode,
                     'updated_after' => $updatedAfter?->toIso8601String(),
                     'date_from' => $placedSyncWindow['from']?->toDateString(),
                     'date_to' => $placedSyncWindow['to']?->toDateString(),
@@ -680,10 +689,11 @@ class CoffracAppointmentService
                 'stage' => $isPendingOnlySync ? 'Récupération des RDV à placer Coffrac terminée.' : 'Synchronisation Coffrac terminée.',
                 'processed' => $remoteAppointments->count(),
                 'total' => $remoteAppointments->count(),
-                'mode' => $this->syncMode($status, $isIncrementalSync),
+                'mode' => $syncMode,
                 'updated_after' => $updatedAfter?->toIso8601String(),
                 'date_from' => $placedSyncWindow['from']?->toDateString(),
                 'date_to' => $placedSyncWindow['to']?->toDateString(),
+                ...$this->placedCalendarSyncCounts($status, $placedSyncWindow['from'], $placedSyncWindow['to']),
                 ...$counts,
             ], touchLastSuccessfulAt: ! $isPendingOnlySync);
 
@@ -2483,7 +2493,7 @@ class CoffracAppointmentService
 
         $isStaleSync = $sync->state === ExternalApiSync::STATE_SYNCING
             && $sync->updated_at !== null
-            && $sync->updated_at->lt(now()->subMinutes(10));
+            && $sync->updated_at->lt(now()->subMinutes($this->syncStaleMinutes()));
 
         $state = $isStaleSync ? 'unavailable' : match ($sync->state) {
             ExternalApiSync::STATE_AVAILABLE => 'available',
@@ -2512,10 +2522,14 @@ class CoffracAppointmentService
             (string) ($metadata['stage'] ?? $sync->message ?? $label),
             $displayedCount,
             $missingCoordinatesCount,
+            $metadata,
         );
     }
 
-    public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...'): ExternalApiSync
+    /**
+     * @param array<string, mixed> $metadata
+     */
+    public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...', array $metadata = []): ExternalApiSync
     {
         $sync = ExternalApiSync::query()->updateOrCreate(
             ['source' => self::SOURCE],
@@ -2523,12 +2537,12 @@ class CoffracAppointmentService
                 'state' => ExternalApiSync::STATE_SYNCING,
                 'message' => $this->syncMessage($message),
                 'last_started_at' => now(),
-                'metadata' => [
+                'metadata' => array_merge($metadata, [
                     'progress' => 3,
                     'stage' => $message,
                     'processed' => 0,
                     'total' => 0,
-                ],
+                ]),
             ],
         );
 
@@ -2621,6 +2635,33 @@ class CoffracAppointmentService
         return Str::limit($message !== '' ? $message : 'Statut Coffrac indisponible.', self::SYNC_MESSAGE_MAX_LENGTH - 3, '...');
     }
 
+    private function syncStaleMinutes(): int
+    {
+        return max(15, (int) config('services.coffrac.sync_stale_minutes', 45));
+    }
+
+    /**
+     * @return array{placed_request_count?: int, calendar_appointment_count?: int}
+     */
+    private function placedCalendarSyncCounts(string $status, ?Carbon $dateFrom, ?Carbon $dateTo): array
+    {
+        if ($status !== self::REMOTE_STATUS_PLACED || ! $dateFrom || ! $dateTo) {
+            return [];
+        }
+
+        return [
+            'placed_request_count' => ExternalAppointmentRequest::query()
+                ->where('source', self::SOURCE)
+                ->where('status', ExternalAppointmentRequest::STATUS_PLACED)
+                ->whereBetween('starts_at', [$dateFrom, $dateTo])
+                ->count(),
+            'calendar_appointment_count' => Appointment::query()
+                ->where('external_source', self::SOURCE)
+                ->whereBetween('starts_at', [$dateFrom, $dateTo])
+                ->count(),
+        ];
+    }
+
     private function shouldSplitRemoteError(string $message): bool
     {
         $normalized = Str::lower(Str::ascii($message));
@@ -2640,6 +2681,7 @@ class CoffracAppointmentService
         string $stage = '',
         ?int $displayedCount = null,
         int $missingCoordinatesCount = 0,
+        array $metadata = [],
     ): array
     {
         return [
@@ -2651,6 +2693,14 @@ class CoffracAppointmentService
             'missing_coordinates_count' => $missingCoordinatesCount,
             'progress' => max(0, min(100, $progress)),
             'stage' => $stage !== '' ? $stage : $label,
+            'mode' => $metadata['mode'] ?? null,
+            'remote_status' => $metadata['remote_status'] ?? null,
+            'processed' => (int) ($metadata['processed'] ?? 0),
+            'total' => (int) ($metadata['total'] ?? 0),
+            'date_from' => $metadata['date_from'] ?? null,
+            'date_to' => $metadata['date_to'] ?? null,
+            'placed_request_count' => isset($metadata['placed_request_count']) ? (int) $metadata['placed_request_count'] : null,
+            'calendar_appointment_count' => isset($metadata['calendar_appointment_count']) ? (int) $metadata['calendar_appointment_count'] : null,
         ];
     }
 

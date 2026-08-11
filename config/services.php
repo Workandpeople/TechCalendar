@@ -62,6 +62,7 @@ return [
         'incremental_overlap_minutes' => env('COFFRAC_INCREMENTAL_OVERLAP_MINUTES', 10),
         'placed_sync_past_years' => env('COFFRAC_PLACED_SYNC_PAST_YEARS', 1),
         'placed_sync_future_months' => env('COFFRAC_PLACED_SYNC_FUTURE_MONTHS', 2),
+        'sync_stale_minutes' => env('COFFRAC_SYNC_STALE_MINUTES', 45),
         'ignored_references' => array_values(array_filter(array_map(
             static fn (string $reference): string => trim($reference),
             explode(',', (string) env('COFFRAC_IGNORED_REFERENCES', '')),

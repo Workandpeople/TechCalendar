@@ -189,7 +189,10 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         if ($coffracAppointments->isConfigured()) {
-            $coffracAppointments->markSyncQueued('Récupération des RDV à placer Coffrac lancée en arrière-plan...');
+            $coffracAppointments->markSyncQueued('Récupération des RDV à placer Coffrac lancée en arrière-plan...', [
+                'mode' => CoffracAppointmentService::REMOTE_STATUS_PENDING,
+                'remote_status' => CoffracAppointmentService::REMOTE_STATUS_PENDING,
+            ]);
             SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PENDING);
         }
 

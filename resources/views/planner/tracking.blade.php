@@ -502,6 +502,8 @@
         let trackingSearchAbortController = null;
         let trackingCoffracSyncPollingTimer = null;
         let trackingCoffracSyncSubscription = null;
+        let trackingCoffracSyncAwaitingCompletion = false;
+        let trackingCoffracLastStatusState = (trackingInitialCoffracSyncStatus || {}).state || null;
         const trackingSearchResultEvents = new Map();
 
         const formatDateTime = (value) => {
@@ -919,9 +921,25 @@
         const trackingCoffracStatusMessage = (status = {}) => {
             const progress = Number(status.progress ?? 0);
             const stage = status.stage || status.detail || status.label || '';
+            const processed = Number(status.processed ?? 0);
+            const total = Number(status.total ?? 0);
+            const calendarAppointmentCount = status.calendar_appointment_count;
+            const placedRequestCount = status.placed_request_count;
 
             if (status.state === 'syncing') {
-                return progress > 0 ? `${stage} (${progress}%)` : stage;
+                const processingSuffix = total > 0 ? ` - ${processed}/${total}` : '';
+
+                return progress > 0 ? `${stage}${processingSuffix} (${progress}%)` : `${stage}${processingSuffix}`;
+            }
+
+            if (
+                status.state === 'available'
+                && calendarAppointmentCount !== null
+                && calendarAppointmentCount !== undefined
+                && placedRequestCount !== null
+                && placedRequestCount !== undefined
+            ) {
+                return `${stage} ${calendarAppointmentCount}/${placedRequestCount} RDV visible(s) dans le calendrier.`;
             }
 
             return stage;
@@ -970,53 +988,82 @@
                     },
                 });
                 const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Statut Coffrac indisponible.');
+                }
+
                 const status = payload.coffrac_api_status || {};
+                const wasSyncing = trackingCoffracLastStatusState === 'syncing';
 
                 renderTrackingCoffracPlacedRefreshButton(status);
+                trackingCoffracLastStatusState = status.state || trackingCoffracLastStatusState;
 
-                if (status.state !== 'syncing') {
-                    stopTrackingCoffracSyncPolling();
+                if (status.state === 'syncing') {
+                    trackingCoffracSyncAwaitingCompletion = true;
 
-                    if (status.state === 'available') {
-                        setTrackingCoffracPlacedRefreshStatus(status.stage || status.detail || 'Synchronisation Coffrac terminée.', '#0f766e');
+                    return status;
+                }
+
+                stopTrackingCoffracSyncPolling();
+
+                if (status.state === 'available') {
+                    setTrackingCoffracPlacedRefreshStatus(trackingCoffracStatusMessage(status) || 'Synchronisation Coffrac terminée.', '#0f766e');
+
+                    if (trackingCoffracSyncAwaitingCompletion || wasSyncing) {
                         refetchCalendar();
                     }
+
+                    trackingCoffracSyncAwaitingCompletion = false;
+                } else {
+                    trackingCoffracSyncAwaitingCompletion = false;
+                    setTrackingCoffracPlacedRefreshStatus(status.stage || status.detail || 'Synchronisation Coffrac interrompue.', '#9f1239');
                 }
+
+                return status;
             } catch (error) {
                 setTrackingCoffracPlacedRefreshStatus('Impossible de lire l’état de la synchronisation Coffrac.', '#9f1239');
+
+                if (trackingCoffracSyncAwaitingCompletion) {
+                    renderTrackingCoffracPlacedRefreshButton({
+                        state: 'syncing',
+                        progress: 3,
+                        stage: 'Synchronisation Coffrac en cours, nouvelle tentative de lecture du statut...',
+                    });
+                }
+
+                return null;
             }
         };
 
         const startTrackingCoffracSyncPolling = () => {
             if (trackingCoffracSyncPollingTimer) return;
 
-            trackingCoffracSyncPollingTimer = window.setInterval(refreshTrackingCoffracSyncStatus, 4000);
+            trackingCoffracSyncAwaitingCompletion = true;
+            refreshTrackingCoffracSyncStatus();
+            trackingCoffracSyncPollingTimer = window.setInterval(refreshTrackingCoffracSyncStatus, 2500);
         };
 
         const handleTrackingCoffracSyncProgress = (payload = {}) => {
             if (payload.source !== 'coffrac') return;
 
             renderTrackingCoffracPlacedRefreshButton(payload);
+            trackingCoffracLastStatusState = payload.state || trackingCoffracLastStatusState;
 
             if (payload.state === 'syncing') {
+                trackingCoffracSyncAwaitingCompletion = true;
                 startTrackingCoffracSyncPolling();
                 return;
             }
 
-            stopTrackingCoffracSyncPolling();
-
-            if (payload.state === 'available') {
-                setTrackingCoffracPlacedRefreshStatus(payload.stage || payload.message || 'Synchronisation Coffrac terminée.', '#0f766e');
-                refetchCalendar();
-            } else {
-                setTrackingCoffracPlacedRefreshStatus(payload.stage || payload.message || 'Synchronisation Coffrac interrompue.', '#9f1239');
-            }
+            refreshTrackingCoffracSyncStatus();
         };
 
         const subscribeTrackingCoffracSync = () => {
             renderTrackingCoffracPlacedRefreshButton(trackingInitialCoffracSyncStatus || {});
 
             if ((trackingInitialCoffracSyncStatus || {}).state === 'syncing') {
+                trackingCoffracSyncAwaitingCompletion = true;
                 startTrackingCoffracSyncPolling();
             }
 
@@ -2382,6 +2429,8 @@
                 progress: 3,
                 stage: 'Récupération des RDV Coffrac déjà placés lancée...',
             });
+            trackingCoffracSyncAwaitingCompletion = true;
+            trackingCoffracLastStatusState = 'syncing';
             setTrackingCoffracPlacedRefreshStatus('Synchro Coffrac lancée...', 'var(--gc-text-soft)');
             startTrackingCoffracSyncPolling();
 
@@ -2399,6 +2448,7 @@
                 if (!response.ok) {
                     if (response.status === 409 && payload.coffrac_api_status) {
                         renderTrackingCoffracPlacedRefreshButton(payload.coffrac_api_status);
+                        trackingCoffracLastStatusState = payload.coffrac_api_status.state || trackingCoffracLastStatusState;
                         setTrackingCoffracPlacedRefreshStatus(
                             trackingCoffracStatusMessage(payload.coffrac_api_status) || payload.message || 'Synchronisation Coffrac déjà en cours.',
                             'var(--gc-text-soft)',
@@ -2416,10 +2466,16 @@
                     progress: 3,
                     stage: payload.message || 'Synchronisation Coffrac en cours...',
                 });
-                setTrackingCoffracPlacedRefreshStatus(payload.message || 'Récupération lancée.', '#0f766e');
-                window.setTimeout(refetchCalendar, 1200);
+                trackingCoffracLastStatusState = (payload.coffrac_api_status || {}).state || trackingCoffracLastStatusState;
+                setTrackingCoffracPlacedRefreshStatus(
+                    trackingCoffracStatusMessage(payload.coffrac_api_status || {}) || payload.message || 'Récupération lancée.',
+                    'var(--gc-text-soft)',
+                );
+                startTrackingCoffracSyncPolling();
             } catch (error) {
                 stopTrackingCoffracSyncPolling();
+                trackingCoffracSyncAwaitingCompletion = false;
+                trackingCoffracLastStatusState = 'unavailable';
                 renderTrackingCoffracPlacedRefreshButton({ state: 'unavailable' });
                 setTrackingCoffracPlacedRefreshStatus(error.message || 'Récupération Coffrac impossible.', '#9f1239');
             }

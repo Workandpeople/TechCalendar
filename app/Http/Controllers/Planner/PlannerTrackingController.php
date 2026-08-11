@@ -114,7 +114,10 @@ class PlannerTrackingController extends Controller
             ], 409);
         }
 
-        $coffracAppointments->markSyncQueued('Récupération des RDV Coffrac déjà placés lancée en arrière-plan...');
+        $coffracAppointments->markSyncQueued('Récupération des RDV Coffrac déjà placés lancée en arrière-plan...', [
+            'mode' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
+            'remote_status' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
+        ]);
         SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PLACED);
 
         return response()->json([

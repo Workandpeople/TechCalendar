@@ -96,7 +96,8 @@ it('refreshes placed coffrac appointments from the tracking page', function () {
     $this->actingAs($planner)
         ->postJson(route('planner.tracking.coffrac.placed.refresh'))
         ->assertOk()
-        ->assertJsonPath('sync_queued', true);
+        ->assertJsonPath('sync_queued', true)
+        ->assertJsonPath('coffrac_api_status.mode', CoffracAppointmentService::REMOTE_STATUS_PLACED);
 
     Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->incremental === false
         && $job->status === \App\Services\CoffracAppointmentService::REMOTE_STATUS_PLACED);
@@ -146,6 +147,57 @@ it('disables placed coffrac refresh while another coffrac sync is running', func
         ->postJson(route('planner.tracking.coffrac.placed.refresh'))
         ->assertStatus(409)
         ->assertJsonPath('sync_queued', false)
+        ->assertJsonPath('coffrac_api_status.state', 'syncing');
+
+    Queue::assertNotPushed(SyncCoffracAppointmentsJob::class);
+});
+
+it('keeps a long running coffrac sync locked before the stale delay', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.coffrac.sync_stale_minutes' => 45,
+    ]);
+    Queue::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    $sync = ExternalApiSync::query()->create([
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_SYNCING,
+        'message' => 'Synchronisation locale Coffrac 5/40...',
+        'metadata' => [
+            'mode' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
+            'remote_status' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
+            'progress' => 12,
+            'stage' => 'Synchronisation locale Coffrac 5/40...',
+            'processed' => 5,
+            'total' => 40,
+        ],
+        'last_started_at' => now()->subMinutes(12),
+    ]);
+    $sync->timestamps = false;
+    $sync->forceFill(['updated_at' => now()->subMinutes(12)])->save();
+
+    $this->actingAs($planner)
+        ->get(route('planner.tracking'))
+        ->assertOk()
+        ->assertSee('Synchronisation en cours...')
+        ->assertSee('disabled', false);
+
+    $this->actingAs($planner)
+        ->getJson(route('planner.tracking.coffrac.placed.status'))
+        ->assertOk()
+        ->assertJsonPath('coffrac_api_status.state', 'syncing')
+        ->assertJsonPath('coffrac_api_status.progress', 12)
+        ->assertJsonPath('coffrac_api_status.mode', CoffracAppointmentService::REMOTE_STATUS_PLACED);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.coffrac.placed.refresh'))
+        ->assertStatus(409)
         ->assertJsonPath('coffrac_api_status.state', 'syncing');
 
     Queue::assertNotPushed(SyncCoffracAppointmentsJob::class);
