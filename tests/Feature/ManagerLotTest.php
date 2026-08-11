@@ -1945,6 +1945,127 @@ it('keeps beneficiary company and installer separated from Coffrac raw columns',
         ->and($appointment->raw_payload["RAISON SOCIALE du bénéficiaire de l'opération"])->toBe('Bénéficiaire Industrie SA');
 });
 
+it('resolves Coffrac beneficiary and installer even with noisy headers and row number fallback', function () {
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+
+    $file = UploadedFile::fake()->createWithContent(
+        'lot-coffrac-noisy.csv',
+        implode("\n", [
+            implode(';', [
+                'SIRET du professionnel',
+                'Email du professionnel',
+                'RAISON SOCIALE du professionnel ayant réalisé l’opération',
+                'RAISON SOCIALE du bénéficiaire de l’opération',
+                'Téléphone',
+                'Adresse',
+                'Code postal',
+                'Ville',
+            ]),
+            implode(';', [
+                '11111111100011',
+                'premier@installateur.test',
+                'Installateur Premier SAS',
+                'Bénéficiaire Premier SA',
+                '0600000001',
+                '1 Rue Première',
+                '75001',
+                'Paris',
+            ]),
+            implode(';', [
+                '12345678900011',
+                'contact@installateur.test',
+                'Installateur Noisy SAS',
+                'Bénéficiaire Noisy SA',
+                '0612345678',
+                '20 Rue Bellecordière',
+                '69002',
+                'Lyon',
+            ]),
+        ]),
+    );
+    $extractor = new LotSpreadsheetExtractor();
+    $rows = $extractor->extract($file);
+    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer
+        ->shouldReceive('normalize')
+        ->once()
+        ->andReturn([
+            'lot_name' => 'Lot Coffrac noisy',
+            'summary' => 'Import de test',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 2,
+                    'external_reference' => 'EXT-FIRST',
+                    'customer_name' => 'Installateur Premier SAS',
+                    'company_name' => 'Installateur Premier SAS',
+                    'site_name' => null,
+                    'installer_name' => null,
+                    'customer_first_name' => null,
+                    'customer_last_name' => null,
+                    'customer_phone' => '0600000001',
+                    'address' => '1 Rue Première',
+                    'postal_code' => '75001',
+                    'city' => 'Paris',
+                    'department_code' => '75',
+                    'latitude' => 48.8647,
+                    'longitude' => 2.334,
+                    'comment' => null,
+                    'confidence' => 0.95,
+                    'warnings' => [],
+                ],
+                [
+                    'row_number' => 2,
+                    'external_reference' => 'EXT-NOISY',
+                    'customer_name' => 'Installateur Noisy SAS',
+                    'company_name' => 'Installateur Noisy SAS',
+                    'site_name' => null,
+                    'installer_name' => null,
+                    'customer_first_name' => null,
+                    'customer_last_name' => null,
+                    'customer_phone' => '0612345678',
+                    'address' => '20 Rue Bellecordière',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'comment' => null,
+                    'confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ]);
+
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+        ->import(
+            file: $file,
+            userId: $manager->id,
+            requestedLotName: 'Lot Coffrac noisy',
+            lotType: Lot::TYPE_FULL_CONTROL,
+            serviceId: $service->id,
+        );
+
+    $appointment = $lot->appointments->firstWhere('external_reference', 'EXT-NOISY');
+
+    expect($appointment->customer_name)->toBe('Bénéficiaire Noisy SA')
+        ->and($appointment->company_name)->toBe('Bénéficiaire Noisy SA')
+        ->and($appointment->installer_name)->toBe('Installateur Noisy SAS')
+        ->and($appointment->row_number)->toBe(3)
+        ->and($appointment->installer_name)->not->toBe('12345678900011')
+        ->and($appointment->installer_name)->not->toBe('contact@installateur.test');
+});
+
 it('confirms selected preview rows and creates a lot', function () {
     $manager = User::factory()->create([
         'role' => 0,

@@ -40,11 +40,12 @@ class LotExcelImportService
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
         $rawRowsByNumber = $rows->keyBy('row_number');
+        $rawRowsByIndex = $rows->values();
         $storedFile = $this->storeOriginalFile($file);
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $rawRowsByIndex, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
@@ -76,10 +77,22 @@ class LotExcelImportService
                     'imported_at' => now(),
                 ]);
 
-                foreach (($normalized['appointments'] ?? []) as $appointmentPayload) {
+                foreach (array_values($normalized['appointments'] ?? []) as $index => $appointmentPayload) {
                     $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
-                    $rawPayload = $rawRowsByNumber->get($rowNumber)['data'] ?? null;
-                    $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload);
+                    $rawRowByNumber = $rawRowsByNumber->get($rowNumber);
+                    $rawRowByIndex = $rawRowsByIndex->get($index);
+                    $rawRowSelection = $this->businessIdentityResolver->selectRawRow($appointmentPayload, $rawRowByNumber, $rawRowByIndex);
+                    $rawPayload = $rawRowSelection['payload'];
+                    $rowNumber = (int) ($rawRowSelection['row_number'] ?? $rowNumber);
+                    $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload, [
+                        'flow' => 'direct',
+                        'lot_name' => $requestedLotName,
+                        'row_number' => $rowNumber,
+                        'appointment_index' => $index,
+                        'raw_row_source' => $rawRowSelection['source'],
+                        'raw_row_number' => $rawRowSelection['row_number'],
+                        'raw_candidate_scores' => $rawRowSelection['scores'],
+                    ]);
                     $warnings = collect($appointmentPayload['warnings'] ?? [])
                         ->filter()
                         ->values();

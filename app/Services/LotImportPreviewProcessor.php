@@ -30,6 +30,7 @@ class LotImportPreviewProcessor
 
         $rows = $this->extractor->extract($file);
         $rawRowsByNumber = $rows->keyBy('row_number');
+        $rawRowsByIndex = $rows->values();
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 25, sprintf(
             'Extraction terminée: %d ligne(s) détectée(s).',
@@ -52,10 +53,22 @@ class LotImportPreviewProcessor
 
         $enrichedAppointments = $appointments
             ->values()
-            ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $totalAppointments): array {
+            ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $rawRowsByIndex, $totalAppointments): array {
                 $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
-                $rawPayload = $rawRowsByNumber->get($rowNumber)['data'] ?? null;
-                $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload);
+                $rawRowByNumber = $rawRowsByNumber->get($rowNumber);
+                $rawRowByIndex = $rawRowsByIndex->get($index);
+                $rawRowSelection = $this->businessIdentityResolver->selectRawRow($appointmentPayload, $rawRowByNumber, $rawRowByIndex);
+                $rawPayload = $rawRowSelection['payload'];
+                $rowNumber = (int) ($rawRowSelection['row_number'] ?? $rowNumber);
+                $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload, [
+                    'flow' => 'preview',
+                    'preview_id' => $preview->id,
+                    'row_number' => $rowNumber,
+                    'appointment_index' => $index,
+                    'raw_row_source' => $rawRowSelection['source'],
+                    'raw_row_number' => $rawRowSelection['row_number'],
+                    'raw_candidate_scores' => $rawRowSelection['scores'],
+                ]);
                 $address = $this->fullAddress($appointmentPayload);
                 $geocoding = $this->geocoder->geocode($address);
                 $warnings = collect($appointmentPayload['warnings'] ?? [])
