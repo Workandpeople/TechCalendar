@@ -192,7 +192,7 @@ class LotAutoCompletionCalculator
      *     satisfaction_percentage:int,
      *     dissatisfaction_processed_count:int,
      *     dissatisfied_count:int,
-     *     dissatisfaction_percentage:int,
+     *     dissatisfaction_percentage:float,
      *     detail:string,
      *     is_sampling:bool,
      *     sampling_percentage:float|null
@@ -264,7 +264,7 @@ class LotAutoCompletionCalculator
             'dissatisfaction_processed_count' => $processedCount,
             'dissatisfied_count' => $rawUnsatisfiedCount,
             'dissatisfaction_percentage' => $processedCount > 0
-                ? (int) min(100, round(($rawUnsatisfiedCount / $processedCount) * 100))
+                ? min(100, round(($rawUnsatisfiedCount / $processedCount) * 100, 2))
                 : 0,
             'detail' => $this->channelDetail($label, $completedCount, $targetCount, $isSampling, $safeSamplingPercentage),
             'is_sampling' => $isSampling,

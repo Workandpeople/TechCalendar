@@ -2776,6 +2776,77 @@ it('rolls back a physical lot appointment when coffrac does not confirm attente 
         ->and($lot->refresh()->status)->toBe(Lot::STATUS_NOT_STARTED);
 });
 
+it('returns a readable coffrac html error when a physical lot appointment cannot be created', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments' => Http::response(
+            '<html><body><h1>Server Error</h1><p>syntax error, unexpected token "&lt;" in Dossier.php:174</p></body></html>',
+            500,
+            ['Content-Type' => 'text/html'],
+        ),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit interne',
+        'average_duration_minutes' => 120,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.html@example.test',
+        'latitude' => 45.764,
+        'longitude' => 4.8357,
+    ]);
+    $technician->services()->attach($service);
+    $lot = Lot::query()->create([
+        'name' => 'Lot erreur Coffrac',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'customer_name' => 'Client Lot',
+        'customer_phone' => '0600000003',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $response = $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'lot_appointment_id' => $lotAppointment->id,
+            'technician_id' => $technician->id,
+            'starts_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
+            'duration_minutes' => 120,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['lot_appointment_id']);
+
+    expect($response->json('errors.lot_appointment_id.0'))
+        ->toContain('HTTP 500')
+        ->toContain('syntax error')
+        ->and(Appointment::query()->count())->toBe(0)
+        ->and($lotAppointment->refresh()->appointment_id)->toBeNull()
+        ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PENDING);
+});
+
 it('uses the coffrac service alias when creating a physical appointment from a lot', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',

@@ -882,6 +882,43 @@ it('keeps hybrid lot physical and contact appointment targets separated', functi
         ->assertSee('Cible satisfaction : 30,00%');
 });
 
+it('keeps dissatisfaction percentages with two decimals on lots index and detail', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot insatisfaction précise',
+        'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
+        'created_by' => $manager->id,
+        'imported_at' => now(),
+    ]);
+
+    foreach (range(1, 3) as $index) {
+        LotAppointment::query()->create([
+            'lot_id' => $lot->id,
+            'row_number' => $index,
+            'customer_name' => 'Client insatisfaction '.$index,
+            'address' => 'Adresse insatisfaction '.$index,
+            'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
+            'processing_mode' => LotAppointment::PROCESSING_MODE_CONTACT,
+            'contact_satisfaction' => $index !== 1,
+        ]);
+    }
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots'))
+        ->assertOk()
+        ->assertSee('33,33%')
+        ->assertDontSee('33,00%');
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('33,33%')
+        ->assertDontSee('33,00%');
+});
+
 it('updates manual appointment targets without changing satisfaction targets', function () {
     $manager = User::factory()->create([
         'role' => 0,

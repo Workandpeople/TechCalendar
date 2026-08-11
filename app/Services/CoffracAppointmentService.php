@@ -13,6 +13,7 @@ use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -454,9 +455,7 @@ class CoffracAppointmentService
         ]);
 
         if ($response->failed()) {
-            $payload = $response->json();
-
-            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de signaler le problème RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Coffrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -806,7 +805,7 @@ class CoffracAppointmentService
                 return;
             }
 
-            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de basculer le RDV Coffrac en attente visite.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de basculer le RDV Coffrac en attente visite.'));
         }
 
         $storedRequest = ExternalAppointmentRequest::query()
@@ -869,8 +868,6 @@ class CoffracAppointmentService
         $response = $this->request()->post($this->endpoint('appointments'), $requestPayload);
 
         if ($response->failed()) {
-            $payload = $response->json();
-
             Log::warning('Création du dossier Coffrac depuis un lot refusée.', [
                 'appointment_id' => $appointment->id,
                 'lot_id' => $requestPayload['lot_id'] ?? null,
@@ -879,10 +876,10 @@ class CoffracAppointmentService
                 'service_name' => $requestPayload['service_name'] ?? null,
                 'technician_email' => $requestPayload['technician_email'] ?? null,
                 'status' => $response->status(),
-                'message' => is_array($payload) ? $this->responseError($payload, 'Erreur Coffrac.') : 'Réponse Coffrac non JSON.',
+                'message' => $this->responseErrorFromResponse($response, 'Erreur Coffrac.'),
             ]);
 
-            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de créer le dossier Coffrac depuis le lot.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de créer le dossier Coffrac depuis le lot.'));
         }
 
         $remotePayload = $response->json('data');
@@ -1110,9 +1107,7 @@ class CoffracAppointmentService
         ]);
 
         if ($response->failed()) {
-            $payload = $response->json();
-
-            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de signaler le problème RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Coffrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -1216,9 +1211,7 @@ class CoffracAppointmentService
         );
 
         if ($response->failed()) {
-            $responsePayload = $response->json();
-
-            throw new RuntimeException($this->responseError(is_array($responsePayload) ? $responsePayload : null, 'Impossible de corriger l’adresse du RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de corriger l’adresse du RDV dans Coffrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -1345,9 +1338,7 @@ class CoffracAppointmentService
         }
 
         if ($response->failed()) {
-            $payload = $response->json();
-
-            throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible d’ajouter le document dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible d’ajouter le document dans Coffrac.'));
         }
 
         $remoteDocument = $response->json('data');
@@ -1580,8 +1571,7 @@ class CoffracAppointmentService
         ], fn ($value): bool => $value !== null && $value !== ''));
 
         if ($response->failed()) {
-            $payload = $response->json();
-            $message = $this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les RDV Coffrac.');
+            $message = $this->responseErrorFromResponse($response, 'Impossible de récupérer les RDV Coffrac.');
 
             if (! $externalReference && $this->shouldSplitRemoteError($message)) {
                 if ($limit === 1) {
@@ -2602,5 +2592,28 @@ class CoffracAppointmentService
         }
 
         return $fallback;
+    }
+
+    private function responseErrorFromResponse(Response $response, string $fallback): string
+    {
+        $payload = $response->json();
+
+        if (is_array($payload)) {
+            return $this->responseError($payload, $fallback);
+        }
+
+        $body = trim((string) $response->body());
+        $plainBody = trim((string) preg_replace('/\s+/u', ' ', strip_tags($body)));
+
+        if ($plainBody !== '') {
+            return sprintf(
+                '%s Coffrac a renvoyé HTTP %d sans JSON: %s',
+                $fallback,
+                $response->status(),
+                Str::limit($plainBody, self::SYNC_MESSAGE_MAX_LENGTH, '...'),
+            );
+        }
+
+        return sprintf('%s Coffrac a renvoyé HTTP %d sans détail exploitable.', $fallback, $response->status());
     }
 }
