@@ -32,8 +32,23 @@ class ProcessLotImportPreviewJob implements ShouldQueue
     {
         $preview = LotImportPreview::query()->findOrFail($this->previewId);
 
+        Log::warning('Lot import preview job started.', [
+            'preview_id' => $preview->id,
+            'status' => $preview->status,
+            'name' => $preview->name,
+            'type' => $preview->type,
+            'original_filename' => $preview->original_filename,
+        ]);
+
         try {
             $processor->process($preview);
+
+            Log::warning('Lot import preview job completed.', [
+                'preview_id' => $preview->id,
+                'status' => $preview->refresh()->status,
+                'normalized_rows' => $preview->normalized_rows,
+                'rejected_rows' => $preview->rejected_rows,
+            ]);
         } catch (Throwable $exception) {
             $this->markPreviewAsFailed($preview->refresh(), $exception);
 

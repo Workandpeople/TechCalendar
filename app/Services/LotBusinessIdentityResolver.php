@@ -132,7 +132,7 @@ class LotBusinessIdentityResolver
                 'raw_headers' => array_keys($rawRow),
             ]);
         } else {
-            Log::info('Lot import business identity resolved.', $logPayload);
+            Log::warning('Lot import business identity resolved.', $logPayload);
         }
 
         return $appointmentPayload;

@@ -23,6 +23,13 @@ class LotImportPreviewProcessor
 
     public function process(LotImportPreview $preview): void
     {
+        Log::warning('Lot import preview diagnostics: processing started.', [
+            'preview_id' => $preview->id,
+            'name' => $preview->name,
+            'type' => $preview->type,
+            'original_filename' => $preview->original_filename,
+        ]);
+
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 5, 'Lecture du fichier original.');
 
         $file = $this->uploadedFileFromPreview($preview);
@@ -31,6 +38,13 @@ class LotImportPreviewProcessor
         $rows = $this->extractor->extract($file);
         $rawRowsByNumber = $rows->keyBy('row_number');
         $rawRowsByIndex = $rows->values();
+
+        Log::warning('Lot import preview diagnostics: spreadsheet extracted.', [
+            'preview_id' => $preview->id,
+            'rows_count' => $rows->count(),
+            'first_row_number' => $rows->first()['row_number'] ?? null,
+            'first_headers' => array_keys($rows->first()['data'] ?? []),
+        ]);
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 25, sprintf(
             'Extraction terminée: %d ligne(s) détectée(s).',
@@ -44,6 +58,12 @@ class LotImportPreviewProcessor
         $normalized = $this->normalizer->normalize($rows, $preview->name, $preview->type);
         $appointments = collect($normalized['appointments'] ?? []);
         $totalAppointments = max(1, $appointments->count());
+
+        Log::warning('Lot import preview diagnostics: OpenAI normalization completed.', [
+            'preview_id' => $preview->id,
+            'appointments_count' => $appointments->count(),
+            'rejected_rows_count' => count($normalized['rejected_rows'] ?? []),
+        ]);
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 35, sprintf(
             'Normalisation OpenAI terminée: %d RDV normalise(s), %d rejet(s).',
@@ -132,6 +152,12 @@ class LotImportPreviewProcessor
             'completed_at' => now(),
         ]);
         $this->broadcast($preview);
+
+        Log::warning('Lot import preview diagnostics: processing completed.', [
+            'preview_id' => $preview->id,
+            'normalized_rows' => count($enrichedAppointments),
+            'rejected_rows' => count($normalized['rejected_rows'] ?? []),
+        ]);
     }
 
     private function uploadedFileFromPreview(LotImportPreview $preview): UploadedFile
