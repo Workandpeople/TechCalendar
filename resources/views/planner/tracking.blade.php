@@ -1,4 +1,15 @@
 <x-layouts.app>
+    @php
+        $coffracSyncStatus = $coffracSyncStatus ?? [
+            'state' => 'unavailable',
+            'label' => 'Statut Coffrac indisponible',
+            'detail' => '',
+            'progress' => 100,
+            'stage' => '',
+        ];
+        $coffracSyncIsRunning = ($coffracSyncStatus['state'] ?? null) === 'syncing';
+    @endphp
+
     <div class="space-y-6">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -65,12 +76,25 @@
                     <button
                         id="tracking-coffrac-placed-refresh"
                         type="button"
-                        class="gc-btn-primary whitespace-nowrap"
+                        class="gc-btn-primary inline-flex items-center gap-2 whitespace-nowrap"
                         data-refresh-url="{{ $refreshPlacedCoffracUrl }}"
+                        data-status-url="{{ $refreshPlacedCoffracStatusUrl }}"
+                        @disabled($coffracSyncIsRunning)
                     >
-                        Récupérer les RDV Coffrac placés
+                        <span
+                            data-tracking-coffrac-refresh-spinner
+                            class="{{ $coffracSyncIsRunning ? '' : 'hidden' }} h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                            aria-hidden="true"
+                        ></span>
+                        <span data-tracking-coffrac-refresh-label>
+                            {{ $coffracSyncIsRunning ? 'Synchronisation en cours...' : 'Récupérer les RDV Coffrac placés' }}
+                        </span>
                     </button>
-                    <span id="tracking-coffrac-placed-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
+                    <span
+                        id="tracking-coffrac-placed-refresh-status"
+                        class="{{ $coffracSyncIsRunning ? '' : 'hidden' }} text-sm"
+                        style="color:var(--gc-text-soft);"
+                    >{{ $coffracSyncIsRunning ? ($coffracSyncStatus['stage'] ?? 'Synchronisation Coffrac en cours...') : '' }}</span>
                 </div>
             </div>
 
@@ -385,6 +409,8 @@
         const trackingResetFilters = document.getElementById('tracking-reset-filters');
         const trackingCoffracPlacedRefreshButton = document.getElementById('tracking-coffrac-placed-refresh');
         const trackingCoffracPlacedRefreshStatus = document.getElementById('tracking-coffrac-placed-refresh-status');
+        const trackingCoffracPlacedRefreshSpinner = trackingCoffracPlacedRefreshButton?.querySelector('[data-tracking-coffrac-refresh-spinner]');
+        const trackingCoffracPlacedRefreshLabel = trackingCoffracPlacedRefreshButton?.querySelector('[data-tracking-coffrac-refresh-label]');
         const trackingSearchForm = document.getElementById('tracking-search-form');
         const trackingSearchQuery = document.getElementById('tracking_search_query');
         const trackingSearchDateFrom = document.getElementById('tracking_search_date_from');
@@ -433,6 +459,7 @@
         const trackingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingSearchUrl = @json($searchAppointmentsUrl);
+        const trackingInitialCoffracSyncStatus = @json($coffracSyncStatus);
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const trackingMapboxToken = @json($mapboxToken ?? null);
         const trackingMailTemplates = @json($trackingMailTemplates);
@@ -473,6 +500,8 @@
         let trackingMailSent = false;
         let trackingCurrentDetailEvent = null;
         let trackingSearchAbortController = null;
+        let trackingCoffracSyncPollingTimer = null;
+        let trackingCoffracSyncSubscription = null;
         const trackingSearchResultEvents = new Map();
 
         const formatDateTime = (value) => {
@@ -885,6 +914,129 @@
             trackingCoffracPlacedRefreshStatus.textContent = message || '';
             trackingCoffracPlacedRefreshStatus.style.color = color;
             trackingCoffracPlacedRefreshStatus.classList.toggle('hidden', !message);
+        };
+
+        const trackingCoffracStatusMessage = (status = {}) => {
+            const progress = Number(status.progress ?? 0);
+            const stage = status.stage || status.detail || status.label || '';
+
+            if (status.state === 'syncing') {
+                return progress > 0 ? `${stage} (${progress}%)` : stage;
+            }
+
+            return stage;
+        };
+
+        const renderTrackingCoffracPlacedRefreshButton = (status = {}) => {
+            const isSyncing = status.state === 'syncing';
+
+            if (trackingCoffracPlacedRefreshButton) {
+                trackingCoffracPlacedRefreshButton.disabled = isSyncing;
+                trackingCoffracPlacedRefreshButton.classList.toggle('opacity-70', isSyncing);
+            }
+
+            trackingCoffracPlacedRefreshSpinner?.classList.toggle('hidden', !isSyncing);
+
+            if (trackingCoffracPlacedRefreshLabel) {
+                trackingCoffracPlacedRefreshLabel.textContent = isSyncing
+                    ? 'Synchronisation en cours...'
+                    : 'Récupérer les RDV Coffrac placés';
+            }
+
+            const message = trackingCoffracStatusMessage(status);
+
+            if (isSyncing && message) {
+                setTrackingCoffracPlacedRefreshStatus(message, 'var(--gc-text-soft)');
+            }
+        };
+
+        const stopTrackingCoffracSyncPolling = () => {
+            if (trackingCoffracSyncPollingTimer) {
+                window.clearInterval(trackingCoffracSyncPollingTimer);
+                trackingCoffracSyncPollingTimer = null;
+            }
+        };
+
+        const refreshTrackingCoffracSyncStatus = async () => {
+            const statusUrl = trackingCoffracPlacedRefreshButton?.dataset.statusUrl;
+
+            if (!statusUrl) return;
+
+            try {
+                const response = await fetch(statusUrl, {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': trackingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+                const status = payload.coffrac_api_status || {};
+
+                renderTrackingCoffracPlacedRefreshButton(status);
+
+                if (status.state !== 'syncing') {
+                    stopTrackingCoffracSyncPolling();
+
+                    if (status.state === 'available') {
+                        setTrackingCoffracPlacedRefreshStatus(status.stage || status.detail || 'Synchronisation Coffrac terminée.', '#0f766e');
+                        refetchCalendar();
+                    }
+                }
+            } catch (error) {
+                setTrackingCoffracPlacedRefreshStatus('Impossible de lire l’état de la synchronisation Coffrac.', '#9f1239');
+            }
+        };
+
+        const startTrackingCoffracSyncPolling = () => {
+            if (trackingCoffracSyncPollingTimer) return;
+
+            trackingCoffracSyncPollingTimer = window.setInterval(refreshTrackingCoffracSyncStatus, 4000);
+        };
+
+        const handleTrackingCoffracSyncProgress = (payload = {}) => {
+            if (payload.source !== 'coffrac') return;
+
+            renderTrackingCoffracPlacedRefreshButton(payload);
+
+            if (payload.state === 'syncing') {
+                startTrackingCoffracSyncPolling();
+                return;
+            }
+
+            stopTrackingCoffracSyncPolling();
+
+            if (payload.state === 'available') {
+                setTrackingCoffracPlacedRefreshStatus(payload.stage || payload.message || 'Synchronisation Coffrac terminée.', '#0f766e');
+                refetchCalendar();
+            } else {
+                setTrackingCoffracPlacedRefreshStatus(payload.stage || payload.message || 'Synchronisation Coffrac interrompue.', '#9f1239');
+            }
+        };
+
+        const subscribeTrackingCoffracSync = () => {
+            renderTrackingCoffracPlacedRefreshButton(trackingInitialCoffracSyncStatus || {});
+
+            if ((trackingInitialCoffracSyncStatus || {}).state === 'syncing') {
+                startTrackingCoffracSyncPolling();
+            }
+
+            if (!window.TechCalendarReverb?.subscribePrivate) {
+                return;
+            }
+
+            trackingCoffracSyncSubscription?.unsubscribe?.();
+            trackingCoffracSyncSubscription = window.TechCalendarReverb.subscribePrivate(
+                'external-api-sync.coffrac',
+                'external-api-sync.progressed',
+                handleTrackingCoffracSyncProgress,
+                {
+                    onError: () => {
+                        if (trackingCoffracPlacedRefreshButton?.disabled) {
+                            startTrackingCoffracSyncPolling();
+                        }
+                    },
+                },
+            );
         };
 
         const trackingMailUrl = (template, appointmentId) => template.replace('__APPOINTMENT__', encodeURIComponent(appointmentId));
@@ -2225,9 +2377,13 @@
 
             if (!url || trackingCoffracPlacedRefreshButton.disabled) return;
 
-            trackingCoffracPlacedRefreshButton.disabled = true;
-            trackingCoffracPlacedRefreshButton.textContent = 'Récupération...';
+            renderTrackingCoffracPlacedRefreshButton({
+                state: 'syncing',
+                progress: 3,
+                stage: 'Récupération des RDV Coffrac déjà placés lancée...',
+            });
             setTrackingCoffracPlacedRefreshStatus('Synchro Coffrac lancée...', 'var(--gc-text-soft)');
+            startTrackingCoffracSyncPolling();
 
             try {
                 const response = await fetch(url, {
@@ -2241,16 +2397,31 @@
                 const payload = await response.json();
 
                 if (!response.ok) {
+                    if (response.status === 409 && payload.coffrac_api_status) {
+                        renderTrackingCoffracPlacedRefreshButton(payload.coffrac_api_status);
+                        setTrackingCoffracPlacedRefreshStatus(
+                            trackingCoffracStatusMessage(payload.coffrac_api_status) || payload.message || 'Synchronisation Coffrac déjà en cours.',
+                            'var(--gc-text-soft)',
+                        );
+                        startTrackingCoffracSyncPolling();
+
+                        return;
+                    }
+
                     throw new Error(payload.message || 'Récupération Coffrac impossible.');
                 }
 
+                renderTrackingCoffracPlacedRefreshButton(payload.coffrac_api_status || {
+                    state: 'syncing',
+                    progress: 3,
+                    stage: payload.message || 'Synchronisation Coffrac en cours...',
+                });
                 setTrackingCoffracPlacedRefreshStatus(payload.message || 'Récupération lancée.', '#0f766e');
                 window.setTimeout(refetchCalendar, 1200);
             } catch (error) {
+                stopTrackingCoffracSyncPolling();
+                renderTrackingCoffracPlacedRefreshButton({ state: 'unavailable' });
                 setTrackingCoffracPlacedRefreshStatus(error.message || 'Récupération Coffrac impossible.', '#9f1239');
-            } finally {
-                trackingCoffracPlacedRefreshButton.disabled = false;
-                trackingCoffracPlacedRefreshButton.textContent = 'Récupérer les RDV Coffrac placés';
             }
         });
 
@@ -2650,6 +2821,7 @@
         applyInitialTechnicianSelection();
         initTrackingCalendar();
         updateLegend();
+        subscribeTrackingCoffracSync();
 
         window.addEventListener('techcalendar:layout-resized', () => {
             trackingCalendar?.updateSize();

@@ -67,12 +67,27 @@ class PlannerTrackingController extends Controller
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'mailTemplates' => $mailTemplates,
             'trackingMailTemplates' => $trackingMailTemplates,
+            'coffracSyncStatus' => $coffracAppointments->currentSyncStatus(),
             'searchAppointmentsUrl' => route($request->routeIs('manager.appointments')
                 ? 'manager.appointments.search'
                 : 'planner.tracking.search'),
             'refreshPlacedCoffracUrl' => route($request->routeIs('manager.appointments')
                 ? 'manager.appointments.coffrac.placed.refresh'
                 : 'planner.tracking.coffrac.placed.refresh'),
+            'refreshPlacedCoffracStatusUrl' => route($request->routeIs('manager.appointments')
+                ? 'manager.appointments.coffrac.placed.status'
+                : 'planner.tracking.coffrac.placed.status'),
+        ]);
+    }
+
+    public function placedCoffracSyncStatus(
+        Request $request,
+        CoffracAppointmentService $coffracAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        return response()->json([
+            'coffrac_api_status' => $coffracAppointments->currentSyncStatus(),
         ]);
     }
 
@@ -89,12 +104,23 @@ class PlannerTrackingController extends Controller
             ], 422);
         }
 
+        $currentStatus = $coffracAppointments->currentSyncStatus();
+
+        if (($currentStatus['state'] ?? null) === 'syncing') {
+            return response()->json([
+                'sync_queued' => false,
+                'message' => $currentStatus['stage'] ?? 'Synchronisation Coffrac déjà en cours.',
+                'coffrac_api_status' => $currentStatus,
+            ], 409);
+        }
+
         $coffracAppointments->markSyncQueued('Récupération des RDV Coffrac déjà placés lancée en arrière-plan...');
         SyncCoffracAppointmentsJob::dispatch(false, CoffracAppointmentService::REMOTE_STATUS_PLACED);
 
         return response()->json([
             'sync_queued' => true,
             'message' => 'Récupération des RDV Coffrac déjà placés lancée. Le calendrier va se mettre à jour avec les données locales.',
+            'coffrac_api_status' => $coffracAppointments->currentSyncStatus(),
         ]);
     }
 

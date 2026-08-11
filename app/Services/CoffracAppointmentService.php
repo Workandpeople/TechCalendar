@@ -490,6 +490,7 @@ class CoffracAppointmentService
     {
         $status = $this->normalizeSyncStatus($status);
         $isPendingOnlySync = $status === self::REMOTE_STATUS_PENDING;
+        $placedSyncWindow = $this->placedSyncWindowForStatus($status);
 
         if (! $this->isConfigured()) {
             $message = 'COFFRAC_API_URL ou COFFRAC_API_TOKEN est absent.';
@@ -536,7 +537,13 @@ class CoffracAppointmentService
             $this->skippedRemoteAppointmentCount = 0;
 
             try {
-                $remoteAppointments = $this->fetchRemoteAppointments($status, $pageSize, updatedAfter: $updatedAfter);
+                $remoteAppointments = $this->fetchRemoteAppointments(
+                    $status,
+                    $pageSize,
+                    updatedAfter: $updatedAfter,
+                    dateFrom: $placedSyncWindow['from'],
+                    dateTo: $placedSyncWindow['to'],
+                );
                 $remoteAppointments = $remoteAppointments
                     ->filter(fn (array $appointment): bool => filled((string) ($appointment['id'] ?? '')))
                     ->reject(fn (array $appointment): bool => $this->isIgnoredExternalReference((string) ($appointment['id'] ?? '')))
@@ -554,6 +561,8 @@ class CoffracAppointmentService
                     'processed' => 0,
                     'mode' => $this->syncMode($status, $isIncrementalSync),
                     'updated_after' => $updatedAfter?->toIso8601String(),
+                    'date_from' => $placedSyncWindow['from']?->toDateString(),
+                    'date_to' => $placedSyncWindow['to']?->toDateString(),
                 ]);
             } catch (Throwable $exception) {
                 report($exception);
@@ -630,13 +639,11 @@ class CoffracAppointmentService
                         $remoteReferences->isNotEmpty(),
                         fn ($query) => $query->whereNotIn('external_reference', $remoteReferences->all()),
                     )
-                    ->whereIn('status', $isPendingOnlySync
-                        ? [ExternalAppointmentRequest::STATUS_PENDING]
-                        : [
-                            ExternalAppointmentRequest::STATUS_PENDING,
-                            ExternalAppointmentRequest::STATUS_PLACED,
-                            ExternalAppointmentRequest::STATUS_PROBLEM,
-                        ]);
+                    ->whereIn('status', $this->localStatusesCoveredByRemoteStatus($status))
+                    ->when(
+                        $status === self::REMOTE_STATUS_PLACED && $placedSyncWindow['from'] && $placedSyncWindow['to'],
+                        fn ($query) => $query->whereBetween('starts_at', [$placedSyncWindow['from'], $placedSyncWindow['to']]),
+                    );
 
                 if ($isPendingOnlySync) {
                     $absentRequestsQuery->delete();
@@ -675,6 +682,8 @@ class CoffracAppointmentService
                 'total' => $remoteAppointments->count(),
                 'mode' => $this->syncMode($status, $isIncrementalSync),
                 'updated_after' => $updatedAfter?->toIso8601String(),
+                'date_from' => $placedSyncWindow['from']?->toDateString(),
+                'date_to' => $placedSyncWindow['to']?->toDateString(),
                 ...$counts,
             ], touchLastSuccessfulAt: ! $isPendingOnlySync);
 
@@ -697,6 +706,41 @@ class CoffracAppointmentService
             self::REMOTE_STATUS_PLACED,
             self::REMOTE_STATUS_PROBLEM,
         ], true) ? $status : self::REMOTE_STATUS_ALL;
+    }
+
+    /**
+     * @return array{from:?Carbon,to:?Carbon}
+     */
+    private function placedSyncWindowForStatus(string $status): array
+    {
+        if ($status !== self::REMOTE_STATUS_PLACED) {
+            return ['from' => null, 'to' => null];
+        }
+
+        $pastYears = max(0, (int) config('services.coffrac.placed_sync_past_years', 1));
+        $futureMonths = max(0, (int) config('services.coffrac.placed_sync_future_months', 2));
+
+        return [
+            'from' => now()->copy()->subYears($pastYears)->startOfDay(),
+            'to' => now()->copy()->addMonths($futureMonths)->endOfDay(),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function localStatusesCoveredByRemoteStatus(string $status): array
+    {
+        return match ($status) {
+            self::REMOTE_STATUS_PENDING => [ExternalAppointmentRequest::STATUS_PENDING],
+            self::REMOTE_STATUS_PLACED => [ExternalAppointmentRequest::STATUS_PLACED],
+            self::REMOTE_STATUS_PROBLEM => [ExternalAppointmentRequest::STATUS_PROBLEM],
+            default => [
+                ExternalAppointmentRequest::STATUS_PENDING,
+                ExternalAppointmentRequest::STATUS_PLACED,
+                ExternalAppointmentRequest::STATUS_PROBLEM,
+            ],
+        };
     }
 
     private function syncMode(string $status, bool $isIncrementalSync): string
@@ -757,6 +801,16 @@ class CoffracAppointmentService
             'problem_count' => $problemCount,
             'total_count' => $pendingCount + $placedCount + $problemCount,
         ];
+    }
+
+    /**
+     * @return array{state:string,label:string,detail:string,count:int,displayed_count:int,missing_coordinates_count:int,progress:int,stage:string}
+     */
+    public function currentSyncStatus(): array
+    {
+        $counts = $this->localStatusCounts();
+
+        return $this->statusFromLastSync($counts['total_count']);
     }
 
     public function markPlaced(Appointment $appointment, array $crmAppointment): void
@@ -1478,7 +1532,9 @@ class CoffracAppointmentService
         string $status,
         int $pageSize,
         ?string $externalReference = null,
-        ?Carbon $updatedAfter = null
+        ?Carbon $updatedAfter = null,
+        ?Carbon $dateFrom = null,
+        ?Carbon $dateTo = null,
     ): Collection {
         $appointments = collect();
         $offset = 0;
@@ -1486,7 +1542,15 @@ class CoffracAppointmentService
         $pageIndex = 0;
 
         do {
-            $page = $this->fetchRemoteAppointmentPage($status, $safePageSize, $offset, $externalReference, $updatedAfter);
+            $page = $this->fetchRemoteAppointmentPage(
+                $status,
+                $safePageSize,
+                $offset,
+                $externalReference,
+                $updatedAfter,
+                $dateFrom,
+                $dateTo,
+            );
 
             $appointments = $appointments->merge($page['appointments']);
             $offset += $safePageSize;
@@ -1560,7 +1624,9 @@ class CoffracAppointmentService
         int $limit,
         int $offset,
         ?string $externalReference = null,
-        ?Carbon $updatedAfter = null
+        ?Carbon $updatedAfter = null,
+        ?Carbon $dateFrom = null,
+        ?Carbon $dateTo = null,
     ): array {
         $response = $this->request()->get($this->endpoint('appointments'), array_filter([
             'status' => $status,
@@ -1568,6 +1634,8 @@ class CoffracAppointmentService
             'offset' => $externalReference ? null : $offset,
             'id' => $externalReference,
             'updated_after' => $externalReference ? null : $updatedAfter?->toIso8601String(),
+            'date_from' => $externalReference ? null : $dateFrom?->toDateString(),
+            'date_to' => $externalReference ? null : $dateTo?->toDateString(),
         ], fn ($value): bool => $value !== null && $value !== ''));
 
         if ($response->failed()) {
@@ -1589,13 +1657,27 @@ class CoffracAppointmentService
 
                 $firstLimit = max(1, intdiv($limit, 2));
                 $secondLimit = $limit - $firstLimit;
-                $firstPage = $this->fetchRemoteAppointmentPage($status, $firstLimit, $offset, updatedAfter: $updatedAfter);
+                $firstPage = $this->fetchRemoteAppointmentPage(
+                    $status,
+                    $firstLimit,
+                    $offset,
+                    updatedAfter: $updatedAfter,
+                    dateFrom: $dateFrom,
+                    dateTo: $dateTo,
+                );
 
                 if ($firstPage['reached_end'] || $secondLimit <= 0) {
                     return $firstPage;
                 }
 
-                $secondPage = $this->fetchRemoteAppointmentPage($status, $secondLimit, $offset + $firstLimit, updatedAfter: $updatedAfter);
+                $secondPage = $this->fetchRemoteAppointmentPage(
+                    $status,
+                    $secondLimit,
+                    $offset + $firstLimit,
+                    updatedAfter: $updatedAfter,
+                    dateFrom: $dateFrom,
+                    dateTo: $dateTo,
+                );
 
                 return [
                     'appointments' => $firstPage['appointments']->merge($secondPage['appointments'])->values(),

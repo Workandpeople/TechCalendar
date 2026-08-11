@@ -14,6 +14,7 @@ use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\CoffracAppointmentService;
 use App\Services\MapboxAddressGeocoder;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -1377,6 +1378,54 @@ it('syncs pending and placed coffrac appointment requests with documents locally
         ->and($appointment->technician_id)->toBe($technician->id)
         ->and($appointment->customer_phone)->toBe($longCoffracPhone)
         ->and($appointment->starts_at->timezone(config('app.timezone'))->format('Y-m-d H:i'))->toBe('2026-06-22 10:30');
+});
+
+it('scopes full placed coffrac sync to the configured date window without archiving pending requests', function () {
+    Carbon::setTestNow(Carbon::parse('2026-08-11 12:00:00', config('app.timezone')));
+
+    try {
+        config([
+            'services.coffrac.api_url' => 'https://coffrac.test/api',
+            'services.coffrac.api_token' => 'secret-token',
+            'services.coffrac.placed_sync_past_years' => 1,
+            'services.coffrac.placed_sync_future_months' => 2,
+        ]);
+
+        ExternalAppointmentRequest::query()->create([
+            'source' => 'coffrac',
+            'external_reference' => 'pending-keep',
+            'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        ]);
+
+        $requestedQueries = [];
+
+        Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedQueries) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $requestedQueries[] = $query;
+
+            return Http::response([
+                'result' => true,
+                'data' => [],
+                'fetched_count' => 0,
+                'skipped_count' => 0,
+            ]);
+        });
+
+        $this->artisan('coffrac:sync --status=placed')
+            ->assertSuccessful();
+
+        expect($requestedQueries[0]['status'] ?? null)->toBe(CoffracAppointmentService::REMOTE_STATUS_PLACED)
+            ->and($requestedQueries[0]['date_from'] ?? null)->toBe('2025-08-11')
+            ->and($requestedQueries[0]['date_to'] ?? null)->toBe('2026-10-11');
+
+        $this->assertDatabaseHas('external_appointment_requests', [
+            'source' => 'coffrac',
+            'external_reference' => 'pending-keep',
+            'status' => ExternalAppointmentRequest::STATUS_PENDING,
+        ]);
+    } finally {
+        Carbon::setTestNow();
+    }
 });
 
 it('renders lot appointment requests on the booking page', function () {

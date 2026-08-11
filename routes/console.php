@@ -124,3 +124,7 @@ Schedule::command('route-metrics:compute')
 Schedule::command('coffrac:sync --incremental')
     ->everyTenMinutes()
     ->withoutOverlapping(60);
+
+Schedule::command('coffrac:sync --status=placed')
+    ->cron('5-59/10 * * * *')
+    ->withoutOverlapping(60);

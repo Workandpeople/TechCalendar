@@ -107,6 +107,50 @@ it('refreshes placed coffrac appointments from the tracking page', function () {
     ]);
 });
 
+it('disables placed coffrac refresh while another coffrac sync is running', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Queue::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+
+    ExternalApiSync::query()->create([
+        'source' => 'coffrac',
+        'state' => ExternalApiSync::STATE_SYNCING,
+        'message' => 'Synchronisation Coffrac en cours.',
+        'metadata' => [
+            'progress' => 42,
+            'stage' => 'Synchronisation locale Coffrac 12/30...',
+        ],
+        'last_started_at' => now(),
+    ]);
+
+    $this->actingAs($planner)
+        ->get(route('planner.tracking'))
+        ->assertOk()
+        ->assertSee('Synchronisation en cours...')
+        ->assertSee('disabled', false);
+
+    $this->actingAs($planner)
+        ->getJson(route('planner.tracking.coffrac.placed.status'))
+        ->assertOk()
+        ->assertJsonPath('coffrac_api_status.state', 'syncing')
+        ->assertJsonPath('coffrac_api_status.progress', 42);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.coffrac.placed.refresh'))
+        ->assertStatus(409)
+        ->assertJsonPath('sync_queued', false)
+        ->assertJsonPath('coffrac_api_status.state', 'syncing');
+
+    Queue::assertNotPushed(SyncCoffracAppointmentsJob::class);
+});
+
 it('shows the placed coffrac refresh action on the manager appointments page', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
