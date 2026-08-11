@@ -2090,33 +2090,41 @@ it('keeps Coffrac business identity columns consistent from a multi row header f
                 'colonne_5',
                 'colonne_6',
                 'colonne_7',
+                'colonne_8',
+                'colonne_9',
             ]),
             implode(';', [
                 'RAISON SOCIALE du demandeur',
-                'RAISON SOCIALE du professionnel',
-                "RAISON SOCIALE du bénéficiaire de l'opération",
-                'Téléphone',
+                "REFERENCE interne de l'opération",
+                "NOM DU SITE bénéficiaire de l'opération",
                 'Adresse',
                 'Code postal',
                 'Ville',
+                "RAISON SOCIALE du bénéficiaire de l'opération",
+                'Téléphone',
+                'RAISON SOCIALE du professionnel',
             ]),
             implode(';', [
                 'TOTAL ALEX',
-                'N.E.C.H',
-                'Bénéficiaire Ligne 1',
-                '0611111111',
+                'TOTAL-ALX-1-2',
+                'BATIMENT',
                 '1 Rue Test',
                 '69001',
                 'Lyon',
+                'Bénéficiaire Ligne 1',
+                '0611111111',
+                'N.E.C.H',
             ]),
             implode(';', [
                 'TOTAL ALEX',
-                'N.E.C.H',
-                'Bénéficiaire Ligne 2',
-                '0622222222',
+                'TOTAL-ALX-1-3',
+                'BATIMENT',
                 '2 Rue Test',
                 '69002',
                 'Lyon',
+                'Bénéficiaire Ligne 2',
+                '0622222222',
+                'N.E.C.H',
             ]),
         ]),
     );
@@ -2192,6 +2200,8 @@ it('keeps Coffrac business identity columns consistent from a multi row header f
         ->and($secondAppointment->company_name)->toBe('Bénéficiaire Ligne 2')
         ->and($secondAppointment->customer_name)->toBe('Bénéficiaire Ligne 2')
         ->and($secondAppointment->installer_name)->toBe('N.E.C.H')
+        ->and($firstAppointment->company_name)->not->toBe('BATIMENT')
+        ->and($secondAppointment->company_name)->not->toBe('BATIMENT')
         ->and($secondAppointment->company_name)->not->toBe('TOTAL ALEX')
         ->and($secondAppointment->installer_name)->not->toBe('TOTAL ALEX');
 });

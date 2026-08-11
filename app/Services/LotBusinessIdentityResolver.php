@@ -317,14 +317,32 @@ class LotBusinessIdentityResolver
 
         $type = $this->columnType($normalizedHeader);
 
-        if ($type === 'beneficiary' && $mapping['beneficiary_key'] === null) {
+        if (
+            $type === 'beneficiary'
+            && (
+                $mapping['beneficiary_key'] === null
+                || $this->businessHeaderPriority($normalizedHeader, 'beneficiary') > $this->businessHeaderPriority(
+                    $this->normalizeHeader((string) $mapping['beneficiary_header']),
+                    'beneficiary',
+                )
+            )
+        ) {
             $mapping['beneficiary_key'] = $key;
             $mapping['beneficiary_header'] = $header;
 
             return;
         }
 
-        if ($type === 'installer' && $mapping['installer_key'] === null) {
+        if (
+            $type === 'installer'
+            && (
+                $mapping['installer_key'] === null
+                || $this->businessHeaderPriority($normalizedHeader, 'installer') > $this->businessHeaderPriority(
+                    $this->normalizeHeader((string) $mapping['installer_header']),
+                    'installer',
+                )
+            )
+        ) {
             $mapping['installer_key'] = $key;
             $mapping['installer_header'] = $header;
         }
@@ -424,13 +442,23 @@ class LotBusinessIdentityResolver
      */
     private function firstColumnOfType(array $columns, string $type): ?array
     {
+        $selectedColumn = null;
+        $selectedScore = -1;
+
         foreach ($columns as $column) {
-            if ($column['type'] === $type) {
-                return $column;
+            if ($column['type'] !== $type) {
+                continue;
+            }
+
+            $score = $this->businessHeaderPriority($column['normalized_header'], $type);
+
+            if ($score > $selectedScore) {
+                $selectedColumn = $column;
+                $selectedScore = $score;
             }
         }
 
-        return null;
+        return $selectedColumn;
     }
 
     /**
@@ -513,6 +541,39 @@ class LotBusinessIdentityResolver
         }
 
         return null;
+    }
+
+    private function businessHeaderPriority(string $header, string $type): int
+    {
+        $hasRaisonSociale = str_contains($header, 'raison sociale')
+            || str_contains($header, 'raison social');
+        $score = 0;
+
+        if ($hasRaisonSociale) {
+            $score += 100;
+        }
+
+        if ($type === 'beneficiary' && $this->hasBeneficiaryKeyword($header)) {
+            $score += 50;
+        }
+
+        if ($type === 'installer' && $this->hasInstallerKeyword($header)) {
+            $score += 50;
+        }
+
+        if (str_contains($header, 'nom du site') || str_contains($header, 'site beneficiaire')) {
+            $score -= 40;
+        }
+
+        if (str_contains($header, 'sous traitant') || str_contains($header, 'sous-traitant')) {
+            $score -= 25;
+        }
+
+        if (str_contains($header, 'controle')) {
+            $score -= 20;
+        }
+
+        return $score;
     }
 
     private function hasBeneficiaryKeyword(string $header): bool
