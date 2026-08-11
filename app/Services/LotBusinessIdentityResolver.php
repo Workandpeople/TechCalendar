@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class LotBusinessIdentityResolver
@@ -80,12 +81,72 @@ class LotBusinessIdentityResolver
     }
 
     /**
+     * @param Collection<int, array{row_number:int,data:array<string, string|null>}> $rows
+     * @return array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * }
+     */
+    public function buildColumnMapping(Collection $rows): array
+    {
+        $mapping = $this->emptyColumnMapping();
+        $firstData = $rows->first()['data'] ?? null;
+
+        if (is_array($firstData)) {
+            $mapping = $this->columnMappingFromHeaders($firstData, 'raw_headers', null);
+
+            if ($mapping['beneficiary_key'] !== null || $mapping['installer_key'] !== null) {
+                $this->logColumnMapping($mapping);
+
+                return $mapping;
+            }
+        }
+
+        $bestMapping = $this->emptyColumnMapping();
+        $bestScore = -1;
+
+        foreach ($rows->take(8) as $row) {
+            $rowData = $row['data'] ?? null;
+
+            if (! is_array($rowData)) {
+                continue;
+            }
+
+            $candidate = $this->columnMappingFromHeaderValues(
+                $rowData,
+                (int) ($row['row_number'] ?? 0) ?: null,
+            );
+            $score = $this->columnMappingScore($candidate);
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestMapping = $candidate;
+            }
+
+            if ($candidate['beneficiary_key'] !== null && $candidate['installer_key'] !== null) {
+                $this->logColumnMapping($candidate);
+
+                return $candidate;
+            }
+        }
+
+        $this->logColumnMapping($bestMapping);
+
+        return $bestMapping;
+    }
+
+    /**
      * @param array<string, mixed> $appointmentPayload
      * @param array<string, string|null>|null $rawRow
      * @param array<string, mixed> $context
      * @return array<string, mixed>
      */
-    public function apply(array $appointmentPayload, ?array $rawRow, array $context = []): array
+    public function apply(array $appointmentPayload, ?array $rawRow, array $context = [], ?array $columnMapping = null): array
     {
         if (! is_array($rawRow) || $rawRow === []) {
             Log::warning('Lot import business identity: raw row missing, AI values kept.', [
@@ -99,20 +160,27 @@ class LotBusinessIdentityResolver
 
         $beforeCompanyName = $this->nullableString($appointmentPayload['company_name'] ?? null);
         $beforeInstallerName = $this->nullableString($appointmentPayload['installer_name'] ?? null);
-        $businessColumns = $this->businessColumns($rawRow);
-        $beneficiaryColumn = $this->firstColumnOfType($businessColumns, 'beneficiary')
-            ?? $this->fallbackBeneficiaryColumn($businessColumns);
-        $installerColumn = $this->firstColumnOfType($businessColumns, 'installer')
-            ?? $this->fallbackInstallerColumn($businessColumns, $beneficiaryColumn);
+        $businessColumns = [];
+        $beneficiaryColumn = $this->mappedColumn($rawRow, $columnMapping, 'beneficiary');
+        $installerColumn = $this->mappedColumn($rawRow, $columnMapping, 'installer');
+
+        if ($columnMapping === null || ($beneficiaryColumn === null && $installerColumn === null)) {
+            $businessColumns = $this->businessColumns($rawRow);
+            $beneficiaryColumn = $beneficiaryColumn
+                ?? $this->firstColumnOfType($businessColumns, 'beneficiary');
+            $installerColumn = $installerColumn
+                ?? $this->firstColumnOfType($businessColumns, 'installer');
+        }
+
         $beneficiaryCompany = $beneficiaryColumn['value'] ?? null;
         $installerName = $installerColumn['value'] ?? null;
 
-        if ($beneficiaryCompany !== null) {
+        if ($beneficiaryColumn !== null) {
             $appointmentPayload['company_name'] = $beneficiaryCompany;
             $appointmentPayload['customer_name'] = $beneficiaryCompany;
         }
 
-        if ($installerName !== null) {
+        if ($installerColumn !== null) {
             $appointmentPayload['installer_name'] = $installerName;
         }
 
@@ -124,6 +192,7 @@ class LotBusinessIdentityResolver
             'ai_installer_name' => $this->shortValue($beforeInstallerName),
             'resolved_company_name' => $this->shortValue($appointmentPayload['company_name'] ?? null),
             'resolved_installer_name' => $this->shortValue($appointmentPayload['installer_name'] ?? null),
+            'column_mapping' => $columnMapping,
         ];
 
         if ($beneficiaryColumn === null || $installerColumn === null) {
@@ -136,6 +205,190 @@ class LotBusinessIdentityResolver
         }
 
         return $appointmentPayload;
+    }
+
+    /**
+     * @return array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * }
+     */
+    private function emptyColumnMapping(): array
+    {
+        return [
+            'source' => 'missing',
+            'header_row_number' => null,
+            'beneficiary_key' => null,
+            'beneficiary_header' => null,
+            'installer_key' => null,
+            'installer_header' => null,
+            'ignored_headers' => [],
+        ];
+    }
+
+    /**
+     * @param array<string, string|null> $rawRow
+     * @return array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * }
+     */
+    private function columnMappingFromHeaders(array $rawRow, string $source, ?int $headerRowNumber): array
+    {
+        $mapping = $this->emptyColumnMapping();
+        $mapping['source'] = $source;
+        $mapping['header_row_number'] = $headerRowNumber;
+
+        foreach (array_keys($rawRow) as $key) {
+            $this->assignColumnMapping($mapping, (string) $key, (string) $key);
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * @param array<string, string|null> $rawRow
+     * @return array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * }
+     */
+    private function columnMappingFromHeaderValues(array $rawRow, ?int $headerRowNumber): array
+    {
+        $mapping = $this->emptyColumnMapping();
+        $mapping['source'] = 'header_row_values';
+        $mapping['header_row_number'] = $headerRowNumber;
+
+        foreach ($rawRow as $key => $headerCandidate) {
+            $headerCandidate = $this->nullableString($headerCandidate);
+
+            if ($headerCandidate === null) {
+                continue;
+            }
+
+            $this->assignColumnMapping($mapping, (string) $key, $headerCandidate);
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * @param array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * } $mapping
+     */
+    private function assignColumnMapping(array &$mapping, string $key, string $header): void
+    {
+        $normalizedHeader = $this->normalizeHeader($header);
+
+        if (! str_contains($normalizedHeader, 'raison social')
+            && ! str_contains($normalizedHeader, 'raison sociale')
+            && ! $this->hasBeneficiaryKeyword($normalizedHeader)
+            && ! $this->hasInstallerKeyword($normalizedHeader)) {
+            return;
+        }
+
+        if ($this->isIgnoredBusinessHeader($normalizedHeader) || $this->isExcludedBusinessHeader($normalizedHeader)) {
+            $mapping['ignored_headers'][] = $header;
+
+            return;
+        }
+
+        $type = $this->columnType($normalizedHeader);
+
+        if ($type === 'beneficiary' && $mapping['beneficiary_key'] === null) {
+            $mapping['beneficiary_key'] = $key;
+            $mapping['beneficiary_header'] = $header;
+
+            return;
+        }
+
+        if ($type === 'installer' && $mapping['installer_key'] === null) {
+            $mapping['installer_key'] = $key;
+            $mapping['installer_header'] = $header;
+        }
+    }
+
+    /**
+     * @param array{
+     *     source:string,
+     *     header_row_number:int|null,
+     *     beneficiary_key:string|null,
+     *     beneficiary_header:string|null,
+     *     installer_key:string|null,
+     *     installer_header:string|null,
+     *     ignored_headers:array<int, string>
+     * } $mapping
+     */
+    private function columnMappingScore(array $mapping): int
+    {
+        return ($mapping['beneficiary_key'] !== null ? 10 : 0)
+            + ($mapping['installer_key'] !== null ? 10 : 0)
+            + count($mapping['ignored_headers']);
+    }
+
+    /**
+     * @param array<string, string|null> $rawRow
+     * @param array<string, mixed>|null $columnMapping
+     * @return array{header:string,normalized_header:string,value:string|null,type:string}|null
+     */
+    private function mappedColumn(array $rawRow, ?array $columnMapping, string $type): ?array
+    {
+        if ($columnMapping === null) {
+            return null;
+        }
+
+        $key = $columnMapping[$type.'_key'] ?? null;
+
+        if (! is_string($key) || $key === '') {
+            return null;
+        }
+
+        $header = (string) ($columnMapping[$type.'_header'] ?? $key);
+
+        return [
+            'header' => $header,
+            'normalized_header' => $this->normalizeHeader($header),
+            'value' => $this->nullableString($rawRow[$key] ?? null),
+            'type' => $type,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $mapping
+     */
+    private function logColumnMapping(array $mapping): void
+    {
+        Log::warning('Lot import business identity column mapping selected.', [
+            'source' => $mapping['source'] ?? null,
+            'header_row_number' => $mapping['header_row_number'] ?? null,
+            'beneficiary_key' => $mapping['beneficiary_key'] ?? null,
+            'beneficiary_header' => $mapping['beneficiary_header'] ?? null,
+            'installer_key' => $mapping['installer_key'] ?? null,
+            'installer_header' => $mapping['installer_header'] ?? null,
+            'ignored_headers' => $mapping['ignored_headers'] ?? [],
+        ]);
     }
 
     /**
@@ -214,7 +467,7 @@ class LotBusinessIdentityResolver
 
     private function isBusinessCompanyHeader(string $header): bool
     {
-        if ($this->isExcludedBusinessHeader($header)) {
+        if ($this->isIgnoredBusinessHeader($header) || $this->isExcludedBusinessHeader($header)) {
             return false;
         }
 
@@ -239,6 +492,14 @@ class LotBusinessIdentityResolver
             || str_contains($header, 'code postal')
             || str_contains($header, 'ville')
             || str_contains($header, 'commune');
+    }
+
+    private function isIgnoredBusinessHeader(string $header): bool
+    {
+        return str_contains($header, 'demandeur')
+            || str_contains($header, 'delegataire')
+            || str_contains($header, 'oblige')
+            || str_contains($header, 'obligation');
     }
 
     private function columnType(string $header): ?string

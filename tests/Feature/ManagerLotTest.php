@@ -2066,6 +2066,136 @@ it('resolves Coffrac beneficiary and installer even with noisy headers and row n
         ->and($appointment->installer_name)->not->toBe('contact@installateur.test');
 });
 
+it('keeps Coffrac business identity columns consistent from a multi row header file', function () {
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+
+    $file = UploadedFile::fake()->createWithContent(
+        'lot-coffrac-header-lines.csv',
+        implode("\n", [
+            implode(';', [
+                'Données remplies par le demandeur',
+                'colonne_2',
+                'colonne_3',
+                'colonne_4',
+                'colonne_5',
+                'colonne_6',
+                'colonne_7',
+            ]),
+            implode(';', [
+                'RAISON SOCIALE du demandeur',
+                'RAISON SOCIALE du professionnel',
+                "RAISON SOCIALE du bénéficiaire de l'opération",
+                'Téléphone',
+                'Adresse',
+                'Code postal',
+                'Ville',
+            ]),
+            implode(';', [
+                'TOTAL ALEX',
+                'N.E.C.H',
+                'Bénéficiaire Ligne 1',
+                '0611111111',
+                '1 Rue Test',
+                '69001',
+                'Lyon',
+            ]),
+            implode(';', [
+                'TOTAL ALEX',
+                'N.E.C.H',
+                'Bénéficiaire Ligne 2',
+                '0622222222',
+                '2 Rue Test',
+                '69002',
+                'Lyon',
+            ]),
+        ]),
+    );
+    $extractor = new LotSpreadsheetExtractor();
+    $rows = $extractor->extract($file);
+    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer
+        ->shouldReceive('normalize')
+        ->once()
+        ->andReturn([
+            'lot_name' => 'Lot Coffrac header lines',
+            'summary' => 'Import de test',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 3,
+                    'external_reference' => 'EXT-HEADER-1',
+                    'customer_name' => 'TOTAL ALEX',
+                    'company_name' => 'TOTAL ALEX',
+                    'site_name' => null,
+                    'installer_name' => 'N.E.C.H',
+                    'customer_first_name' => null,
+                    'customer_last_name' => null,
+                    'customer_phone' => '0611111111',
+                    'address' => '1 Rue Test',
+                    'postal_code' => '69001',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.76,
+                    'longitude' => 4.84,
+                    'comment' => null,
+                    'confidence' => 0.95,
+                    'warnings' => [],
+                ],
+                [
+                    'row_number' => 4,
+                    'external_reference' => 'EXT-HEADER-2',
+                    'customer_name' => 'N.E.C.H',
+                    'company_name' => 'N.E.C.H',
+                    'site_name' => null,
+                    'installer_name' => 'TOTAL ALEX',
+                    'customer_first_name' => null,
+                    'customer_last_name' => null,
+                    'customer_phone' => '0622222222',
+                    'address' => '2 Rue Test',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.75,
+                    'longitude' => 4.83,
+                    'comment' => null,
+                    'confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ]);
+
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+        ->import(
+            file: $file,
+            userId: $manager->id,
+            requestedLotName: 'Lot Coffrac header lines',
+            lotType: Lot::TYPE_FULL_CONTROL,
+            serviceId: $service->id,
+        );
+
+    $firstAppointment = $lot->appointments->firstWhere('external_reference', 'EXT-HEADER-1');
+    $secondAppointment = $lot->appointments->firstWhere('external_reference', 'EXT-HEADER-2');
+
+    expect($firstAppointment->company_name)->toBe('Bénéficiaire Ligne 1')
+        ->and($firstAppointment->customer_name)->toBe('Bénéficiaire Ligne 1')
+        ->and($firstAppointment->installer_name)->toBe('N.E.C.H')
+        ->and($secondAppointment->company_name)->toBe('Bénéficiaire Ligne 2')
+        ->and($secondAppointment->customer_name)->toBe('Bénéficiaire Ligne 2')
+        ->and($secondAppointment->installer_name)->toBe('N.E.C.H')
+        ->and($secondAppointment->company_name)->not->toBe('TOTAL ALEX')
+        ->and($secondAppointment->installer_name)->not->toBe('TOTAL ALEX');
+});
+
 it('confirms selected preview rows and creates a lot', function () {
     $manager = User::factory()->create([
         'role' => 0,

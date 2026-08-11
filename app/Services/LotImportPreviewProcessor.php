@@ -38,12 +38,14 @@ class LotImportPreviewProcessor
         $rows = $this->extractor->extract($file);
         $rawRowsByNumber = $rows->keyBy('row_number');
         $rawRowsByIndex = $rows->values();
+        $businessIdentityColumnMapping = $this->businessIdentityResolver->buildColumnMapping($rows);
 
         Log::warning('Lot import preview diagnostics: spreadsheet extracted.', [
             'preview_id' => $preview->id,
             'rows_count' => $rows->count(),
             'first_row_number' => $rows->first()['row_number'] ?? null,
             'first_headers' => array_keys($rows->first()['data'] ?? []),
+            'business_identity_column_mapping' => $businessIdentityColumnMapping,
         ]);
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 25, sprintf(
@@ -73,7 +75,7 @@ class LotImportPreviewProcessor
 
         $enrichedAppointments = $appointments
             ->values()
-            ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $rawRowsByIndex, $totalAppointments): array {
+            ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $rawRowsByIndex, $totalAppointments, $businessIdentityColumnMapping): array {
                 $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
                 $rawRowByNumber = $rawRowsByNumber->get($rowNumber);
                 $rawRowByIndex = $rawRowsByIndex->get($index);
@@ -88,7 +90,7 @@ class LotImportPreviewProcessor
                     'raw_row_source' => $rawRowSelection['source'],
                     'raw_row_number' => $rawRowSelection['row_number'],
                     'raw_candidate_scores' => $rawRowSelection['scores'],
-                ]);
+                ], $businessIdentityColumnMapping);
                 $address = $this->fullAddress($appointmentPayload);
                 $geocoding = $this->geocoder->geocode($address);
                 $warnings = collect($appointmentPayload['warnings'] ?? [])

@@ -41,11 +41,12 @@ class LotExcelImportService
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
         $rawRowsByNumber = $rows->keyBy('row_number');
         $rawRowsByIndex = $rows->values();
+        $businessIdentityColumnMapping = $this->businessIdentityResolver->buildColumnMapping($rows);
         $storedFile = $this->storeOriginalFile($file);
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $rawRowsByIndex, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $rawRowsByIndex, $businessIdentityColumnMapping, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
@@ -92,7 +93,7 @@ class LotExcelImportService
                         'raw_row_source' => $rawRowSelection['source'],
                         'raw_row_number' => $rawRowSelection['row_number'],
                         'raw_candidate_scores' => $rawRowSelection['scores'],
-                    ]);
+                    ], $businessIdentityColumnMapping);
                     $warnings = collect($appointmentPayload['warnings'] ?? [])
                         ->filter()
                         ->values();
