@@ -897,6 +897,21 @@ class CoffracAppointmentService
             throw new RuntimeException('Coffrac a créé le dossier, mais la référence distante est absente.');
         }
 
+        $remoteStatus = $this->normalizeRemoteStatus($remotePayload);
+
+        if ($remoteStatus !== ExternalAppointmentRequest::STATUS_PLACED) {
+            Log::warning('Création du dossier Coffrac depuis un lot incomplète.', [
+                'appointment_id' => $appointment->id,
+                'lot_id' => data_get($crmAppointment, 'external_payload.lot_id'),
+                'lot_appointment_id' => data_get($crmAppointment, 'external_payload.lot_appointment_id'),
+                'external_reference' => $externalReference,
+                'remote_status_name' => $remotePayload['status_name'] ?? null,
+                'technician_email' => $appointment->technician?->email,
+            ]);
+
+            throw new RuntimeException('Coffrac a créé le dossier, mais il n’est pas en RDV attente visite.');
+        }
+
         $appointment->update([
             'external_source' => self::SOURCE,
             'external_reference' => $externalReference,

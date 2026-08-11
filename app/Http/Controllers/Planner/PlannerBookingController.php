@@ -518,6 +518,8 @@ class PlannerBookingController extends Controller
                     ]);
                 }
 
+                $lotAppointment = null;
+
                 if (! $replacementAppointment && ! empty($payload['lot_appointment_id'])) {
                     $lotAppointment = LotAppointment::query()
                         ->with('lot')
@@ -528,24 +530,35 @@ class PlannerBookingController extends Controller
                     if (! $lotAppointment) {
                         throw new RuntimeException('Ce dossier est sorti des statistiques du lot.');
                     }
-
-                    $lotAppointment->update([
-                        'appointment_id' => $appointment->id,
-                        'service_id' => $crmAppointment['service']['id'],
-                        'status' => LotAppointment::STATUS_PLACED,
-                        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
-                    ]);
-
-                    $this->refreshLotStatus($lotAppointment->lot);
                 }
 
                 $coffracAppointments->markPlaced($appointment, $crmAppointment);
 
+                if ($lotAppointment) {
+                    $appointment->refresh();
+                    $lotAppointment->refresh();
+
+                    if (
+                        (int) $lotAppointment->appointment_id !== (int) $appointment->id
+                        || $lotAppointment->status !== LotAppointment::STATUS_PLACED
+                        || $appointment->external_source !== CoffracAppointmentService::SOURCE
+                        || ! filled($appointment->external_reference)
+                    ) {
+                        throw new RuntimeException('Placement Coffrac incomplet: le RDV n’a pas été confirmé en attente visite.');
+                    }
+
+                    $this->refreshLotStatus($lotAppointment->lot);
+                }
+
                 return $appointment;
             });
         } catch (RuntimeException $exception) {
+            $errorKey = ! empty($payload['lot_appointment_id'])
+                ? 'lot_appointment_id'
+                : 'crm_appointment_id';
+
             throw ValidationException::withMessages([
-                'crm_appointment_id' => $exception->getMessage(),
+                $errorKey => $exception->getMessage(),
             ]);
         }
 

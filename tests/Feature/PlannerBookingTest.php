@@ -2685,6 +2685,97 @@ it('links a placed appointment back to its lot appointment', function () {
     );
 });
 
+it('rolls back a physical lot appointment when coffrac does not confirm attente visite', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments' => Http::response([
+            'result' => true,
+            'message' => 'Dossier Coffrac créé depuis TechCalendar.',
+            'data' => [
+                'id' => 9201,
+                'source' => 'Coffrac',
+                'status_name' => 'Prise de RDV',
+                'service_type' => Service::TYPE_AUDIT,
+                'service_name' => 'Audit interne',
+                'customer_name' => 'Entreprise Lot',
+                'company_name' => 'Entreprise Lot',
+                'phone' => '0600000003',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'address_line' => '20 Place Bellecour',
+                'postal_code' => '69002',
+                'city' => 'Lyon',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'technician_email' => null,
+                'documents' => [],
+                'comments' => [],
+            ],
+        ], 201),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit interne',
+        'average_duration_minutes' => 120,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.lot@example.test',
+        'latitude' => 45.764,
+        'longitude' => 4.8357,
+    ]);
+    $technician->services()->attach($service);
+    $lot = Lot::query()->create([
+        'name' => 'Lot à placer',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'customer_name' => 'Client Lot',
+        'company_name' => 'Entreprise Lot',
+        'customer_phone' => '0600000003',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'lot_appointment_id' => $lotAppointment->id,
+            'technician_id' => $technician->id,
+            'starts_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
+            'duration_minutes' => 120,
+            'comment' => 'Placement depuis lot',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['lot_appointment_id']);
+
+    expect(Appointment::query()->count())->toBe(0)
+        ->and(ExternalAppointmentRequest::query()->where('external_reference', '9201')->exists())->toBeFalse()
+        ->and($lotAppointment->refresh()->appointment_id)->toBeNull()
+        ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PENDING)
+        ->and($lot->refresh()->status)->toBe(Lot::STATUS_NOT_STARTED);
+});
+
 it('uses the coffrac service alias when creating a physical appointment from a lot', function () {
     config([
         'services.coffrac.api_url' => 'https://coffrac.test/api',
