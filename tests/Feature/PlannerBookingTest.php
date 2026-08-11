@@ -2682,3 +2682,101 @@ it('links a placed appointment back to its lot appointment', function () {
             && $mail->appointment->id === $lotAppointment->appointment_id,
     );
 });
+
+it('uses the coffrac service alias when creating a physical appointment from a lot', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+    Mail::fake();
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments' => Http::response([
+            'result' => true,
+            'message' => 'Dossier Coffrac créé depuis TechCalendar.',
+            'data' => [
+                'id' => 9102,
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'BAR 145 TRAVAUX',
+                'customer_name' => 'Entreprise Lot',
+                'company_name' => 'Entreprise Lot',
+                'phone' => '0600000003',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'address_line' => '20 Place Bellecour',
+                'postal_code' => '69002',
+                'city' => 'Lyon',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'technician_email' => 'tech.alias-lot@example.test',
+                'starts_at' => '2026-06-22T10:00:00+02:00',
+                'duration_minutes' => 120,
+                'documents' => [],
+                'comments' => [],
+            ],
+        ], 201),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'BAR TH 145 APRES TRAVAUX',
+        'average_duration_minutes' => 120,
+    ]);
+    ExternalServiceAlias::query()->create([
+        'service_id' => $service->id,
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_type' => Service::TYPE_COFFRAC,
+        'external_name' => 'BAR 145 TRAVAUX',
+        'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
+        'normalized_external_name' => ExternalServiceAlias::normalizeValue('BAR 145 TRAVAUX'),
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.alias-lot@example.test',
+        'latitude' => 45.764,
+        'longitude' => 4.8357,
+    ]);
+    $technician->services()->attach($service);
+    $lot = Lot::query()->create([
+        'name' => 'Lot alias',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client Lot',
+        'company_name' => 'Entreprise Lot',
+        'customer_phone' => '0600000003',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'lot_appointment_id' => $lotAppointment->id,
+            'technician_id' => $technician->id,
+            'starts_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
+            'duration_minutes' => 120,
+        ])
+        ->assertCreated();
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
+        && $request['service_name'] === 'BAR 145 TRAVAUX'
+        && $request['service_type'] === Service::TYPE_COFFRAC);
+});

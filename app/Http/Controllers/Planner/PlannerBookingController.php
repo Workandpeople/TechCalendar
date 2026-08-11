@@ -1079,7 +1079,7 @@ class PlannerBookingController extends Controller
         if (! empty($payload['lot_appointment_id'])) {
             return $this->lotAppointmentFromId(
                 (int) $payload['lot_appointment_id'],
-                isset($payload['lot_service_id']) ? (int) $payload['lot_service_id'] : null,
+                filled($payload['lot_service_id'] ?? null) ? (int) $payload['lot_service_id'] : null,
             );
         }
 

@@ -857,6 +857,7 @@ class CoffracAppointmentService
 
         $appointment->loadMissing([
             'service:id,type,name',
+            'service.externalAliases:id,service_id,source,external_name',
             'technician:id,email,first_name,last_name',
         ]);
 
@@ -864,10 +865,22 @@ class CoffracAppointmentService
             throw new RuntimeException('Prestation absente, impossible de créer le dossier Coffrac depuis le lot.');
         }
 
-        $response = $this->request()->post($this->endpoint('appointments'), $this->remoteLotCreationPayload($appointment, $crmAppointment));
+        $requestPayload = $this->remoteLotCreationPayload($appointment, $crmAppointment);
+        $response = $this->request()->post($this->endpoint('appointments'), $requestPayload);
 
         if ($response->failed()) {
             $payload = $response->json();
+
+            Log::warning('Création du dossier Coffrac depuis un lot refusée.', [
+                'appointment_id' => $appointment->id,
+                'lot_id' => $requestPayload['lot_id'] ?? null,
+                'lot_appointment_id' => $requestPayload['lot_appointment_id'] ?? null,
+                'service_type' => $requestPayload['service_type'] ?? null,
+                'service_name' => $requestPayload['service_name'] ?? null,
+                'technician_email' => $requestPayload['technician_email'] ?? null,
+                'status' => $response->status(),
+                'message' => is_array($payload) ? $this->responseError($payload, 'Erreur Coffrac.') : 'Réponse Coffrac non JSON.',
+            ]);
 
             throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de créer le dossier Coffrac depuis le lot.'));
         }
@@ -916,7 +929,7 @@ class CoffracAppointmentService
 
         return [
             'service_type' => $appointment->service?->type,
-            'service_name' => $appointment->service?->name,
+            'service_name' => $this->coffracServiceNameForAppointment($appointment),
             'technician_email' => $appointment->technician?->email,
             'technician_name' => $appointment->technician?->full_name,
             'starts_at' => $appointment->starts_at?->toIso8601String(),
@@ -943,6 +956,24 @@ class CoffracAppointmentService
             'global_plus' => data_get($externalPayload, 'lot_global_plus', false),
             'techcalendar_appointment_id' => $appointment->id,
         ];
+    }
+
+    private function coffracServiceNameForAppointment(Appointment $appointment): ?string
+    {
+        $service = $appointment->service;
+
+        if (! $service) {
+            return null;
+        }
+
+        $alias = $service->relationLoaded('externalAliases')
+            ? $service->externalAliases
+                ->where('source', self::SOURCE)
+                ->sortBy('id')
+                ->first()
+            : $service->externalAliases()->where('source', self::SOURCE)->orderBy('id')->first();
+
+        return filled($alias?->external_name) ? $alias->external_name : $service->name;
     }
 
     /**
