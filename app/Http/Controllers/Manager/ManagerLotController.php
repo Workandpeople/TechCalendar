@@ -50,6 +50,7 @@ class ManagerLotController extends Controller
                 ->getCollection()
                 ->map(fn (Lot $lot): array => $this->serializeLot($lot, $autoCompletion))
         );
+        $services = $this->lotServicesForForms();
 
         return view('manager.lots.index', [
             'lots' => $lots,
@@ -66,7 +67,8 @@ class ManagerLotController extends Controller
             'activeImportPreview' => $this->activeImportPreview($request),
             'canForceDeleteStartedLots' => $this->canForceDeleteStartedLots($request),
             'mapboxToken' => config('services.mapbox.token'),
-            'services' => $this->lotServicesForForms(),
+            'services' => $services,
+            'serviceAliasOptions' => $this->lotServiceAliasOptions($services),
             'delegataires' => ExternalDelegataire::query()
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->where('is_active', true)
@@ -101,6 +103,7 @@ class ManagerLotController extends Controller
                 ->getCollection()
                 ->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))
         );
+        $services = $this->lotServicesForForms();
 
         return view('manager.lots.show', [
             'lot' => $this->serializeLot($lot, $autoCompletion, $appointments->getCollection()),
@@ -121,7 +124,8 @@ class ManagerLotController extends Controller
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
             'mapboxToken' => config('services.mapbox.token'),
-            'services' => $this->lotServicesForForms(),
+            'services' => $services,
+            'serviceAliasOptions' => $this->lotServiceAliasOptions($services),
             'delegataires' => ExternalDelegataire::query()
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->where('is_active', true)
@@ -801,6 +805,24 @@ class ManagerLotController extends Controller
             ->orderBy('type')
             ->orderBy('name')
             ->get(['id', 'type', 'name', 'average_duration_minutes']);
+    }
+
+    private function lotServiceAliasOptions($services): array
+    {
+        return $services
+            ->map(fn (Service $service): array => [
+                'id' => (int) $service->id,
+                'label' => trim($service->type.' - '.$service->name),
+                'aliases' => $service->externalAliases
+                    ->map(fn (ExternalServiceAlias $alias): array => [
+                        'id' => (int) $alias->id,
+                        'label' => (string) $alias->external_name,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     private function coffracAliasIdForService(int $serviceId, mixed $aliasId): ?int

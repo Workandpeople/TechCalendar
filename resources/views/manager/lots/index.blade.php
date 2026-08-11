@@ -698,14 +698,7 @@
         const hybridLotType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
         const canForceDeleteStartedLots = @json($canForceDeleteStartedLots);
         const resumedLotImport = @json($activeImportPreview);
-        const lotServices = @json($services->map(fn ($service) => [
-            'id' => $service->id,
-            'label' => $service->type.' - '.$service->name,
-            'aliases' => $service->externalAliases->map(fn ($alias) => [
-                'id' => $alias->id,
-                'label' => $alias->external_name,
-            ])->values(),
-        ])->values());
+        const lotServices = @json($serviceAliasOptions);
         const lockedLotImportStatuses = ['pending', 'processing'];
         const lotData = new Map();
         const lotActionModal = document.getElementById('lot-action-modal');

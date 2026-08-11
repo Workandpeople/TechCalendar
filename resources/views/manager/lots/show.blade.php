@@ -765,13 +765,7 @@
             'service_id' => $lot['service_id'],
             'coffrac_service_alias_id' => $lot['coffrac_service_alias_id'],
         ]);
-        const lotDetailServices = @json($services->map(fn ($service) => [
-            'id' => $service->id,
-            'aliases' => $service->externalAliases->map(fn ($alias) => [
-                'id' => $alias->id,
-                'label' => $alias->external_name,
-            ])->values(),
-        ])->values());
+        const lotDetailServices = @json($serviceAliasOptions);
         const lotAppointmentTargetsModal = document.getElementById('lot-appointment-targets-modal');
         const lotAppointmentTargetsClose = document.getElementById('lot-appointment-targets-close');
         const lotAppointmentTargetsCancel = document.getElementById('lot-appointment-targets-cancel');
