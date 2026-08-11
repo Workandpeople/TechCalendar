@@ -950,6 +950,7 @@ it('updates manual appointment targets without changing satisfaction targets', f
                 2 => LotAppointment::PROCESSING_MODE_CONTACT,
                 default => null,
             },
+            'physical_satisfaction' => $index === 1 ? true : null,
             'contact_satisfaction' => $index === 2 ? true : null,
         ]);
     }
@@ -980,6 +981,11 @@ it('updates manual appointment targets without changing satisfaction targets', f
         ->assertSee('sur 4 dossier(s) du lot.')
         ->assertSee('Cible satisfaction : 50,00% · objectif 3 dossier(s)')
         ->assertSee('Cible satisfaction : 25,00% · objectif 2 dossier(s)')
+        ->assertSee('objectif RDV manuel')
+        ->assertSee('--satisfied:33.33', false)
+        ->assertSee('--answered:33.33', false)
+        ->assertSee('--satisfied:50', false)
+        ->assertSee('--answered:50', false)
         ->assertDontSee('Cible satisfaction : 50,00% · objectif 2 dossier(s)')
         ->assertDontSee('Cible satisfaction : 25,00% · objectif 1 dossier(s)');
 });

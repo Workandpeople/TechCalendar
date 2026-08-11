@@ -205,6 +205,9 @@
                                             <p class="mt-1 text-[0.68rem] font-semibold" style="color:#166534;">
                                                 Cible satisfaction : {{ $chart['target_percentage_display'] }}
                                             </p>
+                                            @if ($chart['is_manual_target'] ?? false)
+                                                <p class="mt-1 text-[0.68rem] font-semibold" style="color:#15803d;">objectif RDV manuel</p>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </div>
@@ -244,6 +247,9 @@
                                             <p class="mt-1 text-[0.68rem] font-semibold" style="color:#166534;">
                                                 Cible satisfaction : {{ $chart['target_percentage_display'] }}
                                             </p>
+                                            @if ($chart['is_manual_target'] ?? false)
+                                                <p class="mt-1 text-[0.68rem] font-semibold" style="color:#15803d;">objectif RDV manuel</p>
+                                            @endif
                                         @endunless
                                     </div>
                                 @endforeach

@@ -337,8 +337,17 @@
                     $satisfiedCount = max(0, (int) ($chart['satisfied_count'] ?? 0));
                     $unsatisfiedCount = max(0, (int) ($chart['unsatisfied_count'] ?? 0));
                     $satisfactionAnsweredCount = max(0, (int) ($chart['answered_count'] ?? min($targetCount, $satisfiedCount + $unsatisfiedCount)));
-                    $satisfiedShare = (float) ($chart['satisfied_share'] ?? ($targetCount > 0 ? min(100, round(($satisfiedCount / $targetCount) * 100, 2)) : 0));
-                    $answeredShare = (float) ($chart['answered_share'] ?? ($targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100, 2)) : 0));
+                    $usesManualTarget = (bool) ($chart['is_manual_target'] ?? false);
+                    $satisfiedShare = (float) (
+                        $usesManualTarget
+                            ? ($chart['target_satisfied_share'] ?? $chart['satisfied_share'] ?? 0)
+                            : ($chart['satisfied_share'] ?? ($targetCount > 0 ? min(100, round(($satisfiedCount / $targetCount) * 100, 2)) : 0))
+                    );
+                    $answeredShare = (float) (
+                        $usesManualTarget
+                            ? ($chart['target_answered_share'] ?? $chart['answered_share'] ?? 0)
+                            : ($chart['answered_share'] ?? ($targetCount > 0 ? min(100, round(($satisfactionAnsweredCount / $targetCount) * 100, 2)) : 0))
+                    );
                 @endphp
                 <article class="gc-card p-5">
                     <div class="flex flex-col gap-5 md:flex-row md:items-center">
@@ -358,6 +367,9 @@
                             <p class="mt-1 text-sm font-semibold" style="color:#166534;">
                                 Cible satisfaction : {{ $chart['target_percentage_display'] }} · objectif {{ $targetCount }} dossier(s)
                             </p>
+                            @if ($chart['is_manual_target'] ?? false)
+                                <p class="mt-1 text-xs font-semibold" style="color:#15803d;">objectif RDV manuel</p>
+                            @endif
                             <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                                 <span class="inline-flex items-center gap-2 rounded-full px-3 py-1" style="background:#dcfce7;color:#166534;">
                                     <span class="h-2 w-2 rounded-full" style="background:#16a34a;"></span>

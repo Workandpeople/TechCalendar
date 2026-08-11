@@ -1181,11 +1181,18 @@ class ManagerLotController extends Controller
         $unsatisfiedCount = max(0, (int) ($completion['raw_unsatisfied_count'] ?? $completion['unsatisfied_count'] ?? 0));
         $answeredCount = min($totalCount, $satisfiedCount + $unsatisfiedCount);
         $answeredForTarget = min($targetCount, $satisfiedCount + $unsatisfiedCount);
+        $satisfiedForTarget = min($targetCount, $satisfiedCount);
         $percentage = $totalCount > 0
             ? min(100, round(($satisfiedCount / $totalCount) * 100, 2))
             : 0;
         $answeredPercentage = $totalCount > 0
             ? min(100, round(($answeredCount / $totalCount) * 100, 2))
+            : 0;
+        $targetSatisfiedPercentage = $targetCount > 0
+            ? min(100, round(($satisfiedForTarget / $targetCount) * 100, 2))
+            : 0;
+        $targetAnsweredPercentage = $targetCount > 0
+            ? min(100, round(($answeredForTarget / $targetCount) * 100, 2))
             : 0;
         $isSampling = (bool) ($completion['is_sampling'] ?? false);
         $targetPercentage = $isSampling
@@ -1201,6 +1208,8 @@ class ManagerLotController extends Controller
             'answered_percentage' => $answeredPercentage,
             'satisfied_share' => $percentage,
             'answered_share' => $answeredPercentage,
+            'target_satisfied_share' => $targetSatisfiedPercentage,
+            'target_answered_share' => $targetAnsweredPercentage,
             'satisfied_count' => $satisfiedCount,
             'unsatisfied_count' => $unsatisfiedCount,
             'answered_count' => $answeredCount,
