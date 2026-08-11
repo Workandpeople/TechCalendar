@@ -2729,13 +2729,21 @@ it('uses the coffrac service alias when creating a physical appointment from a l
         'name' => 'BAR TH 145 APRES TRAVAUX',
         'average_duration_minutes' => 120,
     ]);
-    ExternalServiceAlias::query()->create([
+    $globalAlias = ExternalServiceAlias::query()->create([
         'service_id' => $service->id,
         'source' => CoffracAppointmentService::SOURCE,
         'external_type' => Service::TYPE_COFFRAC,
         'external_name' => 'BAR 145 TRAVAUX',
         'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
         'normalized_external_name' => ExternalServiceAlias::normalizeValue('BAR 145 TRAVAUX'),
+    ]);
+    ExternalServiceAlias::query()->create([
+        'service_id' => $service->id,
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_type' => Service::TYPE_COFFRAC,
+        'external_name' => 'BAR TH 145 APRES TRAVAUX',
+        'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
+        'normalized_external_name' => ExternalServiceAlias::normalizeValue('BAR TH 145 APRES TRAVAUX'),
     ]);
     $technician = User::factory()->create([
         'role' => 2,
@@ -2749,6 +2757,7 @@ it('uses the coffrac service alias when creating a physical appointment from a l
         'name' => 'Lot alias',
         'type' => Lot::TYPE_FULL_CONTROL,
         'service_id' => $service->id,
+        'coffrac_service_alias_id' => $globalAlias->id,
         'status' => Lot::STATUS_NOT_STARTED,
         'created_by' => $planner->id,
     ]);
@@ -2778,5 +2787,113 @@ it('uses the coffrac service alias when creating a physical appointment from a l
     Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
         && $request['service_name'] === 'BAR 145 TRAVAUX'
+        && $request['service_type'] === Service::TYPE_COFFRAC);
+});
+
+it('allows overriding the coffrac service alias for one physical lot appointment', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+        'services.mapbox.token' => null,
+    ]);
+    Mail::fake();
+
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments' => Http::response([
+            'result' => true,
+            'message' => 'Dossier Coffrac créé depuis TechCalendar.',
+            'data' => [
+                'id' => 9103,
+                'source' => 'Coffrac',
+                'status_name' => 'RDV attente visite',
+                'service_type' => Service::TYPE_COFFRAC,
+                'service_name' => 'BAR TH 145 APRES TRAVAUX',
+                'customer_name' => 'Entreprise Override',
+                'company_name' => 'Entreprise Override',
+                'phone' => '0600000004',
+                'address' => '20 Place Bellecour, 69002 Lyon, France',
+                'address_line' => '20 Place Bellecour',
+                'postal_code' => '69002',
+                'city' => 'Lyon',
+                'department_code' => '69',
+                'latitude' => 45.7578,
+                'longitude' => 4.832,
+                'technician_email' => 'tech.override-lot@example.test',
+                'starts_at' => '2026-06-22T10:00:00+02:00',
+                'duration_minutes' => 120,
+                'documents' => [],
+                'comments' => [],
+            ],
+        ], 201),
+    ]);
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'BAR TH 145 APRES TRAVAUX',
+        'average_duration_minutes' => 120,
+    ]);
+    $globalAlias = ExternalServiceAlias::query()->create([
+        'service_id' => $service->id,
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_type' => Service::TYPE_COFFRAC,
+        'external_name' => 'BAR 145 TRAVAUX',
+        'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
+        'normalized_external_name' => ExternalServiceAlias::normalizeValue('BAR 145 TRAVAUX'),
+    ]);
+    $overrideAlias = ExternalServiceAlias::query()->create([
+        'service_id' => $service->id,
+        'source' => CoffracAppointmentService::SOURCE,
+        'external_type' => Service::TYPE_COFFRAC,
+        'external_name' => 'BAR TH 145 APRES TRAVAUX',
+        'normalized_external_type' => ExternalServiceAlias::normalizeValue(Service::TYPE_COFFRAC),
+        'normalized_external_name' => ExternalServiceAlias::normalizeValue('BAR TH 145 APRES TRAVAUX'),
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.override-lot@example.test',
+        'latitude' => 45.764,
+        'longitude' => 4.8357,
+    ]);
+    $technician->services()->attach($service);
+    $lot = Lot::query()->create([
+        'name' => 'Lot alias override',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'coffrac_service_alias_id' => $globalAlias->id,
+        'status' => Lot::STATUS_NOT_STARTED,
+        'created_by' => $planner->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client Lot Override',
+        'company_name' => 'Entreprise Override',
+        'customer_phone' => '0600000004',
+        'address' => '20 Place Bellecour, 69002 Lyon, France',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'department_code' => '69',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.appointments.store'), [
+            'lot_appointment_id' => $lotAppointment->id,
+            'lot_service_alias_id' => $overrideAlias->id,
+            'technician_id' => $technician->id,
+            'starts_at' => now()->addDay()->setTime(10, 0)->toIso8601String(),
+            'duration_minutes' => 120,
+        ])
+        ->assertCreated();
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
+        && $request['service_name'] === 'BAR TH 145 APRES TRAVAUX'
         && $request['service_type'] === Service::TYPE_COFFRAC);
 });

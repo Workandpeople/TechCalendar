@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Manager;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
+use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\LotImportPreview;
@@ -24,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
@@ -64,10 +66,7 @@ class ManagerLotController extends Controller
             'activeImportPreview' => $this->activeImportPreview($request),
             'canForceDeleteStartedLots' => $this->canForceDeleteStartedLots($request),
             'mapboxToken' => config('services.mapbox.token'),
-            'services' => Service::query()
-                ->orderBy('type')
-                ->orderBy('name')
-                ->get(['id', 'type', 'name', 'average_duration_minutes']),
+            'services' => $this->lotServicesForForms(),
             'delegataires' => ExternalDelegataire::query()
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->where('is_active', true)
@@ -84,6 +83,8 @@ class ManagerLotController extends Controller
         $lot->load([
             'creator:id,first_name,last_name',
             'service:id,type,name,average_duration_minutes',
+            'service.externalAliases:id,service_id,source,external_name',
+            'coffracServiceAlias:id,service_id,source,external_name',
             'appointments' => fn ($query) => $query
                 ->with($this->lotAppointmentRelations())
                 ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
@@ -120,10 +121,7 @@ class ManagerLotController extends Controller
             'lotTypes' => Lot::types(),
             'lotStatuses' => Lot::statuses(),
             'mapboxToken' => config('services.mapbox.token'),
-            'services' => Service::query()
-                ->orderBy('type')
-                ->orderBy('name')
-                ->get(['id', 'type', 'name', 'average_duration_minutes']),
+            'services' => $this->lotServicesForForms(),
             'delegataires' => ExternalDelegataire::query()
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->where('is_active', true)
@@ -150,6 +148,12 @@ class ManagerLotController extends Controller
             'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
+            'coffrac_service_alias_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_service_aliases', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)),
+            ],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
                 'nullable',
@@ -175,6 +179,7 @@ class ManagerLotController extends Controller
         ]);
         $delegataireName = $this->delegataireNameFromPayload($payload);
         $samplingPayload = $this->normalizedSamplingPayload($payload);
+        $coffracServiceAliasId = $this->coffracAliasIdForService((int) $payload['service_id'], $payload['coffrac_service_alias_id'] ?? null);
 
         try {
             $lot = $importer->import(
@@ -188,6 +193,7 @@ class ManagerLotController extends Controller
                 physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
                 contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
                 serviceId: (int) $payload['service_id'],
+                coffracServiceAliasId: $coffracServiceAliasId,
                 receivedAt: $payload['received_at'] ?? null,
                 comment: $payload['comment'] ?? null,
             );
@@ -208,6 +214,7 @@ class ManagerLotController extends Controller
 
         $payload = $this->validatedLotPayload($request);
         $samplingPayload = $this->normalizedSamplingPayload($payload);
+        $coffracServiceAliasId = $this->coffracAliasIdForService((int) $payload['service_id'], $payload['coffrac_service_alias_id'] ?? null);
         $currentStatus = Lot::normalizedStatus($lot->status);
 
         $lot->fill([
@@ -220,6 +227,7 @@ class ManagerLotController extends Controller
             'received_at' => $payload['received_at'] ?? null,
             'comment' => filled($payload['comment'] ?? null) ? trim((string) $payload['comment']) : null,
             'service_id' => (int) $payload['service_id'],
+            'coffrac_service_alias_id' => $coffracServiceAliasId,
         ])->save();
 
         $this->syncOpenLotAppointmentsService($lot, (int) $payload['service_id']);
@@ -348,6 +356,12 @@ class ManagerLotController extends Controller
             'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
+            'coffrac_service_alias_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_service_aliases', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)),
+            ],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
                 'nullable',
@@ -373,6 +387,7 @@ class ManagerLotController extends Controller
         ]);
         $delegataireName = $this->delegataireNameFromPayload($payload);
         $samplingPayload = $this->normalizedSamplingPayload($payload);
+        $coffracServiceAliasId = $this->coffracAliasIdForService((int) $payload['service_id'], $payload['coffrac_service_alias_id'] ?? null);
 
         $preview = $imports->createFromUpload(
             file: $payload['file'],
@@ -382,6 +397,7 @@ class ManagerLotController extends Controller
             samplingPercentage: $samplingPayload['sampling_percentage'],
             physicalSamplingPercentage: $samplingPayload['physical_sampling_percentage'],
             contactSamplingPercentage: $samplingPayload['contact_sampling_percentage'],
+            coffracServiceAliasId: $coffracServiceAliasId,
             requestedLotName: $payload['name'] ?? null,
             delegataire: $delegataireName,
             receivedAt: $payload['received_at'] ?? null,
@@ -699,6 +715,12 @@ class ManagerLotController extends Controller
             'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')],
+            'coffrac_service_alias_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_service_aliases', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)),
+            ],
             'archive_lot' => ['nullable', 'boolean'],
             'sampling_percentage' => [
                 Rule::requiredIf(fn (): bool => Lot::requiresSamplingPercentageFor($request->input('type'))),
@@ -770,6 +792,38 @@ class ManagerLotController extends Controller
         return trim((string) ($payload['delegataire'] ?? ''));
     }
 
+    private function lotServicesForForms()
+    {
+        return Service::query()
+            ->with(['externalAliases' => fn ($query) => $query
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->orderBy('external_name')])
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get(['id', 'type', 'name', 'average_duration_minutes']);
+    }
+
+    private function coffracAliasIdForService(int $serviceId, mixed $aliasId): ?int
+    {
+        if (! filled($aliasId)) {
+            return null;
+        }
+
+        $alias = ExternalServiceAlias::query()
+            ->whereKey((int) $aliasId)
+            ->where('service_id', $serviceId)
+            ->where('source', CoffracAppointmentService::SOURCE)
+            ->first(['id']);
+
+        if (! $alias) {
+            throw ValidationException::withMessages([
+                'coffrac_service_alias_id' => 'Cet alias Coffrac ne correspond pas à la prestation sélectionnée.',
+            ]);
+        }
+
+        return (int) $alias->id;
+    }
+
     private function syncOpenLotAppointmentsService(Lot $lot, int $serviceId): void
     {
         $service = Service::query()->find($serviceId);
@@ -804,6 +858,8 @@ class ManagerLotController extends Controller
             ->with([
                 'creator:id,first_name,last_name',
                 'service:id,type,name,average_duration_minutes',
+                'service.externalAliases:id,service_id,source,external_name',
+                'coffracServiceAlias:id,service_id,source,external_name',
                 'appointments' => fn ($query) => $query
                     ->with($this->lotAppointmentRelations())
                     ->when(! empty($filters['q']), fn ($query) => $this->applySearchFilter($query, trim((string) $filters['q'])))
@@ -1001,6 +1057,8 @@ class ManagerLotController extends Controller
             'service_label' => $lot->service
                 ? $lot->service->type.' - '.$lot->service->name
                 : null,
+            'coffrac_service_alias_id' => $lot->coffrac_service_alias_id,
+            'coffrac_service_alias_label' => $lot->coffracServiceAlias?->external_name,
             'status' => $status,
             'status_label' => Lot::statusLabelFor($status),
             'status_color' => $statusMeta['color'],
@@ -1487,6 +1545,11 @@ class ManagerLotController extends Controller
      */
     private function serializePreview(LotImportPreview $preview): array
     {
+        $preview->loadMissing([
+            'service:id,type,name,average_duration_minutes',
+            'coffracServiceAlias:id,service_id,source,external_name',
+        ]);
+
         $payload = $preview->payload ?? [];
         $appointments = collect($payload['appointments'] ?? [])
             ->values()
@@ -1514,6 +1577,8 @@ class ManagerLotController extends Controller
             'service_label' => $preview->service
                 ? $preview->service->type.' - '.$preview->service->name
                 : null,
+            'coffrac_service_alias_id' => $preview->coffrac_service_alias_id,
+            'coffrac_service_alias_label' => $preview->coffracServiceAlias?->external_name,
             'sampling_percentage' => $preview->sampling_percentage,
             'physical_sampling_percentage' => $preview->physical_sampling_percentage,
             'contact_sampling_percentage' => $preview->contact_sampling_percentage,

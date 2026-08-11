@@ -979,6 +979,13 @@
                                     </select>
                                 </dd>
                             </div>
+                            <div id="booking_detail_lot_alias_select_wrap" class="hidden">
+                                <dt style="color:var(--gc-text-soft);">Alias Coffrac</dt>
+                                <dd class="mt-2">
+                                    <select id="booking_detail_lot_alias_select" class="gc-input"></select>
+                                    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Override uniquement pour ce RDV, sans modifier l’alias global du lot.</p>
+                                </dd>
+                            </div>
                             <div>
                                 <dt style="color:var(--gc-text-soft);">Adresse</dt>
                                 <dd id="booking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
@@ -3393,6 +3400,68 @@
             ? `${service.type} - ${service.name}`
             : 'Prestation non renseignée';
 
+        const coffracAliasesForServiceId = (serviceId) => {
+            const service = serviceById(serviceId);
+
+            return Array.isArray(service?.coffrac_aliases) ? service.coffrac_aliases : [];
+        };
+
+        const lotAliasOptionsForProps = (props = {}) => {
+            const aliases = Array.isArray(props.lot_service_aliases) && props.lot_service_aliases.length
+                ? props.lot_service_aliases
+                : (currentAppointmentRequest?.coffrac_service_aliases || currentAppointmentRequest?.service?.coffrac_aliases || []);
+
+            return Array.isArray(aliases) ? aliases : [];
+        };
+
+        const requiresLotAliasSelection = (props) => Boolean(
+            props?.is_suggestion
+            && props.lot_appointment_id
+            && lotAliasOptionsForProps(props).length
+        );
+
+        const populateLotAliasSelect = (select, props = {}) => {
+            if (!select) return;
+
+            const aliases = lotAliasOptionsForProps(props);
+            select.innerHTML = '';
+
+            if (!aliases.length) {
+                select.add(new Option('Aucun alias Coffrac disponible', ''));
+                select.disabled = true;
+                return;
+            }
+
+            aliases.forEach((alias) => {
+                select.add(new Option(alias.label, alias.id));
+            });
+
+            const selectedAliasId = props.lot_service_alias_id
+                || currentAppointmentRequest?.coffrac_service_alias_id
+                || aliases[0]?.id
+                || '';
+
+            select.value = aliases.some((alias) => String(alias.id) === String(selectedAliasId))
+                ? String(selectedAliasId)
+                : String(aliases[0]?.id || '');
+            select.disabled = false;
+        };
+
+        const syncLotAliasSelection = () => {
+            if (!selectedCalendarEvent) return;
+
+            const aliasSelect = document.getElementById('booking_detail_lot_alias_select');
+            const props = selectedCalendarEvent.extendedProps || {};
+            const aliases = lotAliasOptionsForProps(props);
+            const selectedAlias = aliases.find((alias) => String(alias.id) === String(aliasSelect?.value));
+
+            selectedCalendarEvent.extendedProps = {
+                ...props,
+                lot_service_alias_id: selectedAlias?.id || null,
+                lot_service_alias_label: selectedAlias?.label || null,
+            };
+        };
+
         const technicianById = (technicianId) => currentTechnicians.find((technician) => String(technician.id) === String(technicianId));
 
         const selectedTechnicians = () => currentTechnicians
@@ -3617,6 +3686,9 @@
                 crm_appointment_id: currentAppointmentRequest.id,
                 crm_service_id: null,
                 lot_appointment_id: currentAppointmentRequest.lot_appointment_id || null,
+                lot_service_alias_id: currentAppointmentRequest.coffrac_service_alias_id || null,
+                lot_service_alias_label: currentAppointmentRequest.coffrac_service_alias_label || null,
+                lot_service_aliases: currentAppointmentRequest.coffrac_service_aliases || currentAppointmentRequest.service?.coffrac_aliases || [],
                 replace_appointment_id: currentAppointmentRequest.replace_appointment_id || null,
                 documents: currentAppointmentRequest.documents || [],
                 comments: currentAppointmentRequest.comments || currentAppointmentRequest.external_payload?.comments || [],
@@ -3631,11 +3703,18 @@
 
             if (!technician) return;
 
+            const currentProps = event.extendedProps || {};
+            const selectedLotAliasId = currentProps.lot_service_alias_id || null;
+            const selectedLotAliasLabel = currentProps.lot_service_alias_label || null;
+            const draftProps = draftPropsForTechnician(technician, event.start);
+
             event.extendedProps = {
-                ...(event.extendedProps || {}),
-                ...draftPropsForTechnician(technician, event.start),
+                ...currentProps,
+                ...draftProps,
+                lot_service_alias_id: selectedLotAliasId || draftProps.lot_service_alias_id || null,
+                lot_service_alias_label: selectedLotAliasLabel || draftProps.lot_service_alias_label || null,
                 duration_minutes: Number(document.getElementById('booking_detail_duration')?.value || event.extendedProps?.duration_minutes || requestDurationMinutes()),
-                comment: document.getElementById('booking_detail_comment')?.value || event.extendedProps?.comment || '',
+                comment: document.getElementById('booking_detail_comment')?.value || currentProps.comment || '',
             };
 
             document.getElementById('booking_detail_technician').textContent = technician.name || '-';
@@ -4432,9 +4511,12 @@
             const technicianSelect = document.getElementById('booking_detail_technician_select');
             const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
             const serviceSelect = document.getElementById('booking_detail_service_select');
+            const lotAliasSelectWrap = document.getElementById('booking_detail_lot_alias_select_wrap');
+            const lotAliasSelect = document.getElementById('booking_detail_lot_alias_select');
             const startsAtInput = document.getElementById('booking_detail_starts_at');
             const durationInput = document.getElementById('booking_detail_duration');
             const shouldSelectCrmService = requiresCrmServiceSelection(props);
+            const shouldSelectLotAlias = requiresLotAliasSelection(props);
             const canReportProblem = !isSuggestion || isCoffracCrmId(props.crm_appointment_id);
 
             hideDetailStatus();
@@ -4470,6 +4552,15 @@
             serviceSelect.onchange = shouldSelectCrmService
                 ? () => syncCrmServiceSelection({ updateDuration: true })
                 : null;
+
+            lotAliasSelectWrap?.classList.toggle('hidden', !shouldSelectLotAlias);
+            if (shouldSelectLotAlias) {
+                populateLotAliasSelect(lotAliasSelect, props);
+                lotAliasSelect.onchange = syncLotAliasSelection;
+            } else if (lotAliasSelect) {
+                lotAliasSelect.innerHTML = '';
+                lotAliasSelect.onchange = null;
+            }
 
             technicianSelectWrap.classList.toggle('hidden', !allowTechnicianChange);
             technicianSelect.innerHTML = selectedTechnicians()
@@ -5948,6 +6039,8 @@
             const button = document.getElementById('booking-confirm-suggestion-btn');
             const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
             const serviceSelect = document.getElementById('booking_detail_service_select');
+            const lotAliasSelectWrap = document.getElementById('booking_detail_lot_alias_select_wrap');
+            const lotAliasSelect = document.getElementById('booking_detail_lot_alias_select');
             const payload = {
                 ...(currentAnalysisPayload || { crm_appointment_id: document.getElementById('booking_detail_crm_id').value }),
                 technician_id: document.getElementById('booking_detail_technician_id').value,
@@ -5964,6 +6057,10 @@
                 }
 
                 payload.crm_service_id = Number(serviceSelect.value);
+            }
+
+            if (!lotAliasSelectWrap?.classList.contains('hidden') && lotAliasSelect?.value) {
+                payload.lot_service_alias_id = Number(lotAliasSelect.value);
             }
 
             button.disabled = true;

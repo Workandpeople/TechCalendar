@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Planner;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
+use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\MailTemplate;
@@ -50,6 +51,9 @@ class PlannerBookingController extends Controller
         $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify');
         $isManagerRoute = $request->routeIs('manager.*');
         $services = Service::query()
+            ->with(['externalAliases' => fn ($query) => $query
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->orderBy('external_name')])
             ->orderBy('type')
             ->orderBy('name')
             ->get(['id', 'type', 'name', 'average_duration_minutes']);
@@ -100,6 +104,12 @@ class PlannerBookingController extends Controller
                     'type' => $service->type,
                     'name' => $service->name,
                     'average_duration_minutes' => $service->average_duration_minutes,
+                    'coffrac_aliases' => $service->externalAliases
+                        ->map(fn (ExternalServiceAlias $alias): array => [
+                            'id' => $alias->id,
+                            'label' => $alias->external_name,
+                        ])
+                        ->values(),
                 ])
                 ->values(),
         ]);
@@ -1000,6 +1010,12 @@ class PlannerBookingController extends Controller
                 'integer',
                 Rule::exists('services', 'id'),
             ],
+            'lot_service_alias_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('external_service_aliases', 'id')->where(fn ($query) => $query
+                    ->where('source', CoffracAppointmentService::SOURCE)),
+            ],
             'replace_appointment_id' => [
                 'nullable',
                 'integer',
@@ -1080,6 +1096,7 @@ class PlannerBookingController extends Controller
             return $this->lotAppointmentFromId(
                 (int) $payload['lot_appointment_id'],
                 filled($payload['lot_service_id'] ?? null) ? (int) $payload['lot_service_id'] : null,
+                filled($payload['lot_service_alias_id'] ?? null) ? (int) $payload['lot_service_alias_id'] : null,
             );
         }
 
@@ -1107,6 +1124,8 @@ class PlannerBookingController extends Controller
         return Lot::query()
             ->with([
                 'service:id,type,name,average_duration_minutes',
+                'service.externalAliases:id,service_id,source,external_name',
+                'coffracServiceAlias:id,service_id,source,external_name',
                 'appointments' => fn ($query) => $query
                     ->with([
                         'appointment:id,technician_id,service_id,starts_at,ends_at',
@@ -1171,6 +1190,8 @@ class PlannerBookingController extends Controller
                     'service_label' => $lot->service
                         ? $lot->service->type.' - '.$lot->service->name
                         : null,
+                    'coffrac_service_alias_id' => $lot->coffrac_service_alias_id,
+                    'coffrac_service_alias_label' => $lot->coffracServiceAlias?->external_name,
                     'status_label' => Lot::statusLabelFor($status),
                     'status_color' => $statusMeta['color'],
                     'status_background' => $statusMeta['background'],
@@ -1270,15 +1291,90 @@ class PlannerBookingController extends Controller
     }
 
     /**
+     * @return Collection<int, ExternalServiceAlias>
+     */
+    private function coffracAliasesForService(?Service $service): Collection
+    {
+        if (! $service) {
+            return collect();
+        }
+
+        if ($service->relationLoaded('externalAliases')) {
+            return $service->externalAliases
+                ->where('source', CoffracAppointmentService::SOURCE)
+                ->sortBy([
+                    ['external_name', 'asc'],
+                    ['id', 'asc'],
+                ])
+                ->values();
+        }
+
+        return $service->externalAliases()
+            ->where('source', CoffracAppointmentService::SOURCE)
+            ->orderBy('external_name')
+            ->orderBy('id')
+            ->get(['id', 'service_id', 'source', 'external_name']);
+    }
+
+    /**
+     * @return array<int, array{id:int,label:string}>
+     */
+    private function coffracAliasesPayload(?Service $service): array
+    {
+        return $this->coffracAliasesForService($service)
+            ->map(fn (ExternalServiceAlias $alias): array => [
+                'id' => $alias->id,
+                'label' => $alias->external_name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function resolveLotCoffracServiceAlias(
+        ?Service $service,
+        LotAppointment $lotAppointment,
+        ?int $requestedAliasId,
+    ): ?ExternalServiceAlias {
+        $aliases = $this->coffracAliasesForService($service);
+
+        if ($aliases->isEmpty()) {
+            return null;
+        }
+
+        if ($requestedAliasId !== null) {
+            $requestedAlias = $aliases->first(fn (ExternalServiceAlias $alias): bool => (int) $alias->id === $requestedAliasId);
+
+            if (! $requestedAlias) {
+                throw ValidationException::withMessages([
+                    'lot_service_alias_id' => 'Cet alias Coffrac ne correspond pas à la prestation du lot.',
+                ]);
+            }
+
+            return $requestedAlias;
+        }
+
+        $lotAlias = $lotAppointment->lot?->coffracServiceAlias;
+
+        if ($lotAlias && $aliases->contains(fn (ExternalServiceAlias $alias): bool => (int) $alias->id === (int) $lotAlias->id)) {
+            return $lotAlias;
+        }
+
+        return $aliases->first();
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
-    private function lotAppointmentFromId(int $id, ?int $serviceId = null): ?array
+    private function lotAppointmentFromId(int $id, ?int $serviceId = null, ?int $serviceAliasId = null): ?array
     {
         $lotAppointment = LotAppointment::query()
             ->with([
-                'lot:id,name,type,status,delegataire,service_id',
+                'lot:id,name,type,status,delegataire,service_id,coffrac_service_alias_id',
                 'lot.service:id,type,name,average_duration_minutes',
+                'lot.service.externalAliases:id,service_id,source,external_name',
+                'lot.coffracServiceAlias:id,service_id,source,external_name',
                 'service:id,type,name,average_duration_minutes',
+                'service.externalAliases:id,service_id,source,external_name',
             ])
             ->whereNull('appointment_id')
             ->whereKey($id)
@@ -1301,6 +1397,8 @@ class PlannerBookingController extends Controller
         $service = $lotAppointment->service
             ?: $lotAppointment->lot?->service
             ?: ($serviceId ? Service::query()->find($serviceId) : null);
+        $coffracAlias = $this->resolveLotCoffracServiceAlias($service, $lotAppointment, $serviceAliasId);
+        $coffracAliases = $this->coffracAliasesPayload($service);
 
         return [
             'id' => 'lot-'.$lotAppointment->id,
@@ -1327,12 +1425,17 @@ class PlannerBookingController extends Controller
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => true,
+            'coffrac_service_alias_id' => $coffracAlias?->id,
+            'coffrac_service_alias_label' => $coffracAlias?->external_name,
+            'coffrac_service_aliases' => $coffracAliases,
             'external_payload' => [
                 'source_type' => 'lot',
                 'lot_id' => $lotAppointment->lot_id,
                 'lot_name' => $lotAppointment->lot?->name,
                 'lot_type' => $lotAppointment->lot?->type,
                 'lot_delegataire' => $lotAppointment->lot?->delegataire,
+                'lot_coffrac_service_alias_id' => $coffracAlias?->id,
+                'lot_coffrac_service_alias_name' => $coffracAlias?->external_name,
                 'lot_global_plus' => (bool) $lotAppointment->added_to_global_plus,
                 'lot_appointment_id' => $lotAppointment->id,
                 'row_number' => $lotAppointment->row_number,
@@ -1345,6 +1448,7 @@ class PlannerBookingController extends Controller
                 'type' => $service->type,
                 'name' => $service->name,
                 'average_duration_minutes' => $service->average_duration_minutes,
+                'coffrac_aliases' => $coffracAliases,
             ] : null,
         ];
     }

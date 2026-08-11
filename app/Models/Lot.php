@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'name',
     'type',
     'service_id',
+    'coffrac_service_alias_id',
     'status',
     'sampling_percentage',
     'physical_sampling_percentage',
@@ -185,6 +186,11 @@ class Lot extends Model
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    public function coffracServiceAlias(): BelongsTo
+    {
+        return $this->belongsTo(ExternalServiceAlias::class, 'coffrac_service_alias_id');
     }
 
     public function typeLabel(): ?string

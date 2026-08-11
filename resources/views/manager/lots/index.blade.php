@@ -346,6 +346,13 @@
                                 </select>
                             </div>
                             <div>
+                                <label class="gc-label" for="lot_action_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                                <select id="lot_action_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                                    <option value="">Sélectionner une prestation</option>
+                                </select>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac lors d’un RDV physique issu de ce lot.</p>
+                            </div>
+                            <div>
                                 <span class="gc-label">Statut du lot</span>
                                 <div id="lot_action_status_text" class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);"></div>
                                 <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Statut recalculé automatiquement selon les objectifs de satisfaction.</p>
@@ -542,6 +549,13 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label class="gc-label" for="lot_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                            <select id="lot_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                                <option value="">Sélectionner une prestation</option>
+                            </select>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne l’intitulé exact attendu par Coffrac pour ce lot.</p>
+                        </div>
                         <div id="lot-single-sampling-wrap">
                             <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
                             <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
@@ -684,6 +698,14 @@
         const hybridLotType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
         const canForceDeleteStartedLots = @json($canForceDeleteStartedLots);
         const resumedLotImport = @json($activeImportPreview);
+        const lotServices = @json($services->map(fn ($service) => [
+            'id' => $service->id,
+            'label' => $service->type.' - '.$service->name,
+            'aliases' => $service->externalAliases->map(fn ($alias) => [
+                'id' => $alias->id,
+                'label' => $alias->external_name,
+            ])->values(),
+        ])->values());
         const lockedLotImportStatuses = ['pending', 'processing'];
         const lotData = new Map();
         const lotActionModal = document.getElementById('lot-action-modal');
@@ -697,6 +719,7 @@
         const lotActionName = document.getElementById('lot_action_name');
         const lotActionType = document.getElementById('lot_action_type');
         const lotActionServiceId = document.getElementById('lot_action_service_id');
+        const lotActionCoffracAliasId = document.getElementById('lot_action_coffrac_service_alias_id');
         const lotActionStatusText = document.getElementById('lot_action_status_text');
         const lotActionArchiveSection = document.getElementById('lot-action-archive-section');
         const lotActionArchiveCheckbox = document.getElementById('lot_action_archive_lot');
@@ -722,6 +745,7 @@
         const lotImportDelegataire = document.getElementById('lot_delegataire');
         const lotImportType = document.getElementById('lot_type');
         const lotImportServiceId = document.getElementById('lot_service_id');
+        const lotImportCoffracAliasId = document.getElementById('lot_coffrac_service_alias_id');
         const lotSamplingPercentage = document.getElementById('lot_sampling_percentage');
         const lotSingleSamplingWrap = document.getElementById('lot-single-sampling-wrap');
         const lotPhysicalSamplingWrap = document.getElementById('lot-physical-sampling-wrap');
@@ -848,6 +872,9 @@
         lotActionClose?.addEventListener('click', closeLotActionModal);
         lotActionCancel?.addEventListener('click', closeLotActionModal);
         lotActionType?.addEventListener('change', updateLotActionSamplingState);
+        lotActionServiceId?.addEventListener('change', () => {
+            populateCoffracAliasSelect(lotActionCoffracAliasId, lotActionServiceId.value, '', { selectFirst: true });
+        });
         lotActionDeleteForm?.addEventListener('submit', (event) => {
             if (lotActionDeleteSubmit?.disabled) {
                 event.preventDefault();
@@ -913,6 +940,51 @@
             }
         }
 
+        function coffracAliasesForService(serviceId) {
+            const service = lotServices.find((item) => String(item.id) === String(serviceId));
+
+            return Array.isArray(service?.aliases) ? service.aliases : [];
+        }
+
+        function populateCoffracAliasSelect(select, serviceId, selectedAliasId = '', options = {}) {
+            if (!select) {
+                return;
+            }
+
+            const aliases = coffracAliasesForService(serviceId);
+
+            select.innerHTML = '';
+
+            if (!serviceId) {
+                select.add(new Option('Sélectionner une prestation', ''));
+                select.disabled = true;
+                return;
+            }
+
+            if (!aliases.length) {
+                select.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
+                select.disabled = true;
+                return;
+            }
+
+            select.add(new Option('Utiliser le fallback automatique', ''));
+            aliases.forEach((alias) => {
+                select.add(new Option(alias.label, alias.id));
+            });
+
+            const selectedValue = selectedAliasId
+                ? String(selectedAliasId)
+                : (options.selectFirst ? String(aliases[0]?.id || '') : '');
+
+            if (selectedValue && aliases.some((alias) => String(alias.id) === selectedValue)) {
+                select.value = selectedValue;
+            } else {
+                select.value = '';
+            }
+
+            select.disabled = false;
+        }
+
         function openLotActionModal(lotId) {
             const lot = lotData.get(String(lotId));
 
@@ -927,6 +999,7 @@
             lotActionName.value = lot.title || '';
             lotActionType.value = lot.type || '';
             if (lotActionServiceId) lotActionServiceId.value = lot.service_id || '';
+            populateCoffracAliasSelect(lotActionCoffracAliasId, lot.service_id || '', lot.coffrac_service_alias_id || '');
             if (lotActionStatusText) lotActionStatusText.textContent = lot.status_label || lot.status || 'En cours';
             if (lotActionArchiveCheckbox) lotActionArchiveCheckbox.checked = false;
             lotActionArchiveSection?.classList.toggle('hidden', !lot.can_archive);
@@ -1021,6 +1094,7 @@
         }
 
         function openLotImportFormModal() {
+            populateCoffracAliasSelect(lotImportCoffracAliasId, lotImportServiceId?.value || '', lotImportCoffracAliasId?.value || '', { selectFirst: true });
             lotImportFormModal?.classList.remove('hidden');
             lotImportFormModal?.classList.add('flex');
             updateLotImportState();
@@ -2093,7 +2167,10 @@
         lotImportReceivedAt?.addEventListener('change', updateLotImportState);
         lotImportDelegataire?.addEventListener('change', updateLotImportState);
         lotImportType?.addEventListener('change', updateLotImportState);
-        lotImportServiceId?.addEventListener('change', updateLotImportState);
+        lotImportServiceId?.addEventListener('change', () => {
+            populateCoffracAliasSelect(lotImportCoffracAliasId, lotImportServiceId.value, '', { selectFirst: true });
+            updateLotImportState();
+        });
         lotSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotPhysicalSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotContactSamplingPercentage?.addEventListener('input', updateLotImportState);

@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'name',
     'type',
     'service_id',
+    'coffrac_service_alias_id',
     'sampling_percentage',
     'physical_sampling_percentage',
     'contact_sampling_percentage',
@@ -66,6 +67,11 @@ class LotImportPreview extends Model
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    public function coffracServiceAlias(): BelongsTo
+    {
+        return $this->belongsTo(ExternalServiceAlias::class, 'coffrac_service_alias_id');
     }
 
     protected function casts(): array

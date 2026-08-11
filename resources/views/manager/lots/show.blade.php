@@ -113,6 +113,14 @@
                         </div>
 
                         <div>
+                            <label class="gc-label" for="lot_detail_edit_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                            <select id="lot_detail_edit_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                                <option value="">Sélectionner une prestation</option>
+                            </select>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac pour les RDV physiques issus de ce lot.</p>
+                        </div>
+
+                        <div>
                             <span class="gc-label">Statut du lot</span>
                             <div class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
                                 {{ $lot['status_label'] }}
@@ -743,6 +751,8 @@
         const lotDetailEditClose = document.getElementById('lot-detail-edit-close');
         const lotDetailEditCancel = document.getElementById('lot-detail-edit-cancel');
         const lotDetailEditType = document.getElementById('lot_detail_edit_type');
+        const lotDetailEditServiceId = document.getElementById('lot_detail_edit_service_id');
+        const lotDetailEditCoffracAliasId = document.getElementById('lot_detail_edit_coffrac_service_alias_id');
         const lotDetailEditSamplingPercentage = document.getElementById('lot_detail_edit_sampling_percentage');
         const lotDetailEditPhysicalSamplingPercentage = document.getElementById('lot_detail_edit_physical_sampling_percentage');
         const lotDetailEditContactSamplingPercentage = document.getElementById('lot_detail_edit_contact_sampling_percentage');
@@ -751,6 +761,17 @@
         const lotDetailEditContactSamplingWrap = document.getElementById('lot-detail-edit-contact-sampling-wrap');
         const lotDetailSamplingTypes = @json(\App\Models\Lot::samplingTypes());
         const lotDetailHybridType = @json(\App\Models\Lot::TYPE_HYBRID_LOCATION_CONTACT);
+        const lotDetailCurrentLot = @json([
+            'service_id' => $lot['service_id'],
+            'coffrac_service_alias_id' => $lot['coffrac_service_alias_id'],
+        ]);
+        const lotDetailServices = @json($services->map(fn ($service) => [
+            'id' => $service->id,
+            'aliases' => $service->externalAliases->map(fn ($alias) => [
+                'id' => $alias->id,
+                'label' => $alias->external_name,
+            ])->values(),
+        ])->values());
         const lotAppointmentTargetsModal = document.getElementById('lot-appointment-targets-modal');
         const lotAppointmentTargetsClose = document.getElementById('lot-appointment-targets-close');
         const lotAppointmentTargetsCancel = document.getElementById('lot-appointment-targets-cancel');
@@ -832,6 +853,10 @@
         });
 
         lotDetailEditOpen?.addEventListener('click', () => {
+            populateLotDetailCoffracAliasSelect(
+                lotDetailEditServiceId?.value || lotDetailCurrentLot.service_id || '',
+                lotDetailCoffracAliasSelectedValue(),
+            );
             updateLotDetailEditSamplingState();
             openModal(lotDetailEditModal);
         });
@@ -843,6 +868,13 @@
             }
         });
         lotDetailEditType?.addEventListener('change', updateLotDetailEditSamplingState);
+        lotDetailEditServiceId?.addEventListener('change', () => {
+            populateLotDetailCoffracAliasSelect(lotDetailEditServiceId.value, '', { selectFirst: true });
+        });
+        populateLotDetailCoffracAliasSelect(
+            lotDetailEditServiceId?.value || lotDetailCurrentLot.service_id || '',
+            lotDetailCurrentLot.coffrac_service_alias_id || '',
+        );
         updateLotDetailEditSamplingState();
         document.querySelectorAll('.lot-appointment-targets-open').forEach((button) => {
             button.addEventListener('click', () => openModal(lotAppointmentTargetsModal));
@@ -1046,6 +1078,52 @@
 
         function isLotDetailHybridType(type) {
             return type === lotDetailHybridType;
+        }
+
+        function lotDetailCoffracAliasesForService(serviceId) {
+            const service = lotDetailServices.find((item) => String(item.id) === String(serviceId));
+
+            return Array.isArray(service?.aliases) ? service.aliases : [];
+        }
+
+        function lotDetailCoffracAliasSelectedValue() {
+            return lotDetailEditCoffracAliasId?.value || lotDetailCurrentLot.coffrac_service_alias_id || '';
+        }
+
+        function populateLotDetailCoffracAliasSelect(serviceId, selectedAliasId = '', options = {}) {
+            if (!lotDetailEditCoffracAliasId) {
+                return;
+            }
+
+            const aliases = lotDetailCoffracAliasesForService(serviceId);
+
+            lotDetailEditCoffracAliasId.innerHTML = '';
+
+            if (!serviceId) {
+                lotDetailEditCoffracAliasId.add(new Option('Sélectionner une prestation', ''));
+                lotDetailEditCoffracAliasId.disabled = true;
+                return;
+            }
+
+            if (!aliases.length) {
+                lotDetailEditCoffracAliasId.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
+                lotDetailEditCoffracAliasId.disabled = true;
+                return;
+            }
+
+            lotDetailEditCoffracAliasId.add(new Option('Utiliser le fallback automatique', ''));
+            aliases.forEach((alias) => {
+                lotDetailEditCoffracAliasId.add(new Option(alias.label, alias.id));
+            });
+
+            const selectedValue = selectedAliasId
+                ? String(selectedAliasId)
+                : (options.selectFirst ? String(aliases[0]?.id || '') : '');
+
+            lotDetailEditCoffracAliasId.value = aliases.some((alias) => String(alias.id) === selectedValue)
+                ? selectedValue
+                : '';
+            lotDetailEditCoffracAliasId.disabled = false;
         }
 
         function updateLotDetailEditSamplingState() {

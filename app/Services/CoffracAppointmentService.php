@@ -929,7 +929,7 @@ class CoffracAppointmentService
 
         return [
             'service_type' => $appointment->service?->type,
-            'service_name' => $this->coffracServiceNameForAppointment($appointment),
+            'service_name' => $this->coffracServiceNameForLotAppointment($appointment, $externalPayload),
             'technician_email' => $appointment->technician?->email,
             'technician_name' => $appointment->technician?->full_name,
             'starts_at' => $appointment->starts_at?->toIso8601String(),
@@ -977,6 +977,22 @@ class CoffracAppointmentService
     }
 
     /**
+     * @param array<string, mixed> $externalPayload
+     */
+    private function coffracServiceNameForLotAppointment(Appointment $appointment, array $externalPayload): ?string
+    {
+        $selectedAlias = trim((string) (
+            data_get($externalPayload, 'lot_coffrac_service_alias_name')
+            ?? data_get($externalPayload, 'coffrac_service_alias_name')
+            ?? ''
+        ));
+
+        return $selectedAlias !== ''
+            ? $selectedAlias
+            : $this->coffracServiceNameForAppointment($appointment);
+    }
+
+    /**
      * @param array<string, mixed> $crmAppointment
      * @param array<string, mixed> $remotePayload
      */
@@ -995,6 +1011,7 @@ class CoffracAppointmentService
         }
 
         $rawPayload = is_array($lotAppointment->raw_payload) ? $lotAppointment->raw_payload : [];
+        $externalPayload = is_array($crmAppointment['external_payload'] ?? null) ? $crmAppointment['external_payload'] : [];
 
         $lotAppointment->update([
             'appointment_id' => $appointment->id,
@@ -1007,6 +1024,8 @@ class CoffracAppointmentService
             'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
             'raw_payload' => [
                 ...$rawPayload,
+                'coffrac_service_alias_id' => data_get($externalPayload, 'lot_coffrac_service_alias_id'),
+                'coffrac_service_alias_name' => data_get($externalPayload, 'lot_coffrac_service_alias_name'),
                 'coffrac_created_payload' => $remotePayload,
             ],
         ]);

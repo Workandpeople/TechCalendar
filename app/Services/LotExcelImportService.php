@@ -31,6 +31,7 @@ class LotExcelImportService
         ?float $physicalSamplingPercentage = null,
         ?float $contactSamplingPercentage = null,
         ?int $serviceId = null,
+        ?int $coffracServiceAliasId = null,
         ?string $receivedAt = null,
         ?string $comment = null,
     ): Lot
@@ -42,11 +43,12 @@ class LotExcelImportService
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
                     'service_id' => $service?->id,
+                    'coffrac_service_alias_id' => $coffracServiceAliasId,
                     'status' => Lot::STATUS_NOT_STARTED,
                     'sampling_percentage' => $samplingPercentage,
                     'physical_sampling_percentage' => $physicalSamplingPercentage,

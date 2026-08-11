@@ -63,6 +63,7 @@ class LotImportConfirmationService
                 'name' => $preview->name ?: pathinfo($preview->original_filename, PATHINFO_FILENAME),
                 'type' => $preview->type,
                 'service_id' => $service?->id,
+                'coffrac_service_alias_id' => $preview->coffrac_service_alias_id,
                 'status' => Lot::STATUS_NOT_STARTED,
                 'sampling_percentage' => $preview->sampling_percentage,
                 'physical_sampling_percentage' => $preview->physical_sampling_percentage,
