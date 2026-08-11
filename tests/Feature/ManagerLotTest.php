@@ -978,8 +978,10 @@ it('updates manual appointment targets without changing satisfaction targets', f
         ->assertSee('objectif manuel')
         ->assertSee('1 réponse(s) de satisfaction')
         ->assertSee('sur 4 dossier(s) du lot.')
-        ->assertSee('Cible satisfaction : 50,00% · objectif 2 dossier(s)')
-        ->assertSee('Cible satisfaction : 25,00% · objectif 1 dossier(s)');
+        ->assertSee('Cible satisfaction : 50,00% · objectif 3 dossier(s)')
+        ->assertSee('Cible satisfaction : 25,00% · objectif 2 dossier(s)')
+        ->assertDontSee('Cible satisfaction : 50,00% · objectif 2 dossier(s)')
+        ->assertDontSee('Cible satisfaction : 25,00% · objectif 1 dossier(s)');
 });
 
 it('excludes and reintegrates a lot appointment from lot statistics', function () {

@@ -1107,7 +1107,7 @@ class ManagerLotController extends Controller
             'imported_at' => $lot->imported_at,
             'import_summary' => $lot->import_summary,
             'auto_completion' => $autoCompletionData,
-            'satisfaction_charts' => $this->lotSatisfactionCharts($lot, $autoCompletionData),
+            'satisfaction_charts' => $this->lotSatisfactionCharts($lot, $autoCompletionData, $appointmentTargets),
             'dissatisfaction_charts' => $this->lotDissatisfactionCharts($lot, $autoCompletionData),
             'dissatisfaction_chart' => $this->lotDissatisfactionChart($autoCompletionData),
             'appointment_targets' => $appointmentTargets,
@@ -1126,7 +1126,7 @@ class ManagerLotController extends Controller
      * @param array<string, mixed> $autoCompletionData
      * @return array<int, array<string, mixed>>
      */
-    private function lotSatisfactionCharts(Lot $lot, array $autoCompletionData): array
+    private function lotSatisfactionCharts(Lot $lot, array $autoCompletionData, array $appointmentTargets): array
     {
         $charts = [];
 
@@ -1136,6 +1136,7 @@ class ManagerLotController extends Controller
                 label: 'Satisfaction RDV physiques',
                 color: '#15803d',
                 completion: $autoCompletionData['physical'],
+                appointmentTarget: $appointmentTargets['physical'] ?? null,
             );
         }
 
@@ -1145,6 +1146,7 @@ class ManagerLotController extends Controller
                 label: 'Satisfaction contacts',
                 color: '#16a34a',
                 completion: $autoCompletionData['contact'],
+                appointmentTarget: $appointmentTargets['contact'] ?? null,
             );
         }
 
@@ -1168,9 +1170,12 @@ class ManagerLotController extends Controller
      * @param array<string, mixed> $completion
      * @return array<string, mixed>
      */
-    private function lotSatisfactionChartPayload(string $key, string $label, string $color, array $completion): array
+    private function lotSatisfactionChartPayload(string $key, string $label, string $color, array $completion, ?array $appointmentTarget = null): array
     {
-        $targetCount = max(0, (int) ($completion['target_count'] ?? $completion['total_count'] ?? 0));
+        $calculatedTargetCount = max(0, (int) ($completion['target_count'] ?? $completion['total_count'] ?? 0));
+        $targetCount = is_array($appointmentTarget) && (bool) ($appointmentTarget['enabled'] ?? false)
+            ? max(0, (int) ($appointmentTarget['target_count'] ?? $calculatedTargetCount))
+            : $calculatedTargetCount;
         $totalCount = max(0, (int) ($completion['total_count'] ?? $targetCount));
         $satisfiedCount = max(0, (int) ($completion['raw_satisfied_count'] ?? $completion['satisfied_count'] ?? 0));
         $unsatisfiedCount = max(0, (int) ($completion['raw_unsatisfied_count'] ?? $completion['unsatisfied_count'] ?? 0));
@@ -1201,6 +1206,8 @@ class ManagerLotController extends Controller
             'answered_count' => $answeredCount,
             'remaining_count' => max(0, $targetCount - $answeredForTarget),
             'target_count' => $targetCount,
+            'calculated_target_count' => $calculatedTargetCount,
+            'is_manual_target' => (bool) ($appointmentTarget['is_manual'] ?? false),
             'target_percentage' => $targetPercentage,
             'target_percentage_display' => $targetPercentage === null
                 ? 'non définie'
