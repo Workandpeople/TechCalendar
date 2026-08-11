@@ -1176,7 +1176,8 @@ it('resets a placed physical lot appointment and removes the local calendar appo
         ->assertJsonPath('appointment.appointment_id', null)
         ->assertJsonPath('appointment.is_placed', false)
         ->assertJsonPath('appointment.physical_satisfaction', null)
-        ->assertJsonPath('appointment.unsuccessful_visits_count', 0)
+        ->assertJsonPath('appointment.unsuccessful_visits_count', 2)
+        ->assertJsonPath('appointment.can_update_visits', true)
         ->assertJsonPath('appointment.can_reset_processing', false)
         ->assertJsonPath('reload_required', true);
 
@@ -1188,7 +1189,7 @@ it('resets a placed physical lot appointment and removes the local calendar appo
         ->and($lotAppointment->processing_mode)->toBeNull()
         ->and($lotAppointment->physical_satisfaction)->toBeNull()
         ->and($lotAppointment->physical_satisfaction_synced_at)->toBeNull()
-        ->and($lotAppointment->unsuccessful_visits_count)->toBe(0)
+        ->and($lotAppointment->unsuccessful_visits_count)->toBe(2)
         ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
 
     $this->assertSoftDeleted('appointments', [
@@ -1233,6 +1234,46 @@ it('updates unsuccessful visits on a physical lot appointment without local cale
         ->assertJsonPath('appointment.unsuccessful_visits_count', 3);
 
     expect($lotAppointment->refresh()->unsuccessful_visits_count)->toBe(3);
+});
+
+it('updates unsuccessful visits on a not placed lot appointment', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot physique non placé',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client non placé',
+        'customer_phone' => '0600000066',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'department_code' => '69',
+        'status' => LotAppointment::STATUS_NOT_PLACED,
+        'unsuccessful_visits_count' => 0,
+    ]);
+
+    $this->actingAs($manager)
+        ->get(route('manager.lots.show', $lot))
+        ->assertOk()
+        ->assertSee('data-lot-appointment-portes="'.$lotAppointment->id.'"', false)
+        ->assertSee('"can_update_visits":true', false);
+
+    $this->actingAs($manager)
+        ->patchJson(route('manager.lots.appointments.visits.update', $lotAppointment), [
+            'unsuccessful_visits_count' => 4,
+        ])
+        ->assertOk()
+        ->assertJsonPath('appointment.status', LotAppointment::STATUS_NOT_PLACED)
+        ->assertJsonPath('appointment.can_update_visits', true)
+        ->assertJsonPath('appointment.can_reset_processing', false)
+        ->assertJsonPath('appointment.unsuccessful_visits_count', 4);
+
+    expect($lotAppointment->refresh()->unsuccessful_visits_count)->toBe(4);
 });
 
 it('renders lot type select in the import form', function () {
@@ -2014,6 +2055,7 @@ it('keeps company and site names when confirming a business lot preview', functi
                     'customer_name' => 'Ancien libellé',
                     'company_name' => 'ACME Industrie',
                     'site_name' => 'Site de Lyon',
+                    'installer_name' => 'Installateur Rhône',
                     'customer_phone' => '0612345678',
                     'address' => '20 Rue Bellecordière',
                     'postal_code' => '69002',
@@ -2038,6 +2080,7 @@ it('keeps company and site names when confirming a business lot preview', functi
         'customer_name' => 'ACME Industrie',
         'company_name' => 'ACME Industrie',
         'site_name' => 'Site de Lyon',
+        'installer_name' => 'Installateur Rhône',
         'postal_code' => '69002',
         'city' => 'Lyon',
         'status' => LotAppointment::STATUS_PENDING,

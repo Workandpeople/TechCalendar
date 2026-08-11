@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'customer_name',
     'company_name',
     'site_name',
+    'installer_name',
     'customer_first_name',
     'customer_last_name',
     'customer_phone',

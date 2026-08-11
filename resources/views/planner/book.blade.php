@@ -538,6 +538,7 @@
                                         $appointment['customer_name'] ?? null,
                                         $appointment['company_name'] ?? null,
                                         $appointment['site_name'] ?? null,
+                                        $appointment['installer_name'] ?? null,
                                         $appointment['customer_phone'] ?? null,
                                         $appointmentFullAddress,
                                         $appointment['department_code'] ?? null,
@@ -579,6 +580,7 @@
                                             $lotAppointmentBusiness = trim(implode(' · ', array_filter([
                                                 ! empty($appointment['company_name']) ? 'Raison sociale : '.$appointment['company_name'] : null,
                                                 ! empty($appointment['site_name']) ? 'Site : '.$appointment['site_name'] : null,
+                                                ! empty($appointment['installer_name']) ? 'Installateur : '.$appointment['installer_name'] : null,
                                             ])));
                                         @endphp
                                         <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h4>
@@ -3681,6 +3683,7 @@
                     || 'Client à qualifier',
                 company_name: currentAppointmentRequest.company_name || null,
                 site_name: currentAppointmentRequest.site_name || null,
+                installer_name: currentAppointmentRequest.installer_name || null,
                 customer_phone: currentAppointmentRequest.phone,
                 service_label: serviceLabelForRequest(),
                 crm_appointment_id: currentAppointmentRequest.id,

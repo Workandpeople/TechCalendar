@@ -1700,6 +1700,7 @@ it('analyzes a lot appointment request with the lot service', function () {
         'customer_name' => 'Client Lot',
         'company_name' => 'ACME Industrie',
         'site_name' => 'Site de Lyon',
+        'installer_name' => 'Installateur Rhône',
         'customer_phone' => '0600000003',
         'address' => '20 Place Bellecour, 69002 Lyon',
         'department_code' => '69',
@@ -1718,6 +1719,7 @@ it('analyzes a lot appointment request with the lot service', function () {
         ->assertJsonPath('crm_appointment.customer_name', 'ACME Industrie')
         ->assertJsonPath('crm_appointment.company_name', 'ACME Industrie')
         ->assertJsonPath('crm_appointment.site_name', 'Site de Lyon')
+        ->assertJsonPath('crm_appointment.installer_name', 'Installateur Rhône')
         ->assertJsonPath('crm_appointment.service.id', $service->id)
         ->assertJsonPath('filters.is_lot', true)
         ->assertJsonCount(1, 'technicians')

@@ -494,6 +494,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left font-semibold">Ligne</th>
                             <th class="px-4 py-3 text-left font-semibold">Client / site</th>
+                            <th class="px-4 py-3 text-left font-semibold">Installateur</th>
                             <th class="px-4 py-3 text-left font-semibold">Contact</th>
                             <th class="px-4 py-3 text-left font-semibold">Adresse</th>
                             <th class="px-4 py-3 text-left font-semibold">Traitement</th>
@@ -505,7 +506,7 @@
                     <tbody class="divide-y" style="border-color:var(--gc-border);">
                         @if ($lot['appointments']->isEmpty())
                             <tr>
-                                <td colspan="8" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
+                                <td colspan="9" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
                                     Aucun dossier ne correspond aux filtres.
                                 </td>
                             </tr>
@@ -557,6 +558,7 @@
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Réf. {{ $appointment['external_reference'] }}</p>
                                     @endif
                                 </td>
+                                <td class="min-w-[180px] px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['installer_name'] ?: '-' }}</td>
                                 <td class="whitespace-nowrap px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: '-' }}</td>
                                 <td class="min-w-[280px] px-4 py-3" style="color:var(--gc-text);">{{ $fullAddress !== '' ? $fullAddress : 'Adresse à qualifier' }}</td>
                                 <td class="px-4 py-3">
@@ -1363,6 +1365,9 @@
                 ['Technicien', appointment.placed_technician_name],
                 ['Date du RDV', formatDateTime(appointment.placed_at)],
                 ['Prestation', appointment.placed_service_label],
+                ['Raison sociale bénéficiaire', appointment.company_name],
+                ['Nom du site', appointment.site_name],
+                ['Installateur', appointment.installer_name],
                 ['Téléphone', appointment.customer_phone],
                 ['Adresse', fullAddress(appointment)],
                 ['Référence', appointment.external_reference],
@@ -1396,6 +1401,9 @@
                 ['Statut', appointment.status_label],
                 ['Traité le', formatDateTime(appointment.contact_processed_at)],
                 ['Traité par', appointment.contact_processed_by_name],
+                ['Raison sociale bénéficiaire', appointment.company_name],
+                ['Nom du site', appointment.site_name],
+                ['Installateur', appointment.installer_name],
                 ['Téléphone', appointment.customer_phone],
                 ['Adresse', fullAddress(appointment)],
                 ['Référence', appointment.external_reference],

@@ -439,6 +439,10 @@
                             <input id="lot_appointment_site_name" class="gc-input" data-lot-appointment-field="site_name" type="text" maxlength="190" />
                         </div>
                         <div>
+                            <label class="gc-label" for="lot_appointment_installer_name">Installateur</label>
+                            <input id="lot_appointment_installer_name" class="gc-input" data-lot-appointment-field="installer_name" type="text" maxlength="190" />
+                        </div>
+                        <div>
                             <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
                             <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="255" />
                         </div>
@@ -635,6 +639,7 @@
                                     <tr>
                                         <th class="px-3 py-2 text-left">Inclure</th>
                                         <th class="px-3 py-2 text-left">Client</th>
+                                        <th class="px-3 py-2 text-left">Installateur</th>
                                         <th class="px-3 py-2 text-left">Téléphone</th>
                                         <th class="px-3 py-2 text-left">Adresse</th>
                                         <th class="px-3 py-2 text-left">CP / ville</th>
@@ -1352,6 +1357,7 @@
                     ? `${Number(appointment.latitude).toFixed(5)}, ${Number(appointment.longitude).toFixed(5)}`
                     : '--';
                 const displayName = lotImportDisplayName(appointment);
+                const installerName = appointment.installer_name || '--';
                 const businessLabel = lotAppointmentBusinessLabel(appointment);
                 const row = document.createElement('tr');
                 row.dataset.previewRow = String(rowNumber);
@@ -1365,6 +1371,7 @@
                         ${businessLabel ? `<div class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(businessLabel)}</div>` : ''}
                         <div class="text-xs" style="color:var(--gc-text-soft);">Ligne ${escapeHtml(appointment.row_number || '--')}</div>
                     </td>
+                    <td class="px-3 py-3 align-top">${escapeHtml(installerName)}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.customer_phone || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.address || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml([appointment.postal_code, appointment.city].filter(Boolean).join(' ') || appointment.department_code || '--')}</td>
@@ -1387,7 +1394,7 @@
                     editRow.dataset.hasWarnings = hasWarnings ? '1' : '0';
                     editRow.dataset.updateUrl = appointment.update_url;
                     editRow.innerHTML = `
-                        <td colspan="8" class="bg-slate-50 px-4 py-4">
+                        <td colspan="9" class="bg-slate-50 px-4 py-4">
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                                 <input type="hidden" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
                                 <div>
@@ -1397,6 +1404,10 @@
                                 <div>
                                     <label class="gc-label">Nom du site</label>
                                     <input class="gc-input" data-field="site_name" value="${escapeHtml(appointment.site_name || '')}">
+                                </div>
+                                <div>
+                                    <label class="gc-label">Installateur</label>
+                                    <input class="gc-input" data-field="installer_name" value="${escapeHtml(appointment.installer_name || '')}">
                                 </div>
                                 <div>
                                     <label class="gc-label">Prénom</label>

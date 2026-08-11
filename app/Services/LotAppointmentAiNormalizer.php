@@ -130,9 +130,13 @@ Tu dois retourner uniquement un JSON respectant le schéma.
 Ne devine pas les informations absentes: utilise null ou une chaîne vide selon le schéma.
 Normalise les téléphones français au mieux, conserve les adresses complètes.
 Il existe deux types de lignes: particuliers et entreprises.
-Pour un particulier, renseigne customer_first_name/customer_last_name/customer_name, et laisse company_name/site_name à null.
-Pour une entreprise, renseigne company_name avec la raison sociale ou société, site_name avec le nom du site/établissement/agence si présent, et utilise company_name comme customer_name si aucun contact nominatif n'existe.
-Ne crée pas de faux nom complet: les colonnes "raison sociale", "société", "entreprise" vont dans company_name, les colonnes "nom du site", "site", "établissement" vont dans site_name.
+Pour un particulier, renseigne customer_first_name/customer_last_name/customer_name, et laisse company_name/site_name/installer_name à null.
+Pour une entreprise, company_name doit être la raison sociale du bénéficiaire/client final uniquement.
+Les colonnes "raison sociale bénéficiaire", "bénéficiaire", "client final", "maître d'ouvrage", "site bénéficiaire" vont dans company_name.
+Les colonnes "installateur", "raison sociale installateur", "professionnel", "entreprise travaux", "société installatrice", "artisan" vont dans installer_name.
+Ne mets jamais la raison sociale de l'installateur dans company_name sauf absence totale de bénéficiaire; dans ce cas, ajoute un warning explicite.
+site_name contient uniquement le nom du site/établissement/agence si présent, et company_name sert de customer_name si aucun contact nominatif n'existe.
+Ne crée pas de faux nom complet: les colonnes bénéficiaire vont dans company_name, les colonnes installateur vont dans installer_name, les colonnes "nom du site", "site", "établissement" vont dans site_name.
 Si l'adresse est séparée en plusieurs colonnes, conserve aussi adresse, code postal et ville dans address_line, postal_code et city.
 Nettoie les adresses avant de les retourner: retire les références cadastrales, codes parcelle, suffixes techniques et morceaux non postaux.
 Exemple: "1 LES PETITES GRANGES - 000 0E 0369 - 000 0E 0370 - 000 0Z 0172" doit devenir "1 LES PETITES GRANGES".
@@ -194,6 +198,7 @@ PROMPT;
                             'customer_name',
                             'company_name',
                             'site_name',
+                            'installer_name',
                             'customer_first_name',
                             'customer_last_name',
                             'customer_phone',
@@ -215,6 +220,7 @@ PROMPT;
                             'customer_name' => ['type' => 'string'],
                             'company_name' => $this->nullableString(),
                             'site_name' => $this->nullableString(),
+                            'installer_name' => $this->nullableString(),
                             'customer_first_name' => $this->nullableString(),
                             'customer_last_name' => $this->nullableString(),
                             'customer_phone' => $this->nullableString(),

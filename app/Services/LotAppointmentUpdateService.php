@@ -34,6 +34,7 @@ class LotAppointmentUpdateService
         $rawPayload = array_merge($rawPayload, [
             'company_name' => $this->nullableString($attributes['company_name'] ?? null),
             'site_name' => $this->nullableString($attributes['site_name'] ?? null),
+            'installer_name' => $this->nullableString($attributes['installer_name'] ?? null),
             'postal_code' => $postalCode,
             'city' => $city,
             'edited_manually' => true,
@@ -53,6 +54,7 @@ class LotAppointmentUpdateService
             'customer_name' => $this->customerName($attributes),
             'company_name' => $this->nullableString($attributes['company_name'] ?? null),
             'site_name' => $this->nullableString($attributes['site_name'] ?? null),
+            'installer_name' => $this->nullableString($attributes['installer_name'] ?? null),
             'customer_first_name' => $this->nullableString($attributes['customer_first_name'] ?? null),
             'customer_last_name' => $this->nullableString($attributes['customer_last_name'] ?? null),
             'customer_phone' => $this->phoneString($attributes['customer_phone'] ?? null),

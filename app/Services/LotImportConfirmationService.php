@@ -104,6 +104,7 @@ class LotImportConfirmationService
                     'customer_name' => $this->requiredCustomerName($appointmentPayload),
                     'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
                     'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
+                    'installer_name' => $this->nullableString($appointmentPayload['installer_name'] ?? null),
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),

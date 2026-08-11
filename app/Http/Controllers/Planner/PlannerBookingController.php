@@ -1237,6 +1237,7 @@ class PlannerBookingController extends Controller
                         'customer_name' => $appointment->customer_name,
                         'company_name' => $appointment->company_name,
                         'site_name' => $appointment->site_name,
+                        'installer_name' => $appointment->installer_name,
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
                         'postal_code' => $appointment->postal_code ?: ($appointment->raw_payload['postal_code'] ?? null),
@@ -1415,6 +1416,7 @@ class PlannerBookingController extends Controller
             ]),
             'company_name' => $lotAppointment->company_name,
             'site_name' => $lotAppointment->site_name,
+            'installer_name' => $lotAppointment->installer_name,
             'phone' => $lotAppointment->customer_phone,
             'address' => $lotAppointment->address,
             'postal_code' => $lotAppointment->postal_code,
@@ -1441,6 +1443,7 @@ class PlannerBookingController extends Controller
                 'row_number' => $lotAppointment->row_number,
                 'company_name' => $lotAppointment->company_name,
                 'site_name' => $lotAppointment->site_name,
+                'installer_name' => $lotAppointment->installer_name,
                 'raw_payload' => $lotAppointment->raw_payload,
             ],
             'service' => $service ? [
@@ -1474,6 +1477,7 @@ class PlannerBookingController extends Controller
         $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
         $companyName = data_get($externalPayload, 'company_name') ?: data_get($externalPayload, 'client.company_name');
         $siteName = data_get($externalPayload, 'site_name') ?: data_get($externalPayload, 'client.site_name');
+        $installerName = data_get($externalPayload, 'installer_name') ?: data_get($externalPayload, 'client.installer_name');
         $departmentCode = $this->departmentCodeFromAddress($appointment->address);
 
         return [
@@ -1485,6 +1489,7 @@ class PlannerBookingController extends Controller
             'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
             'company_name' => $companyName,
             'site_name' => $siteName,
+            'installer_name' => $installerName,
             'phone' => $appointment->customer_phone,
             'address' => $appointment->address,
             'department_code' => $departmentCode,
@@ -2649,6 +2654,7 @@ class PlannerBookingController extends Controller
                 'customer_name' => $this->appointmentRequestDisplayName($crmAppointment),
                 'company_name' => $crmAppointment['company_name'] ?? null,
                 'site_name' => $crmAppointment['site_name'] ?? null,
+                'installer_name' => $crmAppointment['installer_name'] ?? null,
                 'customer_phone' => $crmAppointment['phone'],
                 'service_label' => $crmAppointment['service']
                     ? $crmAppointment['service']['name']

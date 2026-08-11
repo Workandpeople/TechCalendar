@@ -477,6 +477,7 @@ class ManagerLotController extends Controller
             'customer_name' => ['nullable', 'string', 'max:190'],
             'company_name' => ['nullable', 'string', 'max:190'],
             'site_name' => ['nullable', 'string', 'max:190'],
+            'installer_name' => ['nullable', 'string', 'max:190'],
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
@@ -526,6 +527,7 @@ class ManagerLotController extends Controller
             'customer_name' => ['nullable', 'string', 'max:190'],
             'company_name' => ['nullable', 'string', 'max:190'],
             'site_name' => ['nullable', 'string', 'max:190'],
+            'installer_name' => ['nullable', 'string', 'max:190'],
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
@@ -557,7 +559,7 @@ class ManagerLotController extends Controller
     public function updateAppointmentVisits(Request $request, LotAppointment $lotAppointment): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
-        abort_unless($this->canUpdateLotAppointmentVisits($lotAppointment), 422, 'Le nombre de portes concerne uniquement les dossiers traités en déplacement.');
+        abort_unless($this->canUpdateLotAppointmentVisits($lotAppointment), 422, 'Le nombre de portes concerne uniquement les dossiers physiques placés, en déplacement ou marqués « ne pas placer ».');
 
         $payload = $request->validate([
             'unsuccessful_visits_count' => ['required', 'integer', 'min:0', 'max:65535'],
@@ -664,7 +666,6 @@ class ManagerLotController extends Controller
                 'contact_processed_by' => null,
                 'physical_satisfaction' => null,
                 'physical_satisfaction_synced_at' => null,
-                'unsuccessful_visits_count' => 0,
             ]);
 
             $lotAppointment->refresh();
@@ -1034,6 +1035,7 @@ class ManagerLotController extends Controller
                 ->orWhere('customer_name', 'like', "%{$search}%")
                 ->orWhere('company_name', 'like', "%{$search}%")
                 ->orWhere('site_name', 'like', "%{$search}%")
+                ->orWhere('installer_name', 'like', "%{$search}%")
                 ->orWhere('customer_first_name', 'like', "%{$search}%")
                 ->orWhere('customer_last_name', 'like', "%{$search}%")
                 ->orWhere('customer_phone', 'like', "%{$search}%")
@@ -1372,6 +1374,7 @@ class ManagerLotController extends Controller
             'customer_name' => $appointment->customer_name,
             'company_name' => $appointment->company_name,
             'site_name' => $appointment->site_name,
+            'installer_name' => $appointment->installer_name,
             'customer_first_name' => $appointment->customer_first_name,
             'customer_last_name' => $appointment->customer_last_name,
             'customer_phone' => $appointment->customer_phone,
@@ -1530,13 +1533,13 @@ class ManagerLotController extends Controller
             || $appointment->processing_mode !== null
             || $appointment->contact_processed_at !== null
             || $appointment->physical_satisfaction !== null
-            || $appointment->physical_satisfaction_synced_at !== null
-            || ($appointment->unsuccessful_visits_count ?? 0) > 0;
+            || $appointment->physical_satisfaction_synced_at !== null;
     }
 
     private function canUpdateLotAppointmentVisits(LotAppointment $appointment): bool
     {
         return $this->isPlacedLotAppointment($appointment)
+            || $appointment->status === LotAppointment::STATUS_NOT_PLACED
             || $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
             || $appointment->physical_satisfaction !== null
             || $appointment->physical_satisfaction_synced_at !== null;
