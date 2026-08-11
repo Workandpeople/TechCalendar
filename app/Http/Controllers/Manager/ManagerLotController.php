@@ -1176,6 +1176,9 @@ class ManagerLotController extends Controller
         $targetCount = is_array($appointmentTarget) && (bool) ($appointmentTarget['enabled'] ?? false)
             ? max(0, (int) ($appointmentTarget['target_count'] ?? $calculatedTargetCount))
             : $calculatedTargetCount;
+        $completedCount = is_array($appointmentTarget) && (bool) ($appointmentTarget['enabled'] ?? false)
+            ? max(0, (int) ($appointmentTarget['completed_count'] ?? $completion['completed_count'] ?? 0))
+            : max(0, (int) ($completion['completed_count'] ?? 0));
         $totalCount = max(0, (int) ($completion['total_count'] ?? $targetCount));
         $satisfiedCount = max(0, (int) ($completion['raw_satisfied_count'] ?? $completion['satisfied_count'] ?? 0));
         $unsatisfiedCount = max(0, (int) ($completion['raw_unsatisfied_count'] ?? $completion['unsatisfied_count'] ?? 0));
@@ -1222,9 +1225,35 @@ class ManagerLotController extends Controller
                 ? 'non définie'
                 : number_format($targetPercentage, 2, ',', ' ').'%',
             'total_count' => $totalCount,
-            'detail' => $completion['detail'] ?? 'Suivi de la satisfaction',
+            'detail' => $this->lotSatisfactionChartDetail($completion, $completedCount, $targetCount),
             'is_sampling' => $isSampling,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $completion
+     */
+    private function lotSatisfactionChartDetail(array $completion, int $completedCount, int $targetCount): string
+    {
+        $label = filled($completion['label'] ?? null)
+            ? (string) $completion['label']
+            : 'dossier(s)';
+        $isSampling = (bool) ($completion['is_sampling'] ?? false);
+        $samplingPercentage = is_numeric($completion['sampling_percentage'] ?? null)
+            ? max(0, min(100, (float) $completion['sampling_percentage']))
+            : null;
+
+        if ($isSampling && $samplingPercentage !== null) {
+            $samplingLabel = rtrim(rtrim(number_format($samplingPercentage, 2, ',', ' '), '0'), ',');
+
+            return sprintf('%d/%d %s (%s%%)', $completedCount, $targetCount, $label, $samplingLabel);
+        }
+
+        if ($isSampling) {
+            return sprintf('%d/%d %s (échantillonnage non défini)', $completedCount, $targetCount, $label);
+        }
+
+        return sprintf('%d/%d %s', $completedCount, $targetCount, $label);
     }
 
     /**
