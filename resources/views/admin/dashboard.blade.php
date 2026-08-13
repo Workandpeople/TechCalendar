@@ -134,6 +134,41 @@
                     @endforelse
                 </div>
             </article>
+
+            <article class="gc-card p-5 xl:col-span-2">
+                <div class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Coffrac</p>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Laravel log distant</h2>
+                        <p class="mt-1 max-w-3xl text-sm" style="color:var(--gc-text-soft);">
+                            Lecture sécurisée des dernières lignes du log Coffrac via l’API TechCalendar. Utile pour diagnostiquer les créations de dossiers et les passages en problème RDV.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div>
+                            <label class="gc-label" for="coffrac_log_lines">Lignes</label>
+                            <select id="coffrac_log_lines" class="gc-input">
+                                <option value="100">100</option>
+                                <option value="250" selected>250</option>
+                                <option value="500">500</option>
+                                <option value="1000">1000</option>
+                            </select>
+                        </div>
+                        <button
+                            id="coffrac_logs_load_btn"
+                            type="button"
+                            class="gc-btn-primary"
+                            data-url="{{ route('admin.dashboard.coffrac.logs') }}"
+                        >
+                            Charger les logs Coffrac
+                        </button>
+                    </div>
+                </div>
+
+                <div id="coffrac_logs_status" class="mb-3 rounded-xl border px-4 py-3 text-sm" style="display:none;border-color:var(--gc-border);color:var(--gc-text-soft);"></div>
+                <pre id="coffrac_logs_output" class="max-h-[32rem] overflow-auto rounded-xl border p-4 text-xs leading-relaxed" style="display:none;border-color:var(--gc-border);background:#111827;color:#f9fafb;"></pre>
+            </article>
         </section>
 
         <section class="gc-card p-5">
@@ -245,6 +280,72 @@
             @endif
         </section>
     </div>
+
+    <script>
+        (() => {
+            const loadButton = document.getElementById('coffrac_logs_load_btn');
+            const lineSelect = document.getElementById('coffrac_log_lines');
+            const statusBox = document.getElementById('coffrac_logs_status');
+            const outputBox = document.getElementById('coffrac_logs_output');
+
+            if (!loadButton || !lineSelect || !statusBox || !outputBox) {
+                return;
+            }
+
+            const setStatus = (message, tone = 'neutral') => {
+                const colors = {
+                    neutral: ['var(--gc-border)', 'var(--gc-text-soft)', '#ffffff'],
+                    loading: ['#bfdbfe', '#1d4ed8', '#eff6ff'],
+                    ok: ['#bbf7d0', '#15803d', '#f0fdf4'],
+                    error: ['#fecdd3', '#be123c', '#fff1f2'],
+                };
+                const [border, text, background] = colors[tone] || colors.neutral;
+
+                statusBox.style.display = 'block';
+                statusBox.style.borderColor = border;
+                statusBox.style.color = text;
+                statusBox.style.background = background;
+                statusBox.textContent = message;
+            };
+
+            loadButton.addEventListener('click', async () => {
+                const url = new URL(loadButton.dataset.url, window.location.origin);
+                url.searchParams.set('lines', lineSelect.value || '250');
+
+                loadButton.disabled = true;
+                outputBox.style.display = 'none';
+                outputBox.textContent = '';
+                setStatus('Chargement des logs Coffrac...', 'loading');
+
+                try {
+                    const response = await fetch(url.toString(), {
+                        headers: {
+                            Accept: 'application/json',
+                        },
+                    });
+                    const payload = await response.json().catch(() => ({}));
+
+                    if (!response.ok || payload.result === false) {
+                        throw new Error(payload.message || 'Impossible de récupérer les logs Coffrac.');
+                    }
+
+                    const data = payload.data || {};
+                    const updatedAt = data.updated_at
+                        ? new Date(data.updated_at).toLocaleString('fr-FR')
+                        : 'date inconnue';
+                    const size = Number(data.size_bytes || 0).toLocaleString('fr-FR');
+
+                    setStatus(`${data.line_count || 0} ligne(s) chargée(s) depuis ${data.file || 'laravel.log'} · ${size} octets · mis à jour ${updatedAt}`, 'ok');
+                    outputBox.textContent = data.text || 'Log Coffrac vide.';
+                    outputBox.style.display = 'block';
+                } catch (error) {
+                    setStatus(error instanceof Error ? error.message : 'Erreur inconnue pendant le chargement des logs Coffrac.', 'error');
+                } finally {
+                    loadButton.disabled = false;
+                }
+            });
+        })();
+    </script>
 
     @vite('resources/js/chart.js')
     <script>

@@ -7,12 +7,15 @@ use App\Jobs\RunSystemTestsJob;
 use App\Models\SystemErrorEvent;
 use App\Models\SystemHealthSnapshot;
 use App\Models\SystemTestRun;
+use App\Services\CoffracAppointmentService;
 use App\Services\SystemHealthMonitor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class AdminDashboardController extends Controller
 {
@@ -123,6 +126,27 @@ class AdminDashboardController extends Controller
         app(SystemHealthMonitor::class)->run();
 
         return back()->with('status', sprintf('%d fichier(s) de log vidé(s).', $clearedFiles));
+    }
+
+    public function coffracLogs(Request $request, CoffracAppointmentService $coffracAppointments): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->admin, 403);
+
+        $payload = $request->validate([
+            'lines' => ['nullable', 'integer', 'min:1', 'max:1000'],
+        ]);
+
+        try {
+            return response()->json([
+                'result' => true,
+                'data' => $coffracAppointments->recentLogs((int) ($payload['lines'] ?? 250)),
+            ]);
+        } catch (Throwable $exception) {
+            return response()->json([
+                'result' => false,
+                'message' => $exception->getMessage(),
+            ], 502);
+        }
     }
 
     public function runHealthCheck(Request $request, SystemHealthMonitor $healthMonitor): RedirectResponse

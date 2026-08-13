@@ -101,6 +101,45 @@ class CoffracAppointmentService
     }
 
     /**
+     * @return array{file:string,lines:array<int,string>,text:string,line_count:int,size_bytes:int,updated_at:?string}
+     */
+    public function recentLogs(int $lines = 250): array
+    {
+        if (! $this->isConfigured()) {
+            throw new RuntimeException('API Coffrac non configurée, impossible de récupérer les logs.');
+        }
+
+        $lineCount = max(1, min(1000, $lines));
+        $response = $this->request()->get($this->endpoint('logs'), [
+            'lines' => $lineCount,
+        ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de récupérer les logs Coffrac.'));
+        }
+
+        $data = $response->json('data');
+
+        if (! is_array($data)) {
+            throw new RuntimeException('Coffrac a répondu sans payload de logs exploitable.');
+        }
+
+        $logLines = collect($data['lines'] ?? [])
+            ->filter(fn (mixed $line): bool => is_string($line))
+            ->values()
+            ->all();
+
+        return [
+            'file' => (string) ($data['file'] ?? 'laravel.log'),
+            'lines' => $logLines,
+            'text' => is_string($data['text'] ?? null) ? (string) $data['text'] : implode("\n", $logLines),
+            'line_count' => (int) ($data['line_count'] ?? count($logLines)),
+            'size_bytes' => (int) ($data['size_bytes'] ?? 0),
+            'updated_at' => filled($data['updated_at'] ?? null) ? (string) $data['updated_at'] : null,
+        ];
+    }
+
+    /**
      * @return array{comment:string,problem_type:string,recall_date:?string,recall_time:?string}
      */
     private function normalizeProblemReportPayload(array|string $problem): array

@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/admin/dashboard', AdminDashboardController::class)->name('admin.dashboard');
     Route::post('/admin/dashboard/health/run', [AdminDashboardController::class, 'runHealthCheck'])->name('admin.dashboard.health.run');
     Route::post('/admin/dashboard/logs/clear', [AdminDashboardController::class, 'clearLogs'])->name('admin.dashboard.logs.clear');
+    Route::get('/admin/dashboard/coffrac/logs', [AdminDashboardController::class, 'coffracLogs'])->name('admin.dashboard.coffrac.logs');
     Route::post('/admin/dashboard/tests/run', [AdminDashboardController::class, 'runTests'])->name('admin.dashboard.tests.run');
 
     Route::get('/admin/users', [AdminUserController::class, 'index'])->name('admin.users');

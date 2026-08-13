@@ -10,6 +10,7 @@ use App\Services\SystemHealthMonitor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
@@ -138,6 +139,48 @@ it('clears application logs and aggregated system errors from the admin dashboar
     expect(File::get($logPath))->toBe('')
         ->and(SystemErrorEvent::query()->count())->toBe(0)
         ->and(SystemHealthSnapshot::query()->count())->toBe(1);
+});
+
+it('loads coffrac laravel logs from the admin dashboard endpoint', function () {
+    fakeHealthLog();
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/logs*' => Http::response([
+            'result' => true,
+            'data' => [
+                'file' => 'laravel.log',
+                'lines' => [
+                    '[2026-08-13 10:00:00] production.WARNING: Coffrac diagnostic',
+                    '[2026-08-13 10:00:01] production.ERROR: Placement refusé',
+                ],
+                'text' => "[2026-08-13 10:00:00] production.WARNING: Coffrac diagnostic\n[2026-08-13 10:00:01] production.ERROR: Placement refusé",
+                'line_count' => 2,
+                'size_bytes' => 2048,
+                'updated_at' => '2026-08-13T10:00:01+00:00',
+            ],
+        ]),
+    ]);
+    $admin = User::query()->create([
+        'first_name' => 'Ada',
+        'last_name' => 'Admin',
+        'email' => 'coffrac-logs@example.test',
+        'password' => bcrypt('password'),
+        'admin' => true,
+        'role' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.dashboard.coffrac.logs', ['lines' => 2]))
+        ->assertOk()
+        ->assertJsonPath('result', true)
+        ->assertJsonPath('data.line_count', 2)
+        ->assertJsonPath('data.lines.1', '[2026-08-13 10:00:01] production.ERROR: Placement refusé');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://coffrac.test/api/techcalendar/logs?lines=2'
+        && $request->hasHeader('Authorization', 'Bearer secret-token'));
 });
 
 it('can run a fresh health check from the admin dashboard', function () {
