@@ -74,7 +74,7 @@
             </article>
         </section>
 
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
+        <section class="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
             <article class="gc-card p-5">
                 <div class="mb-4">
                     <p class="text-sm" style="color:var(--gc-text-soft);">Checks</p>
@@ -105,26 +105,26 @@
                 </div>
             </article>
 
-            <article class="gc-card p-5">
-                <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
+            <article class="gc-card min-w-0 p-5">
+                <div class="mb-4 flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div class="min-w-0">
                         <p class="text-sm" style="color:var(--gc-text-soft);">Logs</p>
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Dernières erreurs détectées</h2>
+                        <h2 class="break-words text-lg font-semibold" style="color:var(--gc-text);">Dernières erreurs détectées</h2>
                     </div>
-                    <form method="POST" action="{{ route('admin.dashboard.logs.clear') }}" onsubmit="return confirm('Vider les fichiers de logs applicatifs et l historique agrégé ?');">
+                    <form method="POST" action="{{ route('admin.dashboard.logs.clear') }}" class="shrink-0" onsubmit="return confirm('Vider les fichiers de logs applicatifs et l historique agrégé ?');">
                         @csrf
                         <button type="submit" class="gc-btn-danger">Vider les logs</button>
                     </form>
                 </div>
 
-                <div class="space-y-3">
+                <div class="min-w-0 space-y-3">
                     @forelse ($recentErrors as $event)
-                        <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
-                            <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                            <div class="flex min-w-0 items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <p class="text-sm font-semibold" style="color:var(--gc-text);">{{ $event->source }} · {{ $event->severity }}</p>
-                                    <p class="mt-2 line-clamp-3 text-sm" style="color:var(--gc-text-soft);">{{ $event->message }}</p>
-                                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Dernière occurrence: {{ $event->last_seen_at?->diffForHumans() }}</p>
+                                    <p class="break-words text-sm font-semibold" style="color:var(--gc-text);overflow-wrap:anywhere;">{{ $event->source }} · {{ $event->severity }}</p>
+                                    <p class="mt-2 line-clamp-3 break-words text-sm" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">{{ $event->message }}</p>
+                                    <p class="mt-2 break-words text-xs" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">Dernière occurrence: {{ $event->last_seen_at?->diffForHumans() }}</p>
                                 </div>
                                 <span class="shrink-0 rounded-full px-2 py-1 text-xs font-semibold" style="background:#ffe4e6;color:#be123c;">x{{ $event->occurrences }}</span>
                             </div>
@@ -135,17 +135,17 @@
                 </div>
             </article>
 
-            <article class="gc-card p-5 xl:col-span-2">
-                <div class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                    <div>
+            <article class="gc-card min-w-0 p-5 xl:col-span-2">
+                <div class="mb-4 flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div class="min-w-0">
                         <p class="text-sm" style="color:var(--gc-text-soft);">Coffrac</p>
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Laravel log distant</h2>
-                        <p class="mt-1 max-w-3xl text-sm" style="color:var(--gc-text-soft);">
+                        <h2 class="break-words text-lg font-semibold" style="color:var(--gc-text);">Laravel log distant</h2>
+                        <p class="mt-1 max-w-3xl break-words text-sm" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">
                             Lecture sécurisée des dernières lignes du log Coffrac via l’API TechCalendar. Utile pour diagnostiquer les créations de dossiers et les passages en problème RDV.
                         </p>
                     </div>
 
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-end">
                         <div>
                             <label class="gc-label" for="coffrac_log_lines">Lignes</label>
                             <select id="coffrac_log_lines" class="gc-input">
@@ -166,8 +166,8 @@
                     </div>
                 </div>
 
-                <div id="coffrac_logs_status" class="mb-3 rounded-xl border px-4 py-3 text-sm" style="display:none;border-color:var(--gc-border);color:var(--gc-text-soft);"></div>
-                <pre id="coffrac_logs_output" class="max-h-[32rem] overflow-auto rounded-xl border p-4 text-xs leading-relaxed" style="display:none;border-color:var(--gc-border);background:#111827;color:#f9fafb;"></pre>
+                <div id="coffrac_logs_status" class="mb-3 min-w-0 rounded-xl border px-4 py-3 text-sm" style="display:none;border-color:var(--gc-border);color:var(--gc-text-soft);overflow-wrap:anywhere;"></div>
+                <pre id="coffrac_logs_output" class="max-h-[32rem] min-w-0 max-w-full overflow-auto rounded-xl border p-4 text-xs leading-relaxed" style="display:none;border-color:var(--gc-border);background:#111827;color:#f9fafb;white-space:pre-wrap;overflow-wrap:anywhere;"></pre>
             </article>
         </section>
 
