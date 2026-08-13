@@ -1207,6 +1207,10 @@ class CoffracAppointmentService
     public function markProblem(Appointment $appointment, array|string $problem): void
     {
         if ($appointment->external_source !== self::SOURCE) {
+            if ($this->isUnlinkedLotBackedAppointment($appointment)) {
+                throw new RuntimeException('Ce rendez-vous vient d’un lot, mais il n’est pas lié à un dossier Coffrac. Impossible de le passer en problème RDV côté Coffrac.');
+            }
+
             return;
         }
 
@@ -1251,6 +1255,23 @@ class CoffracAppointmentService
             ],
             'fetched_at' => now(),
         ]);
+    }
+
+    private function isUnlinkedLotBackedAppointment(Appointment $appointment): bool
+    {
+        $payload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+
+        if (
+            data_get($payload, 'source_type') === 'lot'
+            || filled(data_get($payload, 'lot_appointment_id'))
+            || filled(data_get($payload, 'techcalendar_lot.lot_appointment_id'))
+        ) {
+            return true;
+        }
+
+        return LotAppointment::query()
+            ->where('appointment_id', $appointment->id)
+            ->exists();
     }
 
     /**

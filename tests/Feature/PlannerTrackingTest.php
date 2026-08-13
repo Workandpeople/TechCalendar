@@ -6,6 +6,8 @@ use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\Lot;
+use App\Models\LotAppointment;
 use App\Models\MailSender;
 use App\Models\MailTemplate;
 use App\Models\Service;
@@ -1129,4 +1131,85 @@ it('reports a coffrac appointment problem and moves it to probleme rendez-vous',
             && $mail->hasTo($technician->email)
             && $mail->appointment->id === $appointment->id,
     );
+});
+
+it('refuses to report a lot appointment problem when it is not linked to coffrac', function () {
+    Mail::fake();
+    Http::fake();
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+        'email' => 'tech.unlinked-lot@example.test',
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_COFFRAC,
+        'name' => 'Inspection Coffrac',
+        'average_duration_minutes' => 90,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot non lié',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $planner->id,
+    ]);
+
+    $startsAt = Carbon::parse('2026-06-22 10:30:00');
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Claire',
+        'customer_last_name' => 'DUPONT',
+        'customer_phone' => '0600000044',
+        'address' => '20 Place Bellecour, 69002 Lyon',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+        'status' => Appointment::STATUS_SCHEDULED,
+        'external_source' => null,
+        'external_reference' => null,
+        'external_payload' => [
+            'source_type' => 'lot',
+            'lot_appointment_id' => 999,
+        ],
+    ]);
+
+    LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'Client Lot',
+        'customer_phone' => '0600000044',
+        'address' => '20 Place Bellecour, 69002 Lyon',
+        'latitude' => 45.7578,
+        'longitude' => 4.832,
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+    ]);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.tracking.appointments.problem', $appointment), [
+            'comment' => 'Client absent au rendez-vous.',
+            'problem_type' => CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['comment']);
+
+    $appointment->refresh();
+
+    expect($appointment->status)->toBe(Appointment::STATUS_SCHEDULED)
+        ->and($appointment->problem_reported_at)->toBeNull();
+
+    Http::assertNotSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), '/techcalendar/appointments/')
+        && str_ends_with($request->url(), '/problem'));
+    Mail::assertNothingQueued();
 });
