@@ -28,14 +28,14 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 @if ($lot['can_download_original_file'])
-                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft min-h-[42px] justify-center px-4">
+                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4">
                         Télécharger le fichier source
                     </a>
                 @endif
-                <button id="lot-detail-documents-open" type="button" class="gc-btn-soft min-h-[42px] justify-center px-4">
+                <button id="lot-detail-documents-open" type="button" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4">
                     Gérer les documents
                 </button>
-                <button id="lot-detail-edit-open" type="button" class="gc-btn-primary min-h-[42px] justify-center px-4">
+                <button id="lot-detail-edit-open" type="button" class="gc-btn-primary inline-flex h-[42px] items-center justify-center px-4">
                     Modifier
                 </button>
             </div>
