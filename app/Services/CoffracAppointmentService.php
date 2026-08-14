@@ -1060,6 +1060,35 @@ class CoffracAppointmentService
         $rawPayload = data_get($externalPayload, 'raw_payload', []);
         $rawPayload = is_array($rawPayload) ? $rawPayload : [];
         $lotAppointmentId = (int) ($crmAppointment['lot_appointment_id'] ?? data_get($externalPayload, 'lot_appointment_id', 0));
+        $beneficiaryName = $this->firstFilledString(
+            $crmAppointment['company_name'] ?? null,
+            data_get($externalPayload, 'company_name'),
+            $crmAppointment['customer_name'] ?? null,
+        );
+        $siteName = $this->firstFilledString(
+            $crmAppointment['site_name'] ?? null,
+            data_get($externalPayload, 'site_name'),
+        );
+        $installerName = $this->firstFilledString(
+            $crmAppointment['installer_name'] ?? null,
+            data_get($externalPayload, 'installer_name'),
+        );
+        $addressLine = $this->firstFilledString(
+            $crmAppointment['address_line'] ?? null,
+            $rawPayload['address_line'] ?? null,
+        );
+        $postalCode = $this->firstFilledString(
+            $crmAppointment['postal_code'] ?? null,
+            $rawPayload['postal_code'] ?? null,
+        );
+        $city = $this->firstFilledString(
+            $crmAppointment['city'] ?? null,
+            $rawPayload['city'] ?? null,
+        );
+        $addressLine ??= $this->addressLineFromFullAddress(
+            $this->firstFilledString($crmAppointment['address'] ?? null),
+            $postalCode,
+        );
 
         return [
             'service_type' => $appointment->service?->type,
@@ -1072,13 +1101,23 @@ class CoffracAppointmentService
             'customer_first_name' => $crmAppointment['first_name'] ?? null,
             'customer_last_name' => $crmAppointment['last_name'] ?? null,
             'customer_name' => $crmAppointment['customer_name'] ?? null,
-            'company_name' => $crmAppointment['company_name'] ?? data_get($externalPayload, 'company_name'),
-            'site_name' => $crmAppointment['site_name'] ?? data_get($externalPayload, 'site_name'),
+            'company_name' => $beneficiaryName,
+            'beneficiary_name' => $beneficiaryName,
+            'site_name' => $siteName,
+            'installer_name' => $installerName,
             'phone' => $crmAppointment['phone'] ?? null,
             'address' => $crmAppointment['address'] ?? null,
-            'address_line' => $crmAppointment['address_line'] ?? ($rawPayload['address_line'] ?? null),
-            'postal_code' => $crmAppointment['postal_code'] ?? ($rawPayload['postal_code'] ?? null),
-            'city' => $crmAppointment['city'] ?? ($rawPayload['city'] ?? null),
+            'address_line' => $addressLine,
+            'postal_code' => $postalCode,
+            'city' => $city,
+            'beneficiary_address' => $crmAppointment['address'] ?? null,
+            'beneficiary_address_line' => $addressLine,
+            'beneficiary_postal_code' => $postalCode,
+            'beneficiary_city' => $city,
+            'nom_demandeur' => $beneficiaryName,
+            'adresse_demandeur' => $addressLine,
+            'code_postale_demandeur' => $postalCode,
+            'ville_demandeur' => $city,
             'latitude' => $crmAppointment['latitude'] ?? null,
             'longitude' => $crmAppointment['longitude'] ?? null,
             'delegataire' => data_get($externalPayload, 'lot_delegataire'),
@@ -1090,6 +1129,39 @@ class CoffracAppointmentService
             'global_plus' => data_get($externalPayload, 'lot_global_plus', false),
             'techcalendar_appointment_id' => $appointment->id,
         ];
+    }
+
+    private function firstFilledString(mixed ...$values): ?string
+    {
+        foreach ($values as $value) {
+            $string = trim((string) $value);
+
+            if ($string !== '') {
+                return $string;
+            }
+        }
+
+        return null;
+    }
+
+    private function addressLineFromFullAddress(?string $address, ?string $postalCode = null): ?string
+    {
+        $address = trim((string) $address);
+
+        if ($address === '') {
+            return null;
+        }
+
+        $withoutCountry = trim((string) preg_replace('/,\s*France\s*$/iu', '', $address));
+        $parts = array_values(array_filter(array_map('trim', explode(',', $withoutCountry))));
+        $addressLine = $parts[0] ?? $withoutCountry;
+
+        if (filled($postalCode)) {
+            $withoutPostalCode = trim((string) preg_replace('/\b'.preg_quote((string) $postalCode, '/').'\b.*$/u', '', $addressLine));
+            $addressLine = $withoutPostalCode !== '' ? $withoutPostalCode : $addressLine;
+        }
+
+        return $addressLine !== '' ? $addressLine : null;
     }
 
     private function coffracServiceNameForAppointment(Appointment $appointment): ?string
@@ -2120,6 +2192,7 @@ class CoffracAppointmentService
     private function normalizedCompanyName(array $appointment): ?string
     {
         foreach ([
+            'beneficiary_name',
             'company_name',
             'customer_company_name',
             'society_name',
@@ -2509,6 +2582,13 @@ class CoffracAppointmentService
             'first_name' => $request->customer_first_name ?: 'Client',
             'last_name' => $request->customer_last_name ?: 'Coffrac',
             'company_name' => $request->company_name ?: trim((string) data_get($request->payload, 'company_name')) ?: null,
+            'beneficiary_name' => trim((string) data_get($request->payload, 'beneficiary_name')) ?: null,
+            'site_name' => trim((string) data_get($request->payload, 'site_name')) ?: null,
+            'installer_name' => trim((string) data_get($request->payload, 'installer_name')) ?: null,
+            'beneficiary_address' => trim((string) data_get($request->payload, 'beneficiary_address')) ?: null,
+            'beneficiary_address_line' => trim((string) data_get($request->payload, 'beneficiary_address_line')) ?: null,
+            'beneficiary_postal_code' => trim((string) data_get($request->payload, 'beneficiary_postal_code')) ?: null,
+            'beneficiary_city' => trim((string) data_get($request->payload, 'beneficiary_city')) ?: null,
             'phone' => $request->phone ?: '',
             'address' => $request->address ?: '',
             'address_line' => $request->address_line,

@@ -2719,6 +2719,9 @@ it('links a placed appointment back to its lot appointment', function () {
                     'customer_last_name' => 'Lot',
                     'customer_name' => 'Entreprise Lot',
                     'company_name' => 'Entreprise Lot',
+                    'beneficiary_name' => 'Entreprise Lot',
+                    'site_name' => 'Site Bellecour',
+                    'installer_name' => 'Installateur Lot SAS',
                     'phone' => '0600000003',
                     'address' => '20 Place Bellecour, 69002 Lyon, France',
                     'address_line' => '20 Place Bellecour',
@@ -2771,6 +2774,7 @@ it('links a placed appointment back to its lot appointment', function () {
         'customer_name' => 'Client Lot',
         'company_name' => 'Entreprise Lot',
         'site_name' => 'Site Bellecour',
+        'installer_name' => 'Installateur Lot SAS',
         'customer_phone' => '0600000003',
         'address' => '20 Place Bellecour, 69002 Lyon, France',
         'postal_code' => '69002',
@@ -2835,7 +2839,15 @@ it('links a placed appointment back to its lot appointment', function () {
         && $request['delegataire'] === 'Délégataire test'
         && $request['lot_id'] === $lot->id
         && $request['lot_appointment_id'] === $lotAppointment->id
-        && $request['global_plus'] === true);
+        && $request['global_plus'] === true
+        && $request['company_name'] === 'Entreprise Lot'
+        && $request['beneficiary_name'] === 'Entreprise Lot'
+        && $request['site_name'] === 'Site Bellecour'
+        && $request['installer_name'] === 'Installateur Lot SAS'
+        && $request['nom_demandeur'] === 'Entreprise Lot'
+        && $request['adresse_demandeur'] === '20 Place Bellecour'
+        && $request['code_postale_demandeur'] === '69002'
+        && $request['ville_demandeur'] === 'Lyon');
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,
