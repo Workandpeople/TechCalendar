@@ -231,74 +231,104 @@
         </div>
 
         <div id="lot-documents-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                <div class="flex flex-col gap-4 border-b p-5 lg:flex-row lg:items-start lg:justify-between" style="border-color:var(--gc-border);">
-                    <div>
-                        <p class="text-sm" style="color:var(--gc-text-soft);">Documents du lot</p>
-                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Gérer les documents dossier par dossier</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ajoute les pièces sur les dossiers du lot. Elles seront envoyées à Coffrac automatiquement quand le RDV physique sera créé.</p>
+            <div class="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+                <div class="flex flex-col gap-4 border-b px-6 py-5 lg:flex-row lg:items-center lg:justify-between" style="border-color:var(--gc-border);">
+                    <div class="max-w-3xl">
+                        <p class="text-xs font-semibold uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Documents du lot</p>
+                        <h2 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Gérer les documents dossier par dossier</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ajoute les pièces au bon dossier. Les documents suivront automatiquement le RDV physique vers Coffrac.</p>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span id="lot-documents-counter" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0 / 0</span>
-                        <button id="lot-documents-close" type="button" class="gc-link">Fermer</button>
+                    <div class="flex shrink-0 items-center gap-3">
+                        <span id="lot-documents-counter" class="inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0 / 0</span>
+                        <button id="lot-documents-close" type="button" class="gc-btn-soft inline-flex h-10 items-center justify-center px-4">Fermer</button>
                     </div>
                 </div>
 
-                <div class="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-                    <aside class="space-y-4 rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
-                        <div>
-                            <label class="gc-label" for="lot_documents_search">Rechercher un dossier</label>
-                            <input id="lot_documents_search" type="search" class="gc-input" placeholder="Client, site, adresse, référence...">
+                <div class="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
+                    <aside class="flex min-h-0 flex-col border-b p-5 lg:border-b-0 lg:border-r" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="gc-label" for="lot_documents_search">Rechercher un dossier</label>
+                                <input id="lot_documents_search" type="search" class="gc-input h-11" placeholder="Client, site, adresse, référence...">
+                            </div>
+
+                            <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                                <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Navigation</p>
+                                <p id="lot-documents-status" class="mt-2 min-h-[40px] text-sm leading-5" style="color:var(--gc-text-soft);">Ouvre la modale pour charger les dossiers.</p>
+                                <div class="mt-4 grid grid-cols-2 gap-2">
+                                    <button id="lot-documents-prev" type="button" class="gc-btn-soft inline-flex h-11 items-center justify-center gap-2" disabled>
+                                        <span aria-hidden="true">←</span>
+                                        Précédent
+                                    </button>
+                                    <button id="lot-documents-next" type="button" class="gc-btn-primary inline-flex h-11 items-center justify-center gap-2" disabled>
+                                        Suivant
+                                        <span aria-hidden="true">→</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <p id="lot-documents-status" class="text-sm" style="color:var(--gc-text-soft);">Ouvre la modale pour charger les dossiers.</p>
-                        <div class="flex items-center gap-2">
-                            <button id="lot-documents-prev" type="button" class="gc-btn-soft flex-1 justify-center" disabled>Précédent</button>
-                            <button id="lot-documents-next" type="button" class="gc-btn-primary flex-1 justify-center" disabled>Suivant</button>
+
+                        <div class="mt-auto hidden rounded-2xl border p-4 text-sm lg:block" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text-soft);">
+                            <p class="font-semibold" style="color:var(--gc-text);">Flux rapide</p>
+                            <p class="mt-1">Dépose les fichiers, ajuste le nom et la visibilité, puis passe au dossier suivant.</p>
                         </div>
                     </aside>
 
-                    <section class="min-h-[520px] rounded-3xl border p-5 shadow-sm" style="border-color:var(--gc-border);background:linear-gradient(145deg,#ffffff,#fbfaf6);">
-                        <div id="lot-documents-empty" class="flex h-full min-h-[420px] items-center justify-center text-center">
-                            <div>
-                                <p class="text-lg font-semibold" style="color:var(--gc-text);">Aucun dossier chargé</p>
-                                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Utilise la recherche ou recharge la modale.</p>
+                    <section class="min-h-0 overflow-y-auto p-5 lg:p-6" style="background:#f8fafc;">
+                        <div id="lot-documents-empty" class="flex min-h-[540px] items-center justify-center text-center">
+                            <div class="max-w-sm rounded-3xl border bg-white p-8 shadow-sm" style="border-color:var(--gc-border);">
+                                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style="background:var(--gc-accent-soft);color:var(--gc-text);">
+                                    <span class="text-2xl" aria-hidden="true">↑</span>
+                                </div>
+                                <p class="mt-4 text-lg font-semibold" style="color:var(--gc-text);">Aucun dossier chargé</p>
+                                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Lance une recherche ou rouvre la modale pour charger les dossiers du lot.</p>
                             </div>
                         </div>
 
-                        <div id="lot-documents-card" class="hidden space-y-5">
-                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                <div>
-                                    <p id="lot-documents-card-reference" class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);"></p>
-                                    <h3 id="lot-documents-card-title" class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);"></h3>
-                                    <p id="lot-documents-card-subtitle" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                        <div id="lot-documents-card" class="hidden">
+                            <div class="overflow-hidden rounded-[1.5rem] border bg-white shadow-sm" style="border-color:var(--gc-border);">
+                                <div class="border-b p-5" style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff,#f6f8fb);">
+                                    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                        <div class="min-w-0">
+                                            <p id="lot-documents-card-reference" class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);"></p>
+                                            <h3 id="lot-documents-card-title" class="mt-1 truncate text-2xl font-semibold" style="color:var(--gc-text);"></h3>
+                                            <p id="lot-documents-card-subtitle" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                                        </div>
+                                        <span id="lot-documents-card-status" class="inline-flex w-fit shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                                    </div>
+                                    <dl id="lot-documents-card-infos" class="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-4"></dl>
                                 </div>
-                                <span id="lot-documents-card-status" class="w-fit rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
-                            </div>
 
-                            <dl id="lot-documents-card-infos" class="grid grid-cols-1 gap-3 rounded-2xl border p-4 text-sm md:grid-cols-2" style="border-color:var(--gc-border);background:#ffffff;"></dl>
+                                <div class="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+                                    <section class="min-w-0 border-b p-5 xl:border-b-0 xl:border-r" style="border-color:var(--gc-border);">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <h4 class="text-lg font-semibold" style="color:var(--gc-text);">Documents du dossier</h4>
+                                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ce qui est déjà rattaché localement ou envoyé à Coffrac.</p>
+                                            </div>
+                                            <span id="lot-documents-card-doc-count" class="inline-flex h-8 min-w-8 items-center justify-center rounded-full px-3 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
+                                        </div>
+                                        <div id="lot-documents-card-list" class="mt-4 space-y-3"></div>
+                                    </section>
 
-                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
-                                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <h4 class="font-semibold" style="color:var(--gc-text);">Documents du dossier</h4>
-                                        <span id="lot-documents-card-doc-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
-                                    </div>
-                                    <div id="lot-documents-card-list" class="mt-3 space-y-2"></div>
-                                </section>
-
-                                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                                    <h4 class="font-semibold" style="color:var(--gc-text);">Ajouter des documents</h4>
-                                    <div id="lot-documents-dropzone" class="mt-3 rounded-2xl border border-dashed p-5 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
-                                        <p class="font-semibold" style="color:var(--gc-text);">Dépose les fichiers ici</p>
-                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">ou clique pour sélectionner des fichiers</p>
-                                        <input id="lot_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
-                                    </div>
-                                    <form id="lot-documents-upload-form" class="mt-4 hidden space-y-3">
-                                        <div id="lot-documents-upload-list" class="space-y-2"></div>
-                                        <button id="lot-documents-upload-submit" type="submit" class="gc-btn-primary w-full justify-center">Ajouter au dossier</button>
-                                    </form>
-                                    <p id="lot-documents-upload-status" class="mt-3 hidden text-sm"></p>
-                                </section>
+                                    <section class="p-5" style="background:#fbfaf6;">
+                                        <h4 class="text-lg font-semibold" style="color:var(--gc-text);">Ajouter des documents</h4>
+                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Renomme chaque fichier et coche privé si besoin.</p>
+                                        <div id="lot-documents-dropzone" class="mt-4 flex min-h-[170px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed p-6 text-center transition" style="border-color:#d8c27a;background:#ffffff;">
+                                            <div class="flex h-12 w-12 items-center justify-center rounded-2xl" style="background:var(--gc-accent-soft);color:var(--gc-text);">
+                                                <span class="text-xl" aria-hidden="true">+</span>
+                                            </div>
+                                            <p class="mt-3 font-semibold" style="color:var(--gc-text);">Dépose les fichiers ici</p>
+                                            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">ou clique pour sélectionner plusieurs fichiers</p>
+                                            <input id="lot_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
+                                        </div>
+                                        <form id="lot-documents-upload-form" class="mt-4 hidden space-y-3">
+                                            <div id="lot-documents-upload-list" class="space-y-3"></div>
+                                            <button id="lot-documents-upload-submit" type="submit" class="gc-btn-primary inline-flex h-11 w-full items-center justify-center">Ajouter au dossier</button>
+                                        </form>
+                                        <p id="lot-documents-upload-status" class="mt-3 hidden text-sm"></p>
+                                    </section>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -1264,6 +1294,15 @@
             `).join('');
         }
 
+        function lotDocumentsInfoGrid(items) {
+            return items.map(([label, value]) => `
+                <div class="rounded-2xl border p-3" style="border-color:var(--gc-border);background:#ffffff;">
+                    <dt class="text-[11px] font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">${escapeHtml(label)}</dt>
+                    <dd class="mt-1 line-clamp-2 font-semibold leading-5" style="color:var(--gc-text);">${escapeHtml(displayValue(value))}</dd>
+                </div>
+            `).join('');
+        }
+
         function currentLotDocumentsAppointment() {
             return lotDocumentsAppointments[lotDocumentsCurrentIndex] || null;
         }
@@ -1316,8 +1355,11 @@
 
             if (documents.length === 0) {
                 listElement.innerHTML = `
-                    <div class="rounded-2xl border p-4 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
-                        Aucun document ajouté sur ce dossier.
+                    <div class="flex min-h-[180px] items-center justify-center rounded-3xl border border-dashed p-6 text-center text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
+                        <div>
+                            <p class="font-semibold" style="color:var(--gc-text);">Aucun document</p>
+                            <p class="mt-1">Ajoute les fichiers depuis le panneau de droite.</p>
+                        </div>
                     </div>
                 `;
                 return;
@@ -1340,18 +1382,18 @@
                 `;
 
                 return `
-                    <article class="rounded-2xl border p-3" data-lot-document-id="${document.id}" data-document-update-url="${escapeHtml(document.update_url || '')}" data-document-delete-url="${escapeHtml(document.delete_url || '')}" style="border-color:var(--gc-border);background:#ffffff;">
-                        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <article class="rounded-2xl border p-4 shadow-sm" data-lot-document-id="${document.id}" data-document-update-url="${escapeHtml(document.update_url || '')}" data-document-delete-url="${escapeHtml(document.delete_url || '')}" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div class="min-w-0 flex-1">
-                                <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(document.name || document.original_name || 'Document')}" ${document.can_update ? '' : 'disabled'} data-document-name-input>
+                                <input type="text" class="gc-input h-11 text-sm font-semibold" value="${escapeHtml(document.name || document.original_name || 'Document')}" ${document.can_update ? '' : 'disabled'} data-document-name-input>
                                 <div class="mt-2 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
                                     <span>${escapeHtml(document.original_name || '')} · ${escapeHtml(document.size_label || '')}</span>
                                     ${visibilityBadge}
                                 </div>
                                 ${document.error_message ? `<p class="mt-1 text-xs" style="color:#be123c;">${escapeHtml(document.error_message)}</p>` : ''}
                             </div>
-                            <div class="space-y-2 md:text-right">
-                                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:${meta.background};color:${meta.color};">${escapeHtml(document.status_label || 'En attente')}</span>
+                            <div class="flex shrink-0 flex-col gap-2 lg:items-end">
+                                <span class="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold" style="background:${meta.background};color:${meta.color};">${escapeHtml(document.status_label || 'En attente')}</span>
                                 ${actions}
                             </div>
                         </div>
@@ -1369,11 +1411,16 @@
                 const defaultName = (file.name || 'Document').replace(/\.[^.]+$/, '');
 
                 return `
-                    <div class="rounded-xl border p-3" style="border-color:var(--gc-border);background:#fbfaf6;">
-                        <label class="gc-label">Nom du document</label>
-                        <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(defaultName)}" data-staged-document-name="${index}">
-                        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
-                            <p class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(file.name)} · ${Math.max(1, Math.round((file.size || 0) / 1024))} Ko</p>
+                    <div class="rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
+                        <div class="flex items-start gap-3">
+                            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">${index + 1}</div>
+                            <div class="min-w-0 flex-1">
+                                <label class="gc-label">Nom du document</label>
+                                <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(defaultName)}" data-staged-document-name="${index}">
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 pl-0 md:pl-[52px]">
+                            <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(file.name)} · ${Math.max(1, Math.round((file.size || 0) / 1024))} Ko</p>
                             <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);background:#ffffff;">
                                 <input type="checkbox" class="rounded border-slate-300" data-staged-document-private="${index}">
                                 Privé
@@ -1468,6 +1515,9 @@
         }
 
         function setupDocumentUploader(context) {
+            const defaultBorderColor = context.defaultBorderColor || 'var(--gc-border)';
+            const defaultBackground = context.defaultBackground || '#fbfaf6';
+
             context.dropzone?.addEventListener('click', () => context.fileInput?.click());
             context.fileInput?.addEventListener('change', () => stageDocumentFiles(context, context.fileInput.files));
             context.dropzone?.addEventListener('dragover', (event) => {
@@ -1476,13 +1526,13 @@
                 context.dropzone.style.background = '#fff7d6';
             });
             context.dropzone?.addEventListener('dragleave', () => {
-                context.dropzone.style.borderColor = 'var(--gc-border)';
-                context.dropzone.style.background = '#fbfaf6';
+                context.dropzone.style.borderColor = defaultBorderColor;
+                context.dropzone.style.background = defaultBackground;
             });
             context.dropzone?.addEventListener('drop', (event) => {
                 event.preventDefault();
-                context.dropzone.style.borderColor = 'var(--gc-border)';
-                context.dropzone.style.background = '#fbfaf6';
+                context.dropzone.style.borderColor = defaultBorderColor;
+                context.dropzone.style.background = defaultBackground;
                 stageDocumentFiles(context, event.dataTransfer?.files || []);
             });
             context.form?.addEventListener('submit', (event) => {
@@ -1558,7 +1608,7 @@
             lotDocumentsCardTitle.textContent = customerLabel(appointment);
             lotDocumentsCardSubtitle.textContent = [appointment.site_name ? `Site : ${appointment.site_name}` : null, appointment.installer_name ? `Installateur : ${appointment.installer_name}` : null].filter(Boolean).join(' · ');
             lotDocumentsCardStatus.textContent = appointment.status_label || 'À traiter';
-            lotDocumentsCardInfos.innerHTML = infoGrid([
+            lotDocumentsCardInfos.innerHTML = lotDocumentsInfoGrid([
                 ['Téléphone', appointment.customer_phone],
                 ['Adresse', fullAddress(appointment)],
                 ['Prestation', appointment.service_label],
@@ -1611,6 +1661,8 @@
             status: lotDocumentsUploadStatus,
             submitLabel: 'Ajouter au dossier',
             stagedFiles: [],
+            defaultBorderColor: '#d8c27a',
+            defaultBackground: '#ffffff',
             getAppointment: currentLotDocumentsAppointment,
             onAppointmentUpdated: (appointment) => {
                 updateLotAppointmentState(appointment);
