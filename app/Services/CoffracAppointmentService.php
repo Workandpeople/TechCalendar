@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Events\ExternalApiSyncProgressed;
+use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Models\Appointment;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\LotAppointmentDocument;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
@@ -1045,6 +1047,7 @@ class CoffracAppointmentService
         ]);
 
         $this->markLotAppointmentAsRemoteLinked($appointment, $crmAppointment, $externalReference, $remotePayload);
+        $this->queueLotAppointmentDocuments($appointment, $crmAppointment);
     }
 
     /**
@@ -1160,6 +1163,35 @@ class CoffracAppointmentService
                 'coffrac_created_payload' => $remotePayload,
             ],
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $crmAppointment
+     */
+    private function queueLotAppointmentDocuments(Appointment $appointment, array $crmAppointment): void
+    {
+        $lotAppointmentId = (int) ($crmAppointment['lot_appointment_id'] ?? data_get($crmAppointment, 'external_payload.lot_appointment_id', 0));
+
+        if ($lotAppointmentId <= 0) {
+            return;
+        }
+
+        LotAppointmentDocument::query()
+            ->where('lot_appointment_id', $lotAppointmentId)
+            ->whereIn('status', [
+                LotAppointmentDocument::STATUS_PENDING,
+                LotAppointmentDocument::STATUS_FAILED,
+            ])
+            ->get()
+            ->each(function (LotAppointmentDocument $document) use ($appointment): void {
+                $document->update([
+                    'appointment_id' => $appointment->id,
+                    'status' => LotAppointmentDocument::STATUS_QUEUED,
+                    'error_message' => null,
+                ]);
+
+                PushLotAppointmentDocumentToCoffracJob::dispatch($document->id)->afterCommit();
+            });
     }
 
     private function markStoredRequestAsLocallyPlacedPendingRemote(Appointment $appointment, string $externalReference): void
@@ -1432,8 +1464,14 @@ class CoffracAppointmentService
     /**
      * @return array<string, mixed>
      */
-    public function uploadDocument(Appointment $appointment, UploadedFile $file, ?string $name = null, ?string $comment = null, ?User $uploadedBy = null): array
-    {
+    public function uploadDocument(
+        Appointment $appointment,
+        UploadedFile $file,
+        ?string $name = null,
+        ?string $comment = null,
+        ?User $uploadedBy = null,
+        bool $isPrivate = false,
+    ): array {
         if ($appointment->external_source !== self::SOURCE) {
             throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
         }
@@ -1472,6 +1510,7 @@ class CoffracAppointmentService
                     'uploaded_by_name' => $uploadedBy?->full_name,
                     'uploaded_by_email' => $uploadedBy?->email,
                     'uploaded_by_role' => $uploadedBy && (int) $uploadedBy->role === 2 ? 'technician' : null,
+                    'is_private' => $isPrivate,
                 ]);
         } finally {
             fclose($stream);

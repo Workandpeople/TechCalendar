@@ -1,14 +1,17 @@
 <?php
 
 use App\Jobs\ProcessLotImportPreviewJob;
+use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\LotAppointmentDocument;
 use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\LotAppointmentAiNormalizer;
+use App\Services\CoffracAppointmentService;
 use App\Services\LotBusinessIdentityResolver;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportPreviewProcessor;
@@ -2513,4 +2516,225 @@ it('downloads the original imported lot file', function () {
         ->get(route('manager.lots.download', $lot))
         ->assertOk()
         ->assertDownload('rdv-client.xlsx');
+});
+
+it('stores documents on lot appointments before they are placed', function () {
+    Queue::fake();
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot documents',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client document',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+
+    $response = $this->actingAs($manager)
+        ->post(route('manager.lots.appointments.documents.store', $lotAppointment), [
+            'document' => UploadedFile::fake()->create('rapport.pdf', 10, 'application/pdf'),
+            'name' => 'Rapport avant placement',
+            'is_private' => '1',
+        ], [
+            'Accept' => 'application/json',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('document.status', LotAppointmentDocument::STATUS_PENDING)
+        ->assertJsonPath('document.is_private', true)
+        ->assertJsonPath('appointment.documents_count', 1);
+
+    $document = LotAppointmentDocument::query()->firstOrFail();
+
+    expect($document->name)->toBe('Rapport avant placement')
+        ->and($document->is_private)->toBeTrue()
+        ->and($response->json('appointment.documents.0.name'))->toBe('Rapport avant placement');
+
+    Storage::disk('local')->assertExists($document->path);
+    Queue::assertNothingPushed();
+});
+
+it('queues lot appointment documents when the dossier is already linked to Coffrac', function () {
+    Queue::fake();
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit documentaire',
+        'average_duration_minutes' => 90,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Coffrac',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'duration_minutes' => 90,
+        'ends_at' => now()->addDay()->setTime(11, 30),
+        'external_source' => 'coffrac',
+        'external_reference' => '12345',
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot documents placés',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'Client Coffrac',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('manager.lots.appointments.documents.store', $lotAppointment), [
+            'document' => UploadedFile::fake()->create('attestation.pdf', 10, 'application/pdf'),
+            'name' => 'Attestation',
+            'is_private' => '1',
+        ], [
+            'Accept' => 'application/json',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('document.status', LotAppointmentDocument::STATUS_QUEUED)
+        ->assertJsonPath('document.is_private', true)
+        ->assertJsonPath('appointment.documents.0.status', LotAppointmentDocument::STATUS_QUEUED);
+
+    $document = LotAppointmentDocument::query()->firstOrFail();
+
+    expect($document->appointment_id)->toBe($appointment->id)
+        ->and($document->status)->toBe(LotAppointmentDocument::STATUS_QUEUED)
+        ->and($document->is_private)->toBeTrue();
+
+    Storage::disk('local')->assertExists($document->path);
+    Queue::assertPushed(PushLotAppointmentDocumentToCoffracJob::class);
+});
+
+it('pushes private lot appointment documents to Coffrac', function () {
+    config([
+        'services.coffrac.api_url' => 'https://coffrac.test/api',
+        'services.coffrac.api_token' => 'secret-token',
+    ]);
+    Storage::fake('local');
+    Http::fake([
+        'https://coffrac.test/api/techcalendar/appointments/coffrac-42/documents' => Http::response([
+            'result' => true,
+            'message' => 'Document ajouté.',
+            'data' => [
+                'id' => 984,
+                'scope' => 'dossier',
+                'name' => 'Document privé',
+                'path' => '20260814_document-prive.pdf',
+                'url' => 'https://coffrac.test/documents/20260814_document-prive.pdf',
+                'is_private' => true,
+            ],
+        ]),
+    ]);
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit documentaire',
+        'average_duration_minutes' => 90,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Coffrac',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'duration_minutes' => 90,
+        'ends_at' => now()->addDay()->setTime(11, 30),
+        'external_source' => CoffracAppointmentService::SOURCE,
+        'external_reference' => 'coffrac-42',
+        'external_payload' => ['documents' => []],
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot documents privés',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'Client Coffrac',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+    ]);
+
+    Storage::disk('local')->put('lot-appointment-documents/'.$lotAppointment->id.'/document-prive.pdf', 'pdf-content');
+    $document = LotAppointmentDocument::query()->create([
+        'lot_appointment_id' => $lotAppointment->id,
+        'appointment_id' => $appointment->id,
+        'uploaded_by' => $manager->id,
+        'name' => 'Document privé',
+        'original_name' => 'document-prive.pdf',
+        'disk' => 'local',
+        'path' => 'lot-appointment-documents/'.$lotAppointment->id.'/document-prive.pdf',
+        'mime' => 'application/pdf',
+        'size' => 11,
+        'is_private' => true,
+        'status' => LotAppointmentDocument::STATUS_PENDING,
+    ]);
+
+    (new PushLotAppointmentDocumentToCoffracJob($document->id))
+        ->handle(app(CoffracAppointmentService::class));
+
+    Http::assertSent(function ($request): bool {
+        $multipartField = fn (string $name, mixed $expected): bool => collect($request->data())
+            ->contains(fn (array $part): bool => ($part['name'] ?? null) === $name
+                && ($part['contents'] ?? null) === $expected);
+
+        return $request->method() === 'POST'
+            && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/coffrac-42/documents'
+            && $request->hasHeader('Authorization', 'Bearer secret-token')
+            && $multipartField('name', 'Document privé')
+            && $multipartField('is_private', true);
+    });
+
+    $document->refresh();
+
+    expect($document->status)->toBe(LotAppointmentDocument::STATUS_UPLOADED)
+        ->and($document->remote_document['is_private'] ?? null)->toBeTrue()
+        ->and($appointment->refresh()->external_payload['documents'][0]['is_private'] ?? null)->toBeTrue();
 });

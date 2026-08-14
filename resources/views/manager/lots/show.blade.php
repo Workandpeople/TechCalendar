@@ -28,11 +28,14 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 @if ($lot['can_download_original_file'])
-                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft justify-center">
+                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft min-h-[42px] justify-center px-4">
                         Télécharger le fichier source
                     </a>
                 @endif
-                <button id="lot-detail-edit-open" type="button" class="gc-btn-primary justify-center">
+                <button id="lot-detail-documents-open" type="button" class="gc-btn-soft min-h-[42px] justify-center px-4">
+                    Gérer les documents
+                </button>
+                <button id="lot-detail-edit-open" type="button" class="gc-btn-primary min-h-[42px] justify-center px-4">
                     Modifier
                 </button>
             </div>
@@ -224,6 +227,82 @@
                         <button type="submit" class="gc-btn-primary">Enregistrer</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div id="lot-documents-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+            <div class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex flex-col gap-4 border-b p-5 lg:flex-row lg:items-start lg:justify-between" style="border-color:var(--gc-border);">
+                    <div>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Documents du lot</p>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Gérer les documents dossier par dossier</h2>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ajoute les pièces sur les dossiers du lot. Elles seront envoyées à Coffrac automatiquement quand le RDV physique sera créé.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="lot-documents-counter" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0 / 0</span>
+                        <button id="lot-documents-close" type="button" class="gc-link">Fermer</button>
+                    </div>
+                </div>
+
+                <div class="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+                    <aside class="space-y-4 rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div>
+                            <label class="gc-label" for="lot_documents_search">Rechercher un dossier</label>
+                            <input id="lot_documents_search" type="search" class="gc-input" placeholder="Client, site, adresse, référence...">
+                        </div>
+                        <p id="lot-documents-status" class="text-sm" style="color:var(--gc-text-soft);">Ouvre la modale pour charger les dossiers.</p>
+                        <div class="flex items-center gap-2">
+                            <button id="lot-documents-prev" type="button" class="gc-btn-soft flex-1 justify-center" disabled>Précédent</button>
+                            <button id="lot-documents-next" type="button" class="gc-btn-primary flex-1 justify-center" disabled>Suivant</button>
+                        </div>
+                    </aside>
+
+                    <section class="min-h-[520px] rounded-3xl border p-5 shadow-sm" style="border-color:var(--gc-border);background:linear-gradient(145deg,#ffffff,#fbfaf6);">
+                        <div id="lot-documents-empty" class="flex h-full min-h-[420px] items-center justify-center text-center">
+                            <div>
+                                <p class="text-lg font-semibold" style="color:var(--gc-text);">Aucun dossier chargé</p>
+                                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Utilise la recherche ou recharge la modale.</p>
+                            </div>
+                        </div>
+
+                        <div id="lot-documents-card" class="hidden space-y-5">
+                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <p id="lot-documents-card-reference" class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);"></p>
+                                    <h3 id="lot-documents-card-title" class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);"></h3>
+                                    <p id="lot-documents-card-subtitle" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
+                                </div>
+                                <span id="lot-documents-card-status" class="w-fit rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                            </div>
+
+                            <dl id="lot-documents-card-infos" class="grid grid-cols-1 gap-3 rounded-2xl border p-4 text-sm md:grid-cols-2" style="border-color:var(--gc-border);background:#ffffff;"></dl>
+
+                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+                                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <h4 class="font-semibold" style="color:var(--gc-text);">Documents du dossier</h4>
+                                        <span id="lot-documents-card-doc-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
+                                    </div>
+                                    <div id="lot-documents-card-list" class="mt-3 space-y-2"></div>
+                                </section>
+
+                                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                                    <h4 class="font-semibold" style="color:var(--gc-text);">Ajouter des documents</h4>
+                                    <div id="lot-documents-dropzone" class="mt-3 rounded-2xl border border-dashed p-5 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                        <p class="font-semibold" style="color:var(--gc-text);">Dépose les fichiers ici</p>
+                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">ou clique pour sélectionner des fichiers</p>
+                                        <input id="lot_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
+                                    </div>
+                                    <form id="lot-documents-upload-form" class="mt-4 hidden space-y-3">
+                                        <div id="lot-documents-upload-list" class="space-y-2"></div>
+                                        <button id="lot-documents-upload-submit" type="submit" class="gc-btn-primary w-full justify-center">Ajouter au dossier</button>
+                                    </form>
+                                    <p id="lot-documents-upload-status" class="mt-3 hidden text-sm"></p>
+                                </section>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
 
@@ -660,10 +739,30 @@
             </div>
 
             <div class="grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);">
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Informations du RDV</h3>
-                    <dl id="lot-physical-detail-infos" class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2"></dl>
-                </section>
+                <div class="space-y-4">
+                    <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);">
+                        <h3 class="font-semibold" style="color:var(--gc-text);">Informations du RDV</h3>
+                        <dl id="lot-physical-detail-infos" class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2"></dl>
+                    </section>
+
+                    <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <span id="lot-physical-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
+                        </div>
+                        <div id="lot-physical-documents-list" class="mt-3 space-y-2"></div>
+                        <div id="lot-physical-documents-dropzone" class="mt-4 rounded-2xl border border-dashed p-4 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ils partiront vers Coffrac dès que possible.</p>
+                            <input id="lot_physical_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
+                        </div>
+                        <form id="lot-physical-documents-upload-form" class="mt-3 hidden space-y-3">
+                            <div id="lot-physical-documents-upload-list" class="space-y-2"></div>
+                            <button id="lot-physical-documents-upload-submit" type="submit" class="gc-btn-primary w-full justify-center">Ajouter les documents</button>
+                        </form>
+                        <p id="lot-physical-documents-upload-status" class="mt-3 hidden text-sm"></p>
+                    </section>
+                </div>
 
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
                     <form id="lot-physical-visits-form" class="space-y-3">
@@ -727,6 +826,24 @@
                     <p id="lot-contact-detail-comment" class="mt-2 whitespace-pre-line text-sm" style="color:var(--gc-text);"></p>
                 </section>
 
+                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                        <span id="lot-contact-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
+                    </div>
+                    <div id="lot-contact-documents-list" class="mt-3 space-y-2"></div>
+                    <div id="lot-contact-documents-dropzone" class="mt-4 rounded-2xl border border-dashed p-4 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
+                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Les documents seront conservés sur ce dossier.</p>
+                        <input id="lot_contact_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
+                    </div>
+                    <form id="lot-contact-documents-upload-form" class="mt-3 hidden space-y-3">
+                        <div id="lot-contact-documents-upload-list" class="space-y-2"></div>
+                        <button id="lot-contact-documents-upload-submit" type="submit" class="gc-btn-primary w-full justify-center">Ajouter les documents</button>
+                    </form>
+                    <p id="lot-contact-documents-upload-status" class="mt-3 hidden text-sm"></p>
+                </section>
+
                 <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
                     <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
                     <p id="lot-contact-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
@@ -764,6 +881,30 @@
         const lotDetailEditModal = document.getElementById('lot-detail-edit-modal');
         const lotDetailEditClose = document.getElementById('lot-detail-edit-close');
         const lotDetailEditCancel = document.getElementById('lot-detail-edit-cancel');
+        const lotDocumentsUrl = @json($lot['documents_url']);
+        const lotDocumentsOpen = document.getElementById('lot-detail-documents-open');
+        const lotDocumentsModal = document.getElementById('lot-documents-modal');
+        const lotDocumentsClose = document.getElementById('lot-documents-close');
+        const lotDocumentsSearch = document.getElementById('lot_documents_search');
+        const lotDocumentsStatus = document.getElementById('lot-documents-status');
+        const lotDocumentsCounter = document.getElementById('lot-documents-counter');
+        const lotDocumentsPrev = document.getElementById('lot-documents-prev');
+        const lotDocumentsNext = document.getElementById('lot-documents-next');
+        const lotDocumentsEmpty = document.getElementById('lot-documents-empty');
+        const lotDocumentsCard = document.getElementById('lot-documents-card');
+        const lotDocumentsCardReference = document.getElementById('lot-documents-card-reference');
+        const lotDocumentsCardTitle = document.getElementById('lot-documents-card-title');
+        const lotDocumentsCardSubtitle = document.getElementById('lot-documents-card-subtitle');
+        const lotDocumentsCardStatus = document.getElementById('lot-documents-card-status');
+        const lotDocumentsCardInfos = document.getElementById('lot-documents-card-infos');
+        const lotDocumentsCardDocCount = document.getElementById('lot-documents-card-doc-count');
+        const lotDocumentsCardList = document.getElementById('lot-documents-card-list');
+        const lotDocumentsDropzone = document.getElementById('lot-documents-dropzone');
+        const lotDocumentsFileInput = document.getElementById('lot_documents_file_input');
+        const lotDocumentsUploadForm = document.getElementById('lot-documents-upload-form');
+        const lotDocumentsUploadList = document.getElementById('lot-documents-upload-list');
+        const lotDocumentsUploadSubmit = document.getElementById('lot-documents-upload-submit');
+        const lotDocumentsUploadStatus = document.getElementById('lot-documents-upload-status');
         const lotDetailEditType = document.getElementById('lot_detail_edit_type');
         const lotDetailEditServiceId = document.getElementById('lot_detail_edit_service_id');
         const lotDetailEditCoffracAliasId = document.getElementById('lot_detail_edit_coffrac_service_alias_id');
@@ -875,6 +1016,30 @@
                 closeModal(lotDetailEditModal);
             }
         });
+        lotDocumentsOpen?.addEventListener('click', () => {
+            openModal(lotDocumentsModal);
+            loadLotDocuments();
+        });
+        lotDocumentsClose?.addEventListener('click', () => closeModal(lotDocumentsModal));
+        lotDocumentsModal?.addEventListener('click', (event) => {
+            if (event.target === lotDocumentsModal) {
+                closeModal(lotDocumentsModal);
+            }
+        });
+        lotDocumentsSearch?.addEventListener('input', () => {
+            window.clearTimeout(lotDocumentsSearchTimer);
+            lotDocumentsSearchTimer = window.setTimeout(loadLotDocuments, 350);
+        });
+        lotDocumentsPrev?.addEventListener('click', () => {
+            lotDocumentsCurrentIndex = Math.max(0, lotDocumentsCurrentIndex - 1);
+            stageDocumentFiles(lotDocumentsUploadContext, []);
+            renderLotDocumentsCard();
+        });
+        lotDocumentsNext?.addEventListener('click', () => {
+            lotDocumentsCurrentIndex = Math.min(lotDocumentsAppointments.length - 1, lotDocumentsCurrentIndex + 1);
+            stageDocumentFiles(lotDocumentsUploadContext, []);
+            renderLotDocumentsCard();
+        });
         lotDetailEditType?.addEventListener('change', updateLotDetailEditSamplingState);
         lotDetailEditServiceId?.addEventListener('change', () => {
             populateLotDetailCoffracAliasSelect(lotDetailEditServiceId.value, '', { selectFirst: true });
@@ -910,6 +1075,14 @@
         const physicalStatsExclusionToggle = document.getElementById('lot-physical-stats-exclusion-toggle');
         const physicalResetProcessingStatus = document.getElementById('lot-physical-reset-processing-status');
         const physicalResetProcessingButton = document.getElementById('lot-physical-reset-processing');
+        const physicalDocumentsList = document.getElementById('lot-physical-documents-list');
+        const physicalDocumentsCount = document.getElementById('lot-physical-documents-count');
+        const physicalDocumentsDropzone = document.getElementById('lot-physical-documents-dropzone');
+        const physicalDocumentsFileInput = document.getElementById('lot_physical_documents_file_input');
+        const physicalDocumentsUploadForm = document.getElementById('lot-physical-documents-upload-form');
+        const physicalDocumentsUploadList = document.getElementById('lot-physical-documents-upload-list');
+        const physicalDocumentsUploadSubmit = document.getElementById('lot-physical-documents-upload-submit');
+        const physicalDocumentsUploadStatus = document.getElementById('lot-physical-documents-upload-status');
 
         const contactModal = document.getElementById('lot-contact-detail-modal');
         const contactClose = document.getElementById('lot-contact-detail-close');
@@ -921,7 +1094,18 @@
         const contactStatsExclusionToggle = document.getElementById('lot-contact-stats-exclusion-toggle');
         const contactResetProcessingStatus = document.getElementById('lot-contact-reset-processing-status');
         const contactResetProcessingButton = document.getElementById('lot-contact-reset-processing');
+        const contactDocumentsList = document.getElementById('lot-contact-documents-list');
+        const contactDocumentsCount = document.getElementById('lot-contact-documents-count');
+        const contactDocumentsDropzone = document.getElementById('lot-contact-documents-dropzone');
+        const contactDocumentsFileInput = document.getElementById('lot_contact_documents_file_input');
+        const contactDocumentsUploadForm = document.getElementById('lot-contact-documents-upload-form');
+        const contactDocumentsUploadList = document.getElementById('lot-contact-documents-upload-list');
+        const contactDocumentsUploadSubmit = document.getElementById('lot-contact-documents-upload-submit');
+        const contactDocumentsUploadStatus = document.getElementById('lot-contact-documents-upload-status');
         let lotAppointmentTooltip = null;
+        let lotDocumentsAppointments = [];
+        let lotDocumentsCurrentIndex = 0;
+        let lotDocumentsSearchTimer = null;
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -1079,6 +1263,405 @@
                 </div>
             `).join('');
         }
+
+        function currentLotDocumentsAppointment() {
+            return lotDocumentsAppointments[lotDocumentsCurrentIndex] || null;
+        }
+
+        function documentStatusMeta(status) {
+            if (status === 'uploaded') {
+                return { background: '#dcfce7', color: '#166534' };
+            }
+
+            if (status === 'failed') {
+                return { background: '#fee2e2', color: '#991b1b' };
+            }
+
+            if (status === 'queued') {
+                return { background: '#fef3c7', color: '#92400e' };
+            }
+
+            return { background: 'var(--gc-accent-soft)', color: 'var(--gc-text)' };
+        }
+
+        function updateLotAppointmentState(appointment) {
+            if (!appointment?.id) {
+                return;
+            }
+
+            lotAppointmentDetails.set(String(appointment.id), appointment);
+
+            const lotDocumentsIndex = lotDocumentsAppointments.findIndex((item) => String(item.id) === String(appointment.id));
+
+            if (lotDocumentsIndex >= 0) {
+                lotDocumentsAppointments[lotDocumentsIndex] = appointment;
+            }
+
+            if (currentPhysicalLotAppointment?.id === appointment.id) {
+                currentPhysicalLotAppointment = appointment;
+            }
+
+            if (currentContactLotAppointment?.id === appointment.id) {
+                currentContactLotAppointment = appointment;
+            }
+        }
+
+        function renderLotDocumentsList(appointment, listElement, countElement) {
+            if (!listElement || !countElement) {
+                return;
+            }
+
+            const documents = Array.isArray(appointment?.documents) ? appointment.documents : [];
+            countElement.textContent = String(documents.length);
+
+            if (documents.length === 0) {
+                listElement.innerHTML = `
+                    <div class="rounded-2xl border p-4 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
+                        Aucun document ajouté sur ce dossier.
+                    </div>
+                `;
+                return;
+            }
+
+            listElement.innerHTML = documents.map((document) => {
+                const meta = documentStatusMeta(document.status);
+                const remoteLink = document.remote_url
+                    ? `<a href="${escapeHtml(document.remote_url)}" target="_blank" rel="noopener" class="gc-link text-xs">Ouvrir côté Coffrac</a>`
+                    : '';
+                const visibilityBadge = document.is_private
+                    ? '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#fee2e2;color:#991b1b;">Privé</span>'
+                    : '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#dcfce7;color:#166534;">Public</span>';
+                const actions = `
+                    <div class="flex flex-wrap items-center gap-2">
+                        ${document.can_update ? '<button type="button" class="gc-btn-soft px-3 py-1.5 text-xs" data-document-action="rename">Renommer</button>' : ''}
+                        ${document.can_delete ? '<button type="button" class="gc-btn-danger px-3 py-1.5 text-xs" data-document-action="delete">Supprimer</button>' : ''}
+                        ${remoteLink}
+                    </div>
+                `;
+
+                return `
+                    <article class="rounded-2xl border p-3" data-lot-document-id="${document.id}" data-document-update-url="${escapeHtml(document.update_url || '')}" data-document-delete-url="${escapeHtml(document.delete_url || '')}" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div class="min-w-0 flex-1">
+                                <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(document.name || document.original_name || 'Document')}" ${document.can_update ? '' : 'disabled'} data-document-name-input>
+                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
+                                    <span>${escapeHtml(document.original_name || '')} · ${escapeHtml(document.size_label || '')}</span>
+                                    ${visibilityBadge}
+                                </div>
+                                ${document.error_message ? `<p class="mt-1 text-xs" style="color:#be123c;">${escapeHtml(document.error_message)}</p>` : ''}
+                            </div>
+                            <div class="space-y-2 md:text-right">
+                                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style="background:${meta.background};color:${meta.color};">${escapeHtml(document.status_label || 'En attente')}</span>
+                                ${actions}
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function renderStagedDocumentFiles(files, listElement) {
+            if (!listElement) {
+                return;
+            }
+
+            listElement.innerHTML = files.map((file, index) => {
+                const defaultName = (file.name || 'Document').replace(/\.[^.]+$/, '');
+
+                return `
+                    <div class="rounded-xl border p-3" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <label class="gc-label">Nom du document</label>
+                        <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(defaultName)}" data-staged-document-name="${index}">
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
+                            <p class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(file.name)} · ${Math.max(1, Math.round((file.size || 0) / 1024))} Ko</p>
+                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);background:#ffffff;">
+                                <input type="checkbox" class="rounded border-slate-300" data-staged-document-private="${index}">
+                                Privé
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function setDocumentUploadStatus(statusElement, message, color = 'var(--gc-text-soft)') {
+            if (!statusElement) {
+                return;
+            }
+
+            statusElement.textContent = message;
+            statusElement.style.color = color;
+            statusElement.classList.remove('hidden');
+        }
+
+        function clearDocumentUploadStatus(statusElement) {
+            statusElement?.classList.add('hidden');
+            if (statusElement) {
+                statusElement.textContent = '';
+            }
+        }
+
+        function stageDocumentFiles(context, files) {
+            context.stagedFiles = Array.from(files || []);
+            context.form?.classList.toggle('hidden', context.stagedFiles.length === 0);
+            renderStagedDocumentFiles(context.stagedFiles, context.uploadList);
+            clearDocumentUploadStatus(context.status);
+            if (context.stagedFiles.length === 0 && context.fileInput) {
+                context.fileInput.value = '';
+            }
+        }
+
+        async function uploadStagedDocuments(context) {
+            const appointment = context.getAppointment();
+
+            if (!appointment?.documents_upload_url || context.stagedFiles.length === 0 || context.submit?.disabled) {
+                return;
+            }
+
+            context.submit.disabled = true;
+            context.submit.textContent = 'Ajout en cours...';
+            setDocumentUploadStatus(context.status, 'Upload des documents en cours...');
+
+            let latestAppointment = appointment;
+
+            try {
+                for (let index = 0; index < context.stagedFiles.length; index++) {
+                    const file = context.stagedFiles[index];
+                    const nameInput = context.uploadList?.querySelector(`[data-staged-document-name="${index}"]`);
+                    const privateInput = context.uploadList?.querySelector(`[data-staged-document-private="${index}"]`);
+                    const formData = new FormData();
+
+                    formData.append('document', file);
+                    formData.append('name', nameInput?.value || file.name);
+                    formData.append('is_private', privateInput?.checked ? '1' : '0');
+
+                    const response = await fetch(appointment.documents_upload_url, {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            'X-CSRF-TOKEN': lotDetailCsrfToken,
+                        },
+                        body: formData,
+                    });
+                    const payload = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Upload impossible.');
+                    }
+
+                    latestAppointment = payload.appointment || latestAppointment;
+                    updateLotAppointmentState(latestAppointment);
+                    context.onAppointmentUpdated?.(latestAppointment);
+                }
+
+                context.stagedFiles = [];
+                context.form?.classList.add('hidden');
+                context.fileInput.value = '';
+                renderStagedDocumentFiles([], context.uploadList);
+                setDocumentUploadStatus(context.status, 'Documents ajoutés.', '#15803d');
+            } catch (error) {
+                setDocumentUploadStatus(context.status, error.message || 'Upload impossible.', '#be123c');
+            } finally {
+                context.submit.disabled = false;
+                context.submit.textContent = context.submitLabel;
+            }
+        }
+
+        function setupDocumentUploader(context) {
+            context.dropzone?.addEventListener('click', () => context.fileInput?.click());
+            context.fileInput?.addEventListener('change', () => stageDocumentFiles(context, context.fileInput.files));
+            context.dropzone?.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                context.dropzone.style.borderColor = 'var(--gc-accent)';
+                context.dropzone.style.background = '#fff7d6';
+            });
+            context.dropzone?.addEventListener('dragleave', () => {
+                context.dropzone.style.borderColor = 'var(--gc-border)';
+                context.dropzone.style.background = '#fbfaf6';
+            });
+            context.dropzone?.addEventListener('drop', (event) => {
+                event.preventDefault();
+                context.dropzone.style.borderColor = 'var(--gc-border)';
+                context.dropzone.style.background = '#fbfaf6';
+                stageDocumentFiles(context, event.dataTransfer?.files || []);
+            });
+            context.form?.addEventListener('submit', (event) => {
+                event.preventDefault();
+                uploadStagedDocuments(context);
+            });
+        }
+
+        async function handleDocumentListAction(event, getAppointment, onAppointmentUpdated) {
+            const button = event.target.closest('[data-document-action]');
+
+            if (!button) {
+                return;
+            }
+
+            const item = button.closest('[data-lot-document-id]');
+            const action = button.dataset.documentAction;
+            const nameInput = item?.querySelector('[data-document-name-input]');
+
+            if (!item || !action) {
+                return;
+            }
+
+            button.disabled = true;
+
+            try {
+                const response = await fetch(action === 'rename' ? item.dataset.documentUpdateUrl : item.dataset.documentDeleteUrl, {
+                    method: action === 'rename' ? 'PATCH' : 'DELETE',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: action === 'rename'
+                        ? JSON.stringify({ name: nameInput?.value || 'Document' })
+                        : null,
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Action impossible.');
+                }
+
+                const appointment = payload.appointment || getAppointment();
+                updateLotAppointmentState(appointment);
+                onAppointmentUpdated?.(appointment);
+            } catch (error) {
+                window.alert(error.message || 'Action impossible.');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function renderLotDocumentsCard() {
+            const appointment = currentLotDocumentsAppointment();
+            const total = lotDocumentsAppointments.length;
+
+            lotDocumentsCounter.textContent = total > 0 ? `${lotDocumentsCurrentIndex + 1} / ${total}` : '0 / 0';
+            lotDocumentsPrev.disabled = lotDocumentsCurrentIndex <= 0;
+            lotDocumentsNext.disabled = lotDocumentsCurrentIndex >= total - 1;
+
+            if (!appointment) {
+                lotDocumentsEmpty.classList.remove('hidden');
+                lotDocumentsCard.classList.add('hidden');
+                return;
+            }
+
+            lotDocumentsEmpty.classList.add('hidden');
+            lotDocumentsCard.classList.remove('hidden');
+            lotDocumentsCardReference.textContent = appointment.row_number
+                ? `Ligne ${appointment.row_number}${appointment.external_reference ? ` · Réf. ${appointment.external_reference}` : ''}`
+                : (appointment.external_reference ? `Réf. ${appointment.external_reference}` : 'Dossier du lot');
+            lotDocumentsCardTitle.textContent = customerLabel(appointment);
+            lotDocumentsCardSubtitle.textContent = [appointment.site_name ? `Site : ${appointment.site_name}` : null, appointment.installer_name ? `Installateur : ${appointment.installer_name}` : null].filter(Boolean).join(' · ');
+            lotDocumentsCardStatus.textContent = appointment.status_label || 'À traiter';
+            lotDocumentsCardInfos.innerHTML = infoGrid([
+                ['Téléphone', appointment.customer_phone],
+                ['Adresse', fullAddress(appointment)],
+                ['Prestation', appointment.service_label],
+                ['Commentaire', appointment.comment],
+            ]);
+            renderLotDocumentsList(appointment, lotDocumentsCardList, lotDocumentsCardDocCount);
+        }
+
+        async function loadLotDocuments() {
+            const url = new URL(lotDocumentsUrl, window.location.origin);
+            const search = lotDocumentsSearch?.value?.trim();
+
+            if (search) {
+                url.searchParams.set('q', search);
+            }
+
+            lotDocumentsStatus.textContent = 'Chargement des dossiers...';
+            lotDocumentsStatus.style.color = 'var(--gc-text-soft)';
+
+            try {
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Chargement impossible.');
+                }
+
+                lotDocumentsAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
+                lotDocumentsAppointments.forEach(updateLotAppointmentState);
+                lotDocumentsCurrentIndex = 0;
+                lotDocumentsStatus.textContent = lotDocumentsAppointments.length
+                    ? `${lotDocumentsAppointments.length} dossier(s) trouvé(s).`
+                    : 'Aucun dossier ne correspond à la recherche.';
+                renderLotDocumentsCard();
+            } catch (error) {
+                lotDocumentsStatus.textContent = error.message || 'Chargement impossible.';
+                lotDocumentsStatus.style.color = '#be123c';
+                lotDocumentsAppointments = [];
+                lotDocumentsCurrentIndex = 0;
+                renderLotDocumentsCard();
+            }
+        }
+
+        const lotDocumentsUploadContext = {
+            dropzone: lotDocumentsDropzone,
+            fileInput: lotDocumentsFileInput,
+            form: lotDocumentsUploadForm,
+            uploadList: lotDocumentsUploadList,
+            submit: lotDocumentsUploadSubmit,
+            status: lotDocumentsUploadStatus,
+            submitLabel: 'Ajouter au dossier',
+            stagedFiles: [],
+            getAppointment: currentLotDocumentsAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
+                renderLotDocumentsCard();
+            },
+        };
+        const physicalDocumentsUploadContext = {
+            dropzone: physicalDocumentsDropzone,
+            fileInput: physicalDocumentsFileInput,
+            form: physicalDocumentsUploadForm,
+            uploadList: physicalDocumentsUploadList,
+            submit: physicalDocumentsUploadSubmit,
+            status: physicalDocumentsUploadStatus,
+            submitLabel: 'Ajouter les documents',
+            stagedFiles: [],
+            getAppointment: () => currentPhysicalLotAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
+                renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount);
+            },
+        };
+        const contactDocumentsUploadContext = {
+            dropzone: contactDocumentsDropzone,
+            fileInput: contactDocumentsFileInput,
+            form: contactDocumentsUploadForm,
+            uploadList: contactDocumentsUploadList,
+            submit: contactDocumentsUploadSubmit,
+            status: contactDocumentsUploadStatus,
+            submitLabel: 'Ajouter les documents',
+            stagedFiles: [],
+            getAppointment: () => currentContactLotAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
+                renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
+            },
+        };
+
+        setupDocumentUploader(lotDocumentsUploadContext);
+        setupDocumentUploader(physicalDocumentsUploadContext);
+        setupDocumentUploader(contactDocumentsUploadContext);
+        lotDocumentsCardList?.addEventListener('click', (event) => handleDocumentListAction(event, currentLotDocumentsAppointment, renderLotDocumentsCard));
+        physicalDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
+            event,
+            () => currentPhysicalLotAppointment,
+            (appointment) => renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount),
+        ));
+        contactDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
+            event,
+            () => currentContactLotAppointment,
+            (appointment) => renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount),
+        ));
 
         function isLotDetailSamplingType(type) {
             return lotDetailSamplingTypes.includes(type);
@@ -1390,6 +1973,9 @@
             physicalVisitsInput.disabled = !appointment.can_update_visits;
             physicalVisitsSubmit.disabled = !appointment.can_update_visits;
             physicalVisitsStatus.classList.add('hidden');
+            stageDocumentFiles(physicalDocumentsUploadContext, []);
+            renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount);
+            clearDocumentUploadStatus(physicalDocumentsUploadStatus);
 
             if (appointment.tracking_url) {
                 physicalTrackingLink.href = appointment.tracking_url;
@@ -1421,6 +2007,9 @@
                 ['Référence', appointment.external_reference],
             ]);
             contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
+            stageDocumentFiles(contactDocumentsUploadContext, []);
+            renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
+            clearDocumentUploadStatus(contactDocumentsUploadStatus);
 
             configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
             configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);

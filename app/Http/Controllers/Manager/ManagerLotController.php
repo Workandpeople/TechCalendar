@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\LotAppointmentDocument;
 use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Services\CoffracAppointmentService;
@@ -24,6 +26,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -515,6 +518,154 @@ class ManagerLotController extends Controller
         );
     }
 
+    public function documents(Request $request, Lot $lot): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'q' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $query = $lot->appointments()
+            ->with($this->lotAppointmentRelations())
+            ->when(filled($payload['q'] ?? null), fn ($query) => $this->applySearchFilter($query, (string) $payload['q']))
+            ->orderByRaw('CASE WHEN `row_number` IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('row_number')
+            ->orderBy('customer_name');
+
+        return response()->json([
+            'appointments' => $query
+                ->get()
+                ->map(fn (LotAppointment $appointment): array => $this->serializeLotAppointment($appointment, $lot))
+                ->values(),
+        ]);
+    }
+
+    public function storeAppointmentDocument(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'document' => [
+                'required',
+                'file',
+                'max:30720',
+                'mimes:jpg,jpeg,png,webp,heic,heif,pdf,doc,docx,xls,xlsx,csv,txt',
+            ],
+            'name' => ['nullable', 'string', 'max:255'],
+            'is_private' => ['nullable', 'boolean'],
+        ], [
+            'document.required' => 'Ajoute un fichier avant de valider.',
+            'document.file' => 'Le document envoyé est invalide.',
+            'document.max' => 'Le document ne doit pas dépasser 30 Mo.',
+            'document.mimes' => 'Format non accepté. Utilise une image, un PDF, un document Office, CSV ou TXT.',
+            'name.max' => 'Le nom du document est trop long.',
+            'is_private.boolean' => 'Le choix privé/public du document est invalide.',
+        ]);
+
+        $file = $payload['document'];
+        $originalName = $file->getClientOriginalName() ?: 'document';
+        $extension = $file->getClientOriginalExtension() ?: $file->guessExtension() ?: 'bin';
+        $storedName = Str::uuid()->toString().'.'.Str::lower($extension);
+        $path = Storage::disk('local')->putFileAs(
+            'lot-appointment-documents/'.$lotAppointment->id,
+            $file,
+            $storedName,
+        );
+
+        if ($path === false) {
+            throw ValidationException::withMessages([
+                'document' => 'Impossible de stocker le document. Réessaie dans quelques instants.',
+            ]);
+        }
+
+        $document = LotAppointmentDocument::query()->create([
+            'lot_appointment_id' => $lotAppointment->id,
+            'appointment_id' => $lotAppointment->appointment_id,
+            'uploaded_by' => $request->user()?->id,
+            'name' => trim((string) ($payload['name'] ?? '')) ?: pathinfo($originalName, PATHINFO_FILENAME) ?: $originalName,
+            'original_name' => $originalName,
+            'disk' => 'local',
+            'path' => $path,
+            'mime' => $file->getMimeType(),
+            'size' => $file->getSize() ?: 0,
+            'is_private' => (bool) ($payload['is_private'] ?? false),
+            'status' => LotAppointmentDocument::STATUS_PENDING,
+        ]);
+
+        $this->queueLotAppointmentDocumentUploadIfPossible($document);
+
+        $lotAppointment = $lotAppointment->fresh(['lot', ...$this->lotAppointmentRelations()]);
+
+        return response()->json([
+            'message' => $document->status === LotAppointmentDocument::STATUS_QUEUED
+                ? 'Document ajouté. Envoi vers Coffrac en arrière-plan.'
+                : 'Document ajouté au dossier du lot.',
+            'document' => $this->serializeLotAppointmentDocument($document->fresh('uploader')),
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ], 201);
+    }
+
+    public function updateAppointmentDocument(Request $request, LotAppointmentDocument $document): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        if (in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true)) {
+            throw ValidationException::withMessages([
+                'name' => 'Ce document est déjà en cours d’envoi ou envoyé à Coffrac, son nom local ne peut plus être modifié.',
+            ]);
+        }
+
+        $payload = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'is_private' => ['nullable', 'boolean'],
+        ], [
+            'name.required' => 'Le nom du document est obligatoire.',
+            'name.max' => 'Le nom du document est trop long.',
+            'is_private.boolean' => 'Le choix privé/public du document est invalide.',
+        ]);
+
+        $document->update([
+            'name' => trim((string) $payload['name']),
+            'is_private' => (bool) ($payload['is_private'] ?? $document->is_private),
+        ]);
+
+        $document->loadMissing('lotAppointment.lot', 'uploader');
+        $lotAppointment = $document->lotAppointment->load($this->lotAppointmentRelations());
+
+        return response()->json([
+            'message' => 'Document mis à jour.',
+            'document' => $this->serializeLotAppointmentDocument($document),
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
+    public function destroyAppointmentDocument(Request $request, LotAppointmentDocument $document): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        if (in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true)) {
+            throw ValidationException::withMessages([
+                'document' => 'Ce document est déjà en cours d’envoi ou envoyé à Coffrac. Il doit être retiré directement depuis Coffrac.',
+            ]);
+        }
+
+        $document->loadMissing('lotAppointment.lot');
+        $lotAppointment = $document->lotAppointment;
+        $disk = $document->disk;
+        $path = $document->path;
+
+        $document->delete();
+        Storage::disk($disk)->delete($path);
+
+        $lotAppointment->load($this->lotAppointmentRelations());
+
+        return response()->json([
+            'message' => 'Document supprimé.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
     public function updateAppointment(
         Request $request,
         LotAppointment $lotAppointment,
@@ -540,15 +691,7 @@ class ManagerLotController extends Controller
         ]);
 
         $lotAppointment = $updater->update($lotAppointment, $payload)
-            ->loadMissing([
-                'lot',
-                'appointment:id,technician_id,service_id,starts_at,ends_at',
-                'appointment.service:id,type,name',
-                'appointment.technician:id,first_name,last_name,department_code,role',
-                'appointment.technician.departments:code',
-                'contactProcessor:id,first_name,last_name',
-                'statsExcluder:id,first_name,last_name',
-            ]);
+            ->loadMissing(['lot', ...$this->lotAppointmentRelations()]);
 
         return response()->json([
             'message' => 'RDV du lot mis à jour.',
@@ -569,15 +712,7 @@ class ManagerLotController extends Controller
             'unsuccessful_visits_count' => (int) $payload['unsuccessful_visits_count'],
         ]);
 
-        $lotAppointment->loadMissing([
-            'lot',
-            'appointment:id,technician_id,service_id,starts_at,ends_at',
-            'appointment.service:id,type,name',
-            'appointment.technician:id,first_name,last_name,department_code,role',
-            'appointment.technician.departments:code',
-            'contactProcessor:id,first_name,last_name',
-            'statsExcluder:id,first_name,last_name',
-        ]);
+        $lotAppointment->loadMissing(['lot', ...$this->lotAppointmentRelations()]);
 
         return response()->json([
             'message' => 'Nombre de portes mis à jour.',
@@ -601,15 +736,7 @@ class ManagerLotController extends Controller
             'excluded_from_lot_stats_by' => $excluded ? $request->user()->id : null,
         ]);
 
-        $lotAppointment->loadMissing([
-            'lot',
-            'appointment:id,technician_id,service_id,starts_at,ends_at',
-            'appointment.service:id,type,name',
-            'appointment.technician:id,first_name,last_name,department_code,role',
-            'appointment.technician.departments:code',
-            'contactProcessor:id,first_name,last_name',
-            'statsExcluder:id,first_name,last_name',
-        ]);
+        $lotAppointment->loadMissing(['lot', ...$this->lotAppointmentRelations()]);
 
         $this->refreshLotStatus($lotAppointment->lot);
 
@@ -976,6 +1103,7 @@ class ManagerLotController extends Controller
             'appointment.technician.departments:code',
             'contactProcessor:id,first_name,last_name',
             'statsExcluder:id,first_name,last_name',
+            'documents.uploader:id,first_name,last_name,email,role',
         ];
     }
 
@@ -1074,6 +1202,7 @@ class ManagerLotController extends Controller
             'update_url' => route('manager.lots.update', $lot),
             'delete_url' => route('manager.lots.destroy', $lot),
             'appointment_targets_update_url' => route('manager.lots.appointment-targets.update', $lot),
+            'documents_url' => route('manager.lots.documents.index', $lot),
             'title' => $lot->name,
             'type' => $lot->type,
             'type_label' => $lot->typeLabel(),
@@ -1413,6 +1542,7 @@ class ManagerLotController extends Controller
             'stats_exclusion_update_url' => route('manager.lots.appointments.stats-exclusion.update', $appointment),
             'global_plus_update_url' => route('manager.lots.appointments.global-plus.update', $appointment),
             'reset_processing_url' => route('manager.lots.appointments.reset-processing', $appointment),
+            'documents_upload_url' => route('manager.lots.appointments.documents.store', $appointment),
             'external_reference' => $appointment->external_reference,
             'row_number' => $appointment->row_number,
             'source' => $appointment->source ?: $lot->source,
@@ -1461,7 +1591,81 @@ class ManagerLotController extends Controller
             'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
             'ai_confidence' => $appointment->ai_confidence,
             'ai_warnings' => $appointment->ai_warnings ?? [],
+            'documents' => $appointment->relationLoaded('documents')
+                ? $appointment->documents
+                    ->sortByDesc('created_at')
+                    ->map(fn (LotAppointmentDocument $document): array => $this->serializeLotAppointmentDocument($document))
+                    ->values()
+                    ->all()
+                : [],
+            'documents_count' => $appointment->relationLoaded('documents') ? $appointment->documents->count() : 0,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeLotAppointmentDocument(LotAppointmentDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'name' => $document->name,
+            'original_name' => $document->original_name,
+            'mime' => $document->mime,
+            'size' => $document->size,
+            'size_label' => $this->humanFileSize((int) $document->size),
+            'is_private' => (bool) $document->is_private,
+            'visibility_label' => $document->is_private ? 'Privé' : 'Public',
+            'status' => $document->status,
+            'status_label' => $document->statusLabel(),
+            'error_message' => $document->error_message,
+            'pushed_at' => $document->pushed_at,
+            'uploaded_by_name' => $document->uploader?->full_name,
+            'created_at' => $document->created_at,
+            'remote_document' => $document->remote_document,
+            'remote_url' => is_array($document->remote_document) ? ($document->remote_document['url'] ?? null) : null,
+            'can_update' => ! in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true),
+            'can_delete' => ! in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true),
+            'update_url' => route('manager.lots.appointments.documents.update', $document),
+            'delete_url' => route('manager.lots.appointments.documents.destroy', $document),
+        ];
+    }
+
+    private function humanFileSize(int $bytes): string
+    {
+        if ($bytes <= 0) {
+            return '0 o';
+        }
+
+        $units = ['o', 'Ko', 'Mo', 'Go'];
+        $index = 0;
+        $size = (float) $bytes;
+
+        while ($size >= 1024 && $index < count($units) - 1) {
+            $size /= 1024;
+            $index++;
+        }
+
+        return number_format($size, $index === 0 ? 0 : 1, ',', ' ').' '.$units[$index];
+    }
+
+    private function queueLotAppointmentDocumentUploadIfPossible(LotAppointmentDocument $document): void
+    {
+        $document->loadMissing('lotAppointment.appointment', 'appointment');
+
+        $appointment = $document->appointment ?: $document->lotAppointment?->appointment;
+
+        if (! $appointment || $appointment->external_source !== CoffracAppointmentService::SOURCE || ! filled($appointment->external_reference)) {
+            return;
+        }
+
+        $document->update([
+            'appointment_id' => $appointment->id,
+            'status' => LotAppointmentDocument::STATUS_QUEUED,
+            'error_message' => null,
+        ]);
+
+        PushLotAppointmentDocumentToCoffracJob::dispatch($document->id)->afterCommit();
     }
 
     /**

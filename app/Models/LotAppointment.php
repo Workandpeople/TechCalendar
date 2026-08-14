@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'lot_id',
@@ -105,6 +106,11 @@ class LotAppointment extends Model
     public function statsExcluder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'excluded_from_lot_stats_by');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(LotAppointmentDocument::class);
     }
 
     protected function casts(): array

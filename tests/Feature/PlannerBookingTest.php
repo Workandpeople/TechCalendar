@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\SyncCoffracAppointmentsJob;
+use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Appointment;
 use App\Models\Department;
@@ -9,6 +10,7 @@ use App\Models\ExternalAppointmentRequest;
 use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\LotAppointmentDocument;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
@@ -19,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -2698,6 +2701,8 @@ it('links a placed appointment back to its lot appointment', function () {
         'services.mapbox.token' => null,
     ]);
     Mail::fake();
+    Queue::fake();
+    Storage::fake('local');
 
     Http::fake(function (\Illuminate\Http\Client\Request $request) {
         if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments') {
@@ -2776,6 +2781,18 @@ it('links a placed appointment back to its lot appointment', function () {
         'status' => LotAppointment::STATUS_PENDING,
         'added_to_global_plus' => true,
     ]);
+    Storage::disk('local')->put('lot-appointment-documents/'.$lotAppointment->id.'/pre-placement.pdf', 'pdf-content');
+    $lotDocument = LotAppointmentDocument::query()->create([
+        'lot_appointment_id' => $lotAppointment->id,
+        'name' => 'Document avant placement',
+        'original_name' => 'pre-placement.pdf',
+        'disk' => 'local',
+        'path' => 'lot-appointment-documents/'.$lotAppointment->id.'/pre-placement.pdf',
+        'mime' => 'application/pdf',
+        'size' => 11,
+        'is_private' => true,
+        'status' => LotAppointmentDocument::STATUS_PENDING,
+    ]);
 
     $this->actingAs($planner)
         ->postJson(route('planner.book.appointments.store'), [
@@ -2797,6 +2814,9 @@ it('links a placed appointment back to its lot appointment', function () {
         ->and($lotAppointment->source)->toBe(CoffracAppointmentService::SOURCE)
         ->and($lotAppointment->external_reference)->toBe('9101')
         ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
+    expect($lotDocument->refresh()->appointment_id)->toBe((int) $lotAppointment->appointment_id)
+        ->and($lotDocument->status)->toBe(LotAppointmentDocument::STATUS_QUEUED)
+        ->and($lotDocument->is_private)->toBeTrue();
 
     $appointment = Appointment::query()->findOrFail((int) $lotAppointment->appointment_id);
     $externalRequest = ExternalAppointmentRequest::query()
@@ -2823,6 +2843,7 @@ it('links a placed appointment back to its lot appointment', function () {
             && $mail->hasTo($technician->email)
             && $mail->appointment->id === $lotAppointment->appointment_id,
     );
+    Queue::assertPushed(PushLotAppointmentDocumentToCoffracJob::class);
 });
 
 it('rolls back a physical lot appointment when coffrac does not confirm attente visite', function () {

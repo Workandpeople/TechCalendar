@@ -118,10 +118,14 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/lots/imports/{preview}/retry', [ManagerLotController::class, 'retryImport'])->name('manager.lots.imports.retry');
     Route::patch('/manager/lots/imports/{preview}/rows/{rowNumber}', [ManagerLotController::class, 'updateImportRow'])->name('manager.lots.imports.rows.update');
     Route::post('/manager/lots/imports/{preview}/confirm', [ManagerLotController::class, 'confirmImport'])->name('manager.lots.imports.confirm');
+    Route::get('/manager/lots/{lot}/documents', [ManagerLotController::class, 'documents'])->name('manager.lots.documents.index');
     Route::patch('/manager/lots/appointments/{lotAppointment}/visits', [ManagerLotController::class, 'updateAppointmentVisits'])->name('manager.lots.appointments.visits.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/stats-exclusion', [ManagerLotController::class, 'updateAppointmentStatsExclusion'])->name('manager.lots.appointments.stats-exclusion.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/global-plus', [ManagerLotController::class, 'updateAppointmentGlobalPlus'])->name('manager.lots.appointments.global-plus.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/reset-processing', [ManagerLotController::class, 'resetAppointmentProcessing'])->name('manager.lots.appointments.reset-processing');
+    Route::post('/manager/lots/appointments/{lotAppointment}/documents', [ManagerLotController::class, 'storeAppointmentDocument'])->name('manager.lots.appointments.documents.store');
+    Route::patch('/manager/lots/appointments/documents/{document}', [ManagerLotController::class, 'updateAppointmentDocument'])->name('manager.lots.appointments.documents.update');
+    Route::delete('/manager/lots/appointments/documents/{document}', [ManagerLotController::class, 'destroyAppointmentDocument'])->name('manager.lots.appointments.documents.destroy');
     Route::patch('/manager/lots/appointments/{lotAppointment}', [ManagerLotController::class, 'updateAppointment'])->name('manager.lots.appointments.update');
     Route::get('/manager/lots/{lot}/download', [ManagerLotController::class, 'download'])->name('manager.lots.download');
     Route::get('/manager/lots/{lot}', [ManagerLotController::class, 'show'])->name('manager.lots.show');
