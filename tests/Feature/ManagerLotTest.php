@@ -2894,6 +2894,15 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
                     ],
                 ],
             ]),
+            'https://global-plus.test/api/Auth/Controllers' => Http::response([
+                [
+                    'id' => 2198,
+                    'nom' => 'Controle',
+                    'prenom' => 'Lucas',
+                    'email' => 'tech.globalplus@example.test',
+                    'etat' => true,
+                ],
+            ]),
             'https://global-plus.test/api/Demande' => Http::response('"5637"', 200, [
                 'Content-Type' => 'application/json',
             ]),
@@ -2970,6 +2979,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
     $this->actingAs($manager)
         ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
             'version_formulaire_id' => 3310,
+            'controller_id' => 2198,
             'installer_address_id' => 901,
             'title' => 'Lot Global+',
             'sub_title' => 'Ligne 7 - HABITAT ENERGIE',
@@ -2996,6 +3006,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             && $request->url() === 'https://global-plus.test/api/Demande'
             && $request->hasHeader('Authorization', 'Bearer global-plus-token')
             && data_get($payload, 'idBureauInspection') === 1035
+            && data_get($payload, 'idControleur') === 2198
             && data_get($payload, 'typeIntervention.0.versionFormulaireId') === 3310
             && data_get($payload, 'client.idTypeAdresse') === 1
             && data_get($payload, 'client.raisonSociale') === 'HABITAT ENERGIE'
@@ -3069,6 +3080,7 @@ it('prevents duplicate Global Plus creation for an already linked lot appointmen
     $this->actingAs($manager)
         ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
             'version_formulaire_id' => 3310,
+            'controller_id' => 2198,
             'send_documents' => true,
         ])
         ->assertStatus(422)

@@ -766,7 +766,7 @@
     </div>
 
     <div id="lot-physical-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-        <div class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail physique</p>
@@ -776,7 +776,7 @@
                 <button id="lot-physical-detail-close" type="button" class="gc-link">Fermer</button>
             </div>
 
-            <div class="grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div class="grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_430px]">
                 <div class="space-y-4">
                     <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);">
                         <h3 class="font-semibold" style="color:var(--gc-text);">Informations du RDV</h3>
@@ -830,7 +830,7 @@
 	                        <p id="lot-physical-global-plus-error" class="mt-2 hidden text-sm" style="color:#be123c;"></p>
 	                        <div class="mt-3 grid gap-2">
 	                            <button id="lot-physical-global-plus-open" type="button" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
-	                                Créer à Global+
+	                                Ajouter à Global+
 	                            </button>
 	                            <button id="lot-physical-global-plus-sync-documents" type="button" class="gc-btn-soft hidden w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
 	                                Synchroniser les documents
@@ -846,7 +846,13 @@
 	                            </div>
 	                            <div class="rounded-2xl border px-3 py-2 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
 	                                <p class="font-semibold" style="color:var(--gc-text);">Technicien Global+ proposé</p>
-	                                <p id="lot-physical-global-plus-controller" class="mt-1">Chargement...</p>
+	                                <p id="lot-physical-global-plus-controller-summary" class="mt-1">Chargement...</p>
+                                    <label class="mt-3 block">
+                                        <span class="gc-label">Technicien Global+</span>
+                                        <select id="lot_physical_global_plus_controller_id" class="gc-input" required>
+                                            <option value="">Chargement...</option>
+                                        </select>
+                                    </label>
 	                            </div>
 	                            <div>
 	                                <label class="gc-label" for="lot_physical_global_plus_installer">Installateur Global+</label>
@@ -929,7 +935,7 @@
     </div>
 
     <div id="lot-contact-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-        <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail contact</p>
@@ -1215,7 +1221,8 @@
         const physicalGlobalPlusForm = document.getElementById('lot-physical-global-plus-form');
         const physicalGlobalPlusFormStatus = document.getElementById('lot-physical-global-plus-form-status');
         const physicalGlobalPlusVersion = document.getElementById('lot_physical_global_plus_version');
-        const physicalGlobalPlusController = document.getElementById('lot-physical-global-plus-controller');
+        const physicalGlobalPlusControllerSummary = document.getElementById('lot-physical-global-plus-controller-summary');
+        const physicalGlobalPlusController = document.getElementById('lot_physical_global_plus_controller_id');
         const physicalGlobalPlusInstaller = document.getElementById('lot_physical_global_plus_installer');
         const physicalGlobalPlusInstallerName = document.getElementById('lot_physical_global_plus_installer_name');
         const physicalGlobalPlusInstallerSiren = document.getElementById('lot_physical_global_plus_installer_siren');
@@ -2142,7 +2149,7 @@
 
             if (physicalGlobalPlusOpen) {
                 physicalGlobalPlusOpen.disabled = !canCreate;
-                physicalGlobalPlusOpen.textContent = hasDemand ? 'Déjà créé dans Global+' : 'Créer à Global+';
+                physicalGlobalPlusOpen.textContent = hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+';
             }
 
             if (physicalGlobalPlusSyncDocuments) {
@@ -2198,11 +2205,23 @@
             }
 
             if (physicalGlobalPlusController) {
+                physicalGlobalPlusController.innerHTML = [
+                    option('Choisir un technicien Global+', ''),
+                    ...controllers.map((controller) => option(
+                        `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}${controller.active === false ? ' · inactif' : ''}`,
+                        controller.id,
+                        String(controller.id) === suggestedController,
+                        controller.active === false,
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusControllerSummary) {
                 const controller = controllers.find((item) => String(item.id) === suggestedController);
 
-                physicalGlobalPlusController.textContent = controller
+                physicalGlobalPlusControllerSummary.textContent = controller
                     ? `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}`
-                    : 'Aucun technicien Global+ actif trouvé avec le même email.';
+                    : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
             }
 
             physicalGlobalPlusInstallerName.value = appointment.installer_name || '';
@@ -2317,6 +2336,11 @@
                 return;
             }
 
+            if (!physicalGlobalPlusController?.value) {
+                setGlobalPlusFormStatus('Choisis le technicien Global+.', '#be123c');
+                return;
+            }
+
             physicalGlobalPlusSubmit.disabled = true;
             physicalGlobalPlusSubmit.textContent = 'Création en cours...';
             setGlobalPlusFormStatus('Création du dossier dans Global+...');
@@ -2331,6 +2355,7 @@
                     },
                     body: JSON.stringify({
                         version_formulaire_id: Number(physicalGlobalPlusVersion.value),
+                        controller_id: Number(physicalGlobalPlusController.value),
                         installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
                         installer_name: physicalGlobalPlusInstallerName?.value || null,
                         installer_siren: physicalGlobalPlusInstallerSiren?.value || null,

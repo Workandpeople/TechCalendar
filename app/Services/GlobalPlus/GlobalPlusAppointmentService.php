@@ -216,12 +216,15 @@ class GlobalPlusAppointmentService
         }
 
         $installer = $this->installerAddress($lotAppointment, $payload);
+        $controllerId = $this->controllerId($payload);
         $title = trim((string) ($payload['title'] ?? '')) ?: $this->defaultTitle($lotAppointment);
         $subTitle = trim((string) ($payload['sub_title'] ?? '')) ?: $this->defaultSubTitle($lotAppointment);
         $sendDocuments = (bool) ($payload['send_documents'] ?? true);
         $demandPayload = [
             'idBureauInspection' => (int) config('services.global_plus.bureau_id'),
+            'dateCreation' => now()->format('Y-m-d\TH:i:s'),
             'dateIntervention' => $appointment->starts_at?->format('Y-m-d\TH:i:s'),
+            'idControleur' => $controllerId,
             'title' => $title,
             'subTitle' => $subTitle,
             'typeIntervention' => [
@@ -321,6 +324,28 @@ class GlobalPlusAppointmentService
             'phone' => $this->nullableString($payload['installer_phone'] ?? null),
             'siren' => $this->limit($payload['installer_siren'] ?? null, self::SIREN_MAX_LENGTH),
         ], fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    private function controllerId(array $payload): int
+    {
+        $controllerId = (int) ($payload['controller_id'] ?? 0);
+
+        if ($controllerId <= 0) {
+            throw new RuntimeException('Choisis le technicien Global+ avant de créer le dossier.');
+        }
+
+        $controller = collect($this->client->controllers())
+            ->first(fn (array $controller): bool => (int) $controller['id'] === $controllerId);
+
+        if (! $controller) {
+            throw new RuntimeException('Le technicien Global+ sélectionné est introuvable. Recharge la liste puis réessaie.');
+        }
+
+        if (($controller['active'] ?? true) === false) {
+            throw new RuntimeException('Le technicien Global+ sélectionné est inactif.');
+        }
+
+        return $controllerId;
     }
 
     /**
@@ -514,7 +539,8 @@ class GlobalPlusAppointmentService
             return null;
         }
 
-        $controller = collect($controllers)->first(fn (array $controller): bool => ($controller['email'] ?? null) === $email);
+        $controller = collect($controllers)->first(fn (array $controller): bool => ($controller['email'] ?? null) === $email
+            && ($controller['active'] ?? true) !== false);
 
         return $controller ? (int) $controller['id'] : null;
     }

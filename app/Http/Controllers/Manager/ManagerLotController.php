@@ -804,6 +804,7 @@ class ManagerLotController extends Controller
 
         $payload = $request->validate([
             'version_formulaire_id' => ['required', 'integer', 'min:1'],
+            'controller_id' => ['required', 'integer', 'min:1'],
             'installer_address_id' => ['nullable', 'integer', 'min:1'],
             'installer_name' => ['nullable', 'string', 'max:255'],
             'installer_siren' => ['nullable', 'string', 'max:20'],
@@ -818,6 +819,8 @@ class ManagerLotController extends Controller
         ], [
             'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
             'version_formulaire_id.min' => 'Choisis une prestation Global+ valide.',
+            'controller_id.required' => 'Choisis le technicien Global+ avant de créer le dossier.',
+            'controller_id.min' => 'Choisis un technicien Global+ valide.',
             'installer_address_id.integer' => 'L’installateur Global+ sélectionné est invalide.',
             'installer_name.max' => 'Le nom de l’installateur est trop long.',
             'installer_siren.max' => 'Le SIREN de l’installateur est trop long.',
