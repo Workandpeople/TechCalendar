@@ -28,7 +28,17 @@ class GlobalPlusAppointmentService
 
     private const ADDRESS_COMPANY_MAX_LENGTH = 255;
 
+    private const ADDRESS_LINE_MAX_LENGTH = 200;
+
+    private const POSTAL_CODE_MAX_LENGTH = 10;
+
+    private const CITY_MAX_LENGTH = 50;
+
     private const SIREN_MAX_LENGTH = 20;
+
+    private const TITLE_MAX_LENGTH = 50;
+
+    private const SUB_TITLE_MAX_LENGTH = 25;
 
     public function __construct(private readonly GlobalPlusClient $client) {}
 
@@ -69,9 +79,9 @@ class GlobalPlusAppointmentService
 
         return [
             'configured' => true,
-            'installers' => $installers,
-            'controllers' => $controllers,
-            'intervention_versions' => $versions,
+            'installers' => $this->publicReferences($installers),
+            'controllers' => $this->publicReferences($controllers),
+            'intervention_versions' => $this->publicReferences($versions),
             'suggested_installer_address_id' => $this->suggestInstallerAddressId($lotAppointment, $installers),
             'suggested_controller_id' => $this->suggestControllerId($lotAppointment, $controllers),
             'suggested_version_formulaire_id' => $this->suggestVersionFormulaireId($lotAppointment, $versions),
@@ -209,26 +219,24 @@ class GlobalPlusAppointmentService
             throw new RuntimeException('Le dossier doit d’abord être placé physiquement dans TechCalendar.');
         }
 
-        $versionFormulaireId = (int) ($payload['version_formulaire_id'] ?? 0);
-
-        if ($versionFormulaireId <= 0) {
-            throw new RuntimeException('Choisis une prestation Global+ avant de créer le dossier.');
-        }
-
+        $versionFormulaire = $this->versionFormulaireDto((int) ($payload['version_formulaire_id'] ?? 0));
         $installer = $this->installerAddress($lotAppointment, $payload);
         $controllerId = $this->controllerId($payload);
-        $title = trim((string) ($payload['title'] ?? '')) ?: $this->defaultTitle($lotAppointment);
-        $subTitle = trim((string) ($payload['sub_title'] ?? '')) ?: $this->defaultSubTitle($lotAppointment);
+        $title = $this->limit(trim((string) ($payload['title'] ?? '')) ?: $this->defaultTitle($lotAppointment), self::TITLE_MAX_LENGTH);
+        $subTitle = $this->limit(trim((string) ($payload['sub_title'] ?? '')) ?: $this->defaultSubTitle($lotAppointment), self::SUB_TITLE_MAX_LENGTH);
         $sendDocuments = (bool) ($payload['send_documents'] ?? true);
+        $files = $sendDocuments ? $this->documentsPayload($lotAppointment) : [];
         $demandPayload = [
             'idBureauInspection' => (int) config('services.global_plus.bureau_id'),
             'dateCreation' => now()->format('Y-m-d\TH:i:s'),
+            'startDate' => $appointment->starts_at?->format('Y-m-d\TH:i:s'),
+            'endDate' => $appointment->ends_at?->format('Y-m-d\TH:i:s'),
             'dateIntervention' => $appointment->starts_at?->format('Y-m-d\TH:i:s'),
             'idControleur' => $controllerId,
             'title' => $title,
             'subTitle' => $subTitle,
             'typeIntervention' => [
-                ['versionFormulaireId' => $versionFormulaireId],
+                $versionFormulaire,
             ],
             'client' => $this->clientAddress($lotAppointment),
             'lieuInspection' => $this->inspectionAddress($lotAppointment, $payload),
@@ -237,8 +245,8 @@ class GlobalPlusAppointmentService
             'facturation' => false,
         ];
 
-        if ($sendDocuments) {
-            $demandPayload['files'] = $this->documentsPayload($lotAppointment);
+        if ($files !== []) {
+            $demandPayload['files'] = $files;
         }
 
         return array_filter($demandPayload, fn (mixed $value): bool => $value !== null);
@@ -299,10 +307,11 @@ class GlobalPlusAppointmentService
             return array_filter([
                 'id' => (int) $installer['address_id'],
                 'idTypeAdresse' => 4,
+                'civilite' => 'Mr',
                 'raisonSociale' => $this->limit($installer['name'] ?? $installer['label'] ?? null, self::ADDRESS_COMPANY_MAX_LENGTH),
-                'adresse' => $this->nullableString($installer['address'] ?? null),
-                'codePostal' => $this->nullableString($installer['postal_code'] ?? null),
-                'ville' => $this->nullableString($installer['city'] ?? null),
+                'adresse' => $this->limit($installer['address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
+                'codePostal' => $this->limit($installer['postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
+                'ville' => $this->limit($installer['city'] ?? null, self::CITY_MAX_LENGTH),
                 'phone' => $this->nullableString($installer['phone'] ?? null),
                 'siren' => $this->limit($installer['siren'] ?? null, self::SIREN_MAX_LENGTH),
             ], fn (mixed $value): bool => $value !== null && $value !== '');
@@ -317,13 +326,58 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => 0,
             'idTypeAdresse' => 4,
+            'civilite' => 'Mr',
             'raisonSociale' => $this->limit($name, self::ADDRESS_COMPANY_MAX_LENGTH),
-            'adresse' => $this->nullableString($payload['installer_address'] ?? null),
-            'codePostal' => $this->nullableString($payload['installer_postal_code'] ?? null),
-            'ville' => $this->nullableString($payload['installer_city'] ?? null),
+            'adresse' => $this->limit($payload['installer_address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
+            'codePostal' => $this->limit($payload['installer_postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
+            'ville' => $this->limit($payload['installer_city'] ?? null, self::CITY_MAX_LENGTH),
             'phone' => $this->nullableString($payload['installer_phone'] ?? null),
             'siren' => $this->limit($payload['installer_siren'] ?? null, self::SIREN_MAX_LENGTH),
         ], fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function versionFormulaireDto(int $versionFormulaireId): array
+    {
+        if ($versionFormulaireId <= 0) {
+            throw new RuntimeException('Choisis une prestation Global+ avant de créer le dossier.');
+        }
+
+        $version = collect($this->client->activeFormVersions())
+            ->first(fn (array $version): bool => (int) $version['version_formulaire_id'] === $versionFormulaireId);
+
+        if (! $version) {
+            throw new RuntimeException('La prestation Global+ sélectionnée est introuvable. Recharge la liste puis réessaie.');
+        }
+
+        $payload = is_array($version['payload'] ?? null) ? $version['payload'] : [];
+
+        return collect([
+            'versionFormulaireId',
+            'codeRapport',
+            'id',
+            'idTypeIntervention',
+            'idTypeInterventionGroupe',
+            'libelleTypeInterventionGroupe',
+            'numVersion',
+            'libelle',
+            'dateModification',
+            'dateMiseEnService',
+            'templateDoc',
+            'templateSynthesisPDF',
+            'templateSynthesisWORD',
+            'actif',
+            'hasStepsJSON',
+            'enablePlanning',
+            'versionPDF',
+            'createdBy',
+        ])
+            ->mapWithKeys(fn (string $key): array => [$key => $payload[$key] ?? null])
+            ->reject(fn (mixed $value): bool => $value === null)
+            ->put('versionFormulaireId', $versionFormulaireId)
+            ->all();
     }
 
     private function controllerId(array $payload): int
@@ -359,12 +413,13 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => (int) ($overrides['id'] ?? 0),
             'idTypeAdresse' => $addressType,
+            'civilite' => $this->limit($overrides['civilite'] ?? 'Mr', 4),
             'nom' => $this->limit($overrides['nom'] ?? $lastName, self::ADDRESS_NAME_MAX_LENGTH),
             'prenom' => $this->limit($overrides['prenom'] ?? $firstName, self::ADDRESS_NAME_MAX_LENGTH),
             'raisonSociale' => $this->limit($overrides['raisonSociale'] ?? $this->customerCompanyName($lotAppointment), self::ADDRESS_COMPANY_MAX_LENGTH),
-            'adresse' => $this->nullableString($overrides['adresse'] ?? $lotAppointment->address),
-            'codePostal' => $this->nullableString($overrides['codePostal'] ?? $lotAppointment->postal_code),
-            'ville' => $this->nullableString($overrides['ville'] ?? $lotAppointment->city),
+            'adresse' => $this->limit($overrides['adresse'] ?? $lotAppointment->address, self::ADDRESS_LINE_MAX_LENGTH),
+            'codePostal' => $this->limit($overrides['codePostal'] ?? $lotAppointment->postal_code, self::POSTAL_CODE_MAX_LENGTH),
+            'ville' => $this->limit($overrides['ville'] ?? $lotAppointment->city, self::CITY_MAX_LENGTH),
             'phone' => $this->nullableString($overrides['phone'] ?? $lotAppointment->customer_phone),
             'precariousness' => $overrides['precariousness'] ?? null,
         ], fn (mixed $value): bool => $value !== null && $value !== '');
@@ -677,7 +732,7 @@ class GlobalPlusAppointmentService
 
     private function defaultTitle(LotAppointment $lotAppointment): string
     {
-        return Str::limit('Lot '.$lotAppointment->lot?->name, 120, '');
+        return Str::limit('Lot '.$lotAppointment->lot?->name, self::TITLE_MAX_LENGTH, '');
     }
 
     private function defaultSubTitle(LotAppointment $lotAppointment): string
@@ -687,7 +742,23 @@ class GlobalPlusAppointmentService
             $lotAppointment->row_number ? 'Ligne '.$lotAppointment->row_number : null,
             $this->customerCompanyName($lotAppointment),
             $lotAppointment->site_name,
-        ]))), 180, '');
+        ]))), self::SUB_TITLE_MAX_LENGTH, '');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $references
+     * @return array<int, array<string, mixed>>
+     */
+    private function publicReferences(array $references): array
+    {
+        return collect($references)
+            ->map(function (array $reference): array {
+                unset($reference['payload']);
+
+                return $reference;
+            })
+            ->values()
+            ->all();
     }
 
     private function limit(mixed $value, int $limit): ?string

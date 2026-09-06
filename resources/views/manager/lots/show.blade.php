@@ -890,11 +890,11 @@
 	                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 	                                <label>
 	                                    <span class="gc-label">Titre du dossier</span>
-	                                    <input id="lot_physical_global_plus_title" type="text" class="gc-input" maxlength="120" />
+	                                    <input id="lot_physical_global_plus_title" type="text" class="gc-input" maxlength="50" />
 	                                </label>
 	                                <label>
 	                                    <span class="gc-label">Sous-titre</span>
-	                                    <input id="lot_physical_global_plus_sub_title" type="text" class="gc-input" maxlength="180" />
+	                                    <input id="lot_physical_global_plus_sub_title" type="text" class="gc-input" maxlength="25" />
 	                                </label>
 	                            </div>
 	                            <label>
@@ -2233,11 +2233,11 @@
             fillGlobalPlusInstallerFieldsFromSelection();
 
             if (physicalGlobalPlusTitle) {
-                physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 120);
+                physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 50);
             }
 
             if (physicalGlobalPlusSubTitle) {
-                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 180);
+                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 25);
             }
 
             if (physicalGlobalPlusPrecariousness) {

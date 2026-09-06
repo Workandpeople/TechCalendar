@@ -2903,6 +2903,19 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
                     'etat' => true,
                 ],
             ]),
+            'https://global-plus.test/api/VersionFormulaire/GetVersionFormulaires/true' => Http::response([
+                [
+                    'id' => 31,
+                    'idTypeIntervention' => 31,
+                    'libelle' => 'BAR EN 101',
+                    'codeRapport' => 'BAREN101',
+                    'versionFormulaireId' => 3310,
+                    'templateDoc' => 'template.docx',
+                    'actif' => true,
+                    'enablePlanning' => true,
+                    'jsonRapport' => '{"ignored":"too-heavy-for-create"}',
+                ],
+            ]),
             'https://global-plus.test/api/Demande' => Http::response('"5637"', 200, [
                 'Content-Type' => 'application/json',
             ]),
@@ -3008,7 +3021,10 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             && data_get($payload, 'idBureauInspection') === 1035
             && data_get($payload, 'idControleur') === 2198
             && data_get($payload, 'typeIntervention.0.versionFormulaireId') === 3310
+            && data_get($payload, 'typeIntervention.0.codeRapport') === 'BAREN101'
+            && ! array_key_exists('jsonRapport', data_get($payload, 'typeIntervention.0', []))
             && data_get($payload, 'client.idTypeAdresse') === 1
+            && data_get($payload, 'client.civilite') === 'Mr'
             && data_get($payload, 'client.raisonSociale') === 'HABITAT ENERGIE'
             && data_get($payload, 'lieuInspection.idTypeAdresse') === 2
             && data_get($payload, 'lieuInspection.raisonSociale') === 'BATIMENT A'

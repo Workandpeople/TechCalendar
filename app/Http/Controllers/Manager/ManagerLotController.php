@@ -813,8 +813,8 @@ class ManagerLotController extends Controller
             'installer_postal_code' => ['nullable', 'string', 'max:20'],
             'installer_city' => ['nullable', 'string', 'max:120'],
             'precariousness' => ['nullable', 'integer', 'min:0', 'max:10'],
-            'title' => ['nullable', 'string', 'max:120'],
-            'sub_title' => ['nullable', 'string', 'max:180'],
+            'title' => ['nullable', 'string', 'max:50'],
+            'sub_title' => ['nullable', 'string', 'max:25'],
             'send_documents' => ['nullable', 'boolean'],
         ], [
             'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
