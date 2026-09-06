@@ -72,4 +72,13 @@ return [
         ))),
     ],
 
+    'global_plus' => [
+        'api_url' => env('GLOBAL_PLUS_API_URL', 'https://cee-api.test.globalplus.fr'),
+        'api_key' => env('GLOBAL_PLUS_API_KEY'),
+        'bureau_id' => env('GLOBAL_PLUS_BUREAU_ID', 1035),
+        'timeout' => env('GLOBAL_PLUS_API_TIMEOUT', 45),
+        'upload_timeout' => env('GLOBAL_PLUS_API_UPLOAD_TIMEOUT', 90),
+        'connect_timeout' => env('GLOBAL_PLUS_API_CONNECT_TIMEOUT', 5),
+    ],
+
 ];

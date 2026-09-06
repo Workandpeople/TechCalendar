@@ -658,6 +658,12 @@
                                     $appointment['contact_satisfaction'] === true || $appointment['physical_satisfaction'] === true => 'satisfied',
                                     default => null,
                                 };
+                                $globalPlusMeta = match (true) {
+                                    filled($appointment['global_plus_demand_id'] ?? null) => ['background' => '#dcfce7', 'color' => '#166534'],
+                                    filled($appointment['global_plus_error_message'] ?? null) => ['background' => '#fee2e2', 'color' => '#991b1b'],
+                                    $appointment['added_to_global_plus'] => ['background' => '#fef3c7', 'color' => '#92400e'],
+                                    default => ['background' => 'var(--gc-accent-soft)', 'color' => 'var(--gc-text-soft)'],
+                                };
                             @endphp
                             <tr
                                 @class([
@@ -712,14 +718,16 @@
                                     @endif
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3 text-center">
-                                    <input
-                                        type="checkbox"
-                                        class="gc-check lot-appointment-global-plus-checkbox"
-                                        data-lot-appointment-id="{{ $appointment['id'] }}"
-                                        @checked($appointment['added_to_global_plus'])
-                                        @disabled(! $appointment['global_plus_update_url'])
-                                        aria-label="Ajouter le dossier {{ $clientLabel ?: 'client' }} au Global +"
-                                    />
+                                    <span
+                                        class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+                                        data-lot-appointment-global-plus-badge="{{ $appointment['id'] }}"
+                                        style="background:{{ $globalPlusMeta['background'] }};color:{{ $globalPlusMeta['color'] }};"
+                                    >
+                                        {{ $appointment['global_plus_status_label'] }}
+                                    </span>
+                                    @if ($appointment['global_plus_demand_id'])
+                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Réf. {{ $appointment['global_plus_demand_id'] }}</p>
+                                    @endif
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3">
                                     <button
@@ -807,12 +815,98 @@
                         </button>
                     </form>
 
-                    <div id="lot-physical-tracking-link-wrap" class="mt-4 hidden">
-                        <a id="lot-physical-tracking-link" href="#" class="gc-btn-soft w-full justify-center">Voir dans la gestion des RDV</a>
-                    </div>
+	                    <div id="lot-physical-tracking-link-wrap" class="mt-4 hidden">
+	                        <a id="lot-physical-tracking-link" href="#" class="gc-btn-soft w-full justify-center">Voir dans la gestion des RDV</a>
+	                    </div>
 
-                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
-                        <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
+	                    <div id="lot-physical-global-plus-card" class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
+	                        <div class="flex items-start justify-between gap-3">
+	                            <div>
+	                                <h3 class="font-semibold" style="color:var(--gc-text);">Global+</h3>
+	                                <p id="lot-physical-global-plus-summary" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
+	                            </div>
+	                            <span id="lot-physical-global-plus-badge" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"></span>
+	                        </div>
+	                        <p id="lot-physical-global-plus-error" class="mt-2 hidden text-sm" style="color:#be123c;"></p>
+	                        <div class="mt-3 grid gap-2">
+	                            <button id="lot-physical-global-plus-open" type="button" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+	                                Créer à Global+
+	                            </button>
+	                            <button id="lot-physical-global-plus-sync-documents" type="button" class="gc-btn-soft hidden w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+	                                Synchroniser les documents
+	                            </button>
+	                        </div>
+	                        <form id="lot-physical-global-plus-form" class="mt-4 hidden space-y-3 rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
+	                            <p id="lot-physical-global-plus-form-status" class="hidden text-sm"></p>
+	                            <div>
+	                                <label class="gc-label" for="lot_physical_global_plus_version">Prestation Global+</label>
+	                                <select id="lot_physical_global_plus_version" class="gc-input" required>
+	                                    <option value="">Chargement...</option>
+	                                </select>
+	                            </div>
+	                            <div class="rounded-2xl border px-3 py-2 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
+	                                <p class="font-semibold" style="color:var(--gc-text);">Technicien Global+ proposé</p>
+	                                <p id="lot-physical-global-plus-controller" class="mt-1">Chargement...</p>
+	                            </div>
+	                            <div>
+	                                <label class="gc-label" for="lot_physical_global_plus_installer">Installateur Global+</label>
+	                                <select id="lot_physical_global_plus_installer" class="gc-input">
+	                                    <option value="">Chargement...</option>
+	                                </select>
+	                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.</p>
+	                            </div>
+	                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	                                <label>
+	                                    <span class="gc-label">Installateur manuel</span>
+	                                    <input id="lot_physical_global_plus_installer_name" type="text" class="gc-input" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">SIREN</span>
+	                                    <input id="lot_physical_global_plus_installer_siren" type="text" class="gc-input" maxlength="20" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">Adresse installateur</span>
+	                                    <input id="lot_physical_global_plus_installer_address" type="text" class="gc-input" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">CP installateur</span>
+	                                    <input id="lot_physical_global_plus_installer_postal_code" type="text" class="gc-input" maxlength="20" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">Ville installateur</span>
+	                                    <input id="lot_physical_global_plus_installer_city" type="text" class="gc-input" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">Téléphone installateur</span>
+	                                    <input id="lot_physical_global_plus_installer_phone" type="text" class="gc-input" />
+	                                </label>
+	                            </div>
+	                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	                                <label>
+	                                    <span class="gc-label">Titre du dossier</span>
+	                                    <input id="lot_physical_global_plus_title" type="text" class="gc-input" maxlength="120" />
+	                                </label>
+	                                <label>
+	                                    <span class="gc-label">Sous-titre</span>
+	                                    <input id="lot_physical_global_plus_sub_title" type="text" class="gc-input" maxlength="180" />
+	                                </label>
+	                            </div>
+	                            <label>
+	                                <span class="gc-label">Précarité</span>
+	                                <input id="lot_physical_global_plus_precariousness" type="number" min="0" max="10" step="1" class="gc-input" placeholder="Optionnel" />
+	                            </label>
+	                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);">
+	                                <input id="lot_physical_global_plus_send_documents" type="checkbox" class="gc-check" checked>
+	                                Transmettre les documents du dossier
+	                            </label>
+	                            <button id="lot-physical-global-plus-submit" type="submit" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+	                                Créer le dossier Global+
+	                            </button>
+	                        </form>
+	                    </div>
+
+	                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
+	                        <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
                         <p id="lot-physical-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 w-full justify-center">
                             Sortir des stats du lot
@@ -1113,6 +1207,28 @@
         const physicalDocumentsUploadList = document.getElementById('lot-physical-documents-upload-list');
         const physicalDocumentsUploadSubmit = document.getElementById('lot-physical-documents-upload-submit');
         const physicalDocumentsUploadStatus = document.getElementById('lot-physical-documents-upload-status');
+        const physicalGlobalPlusSummary = document.getElementById('lot-physical-global-plus-summary');
+        const physicalGlobalPlusBadge = document.getElementById('lot-physical-global-plus-badge');
+        const physicalGlobalPlusError = document.getElementById('lot-physical-global-plus-error');
+        const physicalGlobalPlusOpen = document.getElementById('lot-physical-global-plus-open');
+        const physicalGlobalPlusSyncDocuments = document.getElementById('lot-physical-global-plus-sync-documents');
+        const physicalGlobalPlusForm = document.getElementById('lot-physical-global-plus-form');
+        const physicalGlobalPlusFormStatus = document.getElementById('lot-physical-global-plus-form-status');
+        const physicalGlobalPlusVersion = document.getElementById('lot_physical_global_plus_version');
+        const physicalGlobalPlusController = document.getElementById('lot-physical-global-plus-controller');
+        const physicalGlobalPlusInstaller = document.getElementById('lot_physical_global_plus_installer');
+        const physicalGlobalPlusInstallerName = document.getElementById('lot_physical_global_plus_installer_name');
+        const physicalGlobalPlusInstallerSiren = document.getElementById('lot_physical_global_plus_installer_siren');
+        const physicalGlobalPlusInstallerAddress = document.getElementById('lot_physical_global_plus_installer_address');
+        const physicalGlobalPlusInstallerPostalCode = document.getElementById('lot_physical_global_plus_installer_postal_code');
+        const physicalGlobalPlusInstallerCity = document.getElementById('lot_physical_global_plus_installer_city');
+        const physicalGlobalPlusInstallerPhone = document.getElementById('lot_physical_global_plus_installer_phone');
+        const physicalGlobalPlusTitle = document.getElementById('lot_physical_global_plus_title');
+        const physicalGlobalPlusSubTitle = document.getElementById('lot_physical_global_plus_sub_title');
+        const physicalGlobalPlusPrecariousness = document.getElementById('lot_physical_global_plus_precariousness');
+        const physicalGlobalPlusSendDocuments = document.getElementById('lot_physical_global_plus_send_documents');
+        const physicalGlobalPlusSubmit = document.getElementById('lot-physical-global-plus-submit');
+        const globalPlusReferencesCache = new Map();
 
         const contactModal = document.getElementById('lot-contact-detail-modal');
         const contactClose = document.getElementById('lot-contact-detail-close');
@@ -1136,6 +1252,7 @@
         let lotDocumentsAppointments = [];
         let lotDocumentsCurrentIndex = 0;
         let lotDocumentsSearchTimer = null;
+        let currentGlobalPlusReferences = null;
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -1323,6 +1440,36 @@
             return { background: 'var(--gc-accent-soft)', color: 'var(--gc-text)' };
         }
 
+        function globalPlusStatusMeta(appointment) {
+            if (appointment?.global_plus_demand_id) {
+                if (appointment.global_plus_status === 'documents_failed') {
+                    return { background: '#fef3c7', color: '#92400e' };
+                }
+
+                return { background: '#dcfce7', color: '#166534' };
+            }
+
+            if (appointment?.global_plus_error_message || appointment?.global_plus_status === 'failed') {
+                return { background: '#fee2e2', color: '#991b1b' };
+            }
+
+            if (appointment?.added_to_global_plus) {
+                return { background: '#fef3c7', color: '#92400e' };
+            }
+
+            return { background: 'var(--gc-accent-soft)', color: 'var(--gc-text-soft)' };
+        }
+
+        function updateGlobalPlusBadges(appointment) {
+            document.querySelectorAll(`[data-lot-appointment-global-plus-badge="${appointment.id}"]`).forEach((badge) => {
+                const meta = globalPlusStatusMeta(appointment);
+
+                badge.textContent = appointment.global_plus_status_label || 'Non créé';
+                badge.style.background = meta.background;
+                badge.style.color = meta.color;
+            });
+        }
+
         function updateLotAppointmentState(appointment) {
             if (!appointment?.id) {
                 return;
@@ -1343,6 +1490,8 @@
             if (currentContactLotAppointment?.id === appointment.id) {
                 currentContactLotAppointment = appointment;
             }
+
+            updateGlobalPlusBadges(appointment);
         }
 
         function renderLotDocumentsList(appointment, listElement, countElement) {
@@ -1824,67 +1973,6 @@
             physicalVisitsStatus.classList.remove('hidden');
         }
 
-        function globalPlusCheckboxesFor(appointmentId) {
-            return document.querySelectorAll(`.lot-appointment-global-plus-checkbox[data-lot-appointment-id="${appointmentId}"]`);
-        }
-
-        async function updateLotAppointmentGlobalPlus(appointment, checkboxElement) {
-            if (!appointment?.global_plus_update_url || !checkboxElement) {
-                return;
-            }
-
-            const requestedState = checkboxElement.checked;
-            checkboxElement.disabled = true;
-
-            try {
-                const response = await fetch(appointment.global_plus_update_url, {
-                    method: 'PATCH',
-                    headers: {
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': lotDetailCsrfToken,
-                    },
-                    body: JSON.stringify({
-                        added_to_global_plus: requestedState,
-                    }),
-                });
-                const payload = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Mise à jour impossible.');
-                }
-
-                const updatedAppointment = payload.appointment;
-                lotAppointmentDetails.set(String(updatedAppointment.id), updatedAppointment);
-
-                if (currentPhysicalLotAppointment?.id === updatedAppointment.id) {
-                    currentPhysicalLotAppointment = updatedAppointment;
-                }
-
-                if (currentContactLotAppointment?.id === updatedAppointment.id) {
-                    currentContactLotAppointment = updatedAppointment;
-                }
-
-                globalPlusCheckboxesFor(updatedAppointment.id).forEach((checkbox) => {
-                    checkbox.checked = Boolean(updatedAppointment.added_to_global_plus);
-                    checkbox.disabled = !updatedAppointment.global_plus_update_url;
-                });
-
-                const currentGlobalPlusFilter = new URLSearchParams(window.location.search).get('appointment_global_plus');
-
-                if (
-                    (currentGlobalPlusFilter === '1' && !updatedAppointment.added_to_global_plus)
-                    || (currentGlobalPlusFilter === '0' && updatedAppointment.added_to_global_plus)
-                ) {
-                    window.location.reload();
-                }
-            } catch (error) {
-                checkboxElement.checked = !requestedState;
-                checkboxElement.disabled = false;
-                window.alert(error.message || 'Mise à jour Global + impossible.');
-            }
-        }
-
         function statsExclusionStatusText(appointment) {
             if (!appointment.excluded_from_lot_stats) {
                 return 'Ce dossier compte actuellement dans les statistiques et objectifs du lot.';
@@ -2001,6 +2089,321 @@
             }
         }
 
+        function setGlobalPlusFormStatus(message, color = 'var(--gc-text-soft)') {
+            if (!physicalGlobalPlusFormStatus) return;
+
+            physicalGlobalPlusFormStatus.textContent = message;
+            physicalGlobalPlusFormStatus.style.color = color;
+            physicalGlobalPlusFormStatus.classList.remove('hidden');
+        }
+
+        function clearGlobalPlusFormStatus() {
+            physicalGlobalPlusFormStatus?.classList.add('hidden');
+            if (physicalGlobalPlusFormStatus) {
+                physicalGlobalPlusFormStatus.textContent = '';
+            }
+        }
+
+        function defaultGlobalPlusTitle(appointment) {
+            return `Lot ${lotDetailCurrentLot.name || appointment.lot_id || ''}`.trim();
+        }
+
+        function defaultGlobalPlusSubTitle(appointment) {
+            return [
+                lotDetailCurrentLot.name,
+                appointment.row_number ? `Ligne ${appointment.row_number}` : null,
+                customerLabel(appointment),
+                appointment.site_name,
+            ].filter(Boolean).join(' - ');
+        }
+
+        function configureGlobalPlusStatus(appointment) {
+            const meta = globalPlusStatusMeta(appointment);
+            const hasDemand = Boolean(appointment.global_plus_demand_id);
+            const canCreate = Boolean(appointment.can_create_global_plus);
+            const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
+
+            if (physicalGlobalPlusBadge) {
+                physicalGlobalPlusBadge.textContent = appointment.global_plus_status_label || 'Non créé';
+                physicalGlobalPlusBadge.style.background = meta.background;
+                physicalGlobalPlusBadge.style.color = meta.color;
+            }
+
+            if (physicalGlobalPlusSummary) {
+                physicalGlobalPlusSummary.textContent = hasDemand
+                    ? `Référence Global+ ${appointment.global_plus_demand_id}.`
+                    : (canCreate ? 'Prêt à créer dans Global+.' : 'Le dossier doit être placé physiquement avant l’envoi Global+.');
+            }
+
+            if (physicalGlobalPlusError) {
+                physicalGlobalPlusError.textContent = appointment.global_plus_error_message || '';
+                physicalGlobalPlusError.classList.toggle('hidden', !appointment.global_plus_error_message);
+            }
+
+            if (physicalGlobalPlusOpen) {
+                physicalGlobalPlusOpen.disabled = !canCreate;
+                physicalGlobalPlusOpen.textContent = hasDemand ? 'Déjà créé dans Global+' : 'Créer à Global+';
+            }
+
+            if (physicalGlobalPlusSyncDocuments) {
+                physicalGlobalPlusSyncDocuments.classList.toggle('hidden', !canSyncDocuments);
+                physicalGlobalPlusSyncDocuments.disabled = !canSyncDocuments;
+            }
+
+            if (!canCreate) {
+                physicalGlobalPlusForm?.classList.add('hidden');
+            }
+        }
+
+        function option(label, value = '', selected = false, disabled = false) {
+            return `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
+        }
+
+        function populateGlobalPlusReferences(appointment, references) {
+            currentGlobalPlusReferences = references || {};
+            const versions = Array.isArray(currentGlobalPlusReferences.intervention_versions)
+                ? currentGlobalPlusReferences.intervention_versions
+                : [];
+            const installers = Array.isArray(currentGlobalPlusReferences.installers)
+                ? currentGlobalPlusReferences.installers
+                : [];
+            const controllers = Array.isArray(currentGlobalPlusReferences.controllers)
+                ? currentGlobalPlusReferences.controllers
+                : [];
+            const suggestedVersion = String(currentGlobalPlusReferences.suggested_version_formulaire_id || '');
+            const suggestedInstaller = String(currentGlobalPlusReferences.suggested_installer_address_id || '');
+            const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
+
+            if (physicalGlobalPlusVersion) {
+                physicalGlobalPlusVersion.innerHTML = [
+                    option('Choisir une prestation Global+', ''),
+                    ...versions.map((version) => option(
+                        `${version.label || version.code} · ${version.code || version.version_formulaire_id}`,
+                        version.version_formulaire_id,
+                        String(version.version_formulaire_id) === suggestedVersion,
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusInstaller) {
+                physicalGlobalPlusInstaller.innerHTML = [
+                    option('Saisie manuelle / installateur du dossier', ''),
+                    ...installers.map((installer) => option(
+                        `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
+                        installer.address_id,
+                        String(installer.address_id) === suggestedInstaller,
+                        Boolean(installer.blocked),
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusController) {
+                const controller = controllers.find((item) => String(item.id) === suggestedController);
+
+                physicalGlobalPlusController.textContent = controller
+                    ? `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}`
+                    : 'Aucun technicien Global+ actif trouvé avec le même email.';
+            }
+
+            physicalGlobalPlusInstallerName.value = appointment.installer_name || '';
+            physicalGlobalPlusInstallerSiren.value = '';
+            physicalGlobalPlusInstallerAddress.value = '';
+            physicalGlobalPlusInstallerPostalCode.value = '';
+            physicalGlobalPlusInstallerCity.value = '';
+            physicalGlobalPlusInstallerPhone.value = '';
+            fillGlobalPlusInstallerFieldsFromSelection();
+
+            if (physicalGlobalPlusTitle) {
+                physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 120);
+            }
+
+            if (physicalGlobalPlusSubTitle) {
+                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 180);
+            }
+
+            if (physicalGlobalPlusPrecariousness) {
+                physicalGlobalPlusPrecariousness.value = '';
+            }
+
+            if (physicalGlobalPlusSendDocuments) {
+                physicalGlobalPlusSendDocuments.checked = true;
+            }
+        }
+
+        function selectedGlobalPlusInstaller() {
+            const selectedAddressId = String(physicalGlobalPlusInstaller?.value || '');
+
+            if (!selectedAddressId || !currentGlobalPlusReferences?.installers) {
+                return null;
+            }
+
+            return currentGlobalPlusReferences.installers.find((installer) => String(installer.address_id) === selectedAddressId) || null;
+        }
+
+        function fillGlobalPlusInstallerFieldsFromSelection() {
+            const installer = selectedGlobalPlusInstaller();
+
+            if (!installer) {
+                physicalGlobalPlusInstallerName.value = currentPhysicalLotAppointment?.installer_name || physicalGlobalPlusInstallerName.value || '';
+                return;
+            }
+
+            physicalGlobalPlusInstallerName.value = installer.name || installer.label || '';
+            physicalGlobalPlusInstallerSiren.value = installer.siren || '';
+            physicalGlobalPlusInstallerAddress.value = installer.address || '';
+            physicalGlobalPlusInstallerPostalCode.value = installer.postal_code || '';
+            physicalGlobalPlusInstallerCity.value = installer.city || '';
+            physicalGlobalPlusInstallerPhone.value = installer.phone || '';
+        }
+
+        async function loadGlobalPlusReferences(appointment) {
+            if (!appointment?.global_plus_references_url) {
+                throw new Error('Référentiel Global+ indisponible.');
+            }
+
+            if (globalPlusReferencesCache.has(String(appointment.id))) {
+                return globalPlusReferencesCache.get(String(appointment.id));
+            }
+
+            setGlobalPlusFormStatus('Chargement des référentiels Global+...');
+
+            const response = await fetch(appointment.global_plus_references_url, {
+                headers: { Accept: 'application/json' },
+            });
+            const payload = await response.json();
+
+            if (!response.ok || payload.configured === false) {
+                throw new Error(payload.message || 'Référentiels Global+ indisponibles.');
+            }
+
+            globalPlusReferencesCache.set(String(appointment.id), payload);
+
+            return payload;
+        }
+
+        async function openGlobalPlusCreateForm() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.can_create_global_plus) {
+                return;
+            }
+
+            physicalGlobalPlusForm?.classList.toggle('hidden');
+
+            if (physicalGlobalPlusForm?.classList.contains('hidden')) {
+                return;
+            }
+
+            clearGlobalPlusFormStatus();
+
+            try {
+                const references = await loadGlobalPlusReferences(appointment);
+                populateGlobalPlusReferences(appointment, references);
+                clearGlobalPlusFormStatus();
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Impossible de charger Global+.', '#be123c');
+            }
+        }
+
+        async function submitGlobalPlusCreate() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.global_plus_store_url || !physicalGlobalPlusSubmit) {
+                return;
+            }
+
+            if (!physicalGlobalPlusVersion?.value) {
+                setGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
+                return;
+            }
+
+            physicalGlobalPlusSubmit.disabled = true;
+            physicalGlobalPlusSubmit.textContent = 'Création en cours...';
+            setGlobalPlusFormStatus('Création du dossier dans Global+...');
+
+            try {
+                const response = await fetch(appointment.global_plus_store_url, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        version_formulaire_id: Number(physicalGlobalPlusVersion.value),
+                        installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
+                        installer_name: physicalGlobalPlusInstallerName?.value || null,
+                        installer_siren: physicalGlobalPlusInstallerSiren?.value || null,
+                        installer_phone: physicalGlobalPlusInstallerPhone?.value || null,
+                        installer_address: physicalGlobalPlusInstallerAddress?.value || null,
+                        installer_postal_code: physicalGlobalPlusInstallerPostalCode?.value || null,
+                        installer_city: physicalGlobalPlusInstallerCity?.value || null,
+                        precariousness: physicalGlobalPlusPrecariousness?.value ? Number(physicalGlobalPlusPrecariousness.value) : null,
+                        title: physicalGlobalPlusTitle?.value || null,
+                        sub_title: physicalGlobalPlusSubTitle?.value || null,
+                        send_documents: Boolean(physicalGlobalPlusSendDocuments?.checked),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Création Global+ impossible.');
+                }
+
+                const updatedAppointment = payload.appointment || appointment;
+                updateLotAppointmentState(updatedAppointment);
+                currentPhysicalLotAppointment = updatedAppointment;
+                configureGlobalPlusStatus(updatedAppointment);
+                renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
+                physicalGlobalPlusForm?.classList.add('hidden');
+                setGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', '#15803d');
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
+            } finally {
+                physicalGlobalPlusSubmit.disabled = false;
+                physicalGlobalPlusSubmit.textContent = 'Créer le dossier Global+';
+            }
+        }
+
+        async function syncGlobalPlusDocuments() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.global_plus_documents_sync_url || !physicalGlobalPlusSyncDocuments) {
+                return;
+            }
+
+            physicalGlobalPlusSyncDocuments.disabled = true;
+            physicalGlobalPlusSyncDocuments.textContent = 'Synchronisation...';
+
+            try {
+                const response = await fetch(appointment.global_plus_documents_sync_url, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Synchronisation Global+ impossible.');
+                }
+
+                const updatedAppointment = payload.appointment || appointment;
+                updateLotAppointmentState(updatedAppointment);
+                currentPhysicalLotAppointment = updatedAppointment;
+                configureGlobalPlusStatus(updatedAppointment);
+                renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
+                setGlobalPlusFormStatus(payload.message || 'Documents synchronisés avec Global+.', '#15803d');
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Synchronisation Global+ impossible.', '#be123c');
+            } finally {
+                physicalGlobalPlusSyncDocuments.disabled = false;
+                physicalGlobalPlusSyncDocuments.textContent = 'Synchroniser les documents';
+            }
+        }
+
         function openPhysicalDetail(appointment) {
             currentPhysicalLotAppointment = appointment;
             physicalTitle.textContent = customerLabel(appointment);
@@ -2038,6 +2441,9 @@
 
             configureStatsExclusionControls(appointment, physicalStatsExclusionStatus, physicalStatsExclusionToggle);
             configureResetProcessingControls(appointment, physicalResetProcessingStatus, physicalResetProcessingButton);
+            configureGlobalPlusStatus(appointment);
+            clearGlobalPlusFormStatus();
+            physicalGlobalPlusForm?.classList.add('hidden');
             openModal(physicalModal);
         }
 
@@ -2109,15 +2515,13 @@
         contactResetProcessingButton?.addEventListener('click', () => {
             resetLotAppointmentProcessing(currentContactLotAppointment, contactResetProcessingStatus, contactResetProcessingButton);
         });
-
-        document.querySelectorAll('.lot-appointment-global-plus-checkbox').forEach((checkbox) => {
-            checkbox.addEventListener('click', (event) => event.stopPropagation());
-            checkbox.addEventListener('change', () => {
-                const appointment = lotAppointmentDetails.get(String(checkbox.dataset.lotAppointmentId));
-
-                updateLotAppointmentGlobalPlus(appointment, checkbox);
-            });
+        physicalGlobalPlusOpen?.addEventListener('click', openGlobalPlusCreateForm);
+        physicalGlobalPlusForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            submitGlobalPlusCreate();
         });
+        physicalGlobalPlusInstaller?.addEventListener('change', fillGlobalPlusInstallerFieldsFromSelection);
+        physicalGlobalPlusSyncDocuments?.addEventListener('click', syncGlobalPlusDocuments);
 
         physicalVisitsForm?.addEventListener('submit', async (event) => {
             event.preventDefault();

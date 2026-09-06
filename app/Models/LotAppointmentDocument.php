@@ -20,13 +20,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'status',
     'pushed_at',
     'remote_document',
+    'global_plus_pushed_at',
+    'global_plus_remote_document',
+    'global_plus_error_message',
     'error_message',
 ])]
 class LotAppointmentDocument extends Model
 {
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_QUEUED = 'queued';
+
     public const STATUS_UPLOADED = 'uploaded';
+
     public const STATUS_FAILED = 'failed';
 
     /**
@@ -69,6 +75,8 @@ class LotAppointmentDocument extends Model
             'is_private' => 'boolean',
             'pushed_at' => 'datetime',
             'remote_document' => 'array',
+            'global_plus_pushed_at' => 'datetime',
+            'global_plus_remote_document' => 'array',
         ];
     }
 }

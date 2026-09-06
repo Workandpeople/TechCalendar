@@ -1,0 +1,251 @@
+Intégration API Global+ - TechCalendar
+Guide d'intégration - usage interne - mis à jour le 04/09/2026
+Authentification par clé API, les 8 endpoints disponibles pour créer et faire vivre un dossier, et ce qui n'existe pas encore. Tous les exemples ci-dessous ont été testés en direct sur l'environnement décrit ci-dessous.
+Base URL : https://cee-api.test.globalplus.frBureau : Genius TEST (id 1035)Environnement : TEST uniquement
+1. Authentification
+Un seul mécanisme : échanger votre clé API contre un token, puis utiliser ce token comme un JWT classique sur tous les autres appels. La clé elle-même ne s'envoie jamais ailleurs que sur cet endpoint.
+POST /api/Auth/token
+Requête
+curl -X POST https://cee-api.test.globalplus.fr/api/Auth/token \
+-H "Content-Type: application/json" \
+-d '{"apiKey": "gpk_VOTRE_CLE"}'
+Réponse 200
+{
+"message": "success",
+"token": "eyJhbGciOiJIUzI1NiIs..."
+}
+Réponse 401 - clé invalide ou révoquée
+{ "message": "Clé API invalide ou révoquée" }
+Utilisez ensuite ce token sur tous les appels suivants :
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+Le token se renouvelle tout seul, pas besoin de le ré-échanger régulièrement. Chaque appel qui l'utilise le prolonge automatiquement côté serveur, y compris son expiration réelle (7 jours) - tant que vous faites au moins un appel par semaine, un seul token récupéré une fois suffit indéfiniment.
+Une seule session active par clé à la fois. Si deux process indépendants échangent la même clé contre un token chacun de leur côté, le second écrase la session du premier - le premier se met alors à recevoir des 401 ("session reprise"), pas parce que son token a expiré. Si TechCalendar tourne sur plusieurs workers/serveurs, faites échanger la clé à un seul endroit et partagez le token obtenu, ou demandez-nous une clé distincte par process.
+2. Référence des endpoints
+Huit endpoints au total, tous disponibles sur TEST.
+[TABLE]
+Méthode + route | Rôle | À quoi ça sert
+POST /api/Demande | Créer un dossier | Crée le dossier et le rendez-vous associé en un seul appel.
+PATCH /api/Intervention/Patch/{id} | Assigner / replanifier | Change le contrôleur, la date du RDV, ou tout autre champ du rendez-vous.
+PUT /api/Demande/changeDemandFiles/{id} | Documents | Ajoute ou remplace les documents d'un dossier - à la création ou après coup.
+GET /api/Entreprise/Liste | Référentiel installateurs | Liste des entreprises travaux connues du bureau, avec SIREN.
+GET /api/Auth/Controllers | Référentiel techniciens | Liste des contrôleurs actifs du bureau.
+GET /api/TypeIntervention/list | Référentiel prestations | Liste des types d'intervention (BAR EN 101, etc.) actifs pour le bureau.
+GET /api/VersionFormulaire/GetVersionFormulaires/{actif} | Versions actives | Donne le versionFormulaireId à utiliser pour créer un dossier - voir section 9.
+GET /api/Client/Liste | Référentiel clients | Liste des clients connus du bureau - pour réutiliser un client existant plutôt que d'en recréer un.
+3. Créer un dossier
+POST /api/Demande
+Crée le dossier (la "Demande") et son rendez-vous (l'"Intervention") dans la même transaction - pas d'appel séparé à faire pour le RDV.
+Corps de la requête
+[TABLE]
+Champ | Type | Description
+idBureauInspection | int | requis - toujours 1035 pour Genius TEST.
+dateIntervention | datetime | date/heure du rendez-vous.
+title / subTitle | string | libellé du dossier.
+typeIntervention | [{ versionFormulaireId }] | requis, au moins un élément. versionFormulaireId provient du référentiel section 9 (pas du champ "versions" de la section 8, qui reste vide) - ignorez toute prestation dont l'id revient à 0.
+client | AdresseDto | requis, idTypeAdresse: 1. Pour réutiliser un client déjà connu, envoyez son id (= idAdresse retourné par section 10) ET les mêmes champs (nom, adresse...) - voir l'avertissement en section 10. Sinon id: 0 pour en créer un nouveau.
+lieuInspection | AdresseDto | optionnel, idTypeAdresse: 2. Si absent, le lieu = l'adresse client.
+bénéficiaire | AdresseDto | requis, idTypeAdresse: 3.
+entreprise | AdresseDto | requis, idTypeAdresse: 4. Pour réutiliser un installateur existant, renseignez son id (= idAdresse retourné par section 6).
+files | [{ fileName, fileContent, category }] | optionnel - fileContent en base64, category parmi Client / Achat / Etude / Photos.
+AdresseDto - champs communs à client / lieuInspection / bénéficiaire / entreprise
+[TABLE]
+Champ | Type | Description
+id | int | 0 pour créer une nouvelle adresse, sinon l'id d'une adresse existante à réutiliser.
+nom / prenom | string | ≤ 50 caractères.
+raisonSociale | string | ≤ 255 caractères - nom d'usage pour une entreprise.
+adresse / codePostal / ville | string | adresse postale.
+phone / email | string | contact.
+siren | string | ≤ 20 caractères - utilisé pour le rapprochement installateur.
+precariousness | int | niveau de précarité (sur l'adresse lieuInspection) - voir limites, la grille de valeurs reste à clarifier.
+Exemple de requête
+curl -X POST https://cee-api.test.globalplus.fr/api/Demande \
+-H "Authorization: Bearer $TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+"idBureauInspection": 1035,
+"dateCreation": "2026-09-03T00:00:00",
+"dateIntervention": "2026-09-10T09:30:00",
+"title": "Lot 40",
+"subTitle": "TechCalendar RDV 573",
+"typeIntervention": [{ "versionFormulaireId": 3310 }],
+"client": {
+"id": 0,
+"idTypeAdresse": 1,
+"nom": "Dupont",
+"prenom": "Marie",
+"adresse": "10 rue Exemple",
+"codePostal": "75001",
+"ville": "Paris",
+"phone": "+33600000000"
+},
+"beneficiaire": {
+"id": 0,
+"idTypeAdresse": 3,
+"raisonSociale": "RAISON SOCIALE BENEFICIAIRE",
+"adresse": "10 rue Exemple",
+"codePostal": "75001",
+"ville": "Paris"
+},
+"entreprise": {
+"id": 2044,
+"idTypeAdresse": 4
+},
+"facturation": false
+}'
+Réponse 200
+"5637"
+La réponse est juste l'id du dossier (Demande), pas un objet. L'id du rendez-vous (Intervention) créé avec n'est pas renvoyé directement - pour l'obtenir, un second appel sera nécessaire.
+4. Assigner un contrôleur / déplacer le RDV
+PATCH /api/Intervention/Patch/{id}
+Format JSON Patch standard (RFC 6902). {id} est l'id de l'Intervention (pas du dossier). Les noms de champs sont en camelCase.
+Requête - assigner un contrôleur
+curl -X PATCH https://cee-api.test.globalplus.fr/api/Intervention/Patch/8888 \
+-H "Authorization: Bearer $TOKEN" \
+-H "Content-Type: application/json" \
+-d '[{ "op": "replace", "path": "/idControleur", "value": 2198 }]'
+Requête - déplacer le rendez-vous
+curl -X PATCH https://cee-api.test.globalplus.fr/api/Intervention/Patch/8888 \
+-H "Authorization: Bearer $TOKEN" \
+-H "Content-Type: application/json" \
+-d '[{ "op": "replace", "path": "/dateIntervention", "value": "2026-09-22T14:00:00" }]'
+idControleur est l'id d'un technicien renvoyé par le référentiel section 7 (champ id).
+5. Documents
+PUT /api/Demande/changeDemandFiles/{DemandId}
+Fonctionne à tout moment sur un dossier existant, pas seulement à la création. {DemandId} est l'id du dossier (renvoyé par la section 3). Envoyez la liste complète des documents souhaités - c'est un remplacement, pas un ajout : un fichier déjà présent mais absent du nouvel appel sera supprimé.
+curl -X PUT https://cee-api.test.globalplus.fr/api/Demande/changeDemandFiles/5637 \
+-H "Authorization: Bearer $TOKEN" \
+-H "Content-Type: application/json" \
+-d '[
+{ "fileName": "facture.pdf", "fileContent": "JVBERi0xLjQK...", "category": "Achat" }
+]'
+category : Client, Achat, Etude ou Photos. fileContent en base64.
+6. Référentiel installateurs
+GET /api/Entreprise/Liste
+Réponse 200 (extrait réel)
+[
+{
+"idEntreprise": 2044,
+"idBureauInspection": 1035,
+"adresseEntreprise": {
+"id": 2044,
+"nom": "RANNOU",
+"prenom": "Antoine",
+"raisonSociale": "OUEST ENERGIE",
+"adresse": "ZA DE KERAMPAOU KERNEVEZ ROUSSICA",
+"codePostal": "29140",
+"ville": "MELGVEN",
+"siren": "438965535",
+"phone": "0000000000"
+},
+"blocageActif": false
+}
+]
+Pour réutiliser un installateur dans POST /api/Demande, envoyez entreprise.id = adresseEntreprise.id (pas idEntreprise).
+7. Référentiel techniciens
+GET /api/Auth/Controllers
+Réponse 200 (extrait réel)
+[
+{
+"id": 2198,
+"nom": "ARNOUX",
+"prenom": "Christophe",
+"email": "christophe.arnoux33@gmail.com",
+"etat": true
+}
+]
+id est la valeur à utiliser comme idControleur dans le PATCH (section 4).
+8. Référentiel prestations
+GET /api/TypeIntervention/list
+[TABLE]
+Paramètre | Type | Description
+bureauId | int | passez 1035 pour ne voir que les prestations activées sur Genius TEST.
+search | string | filtre sur code ou libellé.
+page / pageSize | int | pagination, 20 par défaut, 100 max.
+Réponse 200 (extrait réel)
+{
+"items": [
+{
+"id": 31,
+"code": "BARBATEN101",
+"libelle": "BAR BAT EN101",
+"active": true,
+"versions": []
+}
+]
+}
+Le champ "versions" ci-dessus reste vide - ce n'est pas un bug. C'est GET /api/VersionFormulaire/GetVersionFormulaires/{actif} (section 9) qu'il faut appeler pour obtenir le versionFormulaireId. Utilisez code/id de cette liste-ci pour identifier quelle prestation, et la section 9 pour savoir quelle version envoyer.
+9. Versions actives des prestations
+GET /api/VersionFormulaire/GetVersionFormulaires/{actif}
+C'est l'endpoint qui débloque versionFormulaireId pour la section 3. Passez actif=true dans l'URL pour ne voir que les prestations actuellement utilisables.
+Requête
+curl https://cee-api.test.globalplus.fr/api/VersionFormulaire/GetVersionFormulaires/true \
+-H "Authorization: Bearer $TOKEN"
+Réponse 200 (extrait réel)
+[
+{
+"id": 31,
+"idTypeIntervention": 31,
+"libelle": "BAR BAT EN101",
+"codeRapport": "BARBATEN101",
+"versionFormulaireId": 3310,
+"hasStepsJSON": false,
+"enablePlanning": true
+}
+]
+Une seule ligne par prestation, pas par version - vous obtenez toujours la version active, jamais l'historique. Si aucune version n'est active pour une prestation, versionFormulaireId vaut 0 : ignorez-la, elle n'est pas utilisable pour créer un dossier.
+10. Référentiel clients
+GET /api/Client/Liste
+Même logique que la section 6 (installateurs) : utile pour éviter de recréer une adresse client à chaque dossier si le client existe déjà côté Global+.
+Réponse 200 (extrait réel)
+[
+{
+"clientId": 3295,
+"idBureauInspection": 1035,
+"adresseClient": {
+"id": 3295,
+"nom": "Balouka",
+"prenom": "Jonathan",
+"raisonSociale": "I2M ENERGY",
+"adresse": "20-26 20 BOULEVARD DU PARC",
+"codePostal": "92200",
+"ville": "NEUILLY-SUR-SEINE",
+"email": "contact@i2m-energy.fr",
+"phone": "01 88 89 06 88"
+}
+}
+]
+Pour réutiliser un client dans POST /api/Demande, envoyez client.id = adresseClient.id (pas clientId).
+Ne renvoyez pas juste l'id. Côté serveur, ce que vous envoyez dans "client" est aussi stocké tel quel comme instantané d'affichage du dossier (listes, PDF) - indépendamment du lien en base vers le client existant, qui lui sera correct. Un payload minimal ({ "id": 3295 } seul) crée un dossier bien lié au bon client, mais qui apparaîtra sans nom dans les listes. Renvoyez les mêmes champs que ceux reçus ici (nom, raisonSociale, adresse...).
+11. Flux complet
+Enchaînement typique pour créer un dossier avec un installateur déjà connu et assigner un technicien.
+# 1. Authentification
+TOKEN=$(curl -s -X POST https://cee-api.test.globalplus.fr/api/Auth/token \
+-H "Content-Type: application/json" \
+-d '{"apiKey": "gpk_VOTRE_CLE"}' | jq -r .token)
+# 2. Référentiels (en parallèle si besoin)
+curl -s https://cee-api.test.globalplus.fr/api/Entreprise/Liste \
+-H "Authorization: Bearer $TOKEN"
+curl -s https://cee-api.test.globalplus.fr/api/Auth/Controllers \
+-H "Authorization: Bearer $TOKEN"
+# 3. Création du dossier
+DOSSIER_ID=$(curl -s -X POST https://cee-api.test.globalplus.fr/api/Demande \
+-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+-d '{ ...payload voir section 3... }')
+# 4. Assignation du technicien sur le rendez-vous créé
+curl -s -X PATCH https://cee-api.test.globalplus.fr/api/Intervention/Patch/8888 \
+-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+-d '[{ "op": "replace", "path": "/idControleur", "value": 2198 }]'
+12. Erreurs
+[TABLE]
+Code | Cas | Corps
+401 | clé API invalide/révoquée | { "message": "Clé API invalide ou révoquée" }
+401 | session reprise (section 1) | un autre process a échangé la même clé entre-temps - ré-échanger via /api/Auth/token pour reprendre la main.
+400 | installateur bloqué (impartialité) | { "code": "IMPARTIALITE_BLOCKED", "message": "..." }
+400 | aucun type d'intervention fourni | "Aucun type d'intervention"
+500 | erreur serveur | { "Message": "...", "StackTrace": [...] } - nous les faire remonter directement.
+13. Limites connues
+Ce qui n'existe vraiment pas encore.
+[TABLE]
+Limite | Détail
+Pas de mise à jour du dossier | Une fois créé, impossible de corriger l'adresse, le bénéficiaire ou l'installateur via l'API (seuls le rendez-vous - section 4 - et les documents - section 5 - sont modifiables après coup).
+Pas de clé d'idempotence | Aucun mécanisme anti-doublon aujourd'hui : rejouer un POST /api/Demande crée un second dossier. À gérer côté TechCalendar pour l'instant - en discussion de notre côté.

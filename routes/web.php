@@ -121,6 +121,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/manager/lots/{lot}/documents', [ManagerLotController::class, 'documents'])->name('manager.lots.documents.index');
     Route::patch('/manager/lots/appointments/{lotAppointment}/visits', [ManagerLotController::class, 'updateAppointmentVisits'])->name('manager.lots.appointments.visits.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/stats-exclusion', [ManagerLotController::class, 'updateAppointmentStatsExclusion'])->name('manager.lots.appointments.stats-exclusion.update');
+    Route::get('/manager/lots/appointments/{lotAppointment}/global-plus/references', [ManagerLotController::class, 'globalPlusReferences'])->name('manager.lots.appointments.global-plus.references');
+    Route::post('/manager/lots/appointments/{lotAppointment}/global-plus', [ManagerLotController::class, 'storeAppointmentGlobalPlus'])->name('manager.lots.appointments.global-plus.store');
+    Route::put('/manager/lots/appointments/{lotAppointment}/global-plus/documents', [ManagerLotController::class, 'syncAppointmentGlobalPlusDocuments'])->name('manager.lots.appointments.global-plus.documents.sync');
     Route::patch('/manager/lots/appointments/{lotAppointment}/global-plus', [ManagerLotController::class, 'updateAppointmentGlobalPlus'])->name('manager.lots.appointments.global-plus.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/reset-processing', [ManagerLotController::class, 'resetAppointmentProcessing'])->name('manager.lots.appointments.reset-processing');
     Route::post('/manager/lots/appointments/{lotAppointment}/documents', [ManagerLotController::class, 'storeAppointmentDocument'])->name('manager.lots.appointments.documents.store');

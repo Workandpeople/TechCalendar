@@ -2,6 +2,7 @@
 
 use App\Jobs\ProcessLotImportPreviewJob;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
+use App\Jobs\SyncLotAppointmentDocumentsToGlobalPlusJob;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
@@ -10,20 +11,23 @@ use App\Models\LotAppointmentDocument;
 use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Models\User;
-use App\Services\LotAppointmentAiNormalizer;
 use App\Services\CoffracAppointmentService;
+use App\Services\ImportedAddressCleaner;
+use App\Services\LotAppointmentAiNormalizer;
 use App\Services\LotBusinessIdentityResolver;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportPreviewProcessor;
 use App\Services\LotSpreadsheetExtractor;
-use App\Services\ImportedAddressCleaner;
 use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -137,10 +141,14 @@ it('renders manager lots from database', function () {
         ->assertSee('Modifier le lot Lot Audit Juin')
         ->assertSee('Date de réception du lot')
         ->assertSee('name="appointment_global_plus"', false)
-        ->assertSee('lot-appointment-global-plus-checkbox', false)
+        ->assertSee('data-lot-appointment-global-plus-badge', false)
+        ->assertSee('id="lot-physical-global-plus-open"', false)
+        ->assertSee('id="lot-physical-global-plus-sync-documents"', false)
+        ->assertSee('Prestation Global+')
+        ->assertSee('Installateur Global+')
         ->assertDontSee('id="lot-physical-global-plus"', false)
         ->assertDontSee('id="lot-contact-global-plus"', false)
-        ->assertDontSee('data-lot-appointment-global-plus-badge', false);
+        ->assertDontSee('lot-appointment-global-plus-checkbox', false);
 });
 
 it('updates a lot from the manager lot action modal', function () {
@@ -401,7 +409,7 @@ it('updates a persisted lot appointment and refreshes geocoding data', function 
     ]);
 
     $geocodeCalls = 0;
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->twice()
         ->with('1 LES PETITES GRANGES 01000 Bourg-en-Bresse')
@@ -710,7 +718,8 @@ it('filters lot detail appointments dynamically', function () {
     $this->actingAs($manager)
         ->get(route('manager.lots.show', $lot))
         ->assertOk()
-        ->assertSee('lot-appointment-global-plus-checkbox', false)
+        ->assertSee('data-lot-appointment-global-plus-badge', false)
+        ->assertDontSee('lot-appointment-global-plus-checkbox', false)
         ->assertSee('bg-emerald-50/70', false)
         ->assertSee('bg-rose-50/80', false);
 
@@ -1428,7 +1437,7 @@ it('retries a failed manager lot import preview from the stored original file', 
     $path = 'lot-import-previews/retry.xlsx';
     Storage::disk('local')->put($path, 'spreadsheet-content');
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_FAILED,
         'progress' => 100,
         'stage' => 'Erreur pendant: Normalisation OpenAI en cours.',
@@ -1468,7 +1477,7 @@ it('exposes an active lot import preview on the lots page', function () {
         'admin' => false,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_PROCESSING,
         'progress' => 30,
         'stage' => 'Normalisation OpenAI en cours.',
@@ -1494,7 +1503,7 @@ it('serializes completed import preview appointments as a list', function () {
         'admin' => false,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
@@ -1548,7 +1557,7 @@ it('updates one import preview row and geocodes only that row', function () {
         'admin' => false,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'stage' => 'Preview prêt: vérifie les lignes avant création du lot.',
@@ -1594,7 +1603,7 @@ it('updates one import preview row and geocodes only that row', function () {
         ],
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('1 LES PETITES GRANGES 01000 Bourg-en-Bresse')
@@ -1639,7 +1648,7 @@ it('marks an import preview as failed without rethrowing job exceptions', functi
         'admin' => false,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_PROCESSING,
         'progress' => 30,
         'stage' => 'Normalisation OpenAI en cours.',
@@ -1651,11 +1660,11 @@ it('marks an import preview as failed without rethrowing job exceptions', functi
         'created_by' => $manager->id,
     ]);
 
-    $processor = \Mockery::mock(LotImportPreviewProcessor::class);
+    $processor = Mockery::mock(LotImportPreviewProcessor::class);
     $processor->shouldReceive('process')
         ->once()
-        ->with(\Mockery::on(fn (LotImportPreview $handledPreview): bool => $handledPreview->is($preview)))
-        ->andThrow(new \RuntimeException('OpenAI timeout'));
+        ->with(Mockery::on(fn (LotImportPreview $handledPreview): bool => $handledPreview->is($preview)))
+        ->andThrow(new RuntimeException('OpenAI timeout'));
 
     (new ProcessLotImportPreviewJob($preview->id))->handle($processor);
 
@@ -1676,14 +1685,14 @@ it('returns a user friendly error when OpenAI times out', function () {
 
     Http::fake(fn () => throw new ConnectionException('timeout'));
 
-    $normalizer = new LotAppointmentAiNormalizer();
+    $normalizer = new LotAppointmentAiNormalizer;
 
     expect(fn () => $normalizer->normalize(collect([
         [
             'row_number' => 2,
             'data' => ['client' => 'Camille Martin'],
         ],
-    ])))->toThrow(\RuntimeException::class, 'OpenAI ne répond pas dans le délai imparti (12 s).');
+    ])))->toThrow(RuntimeException::class, 'OpenAI ne répond pas dans le délai imparti (12 s).');
 });
 
 it('normalizes lot imports with multiple OpenAI chunks', function () {
@@ -1774,7 +1783,7 @@ it('normalizes lot imports with multiple OpenAI chunks', function () {
         ]);
     });
 
-    $payload = (new LotAppointmentAiNormalizer())->normalize(collect([
+    $payload = (new LotAppointmentAiNormalizer)->normalize(collect([
         ['row_number' => 2, 'data' => ['client' => 'Camille Martin']],
         ['row_number' => 3, 'data' => ['client' => 'Julien Bernard']],
         ['row_number' => 4, 'data' => ['client' => 'Sarah Petit']],
@@ -1841,13 +1850,13 @@ it('stores the original spreadsheet when importing a lot', function () {
         ],
     ]);
 
-    $extractor = \Mockery::mock(LotSpreadsheetExtractor::class);
+    $extractor = Mockery::mock(LotSpreadsheetExtractor::class);
     $extractor->shouldReceive('extract')
         ->once()
         ->with($file)
         ->andReturn($rows);
 
-    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
     $normalizer->shouldReceive('normalize')
         ->once()
         ->with($rows, 'Lot client', Lot::TYPE_FULL_CONTACT_CONTROL)
@@ -1879,7 +1888,7 @@ it('stores the original spreadsheet when importing a lot', function () {
             ],
         ]);
 
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
         ->import(
             file: $file,
             userId: $manager->id,
@@ -1939,14 +1948,14 @@ it('keeps beneficiary company and installer separated from Coffrac raw columns',
             'Lyon',
         ]),
     );
-    $extractor = new LotSpreadsheetExtractor();
+    $extractor = new LotSpreadsheetExtractor;
     $rows = $extractor->extract($file);
-    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
     $normalizer
         ->shouldReceive('normalize')
         ->once()
         ->with(
-            \Mockery::on(fn ($value): bool => $value instanceof \Illuminate\Support\Collection
+            Mockery::on(fn ($value): bool => $value instanceof Collection
                 && $value->toArray() === $rows->toArray()),
             'Lot Coffrac',
             Lot::TYPE_FULL_CONTROL,
@@ -1979,7 +1988,7 @@ it('keeps beneficiary company and installer separated from Coffrac raw columns',
             ],
         ]);
 
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
         ->import(
             file: $file,
             userId: $manager->id,
@@ -2045,9 +2054,9 @@ it('resolves Coffrac beneficiary and installer even with noisy headers and row n
             ]),
         ]),
     );
-    $extractor = new LotSpreadsheetExtractor();
+    $extractor = new LotSpreadsheetExtractor;
     $rows = $extractor->extract($file);
-    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
     $normalizer
         ->shouldReceive('normalize')
         ->once()
@@ -2099,7 +2108,7 @@ it('resolves Coffrac beneficiary and installer even with noisy headers and row n
             ],
         ]);
 
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
         ->import(
             file: $file,
             userId: $manager->id,
@@ -2180,9 +2189,9 @@ it('keeps Coffrac business identity columns consistent from a multi row header f
             ]),
         ]),
     );
-    $extractor = new LotSpreadsheetExtractor();
+    $extractor = new LotSpreadsheetExtractor;
     $rows = $extractor->extract($file);
-    $normalizer = \Mockery::mock(LotAppointmentAiNormalizer::class);
+    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
     $normalizer
         ->shouldReceive('normalize')
         ->once()
@@ -2234,7 +2243,7 @@ it('keeps Coffrac business identity columns consistent from a multi row header f
             ],
         ]);
 
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver()))
+    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
         ->import(
             file: $file,
             userId: $manager->id,
@@ -2269,7 +2278,7 @@ it('confirms selected preview rows and creates a lot', function () {
         'average_duration_minutes' => 120,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'name' => 'Lot preview',
@@ -2363,7 +2372,7 @@ it('blocks selected import preview rows that still have warnings', function () {
         'average_duration_minutes' => 120,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'name' => 'Lot avec warnings',
@@ -2436,7 +2445,7 @@ it('keeps company and site names when confirming a business lot preview', functi
         'admin' => false,
     ]);
     $preview = LotImportPreview::query()->create([
-        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'uuid' => (string) Str::uuid(),
         'status' => LotImportPreview::STATUS_COMPLETED,
         'progress' => 100,
         'name' => 'Lot entreprises',
@@ -2737,4 +2746,474 @@ it('pushes private lot appointment documents to Coffrac', function () {
     expect($document->status)->toBe(LotAppointmentDocument::STATUS_UPLOADED)
         ->and($document->remote_document['is_private'] ?? null)->toBeTrue()
         ->and($appointment->refresh()->external_payload['documents'][0]['is_private'] ?? null)->toBeTrue();
+});
+
+it('loads Global Plus reference data for a placed lot appointment', function () {
+    Cache::flush();
+    config([
+        'services.global_plus.api_url' => 'https://global-plus.test',
+        'services.global_plus.api_key' => 'global-plus-secret',
+        'services.global_plus.bureau_id' => 1035,
+    ]);
+
+    Http::fake([
+        'https://global-plus.test/api/Auth/token' => Http::response([
+            'message' => 'success',
+            'token' => 'global-plus-token',
+        ]),
+        'https://global-plus.test/api/Entreprise/Liste' => Http::response([
+            [
+                'idEntreprise' => 42,
+                'blocageActif' => false,
+                'adresseEntreprise' => [
+                    'id' => 901,
+                    'raisonSociale' => 'INSTALLATEUR TEST',
+                    'siren' => '123456789',
+                    'adresse' => '1 Rue Pro',
+                    'codePostal' => '75001',
+                    'ville' => 'Paris',
+                    'phone' => '0101010101',
+                ],
+            ],
+        ]),
+        'https://global-plus.test/api/Auth/Controllers' => Http::response([
+            [
+                'id' => 2198,
+                'nom' => 'Controle',
+                'prenom' => 'Lucas',
+                'email' => 'tech.globalplus@example.test',
+                'etat' => true,
+            ],
+        ]),
+        'https://global-plus.test/api/VersionFormulaire/GetVersionFormulaires/true' => Http::response([
+            [
+                'id' => 31,
+                'idTypeIntervention' => 31,
+                'libelle' => 'BAR EN 101',
+                'codeRapport' => 'BAREN101',
+                'versionFormulaireId' => 3310,
+                'enablePlanning' => true,
+            ],
+        ]),
+    ]);
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'email' => 'tech.globalplus@example.test',
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => 'BAR EN 101',
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $startsAt = now()->addDay()->setTime(10, 0);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Global',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'HABITAT ENERGIE',
+        'company_name' => 'HABITAT ENERGIE',
+        'site_name' => 'BATIMENT A',
+        'installer_name' => 'INSTALLATEUR TEST',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'service_name' => 'BAR EN 101',
+    ]);
+
+    $this->actingAs($manager)
+        ->getJson(route('manager.lots.appointments.global-plus.references', $lotAppointment))
+        ->assertOk()
+        ->assertJsonPath('configured', true)
+        ->assertJsonPath('suggested_installer_address_id', 901)
+        ->assertJsonPath('suggested_controller_id', 2198)
+        ->assertJsonPath('suggested_version_formulaire_id', 3310)
+        ->assertJsonPath('installers.0.address_id', 901)
+        ->assertJsonPath('controllers.0.email', 'tech.globalplus@example.test')
+        ->assertJsonPath('intervention_versions.0.version_formulaire_id', 3310);
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://global-plus.test/api/Auth/token');
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://global-plus.test/api/Entreprise/Liste'
+        && $request->hasHeader('Authorization', 'Bearer global-plus-token'));
+});
+
+it('creates a Global Plus demand from a placed physical lot appointment with documents', function () {
+    Cache::flush();
+    Storage::fake('local');
+    config([
+        'services.global_plus.api_url' => 'https://global-plus.test',
+        'services.global_plus.api_key' => 'global-plus-secret',
+        'services.global_plus.bureau_id' => 1035,
+    ]);
+
+    Http::fake(function ($request) {
+        return match ($request->url()) {
+            'https://global-plus.test/api/Auth/token' => Http::response([
+                'message' => 'success',
+                'token' => 'global-plus-token',
+            ]),
+            'https://global-plus.test/api/Entreprise/Liste' => Http::response([
+                [
+                    'idEntreprise' => 42,
+                    'blocageActif' => false,
+                    'adresseEntreprise' => [
+                        'id' => 901,
+                        'raisonSociale' => 'INSTALLATEUR TEST',
+                        'siren' => '123456789',
+                        'adresse' => '1 Rue Pro',
+                        'codePostal' => '75001',
+                        'ville' => 'Paris',
+                        'phone' => '0101010101',
+                    ],
+                ],
+            ]),
+            'https://global-plus.test/api/Demande' => Http::response('"5637"', 200, [
+                'Content-Type' => 'application/json',
+            ]),
+            default => Http::response(['message' => 'Unexpected request '.$request->url()], 404),
+        };
+    });
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'email' => 'tech.globalplus@example.test',
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => 'BAR EN 101',
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $startsAt = now()->addDay()->setTime(10, 0);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Global',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $appointment->id,
+        'row_number' => 7,
+        'customer_name' => 'HABITAT ENERGIE',
+        'company_name' => 'HABITAT ENERGIE',
+        'site_name' => 'BATIMENT A',
+        'installer_name' => 'INSTALLATEUR TEST',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'service_name' => 'BAR EN 101',
+    ]);
+    Storage::disk('local')->put('lot-appointment-documents/'.$lotAppointment->id.'/rapport.pdf', 'pdf-content');
+    $document = LotAppointmentDocument::query()->create([
+        'lot_appointment_id' => $lotAppointment->id,
+        'uploaded_by' => $manager->id,
+        'name' => 'Rapport contrôle',
+        'original_name' => 'rapport.pdf',
+        'disk' => 'local',
+        'path' => 'lot-appointment-documents/'.$lotAppointment->id.'/rapport.pdf',
+        'mime' => 'application/pdf',
+        'size' => 11,
+        'is_private' => false,
+        'status' => LotAppointmentDocument::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
+            'version_formulaire_id' => 3310,
+            'installer_address_id' => 901,
+            'title' => 'Lot Global+',
+            'sub_title' => 'Ligne 7 - HABITAT ENERGIE',
+            'send_documents' => true,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('appointment.global_plus_demand_id', '5637')
+        ->assertJsonPath('appointment.global_plus_status', 'created')
+        ->assertJsonPath('appointment.added_to_global_plus', true);
+
+    $lotAppointment->refresh();
+    $document->refresh();
+
+    expect($lotAppointment->added_to_global_plus)->toBeTrue()
+        ->and($lotAppointment->global_plus_demand_id)->toBe('5637')
+        ->and($lotAppointment->global_plus_error_message)->toBeNull()
+        ->and($document->global_plus_pushed_at)->not->toBeNull()
+        ->and($document->global_plus_remote_document['demand_id'] ?? null)->toBe('5637');
+
+    Http::assertSent(function ($request): bool {
+        $payload = $request->data();
+
+        return $request->method() === 'POST'
+            && $request->url() === 'https://global-plus.test/api/Demande'
+            && $request->hasHeader('Authorization', 'Bearer global-plus-token')
+            && data_get($payload, 'idBureauInspection') === 1035
+            && data_get($payload, 'typeIntervention.0.versionFormulaireId') === 3310
+            && data_get($payload, 'client.idTypeAdresse') === 1
+            && data_get($payload, 'client.raisonSociale') === 'HABITAT ENERGIE'
+            && data_get($payload, 'lieuInspection.idTypeAdresse') === 2
+            && data_get($payload, 'lieuInspection.raisonSociale') === 'BATIMENT A'
+            && data_get($payload, 'beneficiaire.idTypeAdresse') === 3
+            && data_get($payload, 'beneficiaire.raisonSociale') === 'HABITAT ENERGIE'
+            && data_get($payload, 'entreprise.id') === 901
+            && data_get($payload, 'entreprise.raisonSociale') === 'INSTALLATEUR TEST'
+            && data_get($payload, 'files.0.fileName') === 'Rapport contrôle.pdf'
+            && data_get($payload, 'files.0.fileContent') === base64_encode('pdf-content')
+            && data_get($payload, 'files.0.category') === 'Client';
+    });
+});
+
+it('prevents duplicate Global Plus creation for an already linked lot appointment', function () {
+    Cache::flush();
+    config([
+        'services.global_plus.api_url' => 'https://global-plus.test',
+        'services.global_plus.api_key' => 'global-plus-secret',
+        'services.global_plus.bureau_id' => 1035,
+    ]);
+    Http::fake([
+        'https://global-plus.test/api/*' => Http::response(['message' => 'This should not be called'], 500),
+    ]);
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => 'BAR EN 101',
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => User::factory()->create(['role' => 2])->id,
+        'created_by' => $manager->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Global',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => now()->addDay()->setTime(10, 0),
+        'duration_minutes' => 90,
+        'ends_at' => now()->addDay()->setTime(11, 30),
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot déjà Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $appointment->id,
+        'customer_name' => 'HABITAT ENERGIE',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'global_plus_demand_id' => '5637',
+        'global_plus_status' => 'created',
+        'added_to_global_plus' => true,
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
+            'version_formulaire_id' => 3310,
+            'send_documents' => true,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Ce dossier existe déjà dans Global+.');
+
+    Http::assertNothingSent();
+});
+
+it('synchronizes the complete document list of a Global Plus demand', function () {
+    Cache::flush();
+    Storage::fake('local');
+    config([
+        'services.global_plus.api_url' => 'https://global-plus.test',
+        'services.global_plus.api_key' => 'global-plus-secret',
+        'services.global_plus.bureau_id' => 1035,
+    ]);
+
+    Http::fake(function ($request) {
+        return match ($request->url()) {
+            'https://global-plus.test/api/Auth/token' => Http::response([
+                'message' => 'success',
+                'token' => 'global-plus-token',
+            ]),
+            'https://global-plus.test/api/Demande/changeDemandFiles/5637' => Http::response([
+                'message' => 'Documents synchronisés.',
+            ]),
+            default => Http::response(['message' => 'Unexpected request '.$request->url()], 404),
+        };
+    });
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot docs Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'HABITAT ENERGIE',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'global_plus_demand_id' => '5637',
+        'global_plus_status' => 'created',
+        'added_to_global_plus' => true,
+    ]);
+    Storage::disk('local')->put('lot-appointment-documents/'.$lotAppointment->id.'/photo.jpg', 'image-content');
+    Storage::disk('local')->put('lot-appointment-documents/'.$lotAppointment->id.'/rapport.pdf', 'pdf-content');
+    LotAppointmentDocument::query()->create([
+        'lot_appointment_id' => $lotAppointment->id,
+        'uploaded_by' => $manager->id,
+        'name' => 'Photo chantier',
+        'original_name' => 'photo.jpg',
+        'disk' => 'local',
+        'path' => 'lot-appointment-documents/'.$lotAppointment->id.'/photo.jpg',
+        'mime' => 'image/jpeg',
+        'size' => 13,
+        'status' => LotAppointmentDocument::STATUS_PENDING,
+    ]);
+    LotAppointmentDocument::query()->create([
+        'lot_appointment_id' => $lotAppointment->id,
+        'uploaded_by' => $manager->id,
+        'name' => 'Rapport',
+        'original_name' => 'rapport.pdf',
+        'disk' => 'local',
+        'path' => 'lot-appointment-documents/'.$lotAppointment->id.'/rapport.pdf',
+        'mime' => 'application/pdf',
+        'size' => 11,
+        'status' => LotAppointmentDocument::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($manager)
+        ->putJson(route('manager.lots.appointments.global-plus.documents.sync', $lotAppointment))
+        ->assertOk()
+        ->assertJsonPath('appointment.global_plus_status', 'documents_synced')
+        ->assertJsonPath('appointment.global_plus_error_message', null);
+
+    $lotAppointment->refresh();
+    $documents = LotAppointmentDocument::query()->orderBy('id')->get();
+
+    expect($lotAppointment->global_plus_status)->toBe('documents_synced')
+        ->and($documents)->toHaveCount(2)
+        ->and($documents[0]->global_plus_pushed_at)->not->toBeNull()
+        ->and($documents[1]->global_plus_pushed_at)->not->toBeNull();
+
+    Http::assertSent(function ($request): bool {
+        $payload = $request->data();
+
+        return $request->method() === 'PUT'
+            && $request->url() === 'https://global-plus.test/api/Demande/changeDemandFiles/5637'
+            && $request->hasHeader('Authorization', 'Bearer global-plus-token')
+            && count($payload) === 2
+            && data_get($payload, '0.fileName') === 'Photo chantier.jpg'
+            && data_get($payload, '0.category') === 'Photos'
+            && data_get($payload, '1.fileName') === 'Rapport.pdf'
+            && data_get($payload, '1.category') === 'Client';
+    });
+});
+
+it('queues a Global Plus document synchronization when a document is added after demand creation', function () {
+    Queue::fake();
+    Storage::fake('local');
+
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot documents Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'status' => Lot::STATUS_IN_PROGRESS,
+        'created_by' => $manager->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'customer_name' => 'Client Global+',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'global_plus_demand_id' => '5637',
+        'global_plus_status' => 'created',
+        'added_to_global_plus' => true,
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('manager.lots.appointments.documents.store', $lotAppointment), [
+            'document' => UploadedFile::fake()->create('attestation.pdf', 10, 'application/pdf'),
+            'name' => 'Attestation',
+            'is_private' => '1',
+        ], [
+            'Accept' => 'application/json',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('document.status', LotAppointmentDocument::STATUS_PENDING)
+        ->assertJsonPath('appointment.can_sync_global_plus_documents', true);
+
+    $document = LotAppointmentDocument::query()->firstOrFail();
+
+    expect($document->global_plus_error_message)->toBeNull();
+    Queue::assertPushed(SyncLotAppointmentDocumentsToGlobalPlusJob::class);
 });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
+use App\Jobs\SyncLotAppointmentDocumentsToGlobalPlusJob;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\ExternalServiceAlias;
@@ -13,17 +14,20 @@ use App\Models\LotAppointmentDocument;
 use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Services\CoffracAppointmentService;
-use App\Services\LotExcelImportService;
-use App\Services\LotAutoCompletionCalculator;
+use App\Services\GlobalPlus\GlobalPlusApiException;
+use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAppointmentUpdateService;
+use App\Services\LotAutoCompletionCalculator;
+use App\Services\LotExcelImportService;
 use App\Services\LotImportConfirmationService;
-use App\Services\LotImportPreviewService;
 use App\Services\LotImportPreviewRowUpdateService;
+use App\Services\LotImportPreviewService;
 use App\Services\LotStatusService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -280,7 +284,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function nullableIntegerPayloadValue(array $payload, string $key): ?int
     {
@@ -593,14 +597,12 @@ class ManagerLotController extends Controller
             'status' => LotAppointmentDocument::STATUS_PENDING,
         ]);
 
-        $this->queueLotAppointmentDocumentUploadIfPossible($document);
+        $queuedTargets = $this->queueLotAppointmentDocumentUploadIfPossible($document);
 
         $lotAppointment = $lotAppointment->fresh(['lot', ...$this->lotAppointmentRelations()]);
 
         return response()->json([
-            'message' => $document->status === LotAppointmentDocument::STATUS_QUEUED
-                ? 'Document ajouté. Envoi vers Coffrac en arrière-plan.'
-                : 'Document ajouté au dossier du lot.',
+            'message' => $this->documentUploadMessage($queuedTargets),
             'document' => $this->serializeLotAppointmentDocument($document->fresh('uploader')),
             'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
         ], 201);
@@ -771,6 +773,101 @@ class ManagerLotController extends Controller
         ]);
     }
 
+    public function globalPlusReferences(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        try {
+            return response()->json($globalPlusAppointments->referenceDataFor($lotAppointment));
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'configured' => true,
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (Throwable $exception) {
+            return response()->json([
+                'configured' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function storeAppointmentGlobalPlus(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate([
+            'version_formulaire_id' => ['required', 'integer', 'min:1'],
+            'installer_address_id' => ['nullable', 'integer', 'min:1'],
+            'installer_name' => ['nullable', 'string', 'max:255'],
+            'installer_siren' => ['nullable', 'string', 'max:20'],
+            'installer_phone' => ['nullable', 'string', 'max:40'],
+            'installer_address' => ['nullable', 'string', 'max:255'],
+            'installer_postal_code' => ['nullable', 'string', 'max:20'],
+            'installer_city' => ['nullable', 'string', 'max:120'],
+            'precariousness' => ['nullable', 'integer', 'min:0', 'max:10'],
+            'title' => ['nullable', 'string', 'max:120'],
+            'sub_title' => ['nullable', 'string', 'max:180'],
+            'send_documents' => ['nullable', 'boolean'],
+        ], [
+            'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
+            'version_formulaire_id.min' => 'Choisis une prestation Global+ valide.',
+            'installer_address_id.integer' => 'L’installateur Global+ sélectionné est invalide.',
+            'installer_name.max' => 'Le nom de l’installateur est trop long.',
+            'installer_siren.max' => 'Le SIREN de l’installateur est trop long.',
+        ]);
+
+        try {
+            $lotAppointment = $globalPlusAppointments->createDemandFromLotAppointment($lotAppointment, $payload, $request->user());
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => sprintf('Dossier créé dans Global+ avec la référence %s.', $lotAppointment->global_plus_demand_id),
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ], 201);
+    }
+
+    public function syncAppointmentGlobalPlusDocuments(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        try {
+            $lotAppointment = $globalPlusAppointments->syncDocuments($lotAppointment);
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        $lotAppointment->loadMissing(['lot', ...$this->lotAppointmentRelations()]);
+
+        return response()->json([
+            'message' => 'Documents synchronisés avec Global+.',
+            'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
+        ]);
+    }
+
     public function resetAppointmentProcessing(Request $request, LotAppointment $lotAppointment): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
@@ -879,7 +976,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array{sampling_percentage:?float,physical_sampling_percentage:?float,contact_sampling_percentage:?float}
      */
     private function normalizedSamplingPayload(array $payload): array
@@ -908,7 +1005,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function delegataireNameFromPayload(array $payload): string
     {
@@ -999,7 +1096,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return Builder<Lot>
      */
     private function lotQuery(array $filters): Builder
@@ -1041,7 +1138,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     private function lotAppointmentQuery(Lot $lot, array $filters)
     {
@@ -1252,7 +1349,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $autoCompletionData
+     * @param  array<string, mixed>  $autoCompletionData
      * @return array<int, array<string, mixed>>
      */
     private function lotSatisfactionCharts(Lot $lot, array $autoCompletionData, array $appointmentTargets): array
@@ -1296,7 +1393,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $completion
+     * @param  array<string, mixed>  $completion
      * @return array<string, mixed>
      */
     private function lotSatisfactionChartPayload(string $key, string $label, string $color, array $completion, ?array $appointmentTarget = null): array
@@ -1360,7 +1457,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $completion
+     * @param  array<string, mixed>  $completion
      */
     private function lotSatisfactionChartDetail(array $completion, int $completedCount, int $targetCount): string
     {
@@ -1386,7 +1483,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $autoCompletionData
+     * @param  array<string, mixed>  $autoCompletionData
      * @return array<int, array<string, mixed>>
      */
     private function lotDissatisfactionCharts(Lot $lot, array $autoCompletionData): array
@@ -1417,7 +1514,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $completion
+     * @param  array<string, mixed>  $completion
      * @return array<string, mixed>
      */
     private function lotDissatisfactionChartPayload(string $key, string $label, array $completion): array
@@ -1439,7 +1536,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $autoCompletionData
+     * @param  array<string, mixed>  $autoCompletionData
      * @return array<string, mixed>
      */
     private function lotDissatisfactionChart(array $autoCompletionData): array
@@ -1464,7 +1561,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $autoCompletionData
+     * @param  array<string, mixed>  $autoCompletionData
      * @return array{physical:array<string, mixed>,contact:array<string, mixed>}
      */
     private function lotAppointmentTargets(
@@ -1541,6 +1638,9 @@ class ManagerLotController extends Controller
             'visits_update_url' => route('manager.lots.appointments.visits.update', $appointment),
             'stats_exclusion_update_url' => route('manager.lots.appointments.stats-exclusion.update', $appointment),
             'global_plus_update_url' => route('manager.lots.appointments.global-plus.update', $appointment),
+            'global_plus_references_url' => route('manager.lots.appointments.global-plus.references', $appointment),
+            'global_plus_store_url' => route('manager.lots.appointments.global-plus.store', $appointment),
+            'global_plus_documents_sync_url' => route('manager.lots.appointments.global-plus.documents.sync', $appointment),
             'reset_processing_url' => route('manager.lots.appointments.reset-processing', $appointment),
             'documents_upload_url' => route('manager.lots.appointments.documents.store', $appointment),
             'external_reference' => $appointment->external_reference,
@@ -1575,6 +1675,15 @@ class ManagerLotController extends Controller
             'physical_satisfaction_synced_at' => $appointment->physical_satisfaction_synced_at,
             'unsuccessful_visits_count' => $appointment->unsuccessful_visits_count ?? 0,
             'added_to_global_plus' => (bool) $appointment->added_to_global_plus,
+            'global_plus_demand_id' => $appointment->global_plus_demand_id,
+            'global_plus_intervention_id' => $appointment->global_plus_intervention_id,
+            'global_plus_status' => $appointment->global_plus_status,
+            'global_plus_status_label' => $this->globalPlusStatusLabel($appointment),
+            'global_plus_created_at' => $appointment->global_plus_created_at,
+            'global_plus_synced_at' => $appointment->global_plus_synced_at,
+            'global_plus_error_message' => $appointment->global_plus_error_message,
+            'can_create_global_plus' => $this->canCreateGlobalPlusDemand($appointment),
+            'can_sync_global_plus_documents' => filled($appointment->global_plus_demand_id),
             'excluded_from_lot_stats' => (bool) $appointment->excluded_from_lot_stats,
             'excluded_from_lot_stats_at' => $appointment->excluded_from_lot_stats_at,
             'excluded_from_lot_stats_by_name' => $appointment->statsExcluder?->full_name,
@@ -1623,6 +1732,9 @@ class ManagerLotController extends Controller
             'uploaded_by_name' => $document->uploader?->full_name,
             'created_at' => $document->created_at,
             'remote_document' => $document->remote_document,
+            'global_plus_pushed_at' => $document->global_plus_pushed_at,
+            'global_plus_remote_document' => $document->global_plus_remote_document,
+            'global_plus_error_message' => $document->global_plus_error_message,
             'remote_url' => is_array($document->remote_document) ? ($document->remote_document['url'] ?? null) : null,
             'can_update' => ! in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true),
             'can_delete' => ! in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true),
@@ -1649,23 +1761,80 @@ class ManagerLotController extends Controller
         return number_format($size, $index === 0 ? 0 : 1, ',', ' ').' '.$units[$index];
     }
 
-    private function queueLotAppointmentDocumentUploadIfPossible(LotAppointmentDocument $document): void
+    /**
+     * @return array<int, string>
+     */
+    private function queueLotAppointmentDocumentUploadIfPossible(LotAppointmentDocument $document): array
     {
         $document->loadMissing('lotAppointment.appointment', 'appointment');
 
         $appointment = $document->appointment ?: $document->lotAppointment?->appointment;
+        $queuedTargets = [];
 
-        if (! $appointment || $appointment->external_source !== CoffracAppointmentService::SOURCE || ! filled($appointment->external_reference)) {
-            return;
+        if ($appointment && $appointment->external_source === CoffracAppointmentService::SOURCE && filled($appointment->external_reference)) {
+            $document->update([
+                'appointment_id' => $appointment->id,
+                'status' => LotAppointmentDocument::STATUS_QUEUED,
+                'error_message' => null,
+            ]);
+
+            PushLotAppointmentDocumentToCoffracJob::dispatch($document->id)->afterCommit();
+            $queuedTargets[] = 'coffrac';
         }
 
-        $document->update([
-            'appointment_id' => $appointment->id,
-            'status' => LotAppointmentDocument::STATUS_QUEUED,
-            'error_message' => null,
-        ]);
+        if ($document->lotAppointment && filled($document->lotAppointment->global_plus_demand_id)) {
+            $document->update([
+                'global_plus_error_message' => null,
+            ]);
 
-        PushLotAppointmentDocumentToCoffracJob::dispatch($document->id)->afterCommit();
+            SyncLotAppointmentDocumentsToGlobalPlusJob::dispatch($document->lotAppointment->id)->afterCommit();
+            $queuedTargets[] = 'global_plus';
+        }
+
+        return $queuedTargets;
+    }
+
+    /**
+     * @param  array<int, string>  $queuedTargets
+     */
+    private function documentUploadMessage(array $queuedTargets): string
+    {
+        $queuedTargets = array_unique($queuedTargets);
+
+        return match (true) {
+            in_array('coffrac', $queuedTargets, true) && in_array('global_plus', $queuedTargets, true) => 'Document ajouté. Envoi vers Coffrac et Global+ en arrière-plan.',
+            in_array('coffrac', $queuedTargets, true) => 'Document ajouté. Envoi vers Coffrac en arrière-plan.',
+            in_array('global_plus', $queuedTargets, true) => 'Document ajouté. Synchronisation Global+ en arrière-plan.',
+            default => 'Document ajouté au dossier du lot.',
+        };
+    }
+
+    private function canCreateGlobalPlusDemand(LotAppointment $appointment): bool
+    {
+        return filled($appointment->appointment_id)
+            && $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+            && ! filled($appointment->global_plus_demand_id);
+    }
+
+    private function globalPlusStatusLabel(LotAppointment $appointment): string
+    {
+        if (filled($appointment->global_plus_demand_id)) {
+            return match ($appointment->global_plus_status) {
+                GlobalPlusAppointmentService::STATUS_DOCUMENTS_SYNCED => 'Créé, documents synchronisés',
+                GlobalPlusAppointmentService::STATUS_DOCUMENTS_FAILED => 'Créé, erreur documents',
+                default => 'Créé dans Global+',
+            };
+        }
+
+        if ($appointment->global_plus_status === GlobalPlusAppointmentService::STATUS_FAILED) {
+            return 'Erreur Global+';
+        }
+
+        if ($appointment->added_to_global_plus) {
+            return 'Marqué localement';
+        }
+
+        return 'Non créé';
     }
 
     /**
@@ -1681,7 +1850,7 @@ class ManagerLotController extends Controller
     }
 
     /**
-     * @param \Illuminate\Support\Collection<int, array<string, mixed>> $lots
+     * @param  Collection<int, array<string, mixed>>  $lots
      * @return array<int, array{status:string,label:string,count:int,percentage:int,color:string,background:string}>
      */
     private function lotStatusWidgets($lots): array
