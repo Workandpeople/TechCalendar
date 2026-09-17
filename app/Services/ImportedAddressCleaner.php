@@ -16,6 +16,9 @@ class ImportedAddressCleaner
             return null;
         }
 
+        // Remove cadastral suffixes even when Excel joins them directly to the street.
+        $address = preg_replace('/\s*[-–—]\s*\d{2,5}\s+[A-Z0-9]{1,4}\s+\d{2,6}(?=\s*(?:[-–—]|$))/iu', '', $address);
+        $address = trim($address);
         $parts = array_map('trim', preg_split('/\s+-\s+/', $address) ?: []);
 
         if (count($parts) <= 1) {

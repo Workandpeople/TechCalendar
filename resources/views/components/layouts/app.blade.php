@@ -161,7 +161,7 @@
         </div>
 
         @if ($user->must_change_password)
-            <div class="gc-modal">
+            <div class="gc-modal" data-modal-static="true">
                 <div class="gc-modal-panel max-w-md">
                     <h2 class="text-lg font-semibold">Changement de mot de passe requis</h2>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
@@ -227,6 +227,11 @@
                     dispatchSidebarResize();
                 });
             }
+
+            document.querySelectorAll('.gc-modal').forEach((modal) => {
+                modal.setAttribute('role', modal.getAttribute('role') || 'dialog');
+                modal.setAttribute('aria-modal', modal.getAttribute('aria-modal') || 'true');
+            });
 
             const headerUserMenu = document.getElementById('header-user-menu');
             const headerUserMenuTrigger = document.getElementById('header-user-menu-trigger');

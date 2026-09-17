@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Events\LotImportPreviewProgressed;
 use App\Models\LotImportPreview;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -14,16 +13,15 @@ class LotImportPreviewProcessor
 {
     public function __construct(
         private readonly LotSpreadsheetExtractor $extractor,
-        private readonly LotAppointmentAiNormalizer $normalizer,
+        private readonly LotTemplateMapper $normalizer,
         private readonly MapboxAddressGeocoder $geocoder,
         private readonly ImportedAddressCleaner $addressCleaner,
-        private readonly LotBusinessIdentityResolver $businessIdentityResolver,
-    ) {
-    }
+        private readonly LotAddressNormalizer $addressNormalizer,
+    ) {}
 
     public function process(LotImportPreview $preview): void
     {
-        Log::warning('Lot import preview diagnostics: processing started.', [
+        Log::info('Lot import: lecture du modèle démarrée.', [
             'preview_id' => $preview->id,
             'name' => $preview->name,
             'type' => $preview->type,
@@ -36,16 +34,13 @@ class LotImportPreviewProcessor
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 12, 'Extraction des lignes du fichier.');
 
         $rows = $this->extractor->extract($file);
-        $rawRowsByNumber = $rows->keyBy('row_number');
-        $rawRowsByIndex = $rows->values();
-        $businessIdentityColumnMapping = $this->businessIdentityResolver->buildColumnMapping($rows);
+        $normalized = $this->normalizer->normalize($rows, $preview->name, $preview->type);
 
-        Log::warning('Lot import preview diagnostics: spreadsheet extracted.', [
+        Log::info('Lot import: correspondance fixe des colonnes validée.', [
             'preview_id' => $preview->id,
             'rows_count' => $rows->count(),
             'first_row_number' => $rows->first()['row_number'] ?? null,
             'first_headers' => array_keys($rows->first()['data'] ?? []),
-            'business_identity_column_mapping' => $businessIdentityColumnMapping,
         ]);
 
         $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 25, sprintf(
@@ -55,51 +50,27 @@ class LotImportPreviewProcessor
             'total_rows' => $rows->count(),
         ]);
 
-        $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 30, 'Normalisation OpenAI en cours.');
-
-        $normalized = $this->normalizer->normalize($rows, $preview->name, $preview->type);
-        $appointments = collect($normalized['appointments'] ?? []);
+        $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 30, 'Nettoyage des adresses uniquement.');
+        $appointments = collect($this->addressNormalizer->normalize($normalized['appointments'], function (int $done, int $total) use ($preview): void {
+            $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 30 + (int) floor($done / max(1, $total) * 20), sprintf('Nettoyage des adresses : tranche %d/%d.', $done, $total));
+        }));
         $totalAppointments = max(1, $appointments->count());
-
-        Log::warning('Lot import preview diagnostics: OpenAI normalization completed.', [
-            'preview_id' => $preview->id,
-            'appointments_count' => $appointments->count(),
-            'rejected_rows_count' => count($normalized['rejected_rows'] ?? []),
-        ]);
-
-        $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 35, sprintf(
-            'Normalisation OpenAI terminée: %d RDV normalise(s), %d rejet(s).',
-            $appointments->count(),
-            count($normalized['rejected_rows'] ?? []),
-        ));
+        $geocodingCache = [];
 
         $enrichedAppointments = $appointments
             ->values()
-            ->map(function (array $appointmentPayload, int $index) use ($preview, $rawRowsByNumber, $rawRowsByIndex, $totalAppointments, $businessIdentityColumnMapping): array {
+            ->map(function (array $appointmentPayload, int $index) use ($preview, $totalAppointments, &$geocodingCache): array {
                 $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
-                $rawRowByNumber = $rawRowsByNumber->get($rowNumber);
-                $rawRowByIndex = $rawRowsByIndex->get($index);
-                $rawRowSelection = $this->businessIdentityResolver->selectRawRow($appointmentPayload, $rawRowByNumber, $rawRowByIndex);
-                $rawPayload = $rawRowSelection['payload'];
-                $rowNumber = (int) ($rawRowSelection['row_number'] ?? $rowNumber);
-                $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload, [
-                    'flow' => 'preview',
-                    'preview_id' => $preview->id,
-                    'row_number' => $rowNumber,
-                    'appointment_index' => $index,
-                    'raw_row_source' => $rawRowSelection['source'],
-                    'raw_row_number' => $rawRowSelection['row_number'],
-                    'raw_candidate_scores' => $rawRowSelection['scores'],
-                ], $businessIdentityColumnMapping);
-                $address = $this->fullAddress($appointmentPayload);
-                $geocoding = $this->geocoder->geocode($address);
+                $address = $appointmentPayload['address'];
+                $queryAddress = $this->fullAddress($appointmentPayload);
+                $geocoding = $geocodingCache[$queryAddress ?? ''] ??= $this->geocoder->geocode($queryAddress);
                 $warnings = collect($appointmentPayload['warnings'] ?? [])
                     ->merge($geocoding['warnings'] ?? [])
                     ->filter()
                     ->values()
                     ->all();
 
-                $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 35 + (int) floor((($index + 1) / $totalAppointments) * 55), sprintf(
+                $this->mark($preview, LotImportPreview::STATUS_PROCESSING, 50 + (int) floor((($index + 1) / $totalAppointments) * 45), sprintf(
                     'Geocodage Mapbox %d/%d: %s',
                     $index + 1,
                     $totalAppointments,
@@ -107,6 +78,7 @@ class LotImportPreviewProcessor
                 ));
 
                 return [
+                    ...$appointmentPayload,
                     'selected' => true,
                     'row_number' => $rowNumber > 0 ? $rowNumber : null,
                     'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
@@ -134,7 +106,7 @@ class LotImportPreviewProcessor
                     'ai_confidence' => $this->confidence($appointmentPayload['confidence'] ?? null),
                     'warnings' => $warnings,
                     'raw_address_parts' => $appointmentPayload['raw_address_parts'] ?? [],
-                    'raw_payload' => $rawPayload,
+                    'raw_payload' => $appointmentPayload['raw_payload'],
                 ];
             })
             ->all();
@@ -155,7 +127,7 @@ class LotImportPreviewProcessor
         ]);
         $this->broadcast($preview);
 
-        Log::warning('Lot import preview diagnostics: processing completed.', [
+        Log::info('Lot import: aperçu terminé.', [
             'preview_id' => $preview->id,
             'normalized_rows' => count($enrichedAppointments),
             'rejected_rows' => count($normalized['rejected_rows'] ?? []),
@@ -202,18 +174,12 @@ class LotImportPreviewProcessor
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function fullAddress(array $payload): ?string
     {
-        $address = $this->addressCleaner->clean($this->nullableString($payload['address'] ?? null));
-
-        if ($address) {
-            return $address;
-        }
-
         $parts = [
-            $this->addressCleaner->clean($this->nullableString($payload['address_line'] ?? null)),
+            $this->addressCleaner->clean($this->nullableString($payload['address_line'] ?? $payload['address'] ?? null)),
             $this->nullableString($payload['postal_code'] ?? null),
             $this->nullableString($payload['city'] ?? null),
         ];
@@ -222,7 +188,7 @@ class LotImportPreviewProcessor
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function customerName(array $payload): string
     {

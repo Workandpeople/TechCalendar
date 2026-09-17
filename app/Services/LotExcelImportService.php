@@ -16,10 +16,10 @@ class LotExcelImportService
 {
     public function __construct(
         private readonly LotSpreadsheetExtractor $extractor,
-        private readonly LotAppointmentAiNormalizer $normalizer,
-        private readonly LotBusinessIdentityResolver $businessIdentityResolver,
-    ) {
-    }
+        private readonly LotTemplateMapper $normalizer,
+        private readonly LotAddressNormalizer $addressNormalizer,
+        private readonly MapboxAddressGeocoder $geocoder,
+    ) {}
 
     public function import(
         UploadedFile $file,
@@ -35,18 +35,24 @@ class LotExcelImportService
         ?int $coffracServiceAliasId = null,
         ?string $receivedAt = null,
         ?string $comment = null,
-    ): Lot
-    {
+    ): Lot {
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
-        $rawRowsByNumber = $rows->keyBy('row_number');
-        $rawRowsByIndex = $rows->values();
-        $businessIdentityColumnMapping = $this->businessIdentityResolver->buildColumnMapping($rows);
+        $normalized['appointments'] = $this->addressNormalizer->normalize($normalized['appointments']);
+        $geocodingCache = [];
+        foreach ($normalized['appointments'] as &$appointment) {
+            $address = trim(implode(' ', array_filter([$appointment['address'], $appointment['postal_code'], $appointment['city']])));
+            $geocoding = $geocodingCache[$address] ??= $this->geocoder->geocode($address);
+            $appointment['latitude'] = $geocoding['latitude'];
+            $appointment['longitude'] = $geocoding['longitude'];
+            $appointment['warnings'] = array_values(array_unique([...$appointment['warnings'], ...$geocoding['warnings']]));
+        }
+        unset($appointment);
         $storedFile = $this->storeOriginalFile($file);
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $rawRowsByNumber, $rawRowsByIndex, $businessIdentityColumnMapping, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $storedFile, $service): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
@@ -78,22 +84,8 @@ class LotExcelImportService
                     'imported_at' => now(),
                 ]);
 
-                foreach (array_values($normalized['appointments'] ?? []) as $index => $appointmentPayload) {
+                foreach ($normalized['appointments'] as $appointmentPayload) {
                     $rowNumber = (int) ($appointmentPayload['row_number'] ?? 0);
-                    $rawRowByNumber = $rawRowsByNumber->get($rowNumber);
-                    $rawRowByIndex = $rawRowsByIndex->get($index);
-                    $rawRowSelection = $this->businessIdentityResolver->selectRawRow($appointmentPayload, $rawRowByNumber, $rawRowByIndex);
-                    $rawPayload = $rawRowSelection['payload'];
-                    $rowNumber = (int) ($rawRowSelection['row_number'] ?? $rowNumber);
-                    $appointmentPayload = $this->businessIdentityResolver->apply($appointmentPayload, $rawPayload, [
-                        'flow' => 'direct',
-                        'lot_name' => $requestedLotName,
-                        'row_number' => $rowNumber,
-                        'appointment_index' => $index,
-                        'raw_row_source' => $rawRowSelection['source'],
-                        'raw_row_number' => $rawRowSelection['row_number'],
-                        'raw_candidate_scores' => $rawRowSelection['scores'],
-                    ], $businessIdentityColumnMapping);
                     $warnings = collect($appointmentPayload['warnings'] ?? [])
                         ->filter()
                         ->values();
@@ -103,12 +95,18 @@ class LotExcelImportService
                         'lot_id' => $lot->id,
                         'service_id' => $service?->id,
                         'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
+                        'internal_reference' => $appointmentPayload['internal_reference'] ?? null,
                         'row_number' => $rowNumber > 0 ? $rowNumber : null,
                         'source' => $lot->source,
                         'customer_name' => $this->requiredCustomerName($appointmentPayload),
                         'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
                         'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
                         'installer_name' => $this->nullableString($appointmentPayload['installer_name'] ?? null),
+                        'installer_siren' => $appointmentPayload['installer_siren'] ?? null,
+                        'customer_email' => $appointmentPayload['customer_email'] ?? null,
+                        'beneficiary_address' => $appointmentPayload['beneficiary_address'] ?? null,
+                        'beneficiary_postal_code' => $appointmentPayload['beneficiary_postal_code'] ?? null,
+                        'beneficiary_city' => $appointmentPayload['beneficiary_city'] ?? null,
                         'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                         'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                         'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
@@ -124,7 +122,7 @@ class LotExcelImportService
                         'status' => $status,
                         'ai_confidence' => $this->confidence($appointmentPayload['confidence'] ?? null),
                         'ai_warnings' => $warnings->all(),
-                        'raw_payload' => $rawPayload,
+                        'raw_payload' => $appointmentPayload,
                         'comment' => $this->nullableString($appointmentPayload['comment'] ?? null),
                     ]);
                 }
@@ -164,8 +162,8 @@ class LotExcelImportService
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param Collection<int, string> $warnings
+     * @param  array<string, mixed>  $payload
+     * @param  Collection<int, string>  $warnings
      */
     private function statusForPayload(array $payload, Collection $warnings): string
     {
@@ -177,7 +175,7 @@ class LotExcelImportService
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
-        if ((float) ($payload['confidence'] ?? 0) < 0.65 || $warnings->isNotEmpty()) {
+        if ((isset($payload['confidence']) && (float) $payload['confidence'] < 0.65) || $warnings->isNotEmpty()) {
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
@@ -185,7 +183,7 @@ class LotExcelImportService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function requiredCustomerName(array $payload): string
     {
@@ -214,7 +212,7 @@ class LotExcelImportService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function hasCustomerIdentity(array $payload): bool
     {

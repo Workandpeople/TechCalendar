@@ -5,6 +5,7 @@ namespace App\Services\GlobalPlus;
 use App\Models\LotAppointment;
 use App\Models\LotAppointmentDocument;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -19,6 +20,8 @@ class GlobalPlusAppointmentService
     public const STATUS_CREATED = 'created';
 
     public const STATUS_FAILED = 'failed';
+
+    public const STATUS_APPOINTMENT_FAILED = 'appointment_failed';
 
     public const STATUS_DOCUMENTS_SYNCED = 'documents_synced';
 
@@ -38,7 +41,7 @@ class GlobalPlusAppointmentService
 
     private const TITLE_MAX_LENGTH = 50;
 
-    private const SUB_TITLE_MAX_LENGTH = 25;
+    private const SUB_TITLE_MAX_LENGTH = 255;
 
     public function __construct(private readonly GlobalPlusClient $client) {}
 
@@ -65,6 +68,7 @@ class GlobalPlusAppointmentService
                 'configured' => false,
                 'message' => 'API Global+ non configurée.',
                 'installers' => [],
+                'clients' => [],
                 'controllers' => [],
                 'intervention_versions' => [],
                 'suggested_installer_address_id' => null,
@@ -80,6 +84,8 @@ class GlobalPlusAppointmentService
         return [
             'configured' => true,
             'installers' => $this->publicReferences($installers),
+            'clients' => $this->publicReferences($this->client->clients()),
+            'delegataire' => $lotAppointment->lot?->delegataire,
             'controllers' => $this->publicReferences($controllers),
             'intervention_versions' => $this->publicReferences($versions),
             'suggested_installer_address_id' => $this->suggestInstallerAddressId($lotAppointment, $installers),
@@ -93,6 +99,26 @@ class GlobalPlusAppointmentService
      */
     public function createDemandFromLotAppointment(LotAppointment $lotAppointment, array $payload, ?User $actor = null): LotAppointment
     {
+        $ttl = max(300, (int) config('services.global_plus.upload_timeout', 120) + 6 * (int) config('services.global_plus.timeout', 45) + 60);
+        $lock = Cache::lock('global_plus:lot_appointment:'.$lotAppointment->id, $ttl);
+        if (! $lock->get()) {
+            throw new RuntimeException('Un envoi Global+ est déjà en cours pour ce dossier.');
+        }
+
+        try {
+            return $this->createOrCompleteDemand($lotAppointment->refresh(), $payload, $actor);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function createOrCompleteDemand(LotAppointment $lotAppointment, array $payload, ?User $actor): LotAppointment
+    {
+        if (filled($lotAppointment->global_plus_demand_id) && $lotAppointment->global_plus_status === self::STATUS_APPOINTMENT_FAILED) {
+            $this->syncAppointment($lotAppointment, $this->controllerId($payload));
+
+            return $lotAppointment->refresh();
+        }
         $this->assertCanCreateDemand($lotAppointment);
 
         $lotAppointment->loadMissing([
@@ -135,7 +161,7 @@ class GlobalPlusAppointmentService
         $lotAppointment->update([
             'added_to_global_plus' => true,
             'global_plus_demand_id' => $demandId,
-            'global_plus_status' => self::STATUS_CREATED,
+            'global_plus_status' => self::STATUS_APPOINTMENT_FAILED,
             'global_plus_payload' => [
                 'last_request' => $this->safeDemandPayload($demandPayload),
                 'created_at' => $now->toIso8601String(),
@@ -143,12 +169,15 @@ class GlobalPlusAppointmentService
             ],
             'global_plus_created_at' => $now,
             'global_plus_synced_at' => $now,
-            'global_plus_error_message' => null,
+            'global_plus_error_message' => 'Dossier créé ; affectation du technicien en attente de confirmation.',
         ]);
 
         if ($documentsWereSent) {
             $this->markDocumentsSynced($lotAppointment, $demandId, 'sent_in_creation');
         }
+
+        // The creation DTO ignores idControleur. Assign the actual Intervention after persisting the Demande ID.
+        $this->syncAppointment($lotAppointment, $this->controllerId($payload));
 
         return $lotAppointment->fresh([
             'lot.service',
@@ -158,6 +187,67 @@ class GlobalPlusAppointmentService
             'appointment.service',
             'documents.uploader',
         ]);
+    }
+
+    public function syncAppointment(LotAppointment $lotAppointment, int $controllerId): void
+    {
+        $lotAppointment->loadMissing('appointment');
+        try {
+            $demand = $this->client->demand((string) $lotAppointment->global_plus_demand_id);
+            $interventions = collect($demand['interventions'] ?? [])
+                ->filter(fn ($item): bool => is_array($item) && (int) ($item['id'] ?? 0) > 0
+                    && (string) ($item['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id);
+            if ($interventions->count() !== 1) {
+                throw new RuntimeException('L’intervention Global+ ne peut pas être identifiée de façon unique. Le dossier est créé, l’affectation du technicien reste à terminer.');
+            }
+            $interventionId = (string) $interventions->first()['id'];
+            $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
+            $startsAt = $lotAppointment->appointment?->starts_at?->format('Y-m-d\TH:i:s');
+            $endsAt = $lotAppointment->appointment?->ends_at?->format('Y-m-d\TH:i:s');
+            if (! $startsAt || ! $endsAt) {
+                throw new RuntimeException('Le rendez-vous local doit avoir une date et une heure de fin.');
+            }
+            $this->client->patchIntervention($interventionId, [
+                ['op' => 'replace', 'path' => '/idControleur', 'value' => $controllerId],
+                ['op' => 'replace', 'path' => '/dateIntervention', 'value' => $startsAt],
+                ['op' => 'replace', 'path' => '/dateInterventionEnd', 'value' => $endsAt],
+            ]);
+            $remote = $this->client->intervention($interventionId);
+            if ((string) ($remote['idDemande'] ?? '') !== (string) $lotAppointment->global_plus_demand_id
+                || (int) ($remote['idControleur'] ?? 0) !== $controllerId
+                || ! $this->sameAppointmentTime($remote['dateIntervention'] ?? null, $startsAt)
+                || ! $this->sameAppointmentTime($remote['dateInterventionEnd'] ?? null, $endsAt)) {
+                throw new RuntimeException('Global+ n’a pas confirmé le technicien et les horaires sélectionnés. Le dossier est créé, mais l’affectation reste à terminer.');
+            }
+            $lotAppointment->update([
+                'global_plus_status' => self::STATUS_CREATED,
+                'global_plus_error_message' => null,
+                'global_plus_synced_at' => now(),
+                'global_plus_payload' => [
+                    ...($lotAppointment->global_plus_payload ?? []),
+                    'appointment_assignment' => ['controller_id' => $controllerId, 'intervention_id' => $interventionId, 'confirmed_at' => now()->toIso8601String()],
+                ],
+            ]);
+        } catch (Throwable $exception) {
+            $lotAppointment->update([
+                'global_plus_status' => self::STATUS_APPOINTMENT_FAILED,
+                'global_plus_error_message' => $exception->getMessage(),
+            ]);
+            Log::warning('Global+ : dossier créé, affectation du RDV incomplète.', [
+                'lot_appointment_id' => $lotAppointment->id, 'demand_id' => $lotAppointment->global_plus_demand_id,
+                'intervention_id' => $lotAppointment->global_plus_intervention_id, 'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function sameAppointmentTime(?string $remote, string $expected): bool
+    {
+        if (! $remote) {
+            return false;
+        }
+
+        return CarbonImmutable::parse($remote, config('app.timezone'))
+            ->equalTo(CarbonImmutable::parse($expected, config('app.timezone')));
     }
 
     public function syncDocuments(LotAppointment $lotAppointment): LotAppointment
@@ -172,12 +262,14 @@ class GlobalPlusAppointmentService
         $files = $this->documentsPayload($lotAppointment);
 
         return $this->withDemandFilesLock($demandId, function () use ($lotAppointment, $demandId, $files): LotAppointment {
+            $lotAppointment->refresh();
+            $assignmentPending = $lotAppointment->global_plus_status === self::STATUS_APPOINTMENT_FAILED;
             try {
                 $response = $this->client->replaceDemandFiles($demandId, $files);
             } catch (Throwable $exception) {
                 $lotAppointment->update([
-                    'global_plus_status' => self::STATUS_DOCUMENTS_FAILED,
-                    'global_plus_error_message' => $exception->getMessage(),
+                    'global_plus_status' => $assignmentPending ? self::STATUS_APPOINTMENT_FAILED : self::STATUS_DOCUMENTS_FAILED,
+                    'global_plus_error_message' => $assignmentPending ? $lotAppointment->global_plus_error_message : $exception->getMessage(),
                 ]);
 
                 $lotAppointment->documents()->update([
@@ -188,9 +280,9 @@ class GlobalPlusAppointmentService
             }
 
             $lotAppointment->update([
-                'global_plus_status' => self::STATUS_DOCUMENTS_SYNCED,
+                'global_plus_status' => $assignmentPending ? self::STATUS_APPOINTMENT_FAILED : self::STATUS_DOCUMENTS_SYNCED,
                 'global_plus_synced_at' => now(),
-                'global_plus_error_message' => null,
+                'global_plus_error_message' => $assignmentPending ? $lotAppointment->global_plus_error_message : null,
                 'global_plus_payload' => [
                     ...(is_array($lotAppointment->global_plus_payload) ? $lotAppointment->global_plus_payload : []),
                     'last_documents_sync' => [
@@ -221,7 +313,7 @@ class GlobalPlusAppointmentService
 
         $versionFormulaire = $this->versionFormulaireDto((int) ($payload['version_formulaire_id'] ?? 0));
         $installer = $this->installerAddress($lotAppointment, $payload);
-        $controllerId = $this->controllerId($payload);
+        $this->controllerId($payload);
         $title = $this->limit(trim((string) ($payload['title'] ?? '')) ?: $this->defaultTitle($lotAppointment), self::TITLE_MAX_LENGTH);
         $subTitle = $this->limit(trim((string) ($payload['sub_title'] ?? '')) ?: $this->defaultSubTitle($lotAppointment), self::SUB_TITLE_MAX_LENGTH);
         $sendDocuments = (bool) ($payload['send_documents'] ?? true);
@@ -232,13 +324,12 @@ class GlobalPlusAppointmentService
             'startDate' => $appointment->starts_at?->format('Y-m-d\TH:i:s'),
             'endDate' => $appointment->ends_at?->format('Y-m-d\TH:i:s'),
             'dateIntervention' => $appointment->starts_at?->format('Y-m-d\TH:i:s'),
-            'idControleur' => $controllerId,
             'title' => $title,
             'subTitle' => $subTitle,
             'typeIntervention' => [
                 $versionFormulaire,
             ],
-            'client' => $this->clientAddress($lotAppointment),
+            'client' => $this->clientAddress($payload),
             'lieuInspection' => $this->inspectionAddress($lotAppointment, $payload),
             'beneficiaire' => $this->beneficiaryAddress($lotAppointment),
             'entreprise' => $installer,
@@ -255,11 +346,19 @@ class GlobalPlusAppointmentService
     /**
      * @return array<string, mixed>
      */
-    private function clientAddress(LotAppointment $lotAppointment): array
+    private function clientAddress(array $payload): array
     {
-        return $this->addressDto(1, $lotAppointment, [
-            'raisonSociale' => $this->customerCompanyName($lotAppointment),
-        ]);
+        $client = collect($this->client->clients())->firstWhere('address_id', (int) ($payload['client_address_id'] ?? 0));
+        if (! $client) {
+            throw new RuntimeException('Sélectionne le délégataire dans la liste des clients Global+.');
+        }
+        $address = $client['payload'];
+
+        return [
+            ...array_intersect_key($address, array_flip(['id', 'nom', 'prenom', 'raisonSociale', 'adresse', 'codePostal', 'ville', 'email', 'phone', 'siren', 'batiment'])),
+            'idTypeAdresse' => 1,
+            'civilite' => 'M',
+        ];
     }
 
     /**
@@ -281,6 +380,9 @@ class GlobalPlusAppointmentService
     {
         return $this->addressDto(3, $lotAppointment, [
             'raisonSociale' => $this->customerCompanyName($lotAppointment),
+            'adresse' => $lotAppointment->beneficiary_address ?: $lotAppointment->address,
+            'codePostal' => $lotAppointment->beneficiary_address ? $lotAppointment->beneficiary_postal_code : $lotAppointment->postal_code,
+            'ville' => $lotAppointment->beneficiary_address ? $lotAppointment->beneficiary_city : $lotAppointment->city,
         ]);
     }
 
@@ -307,7 +409,7 @@ class GlobalPlusAppointmentService
             return array_filter([
                 'id' => (int) $installer['address_id'],
                 'idTypeAdresse' => 4,
-                'civilite' => 'Mr',
+                'civilite' => 'M',
                 'raisonSociale' => $this->limit($installer['name'] ?? $installer['label'] ?? null, self::ADDRESS_COMPANY_MAX_LENGTH),
                 'adresse' => $this->limit($installer['address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
                 'codePostal' => $this->limit($installer['postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
@@ -326,13 +428,13 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => 0,
             'idTypeAdresse' => 4,
-            'civilite' => 'Mr',
+            'civilite' => 'M',
             'raisonSociale' => $this->limit($name, self::ADDRESS_COMPANY_MAX_LENGTH),
             'adresse' => $this->limit($payload['installer_address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
             'codePostal' => $this->limit($payload['installer_postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
             'ville' => $this->limit($payload['installer_city'] ?? null, self::CITY_MAX_LENGTH),
             'phone' => $this->nullableString($payload['installer_phone'] ?? null),
-            'siren' => $this->limit($payload['installer_siren'] ?? null, self::SIREN_MAX_LENGTH),
+            'siren' => $this->limit($payload['installer_siren'] ?? $lotAppointment->installer_siren, self::SIREN_MAX_LENGTH),
         ], fn (mixed $value): bool => $value !== null && $value !== '');
     }
 
@@ -413,14 +515,16 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => (int) ($overrides['id'] ?? 0),
             'idTypeAdresse' => $addressType,
-            'civilite' => $this->limit($overrides['civilite'] ?? 'Mr', 4),
+            'civilite' => 'M',
             'nom' => $this->limit($overrides['nom'] ?? $lastName, self::ADDRESS_NAME_MAX_LENGTH),
             'prenom' => $this->limit($overrides['prenom'] ?? $firstName, self::ADDRESS_NAME_MAX_LENGTH),
             'raisonSociale' => $this->limit($overrides['raisonSociale'] ?? $this->customerCompanyName($lotAppointment), self::ADDRESS_COMPANY_MAX_LENGTH),
             'adresse' => $this->limit($overrides['adresse'] ?? $lotAppointment->address, self::ADDRESS_LINE_MAX_LENGTH),
-            'codePostal' => $this->limit($overrides['codePostal'] ?? $lotAppointment->postal_code, self::POSTAL_CODE_MAX_LENGTH),
-            'ville' => $this->limit($overrides['ville'] ?? $lotAppointment->city, self::CITY_MAX_LENGTH),
+            'codePostal' => $this->limit(array_key_exists('codePostal', $overrides) ? $overrides['codePostal'] : $lotAppointment->postal_code, self::POSTAL_CODE_MAX_LENGTH),
+            'ville' => $this->limit(array_key_exists('ville', $overrides) ? $overrides['ville'] : $lotAppointment->city, self::CITY_MAX_LENGTH),
             'phone' => $this->nullableString($overrides['phone'] ?? $lotAppointment->customer_phone),
+            'email' => $this->nullableString($lotAppointment->customer_email),
+            'batiment' => $this->limit($lotAppointment->site_name, 50),
             'precariousness' => $overrides['precariousness'] ?? null,
         ], fn (mixed $value): bool => $value !== null && $value !== '');
     }
@@ -553,6 +657,13 @@ class GlobalPlusAppointmentService
      */
     private function suggestInstallerAddressId(LotAppointment $lotAppointment, array $installers): ?int
     {
+        $siren = preg_replace('/\s+/', '', (string) $lotAppointment->installer_siren);
+        $installers = array_values(array_filter($installers, fn (array $installer): bool => ! ($installer['blocked'] ?? false)));
+        if ($siren !== '') {
+            $matches = collect($installers)->filter(fn (array $installer): bool => preg_replace('/\s+/', '', (string) ($installer['siren'] ?? '')) === $siren);
+
+            return $matches->count() === 1 ? (int) $matches->first()['address_id'] : null;
+        }
         $installerName = $this->normalizeMatchValue($lotAppointment->installer_name);
 
         if ($installerName === '') {
@@ -737,6 +848,10 @@ class GlobalPlusAppointmentService
 
     private function defaultSubTitle(LotAppointment $lotAppointment): string
     {
+        if (filled($lotAppointment->internalReference())) {
+            return $this->limit($lotAppointment->internalReference(), self::SUB_TITLE_MAX_LENGTH);
+        }
+
         return Str::limit(trim(implode(' - ', array_filter([
             $lotAppointment->lot?->name,
             $lotAppointment->row_number ? 'Ligne '.$lotAppointment->row_number : null,
@@ -783,18 +898,14 @@ class GlobalPlusAppointmentService
      */
     private function withDemandFilesLock(string $demandId, callable $callback): mixed
     {
-        try {
-            $lock = Cache::lock('global_plus:demand_files:'.$demandId, 300);
+        $lock = Cache::lock('global_plus:demand_files:'.$demandId, 300);
 
-            if ($lock->get()) {
-                try {
-                    return $callback();
-                } finally {
-                    $lock->release();
-                }
+        if ($lock->get()) {
+            try {
+                return $callback();
+            } finally {
+                $lock->release();
             }
-        } catch (Throwable) {
-            return $callback();
         }
 
         throw new RuntimeException('Une synchronisation des documents Global+ est déjà en cours pour ce dossier.');

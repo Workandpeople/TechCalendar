@@ -11,11 +11,11 @@ class LotImportPreviewRowUpdateService
     public function __construct(
         private readonly ImportedAddressCleaner $addressCleaner,
         private readonly MapboxAddressGeocoder $geocoder,
-    ) {
-    }
+        private readonly LotTemplateMapper $templateMapper = new LotTemplateMapper,
+    ) {}
 
     /**
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     public function update(LotImportPreview $preview, int $rowNumber, array $attributes): LotImportPreview
     {
@@ -62,6 +62,18 @@ class LotImportPreviewRowUpdateService
             'edited_at' => now()->toIso8601String(),
         ]);
 
+        foreach (['internal_reference', 'customer_email', 'installer_siren', 'beneficiary_address', 'beneficiary_postal_code', 'beneficiary_city'] as $field) {
+            if (array_key_exists($field, $attributes)) {
+                $appointment[$field] = $this->nullableString($attributes[$field]);
+            }
+        }
+
+        if (($appointment['import_format'] ?? null) === 'techcalendar_v1') {
+            $appointment['warnings'] = array_values(array_unique([
+                ...$appointment['warnings'], ...$this->templateMapper->warningsFor($appointment),
+            ]));
+        }
+
         $appointments->put($appointmentIndex, $appointment);
 
         $payload['appointments'] = $appointments->values()->all();
@@ -78,7 +90,7 @@ class LotImportPreviewRowUpdateService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function customerName(array $payload): string
     {

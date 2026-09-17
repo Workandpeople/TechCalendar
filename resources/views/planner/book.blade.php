@@ -108,7 +108,123 @@
                 </aside>
             </div>
 
-            <div class="border-t p-6" style="border-color:var(--gc-border);background:#fbfaf6;">
+            <div id="booking-confirmation-global-plus-card" class="hidden border-t p-6" style="border-color:var(--gc-border);background:#ffffff;">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <h3 class="text-lg font-semibold" style="color:var(--gc-text);">Lier à Global+</h3>
+                            <span id="booking-confirmation-global-plus-badge" class="rounded-full px-3 py-1 text-xs font-semibold"></span>
+                        </div>
+                        <p id="booking-confirmation-global-plus-summary" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
+                        <p id="booking-confirmation-global-plus-error" class="mt-2 hidden text-sm" style="color:#be123c;"></p>
+                    </div>
+                    <div class="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                        <button id="booking-confirmation-global-plus-open" type="button" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                            Préparer Global+
+                        </button>
+                        <button id="booking-confirmation-global-plus-sync-documents" type="button" class="gc-btn-soft hidden justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                            Synchroniser les documents
+                        </button>
+                    </div>
+                </div>
+
+                <p id="booking-confirmation-global-plus-form-status" class="mt-3 hidden text-sm"></p>
+
+                <form id="booking-confirmation-global-plus-form" class="mt-5 hidden space-y-4 rounded-2xl border p-4" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                        <section class="space-y-3">
+                            <div>
+                                <label class="gc-label" for="booking_confirmation_global_plus_client">Délégataire / client Global+</label>
+                                <select id="booking_confirmation_global_plus_client" class="gc-input" required>
+                                    <option value="">Choisir le client Global+</option>
+                                </select>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne le délégataire du lot dans le référentiel Global+.</p>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="booking_confirmation_global_plus_version">Prestation Global+</label>
+                                <select id="booking_confirmation_global_plus_version" class="gc-input" required>
+                                    <option value="">Chargement...</option>
+                                </select>
+                            </div>
+
+                            <div class="rounded-2xl border bg-white px-3 py-3 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
+                                <p class="font-semibold" style="color:var(--gc-text);">Technicien Global+ proposé</p>
+                                <p id="booking-confirmation-global-plus-controller-summary" class="mt-1">Chargement...</p>
+                                <label class="mt-3 block">
+                                    <span class="gc-label">Technicien Global+</span>
+                                    <select id="booking_confirmation_global_plus_controller_id" class="gc-input" required>
+                                        <option value="">Chargement...</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="gc-label" for="booking_confirmation_global_plus_installer">Installateur Global+</label>
+                                <select id="booking_confirmation_global_plus_installer" class="gc-input">
+                                    <option value="">Chargement...</option>
+                                </select>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle sera envoyée.</p>
+                            </div>
+                        </section>
+
+                        <section class="space-y-3">
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <label>
+                                    <span class="gc-label">Installateur manuel</span>
+                                    <input id="booking_confirmation_global_plus_installer_name" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">SIREN</span>
+                                    <input id="booking_confirmation_global_plus_installer_siren" type="text" class="gc-input" maxlength="20" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Adresse installateur</span>
+                                    <input id="booking_confirmation_global_plus_installer_address" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">CP installateur</span>
+                                    <input id="booking_confirmation_global_plus_installer_postal_code" type="text" class="gc-input" maxlength="20" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Ville installateur</span>
+                                    <input id="booking_confirmation_global_plus_installer_city" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Téléphone installateur</span>
+                                    <input id="booking_confirmation_global_plus_installer_phone" type="text" class="gc-input" />
+                                </label>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px]">
+                                <label>
+                                    <span class="gc-label">Titre du dossier</span>
+                                    <input id="booking_confirmation_global_plus_title" type="text" class="gc-input" maxlength="50" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Référence interne</span>
+                                    <input id="booking_confirmation_global_plus_sub_title" type="text" class="gc-input" maxlength="255" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Précarité</span>
+                                    <input id="booking_confirmation_global_plus_precariousness" type="number" min="0" max="10" step="1" class="gc-input" placeholder="-" />
+                                </label>
+                            </div>
+
+                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);">
+                                    <input id="booking_confirmation_global_plus_send_documents" type="checkbox" class="gc-check" checked>
+                                    Transmettre les documents
+                                </label>
+                                <button id="booking-confirmation-global-plus-submit" type="submit" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                                    Créer dans Global+
+                                </button>
+                            </div>
+                        </section>
+                    </div>
+                </form>
+            </div>
+
+            <div class="border-t p-6" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h3 class="text-lg font-semibold" style="color:var(--gc-text);">Envoyer le mail</h3>
@@ -454,7 +570,7 @@
                         </summary>
 
                         <div class="border-t" style="border-color:var(--gc-border);">
-                            <div class="border-b p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                            <div class="border-b p-4" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                                 <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_160px_190px_190px_auto] xl:items-end">
                                     <label class="block">
                                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
@@ -834,7 +950,7 @@
                 </section>
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
-                    <form id="booking-crm-detail-form" class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <form id="booking-crm-detail-form" class="gc-appointment-section">
                         <div class="grid grid-cols-1 gap-3">
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_service_id">Prestation</label>
@@ -863,9 +979,9 @@
                                     <button id="booking-crm-detail-save-comment" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                                 </div>
                             </div>
-                            <details id="booking-crm-problem-section" class="rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                                <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
-                                <div class="mt-3 grid grid-cols-1 gap-3">
+                            <details id="booking-crm-problem-section" class="gc-appointment-action-details">
+                                <summary>Problème RDV</summary>
+                                <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                     <div>
                                         <label class="gc-label" for="booking_crm_problem_comment">Commentaire du problème</label>
                                         <textarea id="booking_crm_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
@@ -903,11 +1019,12 @@
                         </div>
                     </form>
 
-                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
-                        <dl id="booking_crm_detail_infos" class="grid grid-cols-1 gap-3 text-sm"></dl>
+                    <div class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Informations du dossier</h3>
+                        <dl id="booking_crm_detail_infos" class="gc-appointment-info-grid mt-4"></dl>
                     </div>
 
-                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <div class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
                             <span id="booking_crm_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
@@ -915,7 +1032,7 @@
                         <div id="booking_crm_detail_comments" class="mt-3 space-y-2"></div>
                     </div>
 
-                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <div class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
                             <div class="flex items-center gap-2">
@@ -950,8 +1067,9 @@
                 </section>
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
-                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
-                        <dl class="grid grid-cols-1 gap-3 text-sm">
+                    <div class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <dl class="gc-appointment-info-grid mt-4">
                             <div>
                                 <dt style="color:var(--gc-text-soft);">Technicien</dt>
                                 <dd id="booking_detail_technician" class="font-medium" style="color:var(--gc-text);"></dd>
@@ -999,7 +1117,31 @@
                         </dl>
                     </div>
 
-                    <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <section class="gc-appointment-section">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 class="gc-appointment-section-title">Connecteurs</h3>
+                                <p id="booking_detail_connector_summary" class="gc-appointment-section-subtitle"></p>
+                            </div>
+                            <span id="booking_detail_connector_badge" class="gc-status-pill gc-status-pill-neutral shrink-0">Local</span>
+                        </div>
+                        <dl class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                            <div class="rounded-xl border bg-white px-3 py-2" style="border-color:var(--gc-border);">
+                                <dt class="text-xs" style="color:var(--gc-text-soft);">Origine</dt>
+                                <dd id="booking_detail_connector_origin" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            </div>
+                            <div class="rounded-xl border bg-white px-3 py-2" style="border-color:var(--gc-border);">
+                                <dt class="text-xs" style="color:var(--gc-text-soft);">Référence</dt>
+                                <dd id="booking_detail_connector_reference" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            </div>
+                            <div class="rounded-xl border bg-white px-3 py-2 sm:col-span-2" style="border-color:var(--gc-border);">
+                                <dt class="text-xs" style="color:var(--gc-text-soft);">Global+</dt>
+                                <dd id="booking_detail_connector_global_plus" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
                             <span id="booking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
@@ -1007,7 +1149,7 @@
                         <div id="booking_detail_comments" class="mt-3 space-y-2"></div>
                     </section>
 
-                    <section class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
                             <div class="flex items-center gap-2">
@@ -1019,7 +1161,7 @@
                         <div id="booking_detail_documents" class="mt-3 space-y-2"></div>
                     </section>
 
-                    <form id="booking-detail-form" class="rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <form id="booking-detail-form" class="gc-appointment-section">
                         <input id="booking_detail_appointment_id" type="hidden" />
                         <input id="booking_detail_crm_id" type="hidden" />
                         <input id="booking_detail_technician_id" type="hidden" />
@@ -1048,9 +1190,9 @@
                             </div>
                         </div>
 
-                        <details id="booking-problem-section" class="mt-4 rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                            <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
-                            <div class="mt-3 grid grid-cols-1 gap-3">
+                        <details id="booking-problem-section" class="gc-appointment-action-details mt-4">
+                            <summary>Problème RDV</summary>
+                            <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="booking_problem_comment">Commentaire du problème</label>
                                     <textarea id="booking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
@@ -1094,7 +1236,7 @@
     </div>
 
     <div id="booking-lot-contact-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel max-w-2xl">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
             <div class="gc-appointment-modal-header">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Traitement téléphonique</p>
@@ -1104,30 +1246,53 @@
                 <button type="button" id="booking-lot-contact-close" class="gc-link">Fermer</button>
             </div>
 
-            <form id="booking-lot-contact-form" class="space-y-4 p-5">
-                <div>
-                    <label class="gc-label" for="booking_lot_contact_satisfaction">Résultat du contact</label>
-                    <select id="booking_lot_contact_satisfaction" class="gc-input" required>
-                        <option value="">Sélectionner</option>
-                        <option value="1">Satisfaisant</option>
-                        <option value="0">Non satisfaisant</option>
-                    </select>
-                </div>
+            <div class="gc-appointment-modal-body gc-appointment-modal-body-compact">
+                <section class="gc-appointment-modal-map-pane space-y-4">
+                    <div class="gc-appointment-section gc-appointment-section-muted">
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Mode contact</p>
+                        <h3 class="mt-1 text-lg font-semibold" style="color:var(--gc-text);">Qualification téléphonique</h3>
+                        <p class="mt-2 text-sm leading-6" style="color:var(--gc-text-soft);">
+                            Ce mode ne crée pas de dossier Coffrac. Il qualifie uniquement le dossier dans TechCalendar et met à jour les statistiques contact du lot.
+                        </p>
+                    </div>
 
-                <div>
-                    <label class="gc-label" for="booking_lot_contact_comment">Commentaire</label>
-                    <textarea id="booking_lot_contact_comment" class="gc-input min-h-[130px]" maxlength="2000" required placeholder="Résumé de l’appel, éléments constatés, suite à donner..."></textarea>
-                </div>
+                    <div class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">À renseigner</h3>
+                        <div class="mt-4 space-y-3 text-sm" style="color:var(--gc-text-soft);">
+                            <p>1. Choisir si le contact est satisfaisant ou non satisfaisant.</p>
+                            <p>2. Ajouter un commentaire exploitable pour le suivi du lot.</p>
+                            <p>3. Enregistrer le contact pour faire avancer l’objectif d’échantillonnage.</p>
+                        </div>
+                    </div>
+                </section>
 
-                <p id="booking_lot_contact_status" class="hidden text-sm"></p>
+                <section class="gc-appointment-modal-info-pane">
+                    <form id="booking-lot-contact-form" class="gc-appointment-section space-y-4">
+                        <div>
+                            <label class="gc-label" for="booking_lot_contact_satisfaction">Résultat du contact</label>
+                            <select id="booking_lot_contact_satisfaction" class="gc-input" required>
+                                <option value="">Sélectionner</option>
+                                <option value="1">Satisfaisant</option>
+                                <option value="0">Non satisfaisant</option>
+                            </select>
+                        </div>
 
-                <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
-                    <button id="booking-lot-contact-cancel" type="button" class="gc-btn-soft">Annuler</button>
-                    <button id="booking-lot-contact-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled>
-                        Enregistrer le contact
-                    </button>
-                </div>
-            </form>
+                        <div>
+                            <label class="gc-label" for="booking_lot_contact_comment">Commentaire</label>
+                            <textarea id="booking_lot_contact_comment" class="gc-input min-h-[170px]" maxlength="2000" required placeholder="Résumé de l’appel, éléments constatés, suite à donner..."></textarea>
+                        </div>
+
+                        <p id="booking_lot_contact_status" class="hidden text-sm"></p>
+
+                        <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                            <button id="booking-lot-contact-cancel" type="button" class="gc-btn-soft">Annuler</button>
+                            <button id="booking-lot-contact-submit" type="submit" class="gc-btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled>
+                                Enregistrer le contact
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
         </div>
     </div>
 
@@ -1432,6 +1597,30 @@
         const confirmationMailPreviewSubject = document.getElementById('booking_confirmation_mail_preview_subject');
         const confirmationMailPreviewStatus = document.getElementById('booking_confirmation_mail_preview_status');
         const confirmationMailPreviewFrame = document.getElementById('booking_confirmation_mail_preview_frame');
+        const confirmationGlobalPlusCard = document.getElementById('booking-confirmation-global-plus-card');
+        const confirmationGlobalPlusSummary = document.getElementById('booking-confirmation-global-plus-summary');
+        const confirmationGlobalPlusBadge = document.getElementById('booking-confirmation-global-plus-badge');
+        const confirmationGlobalPlusError = document.getElementById('booking-confirmation-global-plus-error');
+        const confirmationGlobalPlusOpen = document.getElementById('booking-confirmation-global-plus-open');
+        const confirmationGlobalPlusSyncDocuments = document.getElementById('booking-confirmation-global-plus-sync-documents');
+        const confirmationGlobalPlusForm = document.getElementById('booking-confirmation-global-plus-form');
+        const confirmationGlobalPlusFormStatus = document.getElementById('booking-confirmation-global-plus-form-status');
+        const confirmationGlobalPlusVersion = document.getElementById('booking_confirmation_global_plus_version');
+        const confirmationGlobalPlusClient = document.getElementById('booking_confirmation_global_plus_client');
+        const confirmationGlobalPlusControllerSummary = document.getElementById('booking-confirmation-global-plus-controller-summary');
+        const confirmationGlobalPlusController = document.getElementById('booking_confirmation_global_plus_controller_id');
+        const confirmationGlobalPlusInstaller = document.getElementById('booking_confirmation_global_plus_installer');
+        const confirmationGlobalPlusInstallerName = document.getElementById('booking_confirmation_global_plus_installer_name');
+        const confirmationGlobalPlusInstallerSiren = document.getElementById('booking_confirmation_global_plus_installer_siren');
+        const confirmationGlobalPlusInstallerAddress = document.getElementById('booking_confirmation_global_plus_installer_address');
+        const confirmationGlobalPlusInstallerPostalCode = document.getElementById('booking_confirmation_global_plus_installer_postal_code');
+        const confirmationGlobalPlusInstallerCity = document.getElementById('booking_confirmation_global_plus_installer_city');
+        const confirmationGlobalPlusInstallerPhone = document.getElementById('booking_confirmation_global_plus_installer_phone');
+        const confirmationGlobalPlusTitle = document.getElementById('booking_confirmation_global_plus_title');
+        const confirmationGlobalPlusSubTitle = document.getElementById('booking_confirmation_global_plus_sub_title');
+        const confirmationGlobalPlusPrecariousness = document.getElementById('booking_confirmation_global_plus_precariousness');
+        const confirmationGlobalPlusSendDocuments = document.getElementById('booking_confirmation_global_plus_send_documents');
+        const confirmationGlobalPlusSubmit = document.getElementById('booking-confirmation-global-plus-submit');
         const bookingReplacementSearchForm = document.getElementById('booking-replacement-search-form');
         const bookingReplacementSearchQuery = document.getElementById('booking_replacement_search_query');
         const bookingReplacementSearchDateFrom = document.getElementById('booking_replacement_search_date_from');
@@ -1460,6 +1649,9 @@
         let confirmationMailPreviewTimer = null;
         let confirmationMailPreviewAbortController = null;
         let confirmationMailSent = false;
+        let confirmationGlobalPlusAppointment = null;
+        let confirmationGlobalPlusReferences = null;
+        const confirmationGlobalPlusReferencesCache = new Map();
 
         const externalRefreshStatusStyles = {
             available: {
@@ -3829,6 +4021,71 @@
 
         const isCoffracCrmId = (value) => String(value || '').startsWith('coffrac-');
 
+        const setBookingDetailText = (id, value) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value || '-';
+        };
+
+        const bookingConnectorMeta = (props = {}, isSuggestion = false) => {
+            const source = String(props.external_source || '').toLowerCase();
+            const isCoffrac = source === 'coffrac' || isCoffracCrmId(props.crm_appointment_id);
+            const isLot = Boolean(props.lot_appointment_id);
+
+            if (isCoffrac) {
+                return {
+                    badge: 'Coffrac',
+                    className: 'gc-status-pill gc-status-pill-success shrink-0',
+                    origin: 'Coffrac',
+                    reference: props.external_reference || props.crm_appointment_id || '-',
+                    summary: isSuggestion
+                        ? 'Demande Coffrac à placer. La validation doit mettre à jour le dossier côté Coffrac.'
+                        : 'RDV Coffrac déjà placé, avec synchronisation possible des documents et commentaires.',
+                    globalPlus: 'Non concerné',
+                };
+            }
+
+            if (isLot) {
+                return {
+                    badge: 'Lot',
+                    className: 'gc-status-pill gc-status-pill-warning shrink-0',
+                    origin: props.external_payload?.lot_name ? `Lot - ${props.external_payload.lot_name}` : 'Lot TechCalendar',
+                    reference: props.external_reference || `Dossier lot #${props.lot_appointment_id}`,
+                    summary: isSuggestion
+                        ? 'Dossier issu d’un lot. La liaison Global+ sera proposée après validation du RDV physique.'
+                        : 'RDV physique issu d’un lot TechCalendar.',
+                    globalPlus: isSuggestion
+                        ? 'Disponible après validation'
+                        : (props.global_plus_status_label || (props.global_plus_demand_id ? `Créé (${props.global_plus_demand_id})` : 'Non créé')),
+                };
+            }
+
+            return {
+                badge: 'Local',
+                className: 'gc-status-pill gc-status-pill-neutral shrink-0',
+                origin: 'TechCalendar',
+                reference: props.external_reference || '-',
+                summary: isSuggestion
+                    ? 'Proposition générée localement pour ce placement.'
+                    : 'RDV géré localement dans TechCalendar.',
+                globalPlus: 'Non concerné',
+            };
+        };
+
+        const renderBookingConnectorSummary = (props = {}, isSuggestion = false) => {
+            const meta = bookingConnectorMeta(props, isSuggestion);
+            const badge = document.getElementById('booking_detail_connector_badge');
+
+            if (badge) {
+                badge.textContent = meta.badge;
+                badge.className = meta.className;
+            }
+
+            setBookingDetailText('booking_detail_connector_summary', meta.summary);
+            setBookingDetailText('booking_detail_connector_origin', meta.origin);
+            setBookingDetailText('booking_detail_connector_reference', meta.reference);
+            setBookingDetailText('booking_detail_connector_global_plus', meta.globalPlus);
+        };
+
         const validRoutePoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
 
         const sameEventIdentity = (left, right) => {
@@ -4369,6 +4626,375 @@
             confirmationMailPreviewTimer = window.setTimeout(updateConfirmationMailPreview, delay);
         }
 
+        const bookingGlobalPlusOption = (label, value = '', selected = false, disabled = false) => (
+            `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(label)}</option>`
+        );
+
+        const confirmationGlobalPlusStatusMeta = (appointment) => {
+            if (appointment?.global_plus_demand_id) {
+                if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
+                    return { background: '#fef3c7', color: '#92400e' };
+                }
+
+                return { background: '#dcfce7', color: '#166534' };
+            }
+
+            if (appointment?.global_plus_error_message || appointment?.global_plus_status === 'failed') {
+                return { background: '#fee2e2', color: '#991b1b' };
+            }
+
+            if (appointment?.added_to_global_plus) {
+                return { background: '#fef3c7', color: '#92400e' };
+            }
+
+            return { background: 'var(--gc-accent-soft)', color: 'var(--gc-text-soft)' };
+        };
+
+        const setConfirmationGlobalPlusFormStatus = (message, color = 'var(--gc-text-soft)') => {
+            if (!confirmationGlobalPlusFormStatus) return;
+
+            confirmationGlobalPlusFormStatus.textContent = message;
+            confirmationGlobalPlusFormStatus.style.color = color;
+            confirmationGlobalPlusFormStatus.classList.remove('hidden');
+        };
+
+        const clearConfirmationGlobalPlusFormStatus = () => {
+            confirmationGlobalPlusFormStatus?.classList.add('hidden');
+            if (confirmationGlobalPlusFormStatus) {
+                confirmationGlobalPlusFormStatus.textContent = '';
+            }
+        };
+
+        const defaultConfirmationGlobalPlusTitle = (appointment) => `Lot ${appointment?.lot_name || appointment?.lot_id || ''}`.trim();
+
+        const defaultConfirmationGlobalPlusSubTitle = (appointment) => appointment?.internal_reference || [
+            appointment?.lot_name,
+            appointment?.row_number ? `Ligne ${appointment.row_number}` : null,
+            appointment?.customer_name,
+            appointment?.site_name,
+        ].filter(Boolean).join(' - ');
+
+        const selectedConfirmationGlobalPlusInstaller = () => {
+            const selectedAddressId = String(confirmationGlobalPlusInstaller?.value || '');
+
+            if (!selectedAddressId || !Array.isArray(confirmationGlobalPlusReferences?.installers)) {
+                return null;
+            }
+
+            return confirmationGlobalPlusReferences.installers.find((installer) => String(installer.address_id) === selectedAddressId) || null;
+        };
+
+        const fillConfirmationGlobalPlusInstallerFieldsFromSelection = () => {
+            const installer = selectedConfirmationGlobalPlusInstaller();
+
+            if (!installer) {
+                if (confirmationGlobalPlusInstallerName) {
+                    confirmationGlobalPlusInstallerName.value = confirmationGlobalPlusAppointment?.installer_name || confirmationGlobalPlusInstallerName.value || '';
+                }
+                return;
+            }
+
+            if (confirmationGlobalPlusInstallerName) confirmationGlobalPlusInstallerName.value = installer.name || installer.label || '';
+            if (confirmationGlobalPlusInstallerSiren) confirmationGlobalPlusInstallerSiren.value = installer.siren || '';
+            if (confirmationGlobalPlusInstallerAddress) confirmationGlobalPlusInstallerAddress.value = installer.address || '';
+            if (confirmationGlobalPlusInstallerPostalCode) confirmationGlobalPlusInstallerPostalCode.value = installer.postal_code || '';
+            if (confirmationGlobalPlusInstallerCity) confirmationGlobalPlusInstallerCity.value = installer.city || '';
+            if (confirmationGlobalPlusInstallerPhone) confirmationGlobalPlusInstallerPhone.value = installer.phone || '';
+        };
+
+        const populateConfirmationGlobalPlusReferences = (appointment, references) => {
+            confirmationGlobalPlusReferences = references || {};
+            const versions = Array.isArray(confirmationGlobalPlusReferences.intervention_versions)
+                ? confirmationGlobalPlusReferences.intervention_versions
+                : [];
+            const installers = Array.isArray(confirmationGlobalPlusReferences.installers)
+                ? confirmationGlobalPlusReferences.installers
+                : [];
+            const controllers = Array.isArray(confirmationGlobalPlusReferences.controllers)
+                ? confirmationGlobalPlusReferences.controllers
+                : [];
+            const suggestedVersion = String(confirmationGlobalPlusReferences.suggested_version_formulaire_id || '');
+            if (confirmationGlobalPlusClient) {
+                confirmationGlobalPlusClient.innerHTML = [
+                    bookingGlobalPlusOption('Choisir le client Global+', ''),
+                    ...(confirmationGlobalPlusReferences.clients || []).map((client) => bookingGlobalPlusOption(client.label || `Client ${client.address_id}`, client.address_id)),
+                ].join('');
+            }
+            const suggestedInstaller = String(confirmationGlobalPlusReferences.suggested_installer_address_id || '');
+            const suggestedController = String(confirmationGlobalPlusReferences.suggested_controller_id || '');
+
+            if (confirmationGlobalPlusVersion) {
+                confirmationGlobalPlusVersion.innerHTML = [
+                    bookingGlobalPlusOption('Choisir une prestation Global+', ''),
+                    ...versions.map((version) => bookingGlobalPlusOption(
+                        `${version.label || version.code} · ${version.code || version.version_formulaire_id}`,
+                        version.version_formulaire_id,
+                        String(version.version_formulaire_id) === suggestedVersion,
+                    )),
+                ].join('');
+            }
+
+            if (confirmationGlobalPlusInstaller) {
+                confirmationGlobalPlusInstaller.innerHTML = [
+                    bookingGlobalPlusOption('Saisie manuelle / installateur du dossier', ''),
+                    ...installers.map((installer) => bookingGlobalPlusOption(
+                        `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
+                        installer.address_id,
+                        String(installer.address_id) === suggestedInstaller,
+                        Boolean(installer.blocked),
+                    )),
+                ].join('');
+            }
+
+            if (confirmationGlobalPlusController) {
+                confirmationGlobalPlusController.innerHTML = [
+                    bookingGlobalPlusOption('Choisir un technicien Global+', ''),
+                    ...controllers.map((controller) => bookingGlobalPlusOption(
+                        `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}${controller.active === false ? ' · inactif' : ''}`,
+                        controller.id,
+                        String(controller.id) === suggestedController,
+                        controller.active === false,
+                    )),
+                ].join('');
+            }
+
+            if (confirmationGlobalPlusControllerSummary) {
+                const controller = controllers.find((item) => String(item.id) === suggestedController);
+
+                confirmationGlobalPlusControllerSummary.textContent = controller
+                    ? `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}`
+                    : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
+            }
+
+            if (confirmationGlobalPlusInstallerName) confirmationGlobalPlusInstallerName.value = appointment?.installer_name || '';
+            if (confirmationGlobalPlusInstallerSiren) confirmationGlobalPlusInstallerSiren.value = appointment?.installer_siren || '';
+            if (confirmationGlobalPlusInstallerAddress) confirmationGlobalPlusInstallerAddress.value = '';
+            if (confirmationGlobalPlusInstallerPostalCode) confirmationGlobalPlusInstallerPostalCode.value = '';
+            if (confirmationGlobalPlusInstallerCity) confirmationGlobalPlusInstallerCity.value = '';
+            if (confirmationGlobalPlusInstallerPhone) confirmationGlobalPlusInstallerPhone.value = '';
+            fillConfirmationGlobalPlusInstallerFieldsFromSelection();
+
+            if (confirmationGlobalPlusTitle) {
+                confirmationGlobalPlusTitle.value = defaultConfirmationGlobalPlusTitle(appointment).slice(0, 50);
+            }
+
+            if (confirmationGlobalPlusSubTitle) {
+                confirmationGlobalPlusSubTitle.value = defaultConfirmationGlobalPlusSubTitle(appointment).slice(0, 255);
+            }
+
+            if (confirmationGlobalPlusPrecariousness) {
+                confirmationGlobalPlusPrecariousness.value = '';
+            }
+
+            if (confirmationGlobalPlusSendDocuments) {
+                confirmationGlobalPlusSendDocuments.checked = true;
+            }
+        };
+
+        const loadConfirmationGlobalPlusReferences = async (appointment) => {
+            if (!appointment?.global_plus_references_url) {
+                throw new Error('Référentiel Global+ indisponible.');
+            }
+
+            if (confirmationGlobalPlusReferencesCache.has(String(appointment.id))) {
+                return confirmationGlobalPlusReferencesCache.get(String(appointment.id));
+            }
+
+            setConfirmationGlobalPlusFormStatus('Chargement des référentiels Global+...');
+
+            const response = await fetch(appointment.global_plus_references_url, {
+                headers: { Accept: 'application/json' },
+            });
+            const payload = await response.json();
+
+            if (!response.ok || payload.configured === false) {
+                throw new Error(payload.message || 'Référentiels Global+ indisponibles.');
+            }
+
+            confirmationGlobalPlusReferencesCache.set(String(appointment.id), payload);
+
+            return payload;
+        };
+
+        const configureConfirmationGlobalPlus = (appointment) => {
+            confirmationGlobalPlusAppointment = appointment || null;
+            confirmationGlobalPlusReferences = null;
+            clearConfirmationGlobalPlusFormStatus();
+            confirmationGlobalPlusForm?.classList.add('hidden');
+
+            const shouldShow = Boolean(appointment?.id && appointment?.appointment_id);
+            confirmationGlobalPlusCard?.classList.toggle('hidden', !shouldShow);
+
+            if (!shouldShow) {
+                return;
+            }
+
+            const meta = confirmationGlobalPlusStatusMeta(appointment);
+            const hasDemand = Boolean(appointment.global_plus_demand_id);
+            const canCreate = Boolean(appointment.can_create_global_plus);
+            const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
+
+            if (confirmationGlobalPlusBadge) {
+                confirmationGlobalPlusBadge.textContent = appointment.global_plus_status_label || 'Non créé';
+                confirmationGlobalPlusBadge.style.background = meta.background;
+                confirmationGlobalPlusBadge.style.color = meta.color;
+            }
+
+            if (confirmationGlobalPlusSummary) {
+                const documentsLabel = Number(appointment.documents_count || 0) > 0
+                    ? ` ${appointment.documents_count} document(s) seront proposés à l’envoi.`
+                    : '';
+
+                confirmationGlobalPlusSummary.textContent = hasDemand
+                    ? `Référence Global+ ${appointment.global_plus_demand_id}.${documentsLabel}`
+                    : (canCreate
+                        ? `Ce RDV physique vient d’un lot et peut être créé dans Global+.${documentsLabel}`
+                        : 'Global+ n’est pas disponible pour ce RDV.');
+            }
+
+            if (confirmationGlobalPlusError) {
+                confirmationGlobalPlusError.textContent = appointment.global_plus_error_message || '';
+                confirmationGlobalPlusError.classList.toggle('hidden', !appointment.global_plus_error_message);
+            }
+
+            if (confirmationGlobalPlusOpen) {
+                confirmationGlobalPlusOpen.disabled = !canCreate;
+                confirmationGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà créé dans Global+' : 'Préparer Global+');
+            }
+
+            if (confirmationGlobalPlusSyncDocuments) {
+                confirmationGlobalPlusSyncDocuments.classList.toggle('hidden', !canSyncDocuments);
+                confirmationGlobalPlusSyncDocuments.disabled = !canSyncDocuments;
+            }
+        };
+
+        const openConfirmationGlobalPlusForm = async () => {
+            const appointment = confirmationGlobalPlusAppointment;
+
+            if (!appointment?.can_create_global_plus) {
+                return;
+            }
+
+            confirmationGlobalPlusForm?.classList.toggle('hidden');
+
+            if (confirmationGlobalPlusForm?.classList.contains('hidden')) {
+                return;
+            }
+
+            clearConfirmationGlobalPlusFormStatus();
+
+            try {
+                const references = await loadConfirmationGlobalPlusReferences(appointment);
+                populateConfirmationGlobalPlusReferences(appointment, references);
+                clearConfirmationGlobalPlusFormStatus();
+            } catch (error) {
+                setConfirmationGlobalPlusFormStatus(error.message || 'Impossible de charger Global+.', '#be123c');
+            }
+        };
+
+        const submitConfirmationGlobalPlusCreate = async () => {
+            const appointment = confirmationGlobalPlusAppointment;
+
+            if (!appointment?.global_plus_store_url || !confirmationGlobalPlusSubmit) {
+                return;
+            }
+
+            if (!confirmationGlobalPlusVersion?.value) {
+                setConfirmationGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
+                return;
+            }
+
+            if (!confirmationGlobalPlusClient?.value) {
+                setConfirmationGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
+                return;
+            }
+
+            if (!confirmationGlobalPlusController?.value) {
+                setConfirmationGlobalPlusFormStatus('Choisis le technicien Global+.', '#be123c');
+                return;
+            }
+
+            confirmationGlobalPlusSubmit.disabled = true;
+            confirmationGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
+            setConfirmationGlobalPlusFormStatus('Création du dossier dans Global+...');
+
+            try {
+                const response = await fetch(appointment.global_plus_store_url, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        version_formulaire_id: Number(confirmationGlobalPlusVersion.value),
+                        client_address_id: Number(confirmationGlobalPlusClient.value),
+                        controller_id: Number(confirmationGlobalPlusController.value),
+                        installer_address_id: confirmationGlobalPlusInstaller?.value ? Number(confirmationGlobalPlusInstaller.value) : null,
+                        installer_name: confirmationGlobalPlusInstallerName?.value || null,
+                        installer_siren: confirmationGlobalPlusInstallerSiren?.value || null,
+                        installer_phone: confirmationGlobalPlusInstallerPhone?.value || null,
+                        installer_address: confirmationGlobalPlusInstallerAddress?.value || null,
+                        installer_postal_code: confirmationGlobalPlusInstallerPostalCode?.value || null,
+                        installer_city: confirmationGlobalPlusInstallerCity?.value || null,
+                        precariousness: confirmationGlobalPlusPrecariousness?.value ? Number(confirmationGlobalPlusPrecariousness.value) : null,
+                        title: confirmationGlobalPlusTitle?.value || null,
+                        sub_title: confirmationGlobalPlusSubTitle?.value || null,
+                        send_documents: Boolean(confirmationGlobalPlusSendDocuments?.checked),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Création Global+ impossible.');
+                }
+
+                const updatedGlobalPlus = payload.global_plus || appointment;
+                configureConfirmationGlobalPlus(updatedGlobalPlus);
+                setConfirmationGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', payload.warning ? '#be123c' : '#15803d');
+            } catch (error) {
+                setConfirmationGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
+            } finally {
+                confirmationGlobalPlusSubmit.disabled = false;
+                confirmationGlobalPlusSubmit.textContent = 'Créer dans Global+';
+            }
+        };
+
+        const syncConfirmationGlobalPlusDocuments = async () => {
+            const appointment = confirmationGlobalPlusAppointment;
+
+            if (!appointment?.global_plus_documents_sync_url || !confirmationGlobalPlusSyncDocuments) {
+                return;
+            }
+
+            confirmationGlobalPlusSyncDocuments.disabled = true;
+            confirmationGlobalPlusSyncDocuments.textContent = 'Synchronisation...';
+
+            try {
+                const response = await fetch(appointment.global_plus_documents_sync_url, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': bookingCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Synchronisation Global+ impossible.');
+                }
+
+                configureConfirmationGlobalPlus(payload.global_plus || appointment);
+                setConfirmationGlobalPlusFormStatus(payload.message || 'Documents synchronisés avec Global+.', '#15803d');
+            } catch (error) {
+                setConfirmationGlobalPlusFormStatus(error.message || 'Synchronisation Global+ impossible.', '#be123c');
+            } finally {
+                confirmationGlobalPlusSyncDocuments.disabled = false;
+                confirmationGlobalPlusSyncDocuments.textContent = 'Synchroniser les documents';
+            }
+        };
+
         const showPlacementConfirmation = (data, payload, event) => {
             const props = event?.extendedProps || {};
             const technician = technicianById(payload.technician_id);
@@ -4414,6 +5040,7 @@
 
             confirmationTrackLink.href = trackingUrl.toString();
             resetConfirmationMailComposer(data);
+            configureConfirmationGlobalPlus(data.global_plus || null);
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
@@ -4538,6 +5165,7 @@
             document.getElementById('booking_detail_service').textContent = props.service_label || '-';
             document.getElementById('booking_detail_address').textContent = props.address || '-';
             document.getElementById('booking_detail_origin').textContent = `${props.origin_label || '-'}${props.origin_name ? ` (${props.origin_name})` : ''}`;
+            renderBookingConnectorSummary(props, isSuggestion);
             renderExternalComments(props.comments || props.external_payload?.comments || [], 'booking_detail_comments', 'booking_detail_comments_count');
             renderBookingDetailDocuments(props.documents || []);
             setBookingDetailDocumentsRefreshVisible(event);
@@ -5619,6 +6247,14 @@
 
         document.getElementById('booking-confirmation-new').addEventListener('click', () => {
             window.location.reload();
+        });
+
+        confirmationGlobalPlusOpen?.addEventListener('click', openConfirmationGlobalPlusForm);
+        confirmationGlobalPlusInstaller?.addEventListener('change', fillConfirmationGlobalPlusInstallerFieldsFromSelection);
+        confirmationGlobalPlusSyncDocuments?.addEventListener('click', syncConfirmationGlobalPlusDocuments);
+        confirmationGlobalPlusForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await submitConfirmationGlobalPlusCreate();
         });
 
         confirmationMailToggle?.addEventListener('click', () => {

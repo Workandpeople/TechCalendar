@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'service_id',
     'appointment_id',
     'external_reference',
+    'internal_reference',
     'row_number',
     'source',
     'customer_name',
@@ -21,6 +22,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'customer_first_name',
     'customer_last_name',
     'customer_phone',
+    'customer_email',
+    'installer_siren',
+    'beneficiary_address',
+    'beneficiary_postal_code',
+    'beneficiary_city',
     'address',
     'postal_code',
     'city',
@@ -93,6 +99,14 @@ class LotAppointment extends Model
     public function lot(): BelongsTo
     {
         return $this->belongsTo(Lot::class);
+    }
+
+    public function internalReference(): ?string
+    {
+        return $this->internal_reference
+            ?: data_get($this->raw_payload, 'internal_reference')
+            ?: data_get($this->raw_payload, 'external_reference')
+            ?: ($this->source !== 'coffrac' ? $this->external_reference : null);
     }
 
     public function service(): BelongsTo

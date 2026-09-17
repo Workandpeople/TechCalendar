@@ -18,6 +18,8 @@ use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\ExternalAppointmentSourceRegistry;
+use App\Services\GlobalPlus\GlobalPlusApiException;
+use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotStatusService;
 use App\Services\MapboxDrivingRouteService;
@@ -582,10 +584,25 @@ class PlannerBookingController extends Controller
             $appointmentMails->created($appointment);
         }
 
+        $globalPlus = ! $replacementAppointment && ! empty($payload['lot_appointment_id'])
+            ? $this->serializeBookingGlobalPlus(
+                LotAppointment::query()
+                    ->with([
+                        'lot.service',
+                        'lot.coffracServiceAlias',
+                        'service',
+                        'appointment.technician',
+                        'appointment.service',
+                    ])
+                    ->find((int) $payload['lot_appointment_id'])
+            )
+            : null;
+
         return response()->json([
             'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
             'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
+            'global_plus' => $globalPlus,
         ], $replacementAppointment ? 200 : 201);
     }
 
@@ -622,6 +639,94 @@ class PlannerBookingController extends Controller
                 'status' => LotAppointment::STATUS_CONTACT_PROCESSED,
                 'status_label' => $lotAppointment->fresh()->statusLabel(),
             ],
+        ]);
+    }
+
+    public function globalPlusReferences(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+        $this->abortUnlessGlobalPlusBookingIsAvailable($lotAppointment);
+
+        try {
+            return response()->json($globalPlusAppointments->referenceDataFor($lotAppointment));
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'configured' => true,
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'configured' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function storeLotAppointmentGlobalPlus(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+
+        $payload = $request->validate($this->globalPlusDemandRules(), [
+            'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
+            'version_formulaire_id.min' => 'Choisis une prestation Global+ valide.',
+            'controller_id.required' => 'Choisis le technicien Global+ avant de créer le dossier.',
+            'client_address_id.required' => 'Choisis le délégataire dans la liste des clients Global+.',
+            'controller_id.min' => 'Choisis un technicien Global+ valide.',
+            'installer_address_id.integer' => 'L’installateur Global+ sélectionné est invalide.',
+            'installer_name.max' => 'Le nom de l’installateur est trop long.',
+            'installer_siren.max' => 'Le SIREN de l’installateur est trop long.',
+        ]);
+
+        try {
+            $lotAppointment = $globalPlusAppointments->createDemandFromLotAppointment($lotAppointment, $payload, $request->user());
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED
+                ? 'Dossier Global+ créé, mais affectation du technicien à terminer : '.$lotAppointment->global_plus_error_message
+                : sprintf('Dossier créé dans Global+ avec la référence %s et technicien affecté.', $lotAppointment->global_plus_demand_id),
+            'warning' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED,
+            'global_plus' => $this->serializeBookingGlobalPlus($lotAppointment),
+        ], 201);
+    }
+
+    public function syncLotAppointmentGlobalPlusDocuments(
+        Request $request,
+        LotAppointment $lotAppointment,
+        GlobalPlusAppointmentService $globalPlusAppointments,
+    ): JsonResponse {
+        abort_unless($this->canAccess($request), 403);
+        $this->abortUnlessGlobalPlusBookingIsAvailable($lotAppointment);
+
+        try {
+            $lotAppointment = $globalPlusAppointments->syncDocuments($lotAppointment);
+        } catch (GlobalPlusApiException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Documents synchronisés avec Global+.',
+            'global_plus' => $this->serializeBookingGlobalPlus($lotAppointment),
         ]);
     }
 
@@ -1254,6 +1359,12 @@ class PlannerBookingController extends Controller
                         'company_name' => $appointment->company_name,
                         'site_name' => $appointment->site_name,
                         'installer_name' => $appointment->installer_name,
+                        'installer_siren' => $appointment->installer_siren,
+                        'internal_reference' => $appointment->internalReference(),
+                        'customer_email' => $appointment->customer_email,
+                        'beneficiary_address' => $appointment->beneficiary_address,
+                        'beneficiary_postal_code' => $appointment->beneficiary_postal_code,
+                        'beneficiary_city' => $appointment->beneficiary_city,
                         'customer_phone' => $appointment->customer_phone,
                         'address' => $appointment->address,
                         'postal_code' => $appointment->postal_code ?: ($appointment->raw_payload['postal_code'] ?? null),
@@ -1433,6 +1544,12 @@ class PlannerBookingController extends Controller
             'company_name' => $lotAppointment->company_name,
             'site_name' => $lotAppointment->site_name,
             'installer_name' => $lotAppointment->installer_name,
+            'installer_siren' => $lotAppointment->installer_siren,
+            'internal_reference' => $lotAppointment->internalReference(),
+            'customer_email' => $lotAppointment->customer_email,
+            'beneficiary_address' => $lotAppointment->beneficiary_address,
+            'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
+            'beneficiary_city' => $lotAppointment->beneficiary_city,
             'phone' => $lotAppointment->customer_phone,
             'address' => $lotAppointment->address,
             'postal_code' => $lotAppointment->postal_code,
@@ -1460,6 +1577,12 @@ class PlannerBookingController extends Controller
                 'company_name' => $lotAppointment->company_name,
                 'site_name' => $lotAppointment->site_name,
                 'installer_name' => $lotAppointment->installer_name,
+                'installer_siren' => $lotAppointment->installer_siren,
+                'internal_reference' => $lotAppointment->internalReference(),
+                'customer_email' => $lotAppointment->customer_email,
+                'beneficiary_address' => $lotAppointment->beneficiary_address,
+                'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
+                'beneficiary_city' => $lotAppointment->beneficiary_city,
                 'raw_payload' => $lotAppointment->raw_payload,
             ],
             'service' => $service ? [
@@ -1600,6 +1723,138 @@ class PlannerBookingController extends Controller
     private function refreshLotStatus(?Lot $lot): void
     {
         app(LotStatusService::class)->refresh($lot);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function globalPlusDemandRules(): array
+    {
+        return [
+            'version_formulaire_id' => ['required', 'integer', 'min:1'],
+            'controller_id' => ['required', 'integer', 'min:1'],
+            'client_address_id' => ['required', 'integer', 'min:1'],
+            'installer_address_id' => ['nullable', 'integer', 'min:1'],
+            'installer_name' => ['nullable', 'string', 'max:255'],
+            'installer_siren' => ['nullable', 'string', 'max:20'],
+            'installer_phone' => ['nullable', 'string', 'max:40'],
+            'installer_address' => ['nullable', 'string', 'max:255'],
+            'installer_postal_code' => ['nullable', 'string', 'max:20'],
+            'installer_city' => ['nullable', 'string', 'max:120'],
+            'precariousness' => ['nullable', 'integer', 'min:0', 'max:10'],
+            'title' => ['nullable', 'string', 'max:50'],
+            'sub_title' => ['nullable', 'string', 'max:255'],
+            'send_documents' => ['nullable', 'boolean'],
+        ];
+    }
+
+    private function abortUnlessGlobalPlusBookingIsAvailable(LotAppointment $lotAppointment): void
+    {
+        $lotAppointment->loadMissing('appointment');
+
+        abort_unless(
+            filled($lotAppointment->appointment_id)
+            && $lotAppointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL,
+            422,
+            'Le dossier doit être placé physiquement avant l’envoi Global+.'
+        );
+    }
+
+    private function canCreateGlobalPlusDemand(LotAppointment $lotAppointment): bool
+    {
+        return filled($lotAppointment->appointment_id)
+            && $lotAppointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
+            && (! filled($lotAppointment->global_plus_demand_id) || $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED);
+    }
+
+    private function globalPlusStatusLabel(LotAppointment $lotAppointment): string
+    {
+        if (filled($lotAppointment->global_plus_demand_id)) {
+            return match ($lotAppointment->global_plus_status) {
+                GlobalPlusAppointmentService::STATUS_DOCUMENTS_SYNCED => 'Créé, documents synchronisés',
+                GlobalPlusAppointmentService::STATUS_DOCUMENTS_FAILED => 'Créé, erreur documents',
+                GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED => 'Créé, technicien non confirmé',
+                default => 'Créé dans Global+',
+            };
+        }
+
+        if ($lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_FAILED) {
+            return 'Erreur Global+';
+        }
+
+        if ($lotAppointment->added_to_global_plus) {
+            return 'Marqué localement';
+        }
+
+        return 'Non créé';
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function serializeBookingGlobalPlus(?LotAppointment $lotAppointment): ?array
+    {
+        if (! $lotAppointment) {
+            return null;
+        }
+
+        $lotAppointment->loadMissing([
+            'lot.service',
+            'lot.coffracServiceAlias',
+            'service',
+            'appointment.technician',
+            'appointment.service',
+        ]);
+
+        if (
+            $lotAppointment->processing_mode !== LotAppointment::PROCESSING_MODE_PHYSICAL
+            || ! filled($lotAppointment->appointment_id)
+        ) {
+            return null;
+        }
+
+        $service = $lotAppointment->service
+            ?: $lotAppointment->lot?->service
+            ?: $lotAppointment->appointment?->service;
+
+        $customerName = $this->appointmentRequestDisplayName([
+            'first_name' => $lotAppointment->customer_first_name,
+            'last_name' => $lotAppointment->customer_last_name,
+            'company_name' => $lotAppointment->company_name,
+            'site_name' => $lotAppointment->site_name,
+            'is_lot' => true,
+        ]);
+
+        return [
+            'id' => $lotAppointment->id,
+            'lot_id' => $lotAppointment->lot_id,
+            'lot_name' => $lotAppointment->lot?->name,
+            'row_number' => $lotAppointment->row_number,
+            'customer_name' => $customerName,
+            'company_name' => $lotAppointment->company_name,
+            'site_name' => $lotAppointment->site_name,
+            'installer_name' => $lotAppointment->installer_name,
+            'installer_siren' => $lotAppointment->installer_siren,
+            'internal_reference' => $lotAppointment->internalReference(),
+            'customer_email' => $lotAppointment->customer_email,
+            'beneficiary_address' => $lotAppointment->beneficiary_address,
+            'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
+            'beneficiary_city' => $lotAppointment->beneficiary_city,
+            'service_label' => $service ? $service->type.' - '.$service->name : null,
+            'appointment_id' => $lotAppointment->appointment_id,
+            'global_plus_references_url' => route('planner.book.lots.appointments.global-plus.references', $lotAppointment),
+            'global_plus_store_url' => route('planner.book.lots.appointments.global-plus.store', $lotAppointment),
+            'global_plus_documents_sync_url' => route('planner.book.lots.appointments.global-plus.documents.sync', $lotAppointment),
+            'added_to_global_plus' => (bool) $lotAppointment->added_to_global_plus,
+            'global_plus_demand_id' => $lotAppointment->global_plus_demand_id,
+            'global_plus_intervention_id' => $lotAppointment->global_plus_intervention_id,
+            'global_plus_status' => $lotAppointment->global_plus_status,
+            'global_plus_status_label' => $this->globalPlusStatusLabel($lotAppointment),
+            'global_plus_error_message' => $lotAppointment->global_plus_error_message,
+            'can_create_global_plus' => $this->canCreateGlobalPlusDemand($lotAppointment),
+            'can_sync_global_plus_documents' => filled($lotAppointment->global_plus_demand_id),
+            'documents_count' => $lotAppointment->documents()->count(),
+        ];
     }
 
     private function forgetRouteMetricsForAppointmentChange(

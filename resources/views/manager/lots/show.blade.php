@@ -20,7 +20,7 @@
                     @endif
                 </p>
                 @if ($lot['comment'])
-                    <p class="mt-3 max-w-4xl whitespace-pre-line rounded-2xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                    <p class="mt-3 max-w-4xl whitespace-pre-line rounded-2xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);">
                         {{ $lot['comment'] }}
                     </p>
                 @endif
@@ -28,7 +28,7 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 @if ($lot['can_download_original_file'])
-                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4">
+                    <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4 leading-none">
                         Télécharger le fichier source
                     </a>
                 @endif
@@ -45,8 +45,8 @@
             $lotDelegataireNames = $delegataires->pluck('name');
         @endphp
 
-        <div id="lot-detail-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-detail-edit-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-3xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Lot</p>
@@ -125,7 +125,7 @@
 
                         <div>
                             <span class="gc-label">Statut du lot</span>
-                            <div class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                            <div class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);">
                                 {{ $lot['status_label'] }}
                             </div>
                             <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Statut recalculé automatiquement selon les objectifs de satisfaction.</p>
@@ -167,8 +167,8 @@
             </div>
         </div>
 
-        <div id="lot-appointment-targets-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-appointment-targets-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-2xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Objectifs de RDV à prendre</p>
@@ -183,7 +183,7 @@
                     @method('PATCH')
 
                     @if ($lot['supports_physical'])
-                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                             <label class="gc-label" for="physical_appointment_target_count">Objectif RDV physiques</label>
                             <input
                                 id="physical_appointment_target_count"
@@ -203,7 +203,7 @@
                     @endif
 
                     @if ($lot['supports_contact'])
-                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                             <label class="gc-label" for="contact_appointment_target_count">Objectif contacts téléphoniques</label>
                             <input
                                 id="contact_appointment_target_count"
@@ -230,8 +230,8 @@
             </div>
         </div>
 
-        <div id="lot-documents-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+        <div id="lot-documents-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel gc-documents-modal-panel">
                 <div class="flex flex-col gap-4 border-b px-6 py-5 lg:flex-row lg:items-center lg:justify-between" style="border-color:var(--gc-border);">
                     <div class="max-w-3xl">
                         <p class="text-xs font-semibold uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Documents du lot</p>
@@ -245,7 +245,7 @@
                 </div>
 
                 <div class="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
-                    <aside class="flex min-h-0 flex-col border-b p-5 lg:border-b-0 lg:border-r" style="border-color:var(--gc-border);background:#fbfaf6;">
+                    <aside class="flex min-h-0 flex-col border-b p-5 lg:border-b-0 lg:border-r" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                         <div class="space-y-4">
                             <div>
                                 <label class="gc-label" for="lot_documents_search">Rechercher un dossier</label>
@@ -274,7 +274,7 @@
                         </div>
                     </aside>
 
-                    <section class="min-h-0 overflow-y-auto p-5 lg:p-6" style="background:#f8fafc;">
+                    <section class="min-h-0 overflow-y-auto p-5 lg:p-6" style="background:var(--gc-panel-muted);">
                         <div id="lot-documents-empty" class="flex min-h-[540px] items-center justify-center text-center">
                             <div class="max-w-sm rounded-3xl border bg-white p-8 shadow-sm" style="border-color:var(--gc-border);">
                                 <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style="background:var(--gc-accent-soft);color:var(--gc-text);">
@@ -287,7 +287,7 @@
 
                         <div id="lot-documents-card" class="hidden">
                             <div class="overflow-hidden rounded-[1.5rem] border bg-white shadow-sm" style="border-color:var(--gc-border);">
-                                <div class="border-b p-5" style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff,#f6f8fb);">
+                                <div class="border-b bg-white p-5" style="border-color:var(--gc-border);">
                                     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                                         <div class="min-w-0">
                                             <p id="lot-documents-card-reference" class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);"></p>
@@ -311,10 +311,10 @@
                                         <div id="lot-documents-card-list" class="mt-4 space-y-3"></div>
                                     </section>
 
-                                    <section class="p-5" style="background:#fbfaf6;">
+                                    <section class="p-5" style="background:var(--gc-panel-muted);">
                                         <h4 class="text-lg font-semibold" style="color:var(--gc-text);">Ajouter des documents</h4>
                                         <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Renomme chaque fichier et coche privé si besoin.</p>
-                                        <div id="lot-documents-dropzone" class="mt-4 flex min-h-[170px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed p-6 text-center transition" style="border-color:#d8c27a;background:#ffffff;">
+                                        <div id="lot-documents-dropzone" class="gc-document-dropzone mt-4 flex min-h-[170px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed p-6 text-center transition">
                                             <div class="flex h-12 w-12 items-center justify-center rounded-2xl" style="background:var(--gc-accent-soft);color:var(--gc-text);">
                                                 <span class="text-xl" aria-hidden="true">+</span>
                                             </div>
@@ -517,7 +517,7 @@
                 </div>
             </div>
 
-            <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-4 md:p-5" style="border-color:var(--gc-border);background:#fbfaf6;">
+            <form id="manager-lot-appointment-filters-form" method="GET" action="{{ route('manager.lots.show', $lot['id']) }}" class="border-b p-4 md:p-5" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6 xl:grid-cols-12 xl:items-end">
                     <label class="block md:col-span-2 lg:col-span-3 xl:col-span-3">
                         <span class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Recherche</span>
@@ -611,7 +611,7 @@
 
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y text-sm" style="border-color:var(--gc-border);">
-                    <thead style="background:#fbfaf6;color:var(--gc-text-soft);">
+                    <thead style="background:var(--gc-panel-muted);color:var(--gc-text-soft);">
                         <tr>
                             <th class="px-4 py-3 text-left font-semibold">Ligne</th>
                             <th class="px-4 py-3 text-left font-semibold">Client / site</th>
@@ -659,6 +659,7 @@
                                     default => null,
                                 };
                                 $globalPlusMeta = match (true) {
+                                    ($appointment['global_plus_status'] ?? null) === 'appointment_failed' => ['background' => '#fef3c7', 'color' => '#92400e'],
                                     filled($appointment['global_plus_demand_id'] ?? null) => ['background' => '#dcfce7', 'color' => '#166534'],
                                     filled($appointment['global_plus_error_message'] ?? null) => ['background' => '#fee2e2', 'color' => '#991b1b'],
                                     $appointment['added_to_global_plus'] => ['background' => '#fef3c7', 'color' => '#92400e'],
@@ -765,9 +766,9 @@
         @endforeach
     </div>
 
-    <div id="lot-physical-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-        <div class="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+    <div id="lot-physical-detail-modal" class="gc-modal hidden">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
+            <div class="gc-appointment-modal-header">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail physique</p>
                     <h2 id="lot-physical-detail-title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
@@ -776,20 +777,24 @@
                 <button id="lot-physical-detail-close" type="button" class="gc-link">Fermer</button>
             </div>
 
-            <div class="grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-                <div class="space-y-4">
-                    <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);">
-                        <h3 class="font-semibold" style="color:var(--gc-text);">Informations du RDV</h3>
-                        <dl id="lot-physical-detail-infos" class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2"></dl>
+            <div class="gc-appointment-modal-body">
+                <section class="gc-appointment-modal-map-pane space-y-4">
+                    <section class="gc-appointment-section">
+                        <div class="mb-3">
+                            <h3 class="gc-appointment-section-title">Localisation</h3>
+                            <p id="lot-physical-detail-map-status" class="gc-appointment-section-subtitle">Chargement du point GPS...</p>
+                        </div>
+                        <div id="lot-physical-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
+                        <p class="gc-appointment-modal-map-note">Carte libre : zoom, déplacement et vérification du point Mapbox.</p>
                     </section>
 
-                    <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                    <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <h3 class="gc-appointment-section-title">Documents</h3>
                             <span id="lot-physical-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
                         </div>
                         <div id="lot-physical-documents-list" class="mt-3 space-y-2"></div>
-                        <div id="lot-physical-documents-dropzone" class="mt-4 rounded-2xl border border-dashed p-4 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div id="lot-physical-documents-dropzone" class="gc-document-dropzone mt-4 rounded-2xl border-2 border-dashed p-4 text-center transition">
                             <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
                             <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ils partiront vers Coffrac dès que possible.</p>
                             <input id="lot_physical_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
@@ -800,127 +805,141 @@
                         </form>
                         <p id="lot-physical-documents-upload-status" class="mt-3 hidden text-sm"></p>
                     </section>
-                </div>
+                </section>
 
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
-                    <form id="lot-physical-visits-form" class="space-y-3">
-                        <div>
-                            <label class="gc-label" for="lot_physical_unsuccessful_visits_count">Nombre de portes</label>
-                            <input id="lot_physical_unsuccessful_visits_count" type="number" min="0" max="65535" step="1" class="gc-input" />
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Nombre de déplacements effectués sans aboutir.</p>
+                <section class="gc-appointment-modal-info-pane space-y-4">
+                    <section class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <dl id="lot-physical-detail-infos" class="gc-appointment-info-grid mt-4"></dl>
+                    </section>
+
+                    <section class="gc-appointment-section gc-appointment-section-muted">
+                        <form id="lot-physical-visits-form" class="space-y-3">
+                            <div>
+                                <label class="gc-label" for="lot_physical_unsuccessful_visits_count">Nombre de portes</label>
+                                <input id="lot_physical_unsuccessful_visits_count" type="number" min="0" max="65535" step="1" class="gc-input" />
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Nombre de déplacements effectués sans aboutir.</p>
+                            </div>
+                            <p id="lot-physical-visits-status" class="hidden text-sm"></p>
+                            <button id="lot-physical-visits-submit" type="submit" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                                Enregistrer les portes
+                            </button>
+                        </form>
+
+                        <div id="lot-physical-tracking-link-wrap" class="mt-4 hidden">
+                            <a id="lot-physical-tracking-link" href="#" class="gc-btn-soft w-full justify-center">Voir dans la gestion des RDV</a>
                         </div>
-                        <p id="lot-physical-visits-status" class="hidden text-sm"></p>
-                        <button id="lot-physical-visits-submit" type="submit" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
-                            Enregistrer les portes
-                        </button>
-                    </form>
+                    </section>
 
-	                    <div id="lot-physical-tracking-link-wrap" class="mt-4 hidden">
-	                        <a id="lot-physical-tracking-link" href="#" class="gc-btn-soft w-full justify-center">Voir dans la gestion des RDV</a>
-	                    </div>
+                    <section id="lot-physical-global-plus-card" class="gc-appointment-section">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 class="gc-appointment-section-title">Global+</h3>
+                                <p id="lot-physical-global-plus-summary" class="gc-appointment-section-subtitle"></p>
+                            </div>
+                            <span id="lot-physical-global-plus-badge" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"></span>
+                        </div>
+                        <p id="lot-physical-global-plus-error" class="mt-2 hidden text-sm" style="color:#be123c;"></p>
+                        <div class="mt-3 grid gap-2">
+                            <button id="lot-physical-global-plus-open" type="button" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                                Ajouter à Global+
+                            </button>
+                            <button id="lot-physical-global-plus-sync-documents" type="button" class="gc-btn-soft hidden w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                                Synchroniser les documents
+                            </button>
+                        </div>
+                        <form id="lot-physical-global-plus-form" class="mt-4 hidden space-y-3 rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
+                            <p id="lot-physical-global-plus-form-status" class="hidden text-sm"></p>
+                            <div>
+                                <label class="gc-label" for="lot_physical_global_plus_client">Délégataire / client Global+</label>
+                                <select id="lot_physical_global_plus_client" class="gc-input" required>
+                                    <option value="">Choisir le client Global+</option>
+                                </select>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne le délégataire du lot dans le référentiel Global+.</p>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_physical_global_plus_version">Prestation Global+</label>
+                                <select id="lot_physical_global_plus_version" class="gc-input" required>
+                                    <option value="">Chargement...</option>
+                                </select>
+                            </div>
+                            <div class="rounded-2xl border px-3 py-2 text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text-soft);">
+                                <p class="font-semibold" style="color:var(--gc-text);">Technicien Global+ proposé</p>
+                                <p id="lot-physical-global-plus-controller-summary" class="mt-1">Chargement...</p>
+                                <label class="mt-3 block">
+                                    <span class="gc-label">Technicien Global+</span>
+                                    <select id="lot_physical_global_plus_controller_id" class="gc-input" required>
+                                        <option value="">Chargement...</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="gc-label" for="lot_physical_global_plus_installer">Installateur Global+</label>
+                                <select id="lot_physical_global_plus_installer" class="gc-input">
+                                    <option value="">Chargement...</option>
+                                </select>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.</p>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label>
+                                    <span class="gc-label">Installateur manuel</span>
+                                    <input id="lot_physical_global_plus_installer_name" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">SIREN</span>
+                                    <input id="lot_physical_global_plus_installer_siren" type="text" class="gc-input" maxlength="20" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Adresse installateur</span>
+                                    <input id="lot_physical_global_plus_installer_address" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">CP installateur</span>
+                                    <input id="lot_physical_global_plus_installer_postal_code" type="text" class="gc-input" maxlength="20" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Ville installateur</span>
+                                    <input id="lot_physical_global_plus_installer_city" type="text" class="gc-input" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Téléphone installateur</span>
+                                    <input id="lot_physical_global_plus_installer_phone" type="text" class="gc-input" />
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label>
+                                    <span class="gc-label">Titre du dossier</span>
+                                    <input id="lot_physical_global_plus_title" type="text" class="gc-input" maxlength="50" />
+                                </label>
+                                <label>
+                                    <span class="gc-label">Référence interne</span>
+                                    <input id="lot_physical_global_plus_sub_title" type="text" class="gc-input" maxlength="255" />
+                                </label>
+                            </div>
+                            <label>
+                                <span class="gc-label">Précarité</span>
+                                <input id="lot_physical_global_plus_precariousness" type="number" min="0" max="10" step="1" class="gc-input" placeholder="Optionnel" />
+                            </label>
+                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);">
+                                <input id="lot_physical_global_plus_send_documents" type="checkbox" class="gc-check" checked>
+                                Transmettre les documents du dossier
+                            </label>
+                            <button id="lot-physical-global-plus-submit" type="submit" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
+                                Créer le dossier Global+
+                            </button>
+                        </form>
+                    </section>
 
-	                    <div id="lot-physical-global-plus-card" class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
-	                        <div class="flex items-start justify-between gap-3">
-	                            <div>
-	                                <h3 class="font-semibold" style="color:var(--gc-text);">Global+</h3>
-	                                <p id="lot-physical-global-plus-summary" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
-	                            </div>
-	                            <span id="lot-physical-global-plus-badge" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"></span>
-	                        </div>
-	                        <p id="lot-physical-global-plus-error" class="mt-2 hidden text-sm" style="color:#be123c;"></p>
-	                        <div class="mt-3 grid gap-2">
-	                            <button id="lot-physical-global-plus-open" type="button" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
-	                                Ajouter à Global+
-	                            </button>
-	                            <button id="lot-physical-global-plus-sync-documents" type="button" class="gc-btn-soft hidden w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
-	                                Synchroniser les documents
-	                            </button>
-	                        </div>
-	                        <form id="lot-physical-global-plus-form" class="mt-4 hidden space-y-3 rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
-	                            <p id="lot-physical-global-plus-form-status" class="hidden text-sm"></p>
-	                            <div>
-	                                <label class="gc-label" for="lot_physical_global_plus_version">Prestation Global+</label>
-	                                <select id="lot_physical_global_plus_version" class="gc-input" required>
-	                                    <option value="">Chargement...</option>
-	                                </select>
-	                            </div>
-	                            <div class="rounded-2xl border px-3 py-2 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
-	                                <p class="font-semibold" style="color:var(--gc-text);">Technicien Global+ proposé</p>
-	                                <p id="lot-physical-global-plus-controller-summary" class="mt-1">Chargement...</p>
-                                    <label class="mt-3 block">
-                                        <span class="gc-label">Technicien Global+</span>
-                                        <select id="lot_physical_global_plus_controller_id" class="gc-input" required>
-                                            <option value="">Chargement...</option>
-                                        </select>
-                                    </label>
-	                            </div>
-	                            <div>
-	                                <label class="gc-label" for="lot_physical_global_plus_installer">Installateur Global+</label>
-	                                <select id="lot_physical_global_plus_installer" class="gc-input">
-	                                    <option value="">Chargement...</option>
-	                                </select>
-	                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.</p>
-	                            </div>
-	                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-	                                <label>
-	                                    <span class="gc-label">Installateur manuel</span>
-	                                    <input id="lot_physical_global_plus_installer_name" type="text" class="gc-input" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">SIREN</span>
-	                                    <input id="lot_physical_global_plus_installer_siren" type="text" class="gc-input" maxlength="20" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">Adresse installateur</span>
-	                                    <input id="lot_physical_global_plus_installer_address" type="text" class="gc-input" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">CP installateur</span>
-	                                    <input id="lot_physical_global_plus_installer_postal_code" type="text" class="gc-input" maxlength="20" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">Ville installateur</span>
-	                                    <input id="lot_physical_global_plus_installer_city" type="text" class="gc-input" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">Téléphone installateur</span>
-	                                    <input id="lot_physical_global_plus_installer_phone" type="text" class="gc-input" />
-	                                </label>
-	                            </div>
-	                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-	                                <label>
-	                                    <span class="gc-label">Titre du dossier</span>
-	                                    <input id="lot_physical_global_plus_title" type="text" class="gc-input" maxlength="50" />
-	                                </label>
-	                                <label>
-	                                    <span class="gc-label">Sous-titre</span>
-	                                    <input id="lot_physical_global_plus_sub_title" type="text" class="gc-input" maxlength="25" />
-	                                </label>
-	                            </div>
-	                            <label>
-	                                <span class="gc-label">Précarité</span>
-	                                <input id="lot_physical_global_plus_precariousness" type="number" min="0" max="10" step="1" class="gc-input" placeholder="Optionnel" />
-	                            </label>
-	                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);">
-	                                <input id="lot_physical_global_plus_send_documents" type="checkbox" class="gc-check" checked>
-	                                Transmettre les documents du dossier
-	                            </label>
-	                            <button id="lot-physical-global-plus-submit" type="submit" class="gc-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
-	                                Créer le dossier Global+
-	                            </button>
-	                        </form>
-	                    </div>
-
-	                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
-	                        <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
+                    <section class="gc-appointment-section gc-appointment-section-muted">
+                        <h3 class="gc-appointment-section-title">Statistiques du lot</h3>
                         <p id="lot-physical-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 w-full justify-center">
                             Sortir des stats du lot
                         </button>
-                    </div>
+                    </section>
 
-                    <div class="mt-4 border-t pt-4" style="border-color:var(--gc-border);">
-                        <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
+                    <section class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Remise à traiter</h3>
                         <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                             Remet le dossier en statut « ne pas placer » et supprime son état de traitement.
                         </p>
@@ -928,15 +947,15 @@
                         <button id="lot-physical-reset-processing" type="button" class="gc-btn-danger mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50">
                             Remettre en non placé
                         </button>
-                    </div>
+                    </section>
                 </section>
             </div>
         </div>
     </div>
 
-    <div id="lot-contact-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-        <div class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+    <div id="lot-contact-detail-modal" class="gc-modal hidden">
+        <div class="gc-modal-panel gc-appointment-modal-panel">
+            <div class="gc-appointment-modal-header">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail contact</p>
                     <h2 id="lot-contact-detail-title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
@@ -945,24 +964,36 @@
                 <button id="lot-contact-detail-close" type="button" class="gc-link">Fermer</button>
             </div>
 
-            <div class="space-y-4 overflow-y-auto p-5">
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);">
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Informations du contact</h3>
-                    <dl id="lot-contact-detail-infos" class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2"></dl>
+            <div class="gc-appointment-modal-body gc-appointment-modal-body-compact">
+                <section class="gc-appointment-modal-map-pane space-y-4">
+                    <section class="gc-appointment-section">
+                        <div class="mb-3">
+                            <h3 class="gc-appointment-section-title">Localisation</h3>
+                            <p id="lot-contact-detail-map-status" class="gc-appointment-section-subtitle">Chargement du point GPS...</p>
+                        </div>
+                        <div id="lot-contact-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
+                        <p class="gc-appointment-modal-map-note">Même en traitement contact, le point reste visible pour contrôler la donnée importée.</p>
+                    </section>
+
+                    <section class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Commentaire</h3>
+                        <p id="lot-contact-detail-comment" class="mt-2 whitespace-pre-line text-sm" style="color:var(--gc-text);"></p>
+                    </section>
                 </section>
 
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#f0f9ff;">
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Commentaire</h3>
-                    <p id="lot-contact-detail-comment" class="mt-2 whitespace-pre-line text-sm" style="color:var(--gc-text);"></p>
-                </section>
+                <section class="gc-appointment-modal-info-pane space-y-4">
+                    <section class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Informations du contact</h3>
+                        <dl id="lot-contact-detail-infos" class="gc-appointment-info-grid mt-4"></dl>
+                    </section>
 
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                    <section class="gc-appointment-section">
                     <div class="flex items-center justify-between gap-3">
-                        <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                        <h3 class="gc-appointment-section-title">Documents</h3>
                         <span id="lot-contact-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
                     </div>
                     <div id="lot-contact-documents-list" class="mt-3 space-y-2"></div>
-                    <div id="lot-contact-documents-dropzone" class="mt-4 rounded-2xl border border-dashed p-4 text-center transition" style="border-color:var(--gc-border);background:#fbfaf6;">
+                    <div id="lot-contact-documents-dropzone" class="gc-document-dropzone mt-4 rounded-2xl border-2 border-dashed p-4 text-center transition">
                         <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Les documents seront conservés sur ce dossier.</p>
                         <input id="lot_contact_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
@@ -974,16 +1005,16 @@
                     <p id="lot-contact-documents-upload-status" class="mt-3 hidden text-sm"></p>
                 </section>
 
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Statistiques du lot</h3>
+                <section class="gc-appointment-section gc-appointment-section-muted">
+                    <h3 class="gc-appointment-section-title">Statistiques du lot</h3>
                     <p id="lot-contact-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                     <button id="lot-contact-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 justify-center">
                         Sortir des stats du lot
                     </button>
                 </section>
 
-                <section class="rounded-2xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Remise à traiter</h3>
+                <section class="gc-appointment-section">
+                    <h3 class="gc-appointment-section-title">Remise à traiter</h3>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                         Remet le dossier en statut « ne pas placer » et supprime son état de satisfaction.
                     </p>
@@ -992,13 +1023,20 @@
                         Remettre en non placé
                     </button>
                 </section>
+                </section>
             </div>
         </div>
     </div>
 
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+
     <script>
         const lotDetailCsrfToken = @json(csrf_token());
+        const lotDetailMapboxToken = @json($mapboxToken ?? null);
         const lotAppointmentDetails = new Map();
+        const lotDetailMaps = {};
+        const lotDetailMapMarkers = {};
         let currentPhysicalLotAppointment = null;
         let currentContactLotAppointment = null;
         const lotAppointmentFiltersForm = document.getElementById('manager-lot-appointment-filters-form');
@@ -1221,6 +1259,7 @@
         const physicalGlobalPlusForm = document.getElementById('lot-physical-global-plus-form');
         const physicalGlobalPlusFormStatus = document.getElementById('lot-physical-global-plus-form-status');
         const physicalGlobalPlusVersion = document.getElementById('lot_physical_global_plus_version');
+        const physicalGlobalPlusClient = document.getElementById('lot_physical_global_plus_client');
         const physicalGlobalPlusControllerSummary = document.getElementById('lot-physical-global-plus-controller-summary');
         const physicalGlobalPlusController = document.getElementById('lot_physical_global_plus_controller_id');
         const physicalGlobalPlusInstaller = document.getElementById('lot_physical_global_plus_installer');
@@ -1305,6 +1344,114 @@
             return address.toLowerCase().includes(postalCity.toLowerCase())
                 ? address
                 : `${address}${address ? ', ' : ''}${postalCity}`;
+        }
+
+        function lotAppointmentCoordinates(appointment) {
+            const latitude = Number(appointment?.latitude);
+            const longitude = Number(appointment?.longitude);
+
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                return null;
+            }
+
+            return { latitude, longitude };
+        }
+
+        function lotDetailMarkerElement(label = 'R') {
+            const element = document.createElement('div');
+            element.className = 'flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-bold shadow-lg';
+            element.style.background = 'var(--gc-primary)';
+            element.style.color = '#ffffff';
+            element.textContent = label;
+
+            return element;
+        }
+
+        function setLotDetailMapStatus(statusId, message, color = 'var(--gc-text-soft)') {
+            const status = document.getElementById(statusId);
+
+            if (!status) {
+                return;
+            }
+
+            status.textContent = message;
+            status.style.color = color;
+        }
+
+        function ensureLotDetailMap(containerId) {
+            const container = document.getElementById(containerId);
+
+            if (!container || !lotDetailMapboxToken || !window.mapboxgl) {
+                return null;
+            }
+
+            if (lotDetailMaps[containerId]) {
+                lotDetailMaps[containerId].resize();
+
+                return lotDetailMaps[containerId];
+            }
+
+            window.mapboxgl.accessToken = lotDetailMapboxToken;
+            lotDetailMaps[containerId] = new window.mapboxgl.Map({
+                container: containerId,
+                style: 'mapbox://styles/mapbox/light-v11',
+                center: [2.2137, 46.2276],
+                zoom: 4.2,
+                dragPan: true,
+                scrollZoom: true,
+                doubleClickZoom: true,
+                touchZoomRotate: true,
+            });
+            lotDetailMaps[containerId].addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+
+            return lotDetailMaps[containerId];
+        }
+
+        function renderLotDetailMap(containerId, statusId, appointment) {
+            const map = ensureLotDetailMap(containerId);
+            const coordinates = lotAppointmentCoordinates(appointment);
+
+            if (!map) {
+                setLotDetailMapStatus(statusId, 'Carte indisponible : token Mapbox absent ou librairie non chargée.', '#be123c');
+                return;
+            }
+
+            const draw = () => {
+                map.resize();
+
+                if (lotDetailMapMarkers[containerId]) {
+                    lotDetailMapMarkers[containerId].remove();
+                    lotDetailMapMarkers[containerId] = null;
+                }
+
+                if (!coordinates) {
+                    setLotDetailMapStatus(statusId, 'Coordonnées GPS indisponibles pour ce dossier.', '#92400e');
+                    map.flyTo({ center: [2.2137, 46.2276], zoom: 4.2, essential: true });
+                    return;
+                }
+
+                lotDetailMapMarkers[containerId] = new window.mapboxgl.Marker({
+                    element: lotDetailMarkerElement(),
+                    anchor: 'center',
+                })
+                    .setLngLat([coordinates.longitude, coordinates.latitude])
+                    .setPopup(new window.mapboxgl.Popup().setHTML(`<strong>${escapeHtml(customerLabel(appointment))}</strong><br>${escapeHtml(fullAddress(appointment))}`))
+                    .addTo(map);
+
+                map.flyTo({
+                    center: [coordinates.longitude, coordinates.latitude],
+                    zoom: 13,
+                    essential: true,
+                });
+                setLotDetailMapStatus(statusId, fullAddress(appointment));
+            };
+
+            if (map.loaded()) {
+                draw();
+                return;
+            }
+
+            map.once('load', draw);
         }
 
         function customerLabel(appointment) {
@@ -1449,7 +1596,7 @@
 
         function globalPlusStatusMeta(appointment) {
             if (appointment?.global_plus_demand_id) {
-                if (appointment.global_plus_status === 'documents_failed') {
+                if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
                     return { background: '#fef3c7', color: '#92400e' };
                 }
 
@@ -1511,7 +1658,7 @@
 
             if (documents.length === 0) {
                 listElement.innerHTML = `
-                    <div class="flex min-h-[180px] items-center justify-center rounded-3xl border border-dashed p-6 text-center text-sm" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text-soft);">
+                    <div class="flex min-h-[180px] items-center justify-center rounded-3xl border border-dashed p-6 text-center text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text-soft);">
                         <div>
                             <p class="font-semibold" style="color:var(--gc-text);">Aucun document</p>
                             <p class="mt-1">Ajoute les fichiers depuis le panneau de droite.</p>
@@ -2116,6 +2263,7 @@
         }
 
         function defaultGlobalPlusSubTitle(appointment) {
+            if (appointment.internal_reference) return appointment.internal_reference;
             return [
                 lotDetailCurrentLot.name,
                 appointment.row_number ? `Ligne ${appointment.row_number}` : null,
@@ -2149,7 +2297,7 @@
 
             if (physicalGlobalPlusOpen) {
                 physicalGlobalPlusOpen.disabled = !canCreate;
-                physicalGlobalPlusOpen.textContent = hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+';
+                physicalGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+');
             }
 
             if (physicalGlobalPlusSyncDocuments) {
@@ -2178,6 +2326,12 @@
                 ? currentGlobalPlusReferences.controllers
                 : [];
             const suggestedVersion = String(currentGlobalPlusReferences.suggested_version_formulaire_id || '');
+            if (physicalGlobalPlusClient) {
+                physicalGlobalPlusClient.innerHTML = [
+                    option('Choisir le client Global+', ''),
+                    ...(currentGlobalPlusReferences.clients || []).map((client) => option(client.label || `Client ${client.address_id}`, client.address_id)),
+                ].join('');
+            }
             const suggestedInstaller = String(currentGlobalPlusReferences.suggested_installer_address_id || '');
             const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
 
@@ -2225,7 +2379,7 @@
             }
 
             physicalGlobalPlusInstallerName.value = appointment.installer_name || '';
-            physicalGlobalPlusInstallerSiren.value = '';
+            physicalGlobalPlusInstallerSiren.value = appointment?.installer_siren || '';
             physicalGlobalPlusInstallerAddress.value = '';
             physicalGlobalPlusInstallerPostalCode.value = '';
             physicalGlobalPlusInstallerCity.value = '';
@@ -2237,7 +2391,7 @@
             }
 
             if (physicalGlobalPlusSubTitle) {
-                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 25);
+                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 255);
             }
 
             if (physicalGlobalPlusPrecariousness) {
@@ -2336,13 +2490,18 @@
                 return;
             }
 
+            if (!physicalGlobalPlusClient?.value) {
+                setGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
+                return;
+            }
+
             if (!physicalGlobalPlusController?.value) {
                 setGlobalPlusFormStatus('Choisis le technicien Global+.', '#be123c');
                 return;
             }
 
             physicalGlobalPlusSubmit.disabled = true;
-            physicalGlobalPlusSubmit.textContent = 'Création en cours...';
+            physicalGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
             setGlobalPlusFormStatus('Création du dossier dans Global+...');
 
             try {
@@ -2355,6 +2514,7 @@
                     },
                     body: JSON.stringify({
                         version_formulaire_id: Number(physicalGlobalPlusVersion.value),
+                        client_address_id: Number(physicalGlobalPlusClient.value),
                         controller_id: Number(physicalGlobalPlusController.value),
                         installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
                         installer_name: physicalGlobalPlusInstallerName?.value || null,
@@ -2380,13 +2540,13 @@
                 currentPhysicalLotAppointment = updatedAppointment;
                 configureGlobalPlusStatus(updatedAppointment);
                 renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
-                physicalGlobalPlusForm?.classList.add('hidden');
-                setGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', '#15803d');
+                physicalGlobalPlusForm?.classList.toggle('hidden', !payload.warning);
+                setGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', payload.warning ? '#be123c' : '#15803d');
             } catch (error) {
                 setGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
             } finally {
                 physicalGlobalPlusSubmit.disabled = false;
-                physicalGlobalPlusSubmit.textContent = 'Créer le dossier Global+';
+                physicalGlobalPlusSubmit.textContent = currentPhysicalLotAppointment?.global_plus_status === 'appointment_failed' ? 'Confirmer l’affectation' : 'Créer le dossier Global+';
             }
         }
 
@@ -2470,6 +2630,9 @@
             clearGlobalPlusFormStatus();
             physicalGlobalPlusForm?.classList.add('hidden');
             openModal(physicalModal);
+            window.setTimeout(() => {
+                renderLotDetailMap('lot-physical-detail-map', 'lot-physical-detail-map-status', appointment);
+            }, 80);
         }
 
         function openContactDetail(appointment) {
@@ -2497,6 +2660,9 @@
             configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
             configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);
             openModal(contactModal);
+            window.setTimeout(() => {
+                renderLotDetailMap('lot-contact-detail-map', 'lot-contact-detail-map-status', appointment);
+            }, 80);
         }
 
         document.querySelectorAll('.lot-appointment-detail-trigger').forEach((button) => {

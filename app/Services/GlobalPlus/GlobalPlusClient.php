@@ -57,6 +57,39 @@ class GlobalPlusClient
         });
     }
 
+    public function clients(): array
+    {
+        return Cache::remember('global_plus:clients', now()->addMinutes(self::REFERENCE_CACHE_TTL_MINUTES), function (): array {
+            return collect($this->listPayload($this->get('Client/Liste')))
+                ->filter(fn ($client): bool => is_array($client) && (int) data_get($client, 'adresseClient.id') > 0)
+                ->map(fn (array $client): array => [
+                    'address_id' => (int) $client['adresseClient']['id'],
+                    'label' => trim((string) ($client['adresseClient']['raisonSociale'] ?? '')) ?: trim(($client['adresseClient']['nom'] ?? '').' '.($client['adresseClient']['prenom'] ?? '')),
+                    'payload' => $client['adresseClient'],
+                ])->values()->all();
+        });
+    }
+
+    public function demand(string $demandId): array
+    {
+        $payload = $this->get('Demande/'.rawurlencode($demandId));
+        if (! is_array($payload) || (string) ($payload['id'] ?? '') !== $demandId) {
+            throw new GlobalPlusApiException('Impossible de vérifier le dossier créé dans Global+.');
+        }
+
+        return $payload;
+    }
+
+    public function intervention(string $interventionId): array
+    {
+        $payload = $this->get('Intervention/'.rawurlencode($interventionId));
+        if (! is_array($payload) || (string) ($payload['id'] ?? '') !== $interventionId) {
+            throw new GlobalPlusApiException('Impossible de vérifier l’affectation du technicien dans Global+.');
+        }
+
+        return $payload;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */

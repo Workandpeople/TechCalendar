@@ -150,6 +150,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
     Route::post('/planner/book/lots/appointments/{lotAppointment}/contact', [PlannerBookingController::class, 'processLotContactAppointment'])->name('planner.book.lots.appointments.contact');
+    Route::get('/planner/book/lots/appointments/{lotAppointment}/global-plus/references', [PlannerBookingController::class, 'globalPlusReferences'])->name('planner.book.lots.appointments.global-plus.references');
+    Route::post('/planner/book/lots/appointments/{lotAppointment}/global-plus', [PlannerBookingController::class, 'storeLotAppointmentGlobalPlus'])->name('planner.book.lots.appointments.global-plus.store');
+    Route::put('/planner/book/lots/appointments/{lotAppointment}/global-plus/documents', [PlannerBookingController::class, 'syncLotAppointmentGlobalPlusDocuments'])->name('planner.book.lots.appointments.global-plus.documents.sync');
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::post('/planner/book/appointments/{appointment}/mail-preview', [PlannerAppointmentMailController::class, 'preview'])->name('planner.book.appointments.mail.preview');
     Route::post('/planner/book/appointments/{appointment}/mail', [PlannerAppointmentMailController::class, 'send'])->name('planner.book.appointments.mail.send');

@@ -25,7 +25,7 @@
 
         <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
             @foreach ($stats['status_widgets'] as $widget)
-                <article class="flex items-center justify-between gap-4 rounded-2xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
+                <article class="gc-kpi-card flex items-center justify-between gap-4 p-4">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">{{ $widget['label'] }}</p>
                         <p class="mt-2 text-2xl font-semibold" style="color:var(--gc-text);">{{ $widget['count'] }}</p>
@@ -175,6 +175,7 @@
                                 type="button"
                                 class="gc-btn-soft relative z-20 whitespace-nowrap lot-action-trigger"
                                 data-lot-id="{{ $lot['id'] }}"
+                                aria-label="Modifier le lot {{ $lot['title'] }}"
                             >
                                 Modifier
                             </button>
@@ -182,7 +183,7 @@
 
                         <div class="grid gap-3 text-center" style="grid-template-columns:repeat({{ count($lotMetricItems) }},minmax(0,1fr));">
                             @foreach ($lotMetricItems as $metric)
-                                <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:#fbfaf6;">
+                                <div class="rounded-2xl border px-3 py-2" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                                     <p class="text-xs" style="color:var(--gc-text-soft);">{{ $metric['label'] }}</p>
                                     <p class="text-lg font-semibold" style="color:var(--gc-text);">{{ $metric['value'] }}</p>
                                     <p class="mt-0.5 text-[0.68rem]" style="color:var(--gc-text-soft);">{{ $metric['hint'] }}</p>
@@ -194,7 +195,7 @@
                             <div class="space-y-3">
                                 <div class="grid grid-cols-2 gap-3">
                                     @foreach ($satisfactionCharts as $chart)
-                                        <div class="rounded-2xl border p-3 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
+                                        <div class="gc-lot-chart-card p-3 text-center">
                                             <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
                                                 <span>{{ $chart['display'] }}</span>
                                             </div>
@@ -213,7 +214,7 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     @foreach ($dissatisfactionCharts as $chart)
-                                        <div class="rounded-2xl border p-3 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
+                                        <div class="gc-lot-chart-card p-3 text-center">
                                             <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
                                                 <span>{{ $chart['display'] }}</span>
                                             </div>
@@ -231,7 +232,7 @@
                                     @php
                                         $isDissatisfactionChart = str_contains((string) ($chart['key'] ?? ''), 'dissatisfaction');
                                     @endphp
-                                    <div class="rounded-2xl border p-3 text-center" style="border-color:var(--gc-border);background:linear-gradient(180deg,#ffffff,#fbfaf6);">
+                                    <div class="gc-lot-chart-card p-3 text-center">
                                         <div class="lot-chart-ring mx-auto" style="--value:{{ $chart['percentage'] }};--ring-color:{{ $chart['color'] }};">
                                             <span>{{ $chart['display'] }}</span>
                                         </div>
@@ -278,8 +279,15 @@
                     </script>
                 </article>
             @empty
-                <div class="rounded-2xl border border-dashed p-8 text-center md:col-span-2 xl:col-span-3" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                    Aucun lot ne correspond aux filtres.
+                <div class="gc-empty-state p-8 text-center md:col-span-2 xl:col-span-3">
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Aucun lot ne correspond aux filtres</h2>
+                    <p class="mx-auto mt-2 max-w-xl text-sm">
+                        Modifie les filtres ou importe un nouveau lot pour démarrer un traitement physique, contact ou hybride.
+                    </p>
+                    <div class="mt-5 flex flex-wrap justify-center gap-2">
+                        <a href="{{ route('manager.lots') }}" class="gc-btn-soft inline-flex min-h-[42px] items-center justify-center px-4">Réinitialiser les filtres</a>
+                        <button id="lot-import-empty-open" type="button" class="gc-btn-primary inline-flex min-h-[42px] items-center justify-center px-4">Importer un lot</button>
+                    </div>
                 </div>
             @endforelse
         </section>
@@ -290,8 +298,8 @@
             </div>
         @endif
 
-        <div id="lot-action-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-action-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-3xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Lot</p>
@@ -360,7 +368,7 @@
                             </div>
                             <div>
                                 <span class="gc-label">Statut du lot</span>
-                                <div id="lot_action_status_text" class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);"></div>
+                                <div id="lot_action_status_text" class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);"></div>
                                 <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Statut recalculé automatiquement selon les objectifs de satisfaction.</p>
                             </div>
                             <div id="lot-action-archive-section" class="hidden rounded-xl border p-4 md:col-span-2" style="border-color:#bbf7d0;background:#f0fdf4;">
@@ -410,8 +418,8 @@
             </div>
         </div>
 
-        <div id="lot-appointment-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-appointment-edit-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-4xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">RDV du lot</p>
@@ -448,6 +456,12 @@
                             <label class="gc-label" for="lot_appointment_installer_name">Installateur</label>
                             <input id="lot_appointment_installer_name" class="gc-input" data-lot-appointment-field="installer_name" type="text" maxlength="190" />
                         </div>
+                        <div><label class="gc-label" for="lot_appointment_internal_reference">Référence interne</label><input id="lot_appointment_internal_reference" class="gc-input" data-lot-appointment-field="internal_reference" type="text" /></div>
+                        <div><label class="gc-label" for="lot_appointment_customer_email">Email du bénéficiaire</label><input id="lot_appointment_customer_email" class="gc-input" data-lot-appointment-field="customer_email" type="text" /></div>
+                        <div><label class="gc-label" for="lot_appointment_installer_siren">SIREN installateur</label><input id="lot_appointment_installer_siren" class="gc-input" data-lot-appointment-field="installer_siren" type="text" /></div>
+                        <div><label class="gc-label" for="lot_appointment_beneficiary_address">Adresse du siège du bénéficiaire</label><input id="lot_appointment_beneficiary_address" class="gc-input" data-lot-appointment-field="beneficiary_address" type="text" /></div>
+                        <div><label class="gc-label" for="lot_appointment_beneficiary_postal_code">Code postal du siège</label><input id="lot_appointment_beneficiary_postal_code" class="gc-input" data-lot-appointment-field="beneficiary_postal_code" type="text" /></div>
+                        <div><label class="gc-label" for="lot_appointment_beneficiary_city">Ville du siège</label><input id="lot_appointment_beneficiary_city" class="gc-input" data-lot-appointment-field="beneficiary_city" type="text" /></div>
                         <div>
                             <label class="gc-label" for="lot_appointment_customer_phone">Téléphone</label>
                             <input id="lot_appointment_customer_phone" class="gc-input" data-lot-appointment-field="customer_phone" type="text" maxlength="255" />
@@ -478,7 +492,7 @@
                             </div>
                             <div id="lot-appointment-edit-map" class="h-[280px] overflow-hidden rounded-xl border" style="border-color:var(--gc-border);background:#eef2f7;"></div>
                         </div>
-                        <div class="rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="rounded-xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                             <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Coordonnées</p>
                             <p id="lot-appointment-edit-gps" class="mt-2" style="color:var(--gc-text);"></p>
                             <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Utilise “Recalculer” si Mapbox a mal positionné le point pendant l’import.</p>
@@ -494,13 +508,13 @@
             </div>
         </div>
 
-        <div id="lot-import-form-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-import-form-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-5xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Nouveau lot</p>
                         <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Importer un lot</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Formats supportés : .xlsx, .csv et .txt. Le nombre de lignes sera recalculé pendant la normalisation IA.</p>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Modèle TechCalendar à 14 colonnes, au format .xlsx ou export CSV. Les informations sont lues directement ; seules les adresses sont nettoyées avant géocodage.</p>
                     </div>
                     <button id="lot-import-form-close" type="button" class="gc-link">Fermer</button>
                 </div>
@@ -588,12 +602,12 @@
             </div>
         </div>
 
-        <div id="lot-import-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
-            <div class="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div id="lot-import-modal" class="gc-modal hidden">
+            <div class="gc-modal-panel flex max-w-6xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Import du lot</p>
-                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Nettoyage IA et géocodage Mapbox</h2>
+                        <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Lecture du modèle et vérification des adresses</h2>
                         <p id="lot-import-modal-status" class="mt-1 text-sm" style="color:var(--gc-text-soft);">Préparation de l'import...</p>
                     </div>
                     <button id="lot-import-modal-close" type="button" class="gc-link disabled:cursor-not-allowed disabled:opacity-50">Fermer</button>
@@ -608,7 +622,7 @@
                         <div class="h-3 overflow-hidden rounded-full bg-slate-100">
                             <div id="lot-import-progress-bar" class="h-full rounded-full transition-all" style="width:0%;background:var(--gc-primary);"></div>
                         </div>
-                        <div class="mt-3 rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);background:#fbfaf6;">
+                        <div class="mt-3 rounded-xl border p-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);">
                             <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Étape en cours</p>
                             <p id="lot-import-stage" class="mt-1 font-medium" style="color:var(--gc-text);">En attente du lancement.</p>
                             <p id="lot-import-realtime-state" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Suivi temps réel en attente.</p>
@@ -630,7 +644,7 @@
                                 <p id="lot-import-warnings-summary" class="mt-1 text-xs font-semibold" style="color:var(--gc-text-soft);"></p>
                             </div>
                             <div class="flex flex-wrap items-center gap-3">
-                                <label class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);background:#fbfaf6;color:var(--gc-text);">
+                                <label class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);">
                                     <input id="lot-import-warnings-only" type="checkbox" class="gc-check">
                                     <span>Voir uniquement les warnings</span>
                                 </label>
@@ -641,7 +655,7 @@
 
                         <div class="overflow-x-auto rounded-xl border" style="border-color:var(--gc-border);">
                             <table class="min-w-full divide-y text-sm" style="border-color:var(--gc-border);">
-                                <thead style="background:#fbfaf6;color:var(--gc-text-soft);">
+                                <thead style="background:var(--gc-panel-muted);color:var(--gc-text-soft);">
                                     <tr>
                                         <th class="px-3 py-2 text-left">Inclure</th>
                                         <th class="px-3 py-2 text-left">Client</th>
@@ -739,6 +753,7 @@
         let currentLotAction = null;
 
         const lotImportFormOpen = document.getElementById('lot-import-form-open');
+        const lotImportEmptyOpen = document.getElementById('lot-import-empty-open');
         const lotImportFormModal = document.getElementById('lot-import-form-modal');
         const lotImportFormClose = document.getElementById('lot-import-form-close');
         const lotImportFormCancel = document.getElementById('lot-import-form-cancel');
@@ -1294,6 +1309,25 @@
                 .filter((checkbox) => checkbox.checked && checkbox.dataset.hasWarnings === '1');
         }
 
+        function lotImportSelectedWarningRows() {
+            return lotImportSelectedWarningCheckboxes()
+                .map((checkbox) => checkbox.dataset.rowNumber || checkbox.value)
+                .filter(Boolean);
+        }
+
+        function lotImportSelectedPayload() {
+            const selectedCheckboxes = lotImportCheckboxes().filter((checkbox) => checkbox.checked);
+
+            return {
+                selectedRows: Array.from(new Set(selectedCheckboxes
+                    .map((checkbox) => Number(checkbox.dataset.rowNumber || 0))
+                    .filter(Boolean))),
+                selectedKeys: Array.from(new Set(selectedCheckboxes
+                    .map((checkbox) => checkbox.value)
+                    .filter(Boolean))),
+            };
+        }
+
         function applyLotImportWarningFilter() {
             const warningsOnly = Boolean(lotImportWarningsOnly?.checked);
 
@@ -1313,7 +1347,7 @@
             selectedLotImportRows = new Set(lotImportCheckboxes().filter((checkbox) => checkbox.checked)
                 .map((checkbox) => checkbox.value));
 
-            const selectedWarningRows = lotImportSelectedWarningCheckboxes();
+            const selectedWarningRows = lotImportSelectedWarningRows();
             const warningSuffix = selectedWarningRows.length > 0
                 ? ` · ${selectedWarningRows.length} warning(s) à corriger ou décocher`
                 : '';
@@ -1322,14 +1356,22 @@
             lotImportConfirm.disabled = selectedLotImportRows.size === 0
                 || selectedWarningRows.length > 0
                 || !currentLotImport?.confirm_url;
+
+            if (
+                selectedWarningRows.length === 0
+                && lotImportErrorMessage.textContent.startsWith('Corrige ou décoche les lignes avec warning')
+            ) {
+                hideLotImportError();
+            }
         }
 
-        function isLotImportRowSelected(rowNumber) {
+        function isLotImportRowSelected(rowKey, rowNumber) {
             if (selectedLotImportRows === null) {
                 return true;
             }
 
-            return selectedLotImportRows.has(String(rowNumber || ''));
+            return selectedLotImportRows.has(String(rowKey || ''))
+                || selectedLotImportRows.has(String(rowNumber || ''));
         }
 
         function renderLotImportPreview(data) {
@@ -1354,9 +1396,10 @@
                 lotImportWarningsSummary.style.color = warningRowsCount > 0 ? '#b45309' : '#15803d';
             }
 
-            appointments.forEach((appointment) => {
+            appointments.forEach((appointment, appointmentIndex) => {
                 const rowNumber = appointment.row_number || '';
-                const rowChecked = isLotImportRowSelected(rowNumber) ? 'checked' : '';
+                const rowKey = appointment.preview_key || `preview-row-${Number(rowNumber || 0)}-${appointmentIndex}`;
+                const rowChecked = isLotImportRowSelected(rowKey, rowNumber) ? 'checked' : '';
                 const warnings = lotImportWarnings(appointment);
                 const hasWarnings = warnings.length > 0;
                 const gps = appointment.latitude && appointment.longitude
@@ -1366,11 +1409,12 @@
                 const installerName = appointment.installer_name || '--';
                 const businessLabel = lotAppointmentBusinessLabel(appointment);
                 const row = document.createElement('tr');
-                row.dataset.previewRow = String(rowNumber);
+                row.dataset.previewRow = String(rowKey);
+                row.dataset.rowNumber = String(rowNumber);
                 row.dataset.hasWarnings = hasWarnings ? '1' : '0';
                 row.innerHTML = `
                     <td class="px-3 py-3 align-top">
-                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowNumber)}" data-has-warnings="${hasWarnings ? '1' : '0'}" ${rowChecked}>
+                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}" data-has-warnings="${hasWarnings ? '1' : '0'}" ${rowChecked}>
                     </td>
                     <td class="px-3 py-3 align-top">
                         <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(displayName)}</div>
@@ -1388,7 +1432,7 @@
                             : '<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#166534;">OK</span>'}
                     </td>
                     <td class="px-3 py-3 align-top">
-                        ${appointment.update_url ? `<button type="button" class="gc-link lot-import-edit-button" data-row-number="${escapeHtml(rowNumber)}">Modifier</button>` : '--'}
+                        ${appointment.update_url ? `<button type="button" class="gc-link lot-import-edit-button" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Modifier</button>` : '--'}
                     </td>
                 `;
                 lotImportPreviewRows.appendChild(row);
@@ -1396,13 +1440,20 @@
                 if (appointment.update_url) {
                     const editRow = document.createElement('tr');
                     editRow.className = 'lot-import-edit-row hidden';
-                    editRow.dataset.editRow = String(rowNumber);
+                    editRow.dataset.editRow = String(rowKey);
+                    editRow.dataset.rowNumber = String(rowNumber);
                     editRow.dataset.hasWarnings = hasWarnings ? '1' : '0';
                     editRow.dataset.updateUrl = appointment.update_url;
                     editRow.innerHTML = `
                         <td colspan="9" class="bg-slate-50 px-4 py-4">
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                                 <input type="hidden" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
+                                <div><label class="gc-label">Référence interne</label><input class="gc-input" data-field="internal_reference" value="${escapeHtml(appointment.internal_reference || '')}"></div>
+                                <div><label class="gc-label">Email du bénéficiaire</label><input class="gc-input" data-field="customer_email" value="${escapeHtml(appointment.customer_email || '')}"></div>
+                                <div><label class="gc-label">SIREN installateur</label><input class="gc-input" data-field="installer_siren" value="${escapeHtml(appointment.installer_siren || '')}"></div>
+                                <div><label class="gc-label">Adresse du siège du bénéficiaire</label><input class="gc-input" data-field="beneficiary_address" value="${escapeHtml(appointment.beneficiary_address || '')}"></div>
+                                <div><label class="gc-label">Code postal du siège</label><input class="gc-input" data-field="beneficiary_postal_code" value="${escapeHtml(appointment.beneficiary_postal_code || '')}"></div>
+                                <div><label class="gc-label">Ville du siège</label><input class="gc-input" data-field="beneficiary_city" value="${escapeHtml(appointment.beneficiary_city || '')}"></div>
                                 <div>
                                     <label class="gc-label">Raison sociale</label>
                                     <input class="gc-input" data-field="company_name" value="${escapeHtml(appointment.company_name || '')}">
@@ -1450,8 +1501,8 @@
                             </div>
                             <p class="lot-import-row-error mt-3 hidden text-sm" style="color:#be123c;"></p>
                             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                                <button type="button" class="gc-btn-soft lot-import-cancel-edit" data-row-number="${escapeHtml(rowNumber)}">Annuler</button>
-                                <button type="button" class="gc-btn-primary lot-import-save-row" data-row-number="${escapeHtml(rowNumber)}">Enregistrer et géocoder</button>
+                                <button type="button" class="gc-btn-soft lot-import-cancel-edit" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Annuler</button>
+                                <button type="button" class="gc-btn-primary lot-import-save-row" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Enregistrer et géocoder</button>
                             </div>
                         </td>
                     `;
@@ -1464,10 +1515,10 @@
                 checkbox.addEventListener('change', updateLotImportSelectionCount);
             });
             lotImportPreviewRows.querySelectorAll('.lot-import-edit-button').forEach((button) => {
-                button.addEventListener('click', () => toggleLotImportEditRow(button.dataset.rowNumber, true));
+                button.addEventListener('click', () => toggleLotImportEditRow(button.dataset.previewKey, true));
             });
             lotImportPreviewRows.querySelectorAll('.lot-import-cancel-edit').forEach((button) => {
-                button.addEventListener('click', () => toggleLotImportEditRow(button.dataset.rowNumber, false));
+                button.addEventListener('click', () => toggleLotImportEditRow(button.dataset.previewKey, false));
             });
             lotImportPreviewRows.querySelectorAll('.lot-import-save-row').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -2085,17 +2136,17 @@
             void saveLotAppointmentEdit(true);
         });
 
-        function lotImportEditRow(rowNumber) {
-            return lotImportPreviewRows.querySelector(`[data-edit-row="${String(rowNumber || '')}"]`);
+        function lotImportEditRow(rowKey) {
+            return lotImportPreviewRows.querySelector(`[data-edit-row="${String(rowKey || '')}"]`);
         }
 
-        function toggleLotImportEditRow(rowNumber, shouldOpen) {
-            lotImportEditRow(rowNumber)?.classList.toggle('hidden', !shouldOpen);
+        function toggleLotImportEditRow(rowKey, shouldOpen) {
+            lotImportEditRow(rowKey)?.classList.toggle('hidden', !shouldOpen);
         }
 
         async function saveLotImportPreviewRow(button) {
             const rowNumber = button.dataset.rowNumber;
-            const editRow = lotImportEditRow(rowNumber);
+            const editRow = lotImportEditRow(button.dataset.previewKey);
 
             if (!editRow?.dataset.updateUrl) {
                 return;
@@ -2185,6 +2236,7 @@
         lotPhysicalSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotContactSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotImportFormOpen?.addEventListener('click', openLotImportFormModal);
+        lotImportEmptyOpen?.addEventListener('click', openLotImportFormModal);
         lotImportFormClose?.addEventListener('click', closeLotImportFormModal);
         lotImportFormCancel?.addEventListener('click', closeLotImportFormModal);
         updateLotImportState();
@@ -2208,7 +2260,7 @@
 
         async function watchLotImport(data) {
             currentLotImport = data;
-            updateLotImportProgress(data.progress || 10, 'Import lancé, nettoyage IA en cours...', data.stage || 'Import ajouté à la file de traitement.');
+            updateLotImportProgress(data.progress || 10, 'Import lancé, lecture du modèle en cours...', data.stage || 'Import ajouté à la file de traitement.');
             updateLotImportModalCloseState();
             subscribeToLotImport(data);
             currentLotImportPoll = window.setInterval(() => pollLotImport(data.status_url), 5000);
@@ -2353,14 +2405,10 @@
         });
 
         lotImportConfirm?.addEventListener('click', async () => {
-            const selectedRows = Array.from(lotImportPreviewRows.querySelectorAll('input[type="checkbox"]:checked'))
-                .map((checkbox) => Number(checkbox.value))
-                .filter(Boolean);
-            const selectedWarningRows = lotImportSelectedWarningCheckboxes()
-                .map((checkbox) => checkbox.value)
-                .filter(Boolean);
+            const { selectedRows, selectedKeys } = lotImportSelectedPayload();
+            const selectedWarningRows = lotImportSelectedWarningRows();
 
-            if (!selectedRows.length || !currentLotImport?.confirm_url) {
+            if (!selectedKeys.length || !currentLotImport?.confirm_url) {
                 return;
             }
 
@@ -2381,7 +2429,10 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': csrfToken(),
                     },
-                    body: JSON.stringify({ selected_rows: selectedRows }),
+                    body: JSON.stringify({
+                        selected_rows: selectedRows,
+                        selected_keys: selectedKeys,
+                    }),
                 });
                 const data = await response.json();
 

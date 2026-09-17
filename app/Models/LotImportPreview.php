@@ -49,6 +49,17 @@ class LotImportPreview extends Model
 
     public const STATUS_CONFIRMED = 'confirmed';
 
+    /**
+     * Identifie une ligne de payload sans dépendre uniquement du numéro Excel,
+     * qui peut être dupliqué si la normalisation IA se trompe.
+     */
+    public static function appointmentPayloadKey(array $appointment, int $index): string
+    {
+        $rowNumber = max(0, (int) ($appointment['row_number'] ?? 0));
+
+        return sprintf('preview-row-%d-%d', $rowNumber, $index);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'uuid';

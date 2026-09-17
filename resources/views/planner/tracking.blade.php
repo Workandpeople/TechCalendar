@@ -155,7 +155,7 @@
             </div>
 
             <div class="gc-appointment-modal-body">
-                <section class="gc-appointment-modal-map-pane rounded-xl border bg-white p-4" style="border-color:var(--gc-border);">
+                <section class="gc-appointment-modal-map-pane gc-appointment-section">
                     <div class="mb-3 flex items-center justify-between gap-3">
                         <div>
                             <p class="text-sm font-medium" style="color:var(--gc-text);">Trajet</p>
@@ -167,43 +167,66 @@
                     <div id="tracking_day_route_summary" class="mt-3 rounded-lg border px-3 py-3 text-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);"></div>
                 </section>
 
-                <section class="gc-appointment-modal-info-pane rounded-xl border bg-white p-4" style="border-color:var(--gc-border);">
-                    <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-1">
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Technicien</dt>
-                            <dd id="tracking_detail_technician" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Client</dt>
-                            <dd id="tracking_detail_customer" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Téléphone client</dt>
-                            <dd id="tracking_detail_customer_phone" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Durée</dt>
-                            <dd id="tracking_detail_duration" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Début</dt>
-                            <dd id="tracking_detail_start" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Fin</dt>
-                            <dd id="tracking_detail_end" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Créé par</dt>
-                            <dd id="tracking_detail_created_by" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                        <div>
-                            <dt style="color:var(--gc-text-soft);">Adresse</dt>
-                            <dd id="tracking_detail_address" class="font-medium" style="color:var(--gc-text);"></dd>
-                        </div>
-                    </dl>
+                <section class="gc-appointment-modal-info-pane space-y-4">
+                    <section class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <dl class="gc-appointment-info-grid mt-4">
+                            <div>
+                                <dt>Technicien</dt>
+                                <dd id="tracking_detail_technician"></dd>
+                            </div>
+                            <div>
+                                <dt>Client</dt>
+                                <dd id="tracking_detail_customer"></dd>
+                            </div>
+                            <div>
+                                <dt>Téléphone client</dt>
+                                <dd id="tracking_detail_customer_phone"></dd>
+                            </div>
+                            <div>
+                                <dt>Durée</dt>
+                                <dd id="tracking_detail_duration"></dd>
+                            </div>
+                            <div>
+                                <dt>Début</dt>
+                                <dd id="tracking_detail_start"></dd>
+                            </div>
+                            <div>
+                                <dt>Fin</dt>
+                                <dd id="tracking_detail_end"></dd>
+                            </div>
+                            <div>
+                                <dt>Créé par</dt>
+                                <dd id="tracking_detail_created_by"></dd>
+                            </div>
+                            <div>
+                                <dt>Adresse</dt>
+                                <dd id="tracking_detail_address"></dd>
+                            </div>
+                        </dl>
+                    </section>
 
-                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <section class="gc-appointment-section">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 class="gc-appointment-section-title">Connecteurs</h3>
+                                <p id="tracking_connector_summary" class="gc-appointment-section-subtitle"></p>
+                            </div>
+                            <span id="tracking_connector_badge" class="gc-status-pill gc-status-pill-neutral shrink-0">Local</span>
+                        </div>
+                        <dl class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                            <div class="rounded-xl border bg-white px-3 py-2" style="border-color:var(--gc-border);">
+                                <dt class="text-xs" style="color:var(--gc-text-soft);">Origine</dt>
+                                <dd id="tracking_connector_origin" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            </div>
+                            <div class="rounded-xl border bg-white px-3 py-2" style="border-color:var(--gc-border);">
+                                <dt class="text-xs" style="color:var(--gc-text-soft);">Référence externe</dt>
+                                <dd id="tracking_connector_reference" class="mt-1 font-semibold" style="color:var(--gc-text);"></dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
                             <span id="tracking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
@@ -211,7 +234,7 @@
                         <div id="tracking_detail_comments" class="mt-3 space-y-2"></div>
                     </section>
 
-                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
+                    <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
                             <div class="flex items-center gap-2">
@@ -223,7 +246,7 @@
                         <div id="tracking_detail_documents" class="mt-3 space-y-2"></div>
                     </section>
 
-                    <section class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:#fbfaf6;">
+                    <section class="gc-appointment-section gc-appointment-section-muted">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Envoyer le mail</h3>
@@ -288,74 +311,79 @@
                         </div>
                     </section>
 
-                    <form id="tracking-details-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);" data-validate-form>
-                        <div class="mb-3">
-                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Modifier le RDV</h3>
-                            <p class="text-xs" style="color:var(--gc-text-soft);">Date, heure, durée et adresse peuvent être ajustées en cas de changement de dernière minute.</p>
-                        </div>
+                    <details class="gc-appointment-action-details">
+                        <summary>Modifier le RDV</summary>
+                        <form id="tracking-details-form" class="gc-appointment-action-details-body" data-validate-form>
+                            <p class="mb-3 text-xs" style="color:var(--gc-text-soft);">Date, heure, durée et adresse peuvent être ajustées en cas de changement de dernière minute.</p>
 
-                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div>
-                                <label class="gc-label" for="tracking_detail_starts_at">Date et heure</label>
-                                <input id="tracking_detail_starts_at" type="datetime-local" class="gc-input" required />
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <div>
+                                    <label class="gc-label" for="tracking_detail_starts_at">Date et heure</label>
+                                    <input id="tracking_detail_starts_at" type="datetime-local" class="gc-input" required />
+                                </div>
+                                <div>
+                                    <label class="gc-label" for="tracking_detail_duration_minutes">Durée (minutes)</label>
+                                    <input id="tracking_detail_duration_minutes" type="number" min="15" max="600" step="5" class="gc-input" required />
+                                </div>
                             </div>
-                            <div>
-                                <label class="gc-label" for="tracking_detail_duration_minutes">Durée (minutes)</label>
-                                <input id="tracking_detail_duration_minutes" type="number" min="15" max="600" step="5" class="gc-input" required />
+
+                            <div class="relative mt-3">
+                                <label class="gc-label" for="tracking_detail_address_input">Adresse</label>
+                                <input id="tracking_detail_address_input" type="text" maxlength="255" class="gc-input" required autocomplete="off" />
+                                <input id="tracking_detail_latitude" type="hidden" />
+                                <input id="tracking_detail_longitude" type="hidden" />
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer</button>
+                                    <span class="gc-help-tooltip">
+                                        <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement du RDV">?</button>
+                                        <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.</span>
+                                    </span>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="relative mt-3">
-                            <label class="gc-label" for="tracking_detail_address_input">Adresse</label>
-                            <input id="tracking_detail_address_input" type="text" maxlength="255" class="gc-input" required autocomplete="off" />
-                            <input id="tracking_detail_latitude" type="hidden" />
-                            <input id="tracking_detail_longitude" type="hidden" />
-                            <div class="mt-2 flex flex-wrap items-center gap-2">
-                                <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer</button>
-                                <span class="gc-help-tooltip">
-                                    <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement du RDV">?</button>
-                                    <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.</span>
-                                </span>
+                            <div id="tracking_details_status" class="mt-2 hidden text-sm"></div>
+                        </form>
+                    </details>
+
+                    <details class="gc-appointment-action-details">
+                        <summary>Réaffecter le RDV</summary>
+                        <form id="tracking-reassign-form" class="gc-appointment-action-details-body">
+                            <label class="gc-label" for="tracking_reassign_technician_id">Technicien</label>
+                            <select id="tracking_reassign_technician_id" class="gc-input">
+                                @foreach ($technicians as $technician)
+                                    @php
+                                        $technicianLabel = $technician->full_name_with_departments;
+                                    @endphp
+                                    <option
+                                        value="{{ $technician->id }}"
+                                        data-label="{{ $technicianLabel }}"
+                                        data-service-ids="{{ $technician->services->pluck('id')->implode(',') }}"
+                                    >
+                                        {{ $technicianLabel }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Les techniciens incompatibles avec la prestation sont désactivés.</p>
+                            <div id="tracking_reassign_status" class="mt-2 hidden text-sm"></div>
+                            <div class="mt-3 flex justify-end">
+                                <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Réaffecter</button>
                             </div>
-                        </div>
+                        </form>
+                    </details>
 
-                        <div id="tracking_details_status" class="mt-2 hidden text-sm"></div>
-                    </form>
-
-                    <form id="tracking-reassign-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                        <label class="gc-label" for="tracking_reassign_technician_id">Réaffecter le RDV</label>
-                        <select id="tracking_reassign_technician_id" class="gc-input">
-                            @foreach ($technicians as $technician)
-                                @php
-                                    $technicianLabel = $technician->full_name_with_departments;
-                                @endphp
-                                <option
-                                    value="{{ $technician->id }}"
-                                    data-label="{{ $technicianLabel }}"
-                                    data-service-ids="{{ $technician->services->pluck('id')->implode(',') }}"
-                                >
-                                    {{ $technicianLabel }}
-                                </option>
-                            @endforeach
-                        </select>
-                        <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Les techniciens incompatibles avec la prestation sont désactivés.</p>
-                        <div id="tracking_reassign_status" class="mt-2 hidden text-sm"></div>
-                        <div class="mt-3 flex justify-end">
-                            <button id="tracking-reassign-btn" type="submit" class="gc-btn-primary">Réaffecter</button>
-                        </div>
-                    </form>
-
-                    <form id="tracking-comment-form" class="mt-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
-                        <input id="tracking_detail_appointment_id" type="hidden" />
-                        <label class="gc-label" for="tracking_detail_comment">Commentaire</label>
-                        <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
-                        <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
-                        <div class="mt-3 flex flex-wrap justify-end gap-2">
-                            <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
-                        </div>
-                        <details id="tracking-problem-section" class="mt-4 rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                            <summary class="cursor-pointer text-sm font-semibold" style="color:var(--gc-text);">Problème RDV</summary>
-                            <div class="mt-3 grid grid-cols-1 gap-3">
+                    <details class="gc-appointment-action-details">
+                        <summary>Commentaire et problème RDV</summary>
+                        <form id="tracking-comment-form" class="gc-appointment-action-details-body">
+                            <input id="tracking_detail_appointment_id" type="hidden" />
+                            <label class="gc-label" for="tracking_detail_comment">Commentaire</label>
+                            <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
+                            <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
+                            <div class="mt-3 flex flex-wrap justify-end gap-2">
+                                <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
+                            </div>
+                            <details id="tracking-problem-section" class="gc-appointment-action-details mt-4">
+                                <summary>Problème RDV</summary>
+                                <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="tracking_problem_comment">Commentaire du problème</label>
                                     <textarea id="tracking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
@@ -384,9 +412,10 @@
                                 <div class="flex justify-end">
                                     <button id="tracking-problem-appointment-btn" type="button" class="gc-btn-danger">Déclarer le problème RDV</button>
                                 </div>
-                            </div>
-                        </details>
-                    </form>
+                                </div>
+                            </details>
+                        </form>
+                    </details>
                 </section>
             </div>
         </div>
@@ -531,6 +560,51 @@
         const setText = (id, value) => {
             const element = document.getElementById(id);
             if (element) element.textContent = value || '-';
+        };
+
+        const trackingConnectorMeta = (props = {}) => {
+            const source = String(props.external_source || '').toLowerCase();
+
+            if (source === 'coffrac') {
+                return {
+                    badge: 'Coffrac',
+                    className: 'gc-status-pill gc-status-pill-success shrink-0',
+                    origin: 'Coffrac',
+                    summary: 'Les documents, commentaires et changements importants peuvent être resynchronisés avec Coffrac.',
+                };
+            }
+
+            if (source === 'global_plus') {
+                return {
+                    badge: 'Global+',
+                    className: 'gc-status-pill gc-status-pill-success shrink-0',
+                    origin: 'Global+',
+                    summary: 'Ce RDV est lié à Global+ et doit conserver une donnée cohérente avec le CRM externe.',
+                };
+            }
+
+            return {
+                badge: 'Local',
+                className: 'gc-status-pill gc-status-pill-neutral shrink-0',
+                origin: props.lot_appointment_id ? 'Lot TechCalendar' : 'TechCalendar',
+                summary: props.lot_appointment_id
+                    ? 'Ce RDV provient d’un lot importé dans TechCalendar.'
+                    : 'Ce RDV est géré localement dans TechCalendar.',
+            };
+        };
+
+        const renderTrackingConnectorSummary = (props = {}) => {
+            const meta = trackingConnectorMeta(props);
+            const badge = document.getElementById('tracking_connector_badge');
+
+            if (badge) {
+                badge.textContent = meta.badge;
+                badge.className = meta.className;
+            }
+
+            setText('tracking_connector_summary', meta.summary);
+            setText('tracking_connector_origin', meta.origin);
+            setText('tracking_connector_reference', props.external_reference || props.crm_appointment_id || '-');
         };
 
         const setTrackingReassignStatus = (message, color = '#0f766e') => {
@@ -1827,6 +1901,7 @@
             setText('tracking_detail_end', formatDateTime(event.end));
             setText('tracking_detail_created_by', props.created_by_name);
             setText('tracking_detail_address', props.address);
+            renderTrackingConnectorSummary(props);
             renderTrackingDetailComments(props.comments || []);
             renderTrackingDetailDocuments(props.documents || []);
             setTrackingDocumentsRefreshVisible(event);

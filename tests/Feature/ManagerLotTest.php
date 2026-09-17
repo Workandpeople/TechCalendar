@@ -14,20 +14,18 @@ use App\Models\User;
 use App\Services\CoffracAppointmentService;
 use App\Services\ImportedAddressCleaner;
 use App\Services\LotAppointmentAiNormalizer;
-use App\Services\LotBusinessIdentityResolver;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportPreviewProcessor;
-use App\Services\LotSpreadsheetExtractor;
 use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Support\LotTemplateFile;
 
 uses(RefreshDatabase::class);
 
@@ -1826,445 +1824,47 @@ it('requires sampling percentage for sampling lot types', function () {
         ->assertJsonValidationErrors('sampling_percentage');
 });
 
-it('stores the original spreadsheet when importing a lot', function () {
+it('stores the standard spreadsheet and its deterministic identities when importing a lot', function () {
     Storage::fake('local');
-
-    $manager = User::factory()->create([
-        'role' => 0,
-        'admin' => false,
-    ]);
-    $service = Service::query()->create([
-        'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualité site client',
-        'average_duration_minutes' => 120,
-    ]);
-
-    $file = UploadedFile::fake()->createWithContent('lot-client.csv', "client;adresse\nCamille Martin;20 Rue Bellecordiere, Lyon");
-    $rows = collect([
-        [
-            'row_number' => 2,
-            'data' => [
-                'client' => 'Camille Martin',
-                'adresse' => '20 Rue Bellecordiere, Lyon',
-            ],
-        ],
-    ]);
-
-    $extractor = Mockery::mock(LotSpreadsheetExtractor::class);
-    $extractor->shouldReceive('extract')
-        ->once()
-        ->with($file)
-        ->andReturn($rows);
-
-    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
-    $normalizer->shouldReceive('normalize')
-        ->once()
-        ->with($rows, 'Lot client', Lot::TYPE_FULL_CONTACT_CONTROL)
-        ->andReturn([
-            'lot_name' => 'Lot client',
-            'summary' => 'Import de test',
-            'rejected_rows' => [],
-            'appointments' => [
-                [
-                    'row_number' => 2,
-                    'external_reference' => 'EXT-1',
-                    'customer_name' => 'Camille Martin',
-                    'customer_first_name' => 'Camille',
-                    'customer_last_name' => 'Martin',
-                    'customer_phone' => '0612345678',
-                    'address' => '20 Rue Bellecordiere',
-                    'postal_code' => '69002',
-                    'city' => 'Lyon',
-                    'department_code' => '69',
-                    'latitude' => 45.7578,
-                    'longitude' => 4.832,
-                    'service_type' => Service::TYPE_AUDIT,
-                    'service_name' => 'Audit qualité site client',
-                    'duration_minutes' => 120,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-            ],
-        ]);
-
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
-        ->import(
-            file: $file,
-            userId: $manager->id,
-            requestedLotName: 'Lot client',
-            lotType: Lot::TYPE_FULL_CONTACT_CONTROL,
-            serviceId: $service->id,
-            comment: 'Consignes import direct',
-        );
-
-    expect($lot->original_filename)->toBe('lot-client.csv')
+    config(['services.openai.api_key' => null, 'services.mapbox.token' => null]);
+    Http::preventStrayRequests();
+    $manager = User::factory()->create();
+    $service = Service::create(['type' => Service::TYPE_AUDIT, 'name' => 'Audit site', 'average_duration_minutes' => 120]);
+    $lot = app(LotExcelImportService::class)->import(
+        file: LotTemplateFile::upload(),
+        userId: $manager->id,
+        requestedLotName: 'Lot client',
+        lotType: Lot::TYPE_FULL_CONTACT_CONTROL,
+        serviceId: $service->id,
+        comment: 'Consignes import direct',
+    );
+    expect($lot->original_filename)->toBe('lot-modele.csv')
         ->and($lot->type)->toBe(Lot::TYPE_FULL_CONTACT_CONTROL)
         ->and($lot->service_id)->toBe($service->id)
         ->and($lot->comment)->toBe('Consignes import direct')
-        ->and($lot->original_file_disk)->toBe('local')
-        ->and($lot->original_file_path)->not->toBeNull()
         ->and($lot->appointments)->toHaveCount(1);
-
     $appointment = $lot->appointments->first();
-
-    expect($appointment->service_id)->toBe($service->id)
-        ->and($appointment->service_type)->toBe(Service::TYPE_AUDIT)
-        ->and($appointment->service_name)->toBe('Audit qualité site client')
-        ->and($appointment->duration_minutes)->toBe(120)
-        ->and($appointment->status)->toBe(LotAppointment::STATUS_PENDING);
-
+    expect($appointment->company_name)->toBe('Beneficiaire SAS')
+        ->and($appointment->installer_name)->toBe('Installateur SAS')
+        ->and($appointment->installer_siren)->toBe('348808007')
+        ->and($appointment->customer_email)->toBe('beneficiaire@example.test')
+        ->and($appointment->beneficiary_city)->toBe('Paris')
+        ->and($appointment->city)->toBe('ESCHES')
+        ->and($appointment->address)->toBe('12 RUE DE LARGILIERE')
+        ->and($appointment->internal_reference)->toBe('ALVEA-ACT-1616542/OP-2261616')
+        ->and($appointment->service_id)->toBe($service->id);
     Storage::disk('local')->assertExists($lot->original_file_path);
+    Http::assertNothingSent();
 });
 
-it('keeps beneficiary company and installer separated from Coffrac raw columns', function () {
-    Storage::fake('local');
-
-    $manager = User::factory()->create([
-        'role' => 0,
-        'admin' => false,
-    ]);
-    $service = Service::query()->create([
-        'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualité site client',
-        'average_duration_minutes' => 120,
-    ]);
-
-    $file = UploadedFile::fake()->createWithContent(
-        'lot-coffrac.csv',
-        implode(';', [
-            'RAISON SOCIALE du professionnel',
-            "RAISON SOCIALE du bénéficiaire de l'opération",
-            'Téléphone',
-            'Adresse',
-            'Code postal',
-            'Ville',
-        ])."\n".implode(';', [
-            'Installateur Travaux SAS',
-            'Bénéficiaire Industrie SA',
-            '0612345678',
-            '20 Rue Bellecordière',
-            '69002',
-            'Lyon',
-        ]),
-    );
-    $extractor = new LotSpreadsheetExtractor;
-    $rows = $extractor->extract($file);
-    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
-    $normalizer
-        ->shouldReceive('normalize')
-        ->once()
-        ->with(
-            Mockery::on(fn ($value): bool => $value instanceof Collection
-                && $value->toArray() === $rows->toArray()),
-            'Lot Coffrac',
-            Lot::TYPE_FULL_CONTROL,
-        )
-        ->andReturn([
-            'lot_name' => 'Lot Coffrac',
-            'summary' => 'Import de test',
-            'rejected_rows' => [],
-            'appointments' => [
-                [
-                    'row_number' => 2,
-                    'external_reference' => 'EXT-COFFRAC',
-                    'customer_name' => 'Installateur Travaux SAS',
-                    'company_name' => 'Installateur Travaux SAS',
-                    'site_name' => null,
-                    'installer_name' => null,
-                    'customer_first_name' => null,
-                    'customer_last_name' => null,
-                    'customer_phone' => '0612345678',
-                    'address' => '20 Rue Bellecordière',
-                    'postal_code' => '69002',
-                    'city' => 'Lyon',
-                    'department_code' => '69',
-                    'latitude' => 45.7578,
-                    'longitude' => 4.832,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-            ],
-        ]);
-
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
-        ->import(
-            file: $file,
-            userId: $manager->id,
-            requestedLotName: 'Lot Coffrac',
-            lotType: Lot::TYPE_FULL_CONTROL,
-            serviceId: $service->id,
-        );
-
-    $appointment = $lot->appointments->first();
-
-    expect($appointment->customer_name)->toBe('Bénéficiaire Industrie SA')
-        ->and($appointment->company_name)->toBe('Bénéficiaire Industrie SA')
-        ->and($appointment->installer_name)->toBe('Installateur Travaux SAS')
-        ->and($appointment->raw_payload['RAISON SOCIALE du professionnel'])->toBe('Installateur Travaux SAS')
-        ->and($appointment->raw_payload["RAISON SOCIALE du bénéficiaire de l'opération"])->toBe('Bénéficiaire Industrie SA');
-});
-
-it('resolves Coffrac beneficiary and installer even with noisy headers and row number fallback', function () {
-    Storage::fake('local');
-
-    $manager = User::factory()->create([
-        'role' => 0,
-        'admin' => false,
-    ]);
-    $service = Service::query()->create([
-        'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualité site client',
-        'average_duration_minutes' => 120,
-    ]);
-
-    $file = UploadedFile::fake()->createWithContent(
-        'lot-coffrac-noisy.csv',
-        implode("\n", [
-            implode(';', [
-                'SIRET du professionnel',
-                'Email du professionnel',
-                'RAISON SOCIALE du professionnel ayant réalisé l’opération',
-                'RAISON SOCIALE du bénéficiaire de l’opération',
-                'Téléphone',
-                'Adresse',
-                'Code postal',
-                'Ville',
-            ]),
-            implode(';', [
-                '11111111100011',
-                'premier@installateur.test',
-                'Installateur Premier SAS',
-                'Bénéficiaire Premier SA',
-                '0600000001',
-                '1 Rue Première',
-                '75001',
-                'Paris',
-            ]),
-            implode(';', [
-                '12345678900011',
-                'contact@installateur.test',
-                'Installateur Noisy SAS',
-                'Bénéficiaire Noisy SA',
-                '0612345678',
-                '20 Rue Bellecordière',
-                '69002',
-                'Lyon',
-            ]),
-        ]),
-    );
-    $extractor = new LotSpreadsheetExtractor;
-    $rows = $extractor->extract($file);
-    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
-    $normalizer
-        ->shouldReceive('normalize')
-        ->once()
-        ->andReturn([
-            'lot_name' => 'Lot Coffrac noisy',
-            'summary' => 'Import de test',
-            'rejected_rows' => [],
-            'appointments' => [
-                [
-                    'row_number' => 2,
-                    'external_reference' => 'EXT-FIRST',
-                    'customer_name' => 'Installateur Premier SAS',
-                    'company_name' => 'Installateur Premier SAS',
-                    'site_name' => null,
-                    'installer_name' => null,
-                    'customer_first_name' => null,
-                    'customer_last_name' => null,
-                    'customer_phone' => '0600000001',
-                    'address' => '1 Rue Première',
-                    'postal_code' => '75001',
-                    'city' => 'Paris',
-                    'department_code' => '75',
-                    'latitude' => 48.8647,
-                    'longitude' => 2.334,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-                [
-                    'row_number' => 2,
-                    'external_reference' => 'EXT-NOISY',
-                    'customer_name' => 'Installateur Noisy SAS',
-                    'company_name' => 'Installateur Noisy SAS',
-                    'site_name' => null,
-                    'installer_name' => null,
-                    'customer_first_name' => null,
-                    'customer_last_name' => null,
-                    'customer_phone' => '0612345678',
-                    'address' => '20 Rue Bellecordière',
-                    'postal_code' => '69002',
-                    'city' => 'Lyon',
-                    'department_code' => '69',
-                    'latitude' => 45.7578,
-                    'longitude' => 4.832,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-            ],
-        ]);
-
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
-        ->import(
-            file: $file,
-            userId: $manager->id,
-            requestedLotName: 'Lot Coffrac noisy',
-            lotType: Lot::TYPE_FULL_CONTROL,
-            serviceId: $service->id,
-        );
-
-    $appointment = $lot->appointments->firstWhere('external_reference', 'EXT-NOISY');
-
-    expect($appointment->customer_name)->toBe('Bénéficiaire Noisy SA')
-        ->and($appointment->company_name)->toBe('Bénéficiaire Noisy SA')
-        ->and($appointment->installer_name)->toBe('Installateur Noisy SAS')
-        ->and($appointment->row_number)->toBe(3)
-        ->and($appointment->installer_name)->not->toBe('12345678900011')
-        ->and($appointment->installer_name)->not->toBe('contact@installateur.test');
-});
-
-it('keeps Coffrac business identity columns consistent from a multi row header file', function () {
-    Storage::fake('local');
-
-    $manager = User::factory()->create([
-        'role' => 0,
-        'admin' => false,
-    ]);
-    $service = Service::query()->create([
-        'type' => Service::TYPE_AUDIT,
-        'name' => 'Audit qualité site client',
-        'average_duration_minutes' => 120,
-    ]);
-
-    $file = UploadedFile::fake()->createWithContent(
-        'lot-coffrac-header-lines.csv',
-        implode("\n", [
-            implode(';', [
-                'Données remplies par le demandeur',
-                'colonne_2',
-                'colonne_3',
-                'colonne_4',
-                'colonne_5',
-                'colonne_6',
-                'colonne_7',
-                'colonne_8',
-                'colonne_9',
-            ]),
-            implode(';', [
-                'RAISON SOCIALE du demandeur',
-                "REFERENCE interne de l'opération",
-                "NOM DU SITE bénéficiaire de l'opération",
-                'Adresse',
-                'Code postal',
-                'Ville',
-                "RAISON SOCIALE du bénéficiaire de l'opération",
-                'Téléphone',
-                'RAISON SOCIALE du professionnel',
-            ]),
-            implode(';', [
-                'TOTAL ALEX',
-                'TOTAL-ALX-1-2',
-                'BATIMENT',
-                '1 Rue Test',
-                '69001',
-                'Lyon',
-                'Bénéficiaire Ligne 1',
-                '0611111111',
-                'N.E.C.H',
-            ]),
-            implode(';', [
-                'TOTAL ALEX',
-                'TOTAL-ALX-1-3',
-                'BATIMENT',
-                '2 Rue Test',
-                '69002',
-                'Lyon',
-                'Bénéficiaire Ligne 2',
-                '0622222222',
-                'N.E.C.H',
-            ]),
-        ]),
-    );
-    $extractor = new LotSpreadsheetExtractor;
-    $rows = $extractor->extract($file);
-    $normalizer = Mockery::mock(LotAppointmentAiNormalizer::class);
-    $normalizer
-        ->shouldReceive('normalize')
-        ->once()
-        ->andReturn([
-            'lot_name' => 'Lot Coffrac header lines',
-            'summary' => 'Import de test',
-            'rejected_rows' => [],
-            'appointments' => [
-                [
-                    'row_number' => 3,
-                    'external_reference' => 'EXT-HEADER-1',
-                    'customer_name' => 'TOTAL ALEX',
-                    'company_name' => 'TOTAL ALEX',
-                    'site_name' => null,
-                    'installer_name' => 'N.E.C.H',
-                    'customer_first_name' => null,
-                    'customer_last_name' => null,
-                    'customer_phone' => '0611111111',
-                    'address' => '1 Rue Test',
-                    'postal_code' => '69001',
-                    'city' => 'Lyon',
-                    'department_code' => '69',
-                    'latitude' => 45.76,
-                    'longitude' => 4.84,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-                [
-                    'row_number' => 4,
-                    'external_reference' => 'EXT-HEADER-2',
-                    'customer_name' => 'N.E.C.H',
-                    'company_name' => 'N.E.C.H',
-                    'site_name' => null,
-                    'installer_name' => 'TOTAL ALEX',
-                    'customer_first_name' => null,
-                    'customer_last_name' => null,
-                    'customer_phone' => '0622222222',
-                    'address' => '2 Rue Test',
-                    'postal_code' => '69002',
-                    'city' => 'Lyon',
-                    'department_code' => '69',
-                    'latitude' => 45.75,
-                    'longitude' => 4.83,
-                    'comment' => null,
-                    'confidence' => 0.95,
-                    'warnings' => [],
-                ],
-            ],
-        ]);
-
-    $lot = (new LotExcelImportService($extractor, $normalizer, new LotBusinessIdentityResolver))
-        ->import(
-            file: $file,
-            userId: $manager->id,
-            requestedLotName: 'Lot Coffrac header lines',
-            lotType: Lot::TYPE_FULL_CONTROL,
-            serviceId: $service->id,
-        );
-
-    $firstAppointment = $lot->appointments->firstWhere('external_reference', 'EXT-HEADER-1');
-    $secondAppointment = $lot->appointments->firstWhere('external_reference', 'EXT-HEADER-2');
-
-    expect($firstAppointment->company_name)->toBe('Bénéficiaire Ligne 1')
-        ->and($firstAppointment->customer_name)->toBe('Bénéficiaire Ligne 1')
-        ->and($firstAppointment->installer_name)->toBe('N.E.C.H')
-        ->and($secondAppointment->company_name)->toBe('Bénéficiaire Ligne 2')
-        ->and($secondAppointment->customer_name)->toBe('Bénéficiaire Ligne 2')
-        ->and($secondAppointment->installer_name)->toBe('N.E.C.H')
-        ->and($firstAppointment->company_name)->not->toBe('BATIMENT')
-        ->and($secondAppointment->company_name)->not->toBe('BATIMENT')
-        ->and($secondAppointment->company_name)->not->toBe('TOTAL ALEX')
-        ->and($secondAppointment->installer_name)->not->toBe('TOTAL ALEX');
+it('refuses old unstructured lot files without invoking AI or creating a lot', function () {
+    Http::preventStrayRequests();
+    $manager = User::factory()->create();
+    $file = UploadedFile::fake()->createWithContent('old.csv', "client;adresse\nCamille;1 Rue Test");
+    expect(fn () => app(LotExcelImportService::class)->import($file, $manager->id))
+        ->toThrow(RuntimeException::class, 'modèle TechCalendar');
+    expect(Lot::count())->toBe(0);
+    Http::assertNothingSent();
 });
 
 it('confirms selected preview rows and creates a lot', function () {
@@ -2436,6 +2036,75 @@ it('blocks selected import preview rows that still have warnings', function () {
     ]);
     $this->assertDatabaseMissing('lot_appointments', [
         'customer_name' => 'Client à corriger',
+    ]);
+});
+
+it('confirms the checked preview row when several rows share the same spreadsheet number', function () {
+    $manager = User::factory()->create([
+        'role' => 0,
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => Service::TYPE_AUDIT,
+        'name' => 'Audit qualité site client',
+        'average_duration_minutes' => 120,
+    ]);
+    $preview = LotImportPreview::query()->create([
+        'uuid' => (string) Str::uuid(),
+        'status' => LotImportPreview::STATUS_COMPLETED,
+        'progress' => 100,
+        'name' => 'Lot lignes dupliquées',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'original_filename' => 'preview.xlsx',
+        'original_file_disk' => 'local',
+        'original_file_path' => 'lot-import-previews/preview.xlsx',
+        'total_rows' => 2,
+        'normalized_rows' => 2,
+        'rejected_rows' => 0,
+        'created_by' => $manager->id,
+        'payload' => [
+            'summary' => 'Preview avec numéros de lignes dupliqués',
+            'rejected_rows' => [],
+            'appointments' => [
+                [
+                    'row_number' => 112,
+                    'customer_name' => 'Client warning décoché',
+                    'address' => null,
+                    'ai_confidence' => 0.2,
+                    'warnings' => ['Adresse absente'],
+                ],
+                [
+                    'row_number' => 112,
+                    'customer_name' => 'Client prêt importé',
+                    'address' => '20 Rue Bellecordière',
+                    'postal_code' => '69002',
+                    'city' => 'Lyon',
+                    'department_code' => '69',
+                    'latitude' => 45.7578,
+                    'longitude' => 4.832,
+                    'ai_confidence' => 0.95,
+                    'warnings' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($manager)
+        ->postJson(route('manager.lots.imports.confirm', $preview), [
+            'selected_rows' => [112],
+            'selected_keys' => ['preview-row-112-1'],
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Lot "Lot lignes dupliquées" créé avec 1 RDV.');
+
+    $this->assertDatabaseHas('lot_appointments', [
+        'customer_name' => 'Client prêt importé',
+        'row_number' => 112,
+        'status' => LotAppointment::STATUS_PENDING,
+    ]);
+    $this->assertDatabaseMissing('lot_appointments', [
+        'customer_name' => 'Client warning décoché',
     ]);
 });
 
@@ -2761,6 +2430,7 @@ it('loads Global Plus reference data for a placed lot appointment', function () 
             'message' => 'success',
             'token' => 'global-plus-token',
         ]),
+        'https://global-plus.test/api/Client/Liste' => Http::response([['adresseClient' => ['id' => 700, 'raisonSociale' => 'Delegataire choisi']]]),
         'https://global-plus.test/api/Entreprise/Liste' => Http::response([
             [
                 'idEntreprise' => 42,
@@ -2879,6 +2549,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
                 'message' => 'success',
                 'token' => 'global-plus-token',
             ]),
+            'https://global-plus.test/api/Client/Liste' => Http::response([['adresseClient' => ['id' => 700, 'raisonSociale' => 'Delegataire choisi']]]),
             'https://global-plus.test/api/Entreprise/Liste' => Http::response([
                 [
                     'idEntreprise' => 42,
@@ -2915,6 +2586,13 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
                     'enablePlanning' => true,
                     'jsonRapport' => '{"ignored":"too-heavy-for-create"}',
                 ],
+            ]),
+            'https://global-plus.test/api/Demande/5637' => Http::response(['id' => 5637, 'interventions' => [['id' => 8123, 'idDemande' => 5637]]]),
+            'https://global-plus.test/api/Intervention/Patch/8123' => Http::response(null, 204),
+            'https://global-plus.test/api/Intervention/8123' => Http::response([
+                'id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198,
+                'dateIntervention' => Appointment::latest('id')->first()->starts_at->format('Y-m-d\TH:i:s'),
+                'dateInterventionEnd' => Appointment::latest('id')->first()->ends_at->format('Y-m-d\TH:i:s'),
             ]),
             'https://global-plus.test/api/Demande' => Http::response('"5637"', 200, [
                 'Content-Type' => 'application/json',
@@ -2993,6 +2671,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
         ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
             'version_formulaire_id' => 3310,
             'controller_id' => 2198,
+            'client_address_id' => 700,
             'installer_address_id' => 901,
             'title' => 'Lot Global+',
             'sub_title' => 'Ligne 7 - HABITAT ENERGIE',
@@ -3019,13 +2698,13 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             && $request->url() === 'https://global-plus.test/api/Demande'
             && $request->hasHeader('Authorization', 'Bearer global-plus-token')
             && data_get($payload, 'idBureauInspection') === 1035
-            && data_get($payload, 'idControleur') === 2198
+            && ! array_key_exists('idControleur', $payload)
             && data_get($payload, 'typeIntervention.0.versionFormulaireId') === 3310
             && data_get($payload, 'typeIntervention.0.codeRapport') === 'BAREN101'
             && ! array_key_exists('jsonRapport', data_get($payload, 'typeIntervention.0', []))
             && data_get($payload, 'client.idTypeAdresse') === 1
-            && data_get($payload, 'client.civilite') === 'Mr'
-            && data_get($payload, 'client.raisonSociale') === 'HABITAT ENERGIE'
+            && data_get($payload, 'client.civilite') === 'M'
+            && data_get($payload, 'client.raisonSociale') === 'Delegataire choisi'
             && data_get($payload, 'lieuInspection.idTypeAdresse') === 2
             && data_get($payload, 'lieuInspection.raisonSociale') === 'BATIMENT A'
             && data_get($payload, 'beneficiaire.idTypeAdresse') === 3
@@ -3097,6 +2776,7 @@ it('prevents duplicate Global Plus creation for an already linked lot appointmen
         ->postJson(route('manager.lots.appointments.global-plus.store', $lotAppointment), [
             'version_formulaire_id' => 3310,
             'controller_id' => 2198,
+            'client_address_id' => 700,
             'send_documents' => true,
         ])
         ->assertStatus(422)

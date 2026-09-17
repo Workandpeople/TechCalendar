@@ -21,6 +21,10 @@
     --gc-accent: #d8c27a;
     --gc-accent-soft: #fcf8ea;
     --gc-danger: #be123c;
+    --gc-success: #15803d;
+    --gc-warning: #92400e;
+    --gc-panel-muted: #f8fafc;
+    --gc-panel-soft: #fbfaf6;
 }
 
 @layer base {
@@ -99,7 +103,7 @@
     }
 
     .gc-btn-primary {
-        @apply rounded-lg px-4 py-2.5 text-sm font-medium text-white transition;
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition;
         background-color: var(--gc-primary);
     }
 
@@ -118,7 +122,7 @@
     }
 
     .gc-btn-soft {
-        @apply rounded-lg border px-3 py-1.5 text-xs font-medium transition;
+        @apply inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition;
         border-color: #c7cdd1;
         color: var(--gc-text);
         background-color: #fff;
@@ -130,7 +134,7 @@
     }
 
     .gc-btn-danger {
-        @apply rounded-lg border px-3 py-1.5 text-xs font-medium transition;
+        @apply inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition;
         border-color: #f8b4c0;
         color: #9f1239;
         background-color: #fff1f2;
@@ -297,11 +301,12 @@
     }
 
     .gc-modal {
-        @apply fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/40 p-4;
+        @apply fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 p-4;
+        backdrop-filter: blur(4px);
     }
 
     .gc-modal-panel {
-        @apply w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-xl;
+        @apply w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-2xl;
         max-height: calc(100vh - 2rem);
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -309,17 +314,19 @@
     }
 
     .gc-modal-panel-xl {
-        @apply max-w-6xl;
+        @apply max-w-7xl;
     }
 
     .gc-appointment-modal-panel {
-        width: min(96rem, calc(100vw - 2rem));
-        max-width: min(96rem, calc(100vw - 2rem));
+        width: min(112rem, calc(100vw - 2rem));
+        max-width: min(112rem, calc(100vw - 2rem));
         max-height: calc(100vh - 2rem);
         display: flex;
         flex-direction: column;
         overflow: hidden;
         padding: 0;
+        border-radius: 1.5rem;
+        box-shadow: 0 30px 90px rgba(15, 23, 42, .32);
     }
 
     .gc-appointment-modal-header {
@@ -330,18 +337,23 @@
         gap: 1rem;
         padding: 1.25rem 1.5rem;
         border-bottom: 1px solid var(--gc-border);
-        background: #fff;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 250, 252, .96));
     }
 
     .gc-appointment-modal-body {
         min-height: 0;
         flex: 1;
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(390px, .85fr);
+        grid-template-columns: minmax(0, 1.12fr) minmax(440px, .88fr);
         gap: 1rem;
         overflow: hidden;
         padding: 1rem;
-        background: #fff;
+        background: var(--gc-panel-muted);
+    }
+
+    .gc-appointment-modal-body-compact {
+        grid-template-columns: minmax(0, .85fr) minmax(420px, 1.15fr);
     }
 
     .gc-appointment-modal-map-pane,
@@ -362,6 +374,188 @@
     .gc-appointment-modal-map {
         height: min(68vh, 620px);
         min-height: 420px;
+    }
+
+    .gc-appointment-section {
+        border: 1px solid #dfe5ea;
+        border-radius: 1rem;
+        background: #ffffff;
+        padding: 1rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
+    }
+
+    .gc-appointment-section-muted {
+        background: var(--gc-panel-muted);
+    }
+
+    .gc-appointment-section-title {
+        color: var(--gc-text);
+        font-size: .875rem;
+        font-weight: 700;
+    }
+
+    .gc-appointment-section-subtitle {
+        color: var(--gc-text-soft);
+        font-size: .75rem;
+        line-height: 1.45;
+        margin-top: .25rem;
+    }
+
+    .gc-appointment-info-grid {
+        display: grid;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        gap: .75rem;
+        font-size: .875rem;
+    }
+
+    .gc-appointment-info-grid dt {
+        color: var(--gc-text-soft);
+        font-size: .75rem;
+    }
+
+    .gc-appointment-info-grid dd {
+        color: var(--gc-text);
+        font-weight: 600;
+        margin-top: .25rem;
+        overflow-wrap: anywhere;
+    }
+
+    .gc-appointment-modal-map-note {
+        color: var(--gc-text-soft);
+        font-size: .75rem;
+        margin-top: .5rem;
+    }
+
+    .gc-appointment-actions-grid {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .gc-appointment-action-details {
+        border: 1px solid #dfe5ea;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
+    }
+
+    .gc-appointment-action-details > summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 1rem;
+        color: var(--gc-text);
+        font-size: .875rem;
+        font-weight: 700;
+    }
+
+    .gc-appointment-action-details > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .gc-appointment-action-details > summary::after {
+        content: '+';
+        float: right;
+        color: var(--gc-text-soft);
+        font-weight: 800;
+    }
+
+    .gc-appointment-action-details[open] > summary {
+        border-bottom: 1px solid #dfe5ea;
+    }
+
+    .gc-appointment-action-details[open] > summary::after {
+        content: '-';
+    }
+
+    .gc-appointment-action-details-body {
+        padding: 1rem;
+    }
+
+    .gc-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        min-height: 1.75rem;
+        border-radius: 9999px;
+        padding: .25rem .75rem;
+        font-size: .75rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .gc-status-pill-success {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .gc-status-pill-warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .gc-status-pill-danger {
+        background: #ffe4e6;
+        color: #9f1239;
+    }
+
+    .gc-status-pill-neutral {
+        background: #eef2f7;
+        color: var(--gc-text);
+    }
+
+    .gc-documents-modal-panel {
+        width: min(96rem, calc(100vw - 2rem));
+        max-width: min(96rem, calc(100vw - 2rem));
+        max-height: calc(100vh - 2rem);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+        border-radius: 1.5rem;
+    }
+
+    .gc-document-dropzone {
+        border-color: #d6bc62 !important;
+        background:
+            radial-gradient(circle at top, rgba(216, 194, 122, .14), transparent 42%),
+            #ffffff !important;
+    }
+
+    .gc-document-dropzone:hover,
+    .gc-document-dropzone.is-dragover {
+        border-color: var(--gc-primary) !important;
+        background:
+            radial-gradient(circle at top, rgba(49, 66, 76, .08), transparent 46%),
+            #ffffff !important;
+        transform: translateY(-1px);
+    }
+
+    .gc-empty-state {
+        border: 1px dashed var(--gc-border);
+        border-radius: 1.25rem;
+        background:
+            radial-gradient(circle at top, rgba(216, 194, 122, .12), transparent 36%),
+            #ffffff;
+        color: var(--gc-text-soft);
+    }
+
+    .gc-kpi-card {
+        border: 1px solid var(--gc-border);
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
+    }
+
+    .gc-lot-chart-card {
+        border: 1px solid var(--gc-border);
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
+    }
+
+    @media (min-width: 768px) {
+        .gc-appointment-info-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     @media (max-width: 1279px) {

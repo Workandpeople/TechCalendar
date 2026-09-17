@@ -1,7 +1,7 @@
 <?php
 
-use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
+use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Appointment;
 use App\Models\Department;
@@ -18,6 +18,9 @@ use App\Services\CoffracAppointmentService;
 use App\Services\MapboxAddressGeocoder;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -46,7 +49,7 @@ it('uses coffrac appointment requests on the planning dashboard when configured'
         'services.coffrac.ignored_references' => [],
     ]);
 
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+    Http::fake(fn (Request $request) => Http::response([
         'result' => true,
         'data' => [[
             'id' => 44,
@@ -78,7 +81,7 @@ it('uses coffrac appointment requests on the planning dashboard when configured'
         ->assertSee(route('planner.book', ['crm_appointment_id' => 'coffrac-44']), false);
 
     Http::assertSentCount(1);
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'GET'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
         && str_starts_with($request->url(), 'https://coffrac.test/api/techcalendar/appointments')
         && str_contains($request->url(), 'status=all')
         && $request->hasHeader('Authorization', 'Bearer secret-token'));
@@ -91,7 +94,7 @@ it('exposes the initial coffrac appointment id on the booking page', function ()
         'services.coffrac.ignored_references' => [],
     ]);
 
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+    Http::fake(fn (Request $request) => Http::response([
         'result' => true,
         'data' => [[
             'id' => 44,
@@ -375,7 +378,7 @@ it('skips a coffrac appointment that crashes remote page serialization', functio
         'longitude' => 2.331,
     ];
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) use ($appointmentPayload) {
+    Http::fake(function (Request $request) use ($appointmentPayload) {
         parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
         $limit = (int) ($query['limit'] ?? 0);
@@ -430,7 +433,7 @@ it('continues coffrac pagination when the remote api skips a serialized appointm
         'longitude' => 2.331,
     ];
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) use ($appointmentPayload) {
+    Http::fake(function (Request $request) use ($appointmentPayload) {
         parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
         return match (((int) ($query['offset'] ?? 0)).':'.((int) ($query['limit'] ?? 0))) {
@@ -472,7 +475,7 @@ it('geocodes coffrac pending appointments without remote coordinates', function 
         'services.coffrac.ignored_references' => [],
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('145 RUE DE PARIS, 75019 PARIS, France')
@@ -529,7 +532,7 @@ it('keeps coffrac appointments when mapbox cannot geocode the remote address', f
         'services.coffrac.ignored_references' => [],
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('ADRESSE INTROUVABLE, 99999 VILLE FANTOME, France')
@@ -586,7 +589,7 @@ it('keeps coffrac appointments when mapbox throws during remote geocoding', func
         'services.coffrac.ignored_references' => [],
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('10 RUE MAPBOX KO, 69003 LYON, France')
@@ -639,7 +642,7 @@ it('does not geocode an unchanged coffrac appointment twice', function () {
         'services.coffrac.ignored_references' => [],
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('145 RUE DE PARIS, 75019 PARIS, France')
@@ -730,7 +733,7 @@ it('keeps local coffrac appointments that are absent from an incremental sync de
     ]);
 
     $requestedUpdatedAfter = null;
-    Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedUpdatedAfter) {
+    Http::fake(function (Request $request) use (&$requestedUpdatedAfter) {
         parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
         $requestedUpdatedAfter = $query['updated_after'] ?? null;
 
@@ -811,7 +814,7 @@ it('syncs only pending coffrac requests for manual booking refreshes', function 
         'fetched_at' => now()->subDay(),
     ]);
 
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+    Http::fake(fn (Request $request) => Http::response([
         'result' => true,
         'data' => [[
             'id' => 44,
@@ -831,7 +834,7 @@ it('syncs only pending coffrac requests for manual booking refreshes', function 
 
     $result = app(CoffracAppointmentService::class)->sync(status: CoffracAppointmentService::REMOTE_STATUS_PENDING);
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => str_contains($request->url(), 'status=pending')
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'status=pending')
         && ! str_contains($request->url(), 'status=all'));
 
     expect($result['pending_count'])->toBe(1)
@@ -875,7 +878,7 @@ it('ignores configured obsolete coffrac references during pending syncs', functi
         'fetched_at' => now()->subDay(),
     ]);
 
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+    Http::fake(fn (Request $request) => Http::response([
         'result' => true,
         'data' => [
             [
@@ -967,7 +970,7 @@ it('updates a local coffrac appointment before booking it', function () {
         ]),
     ]);
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')
         ->once()
         ->with('22 Rue Victor Hugo, 69002 Lyon')
@@ -1013,7 +1016,7 @@ it('updates a local coffrac appointment before booking it', function () {
         ->and($stored->comment)->toBe('Client à rappeler avant intervention.');
 
     Http::assertSentCount(1);
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'PATCH'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4257/address'
         && $request->hasHeader('Authorization', 'Bearer secret-token')
         && $request['address'] === '22 Rue Victor Hugo, 69002 Lyon, France'
@@ -1058,7 +1061,7 @@ it('updates a pending coffrac appointment comment without geocoding it', functio
     ]);
     Http::fake();
 
-    $geocoder = \Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
     $geocoder->shouldReceive('geocode')->never();
     app()->instance(MapboxAddressGeocoder::class, $geocoder);
 
@@ -1163,7 +1166,7 @@ it('marks a pending coffrac appointment as problem from its detail modal', funct
         ->and($storedRequest->appointment_id)->toBeNull()
         ->and($storedRequest->comment)->toBe('Client injoignable, dossier à retraiter côté Coffrac.');
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4258/problem'
         && $request['comment'] === 'Client injoignable, dossier à retraiter côté Coffrac.'
         && $request['problem_type'] === CoffracAppointmentService::PROBLEM_TYPE_CALLBACK
@@ -1303,7 +1306,7 @@ it('syncs pending and placed coffrac appointment requests with documents locally
     $technician->services()->attach($service);
     $longCoffracPhone = '06 00 00 00 45 / 07 00 00 00 45 / Standard: +33 1 23 45 67 89';
 
-    Http::fake(fn (\Illuminate\Http\Client\Request $request) => Http::response([
+    Http::fake(fn (Request $request) => Http::response([
         'result' => true,
         'data' => [
             [
@@ -1402,7 +1405,7 @@ it('scopes full placed coffrac sync to the configured date window without archiv
 
         $requestedQueries = [];
 
-        Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedQueries) {
+        Http::fake(function (Request $request) use (&$requestedQueries) {
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
             $requestedQueries[] = $query;
 
@@ -1461,7 +1464,7 @@ it('splits a coffrac page automatically when a placed sync page times out', func
         ];
     };
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$requestedQueries, $remoteAppointment) {
+    Http::fake(function (Request $request) use (&$requestedQueries, $remoteAppointment) {
         parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
         $requestedQueries[] = $query;
 
@@ -1469,7 +1472,7 @@ it('splits a coffrac page automatically when a placed sync page times out', func
         $offset = (int) ($query['offset'] ?? 0);
 
         if ($limit === 100 && $offset === 100) {
-            throw new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out after 45000 milliseconds with 2618569 bytes received');
+            throw new ConnectionException('cURL error 28: Operation timed out after 45000 milliseconds with 2618569 bytes received');
         }
 
         return match (true) {
@@ -1872,7 +1875,7 @@ it('analyzes a lot appointment request with the lot service', function () {
 
 it('includes saturday in booking slot suggestions', function () {
     config(['services.mapbox.token' => null]);
-    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+    Carbon::setTestNow('2026-06-11 09:00:00');
 
     try {
         $planner = User::factory()->create([
@@ -1917,7 +1920,7 @@ it('includes saturday in booking slot suggestions', function () {
 
         expect($response->json('suggestions'))->not->toBeEmpty()
             ->and(collect($response->json('suggestions'))
-                ->contains(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSaturday()))
+                ->contains(fn (array $suggestion): bool => Carbon::parse($suggestion['start'])->isSaturday()))
             ->toBeTrue();
 
         $firstSuggestionProps = $response->json('suggestions.0.extendedProps');
@@ -1931,13 +1934,13 @@ it('includes saturday in booking slot suggestions', function () {
             ->and($firstSuggestionProps['home_to_distance_km'])->toBeGreaterThanOrEqual(0)
             ->and($firstSuggestionProps['return_home_distance_km'])->toBeGreaterThanOrEqual(0);
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
 it('adds home previous and next route metrics to booking suggestions', function () {
     config(['services.mapbox.token' => null]);
-    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+    Carbon::setTestNow('2026-06-11 09:00:00');
 
     try {
         $planner = User::factory()->create([
@@ -1975,9 +1978,9 @@ it('adds home previous and next route metrics to booking suggestions', function 
             'address' => '10 Rue de Brest, 69002 Lyon',
             'latitude' => 45.7627,
             'longitude' => 4.8337,
-            'starts_at' => \Carbon\Carbon::parse('2026-06-11 09:00:00'),
+            'starts_at' => Carbon::parse('2026-06-11 09:00:00'),
             'duration_minutes' => 60,
-            'ends_at' => \Carbon\Carbon::parse('2026-06-11 10:00:00'),
+            'ends_at' => Carbon::parse('2026-06-11 10:00:00'),
         ]);
         Appointment::query()->create([
             'service_id' => $service->id,
@@ -1989,9 +1992,9 @@ it('adds home previous and next route metrics to booking suggestions', function 
             'address' => '5 Place des Terreaux, 69001 Lyon',
             'latitude' => 45.7675,
             'longitude' => 4.8342,
-            'starts_at' => \Carbon\Carbon::parse('2026-06-11 14:00:00'),
+            'starts_at' => Carbon::parse('2026-06-11 14:00:00'),
             'duration_minutes' => 60,
-            'ends_at' => \Carbon\Carbon::parse('2026-06-11 15:00:00'),
+            'ends_at' => Carbon::parse('2026-06-11 15:00:00'),
         ]);
 
         $response = $this->actingAs($planner)
@@ -2010,7 +2013,7 @@ it('adds home previous and next route metrics to booking suggestions', function 
             ->assertOk();
 
         $suggestion = collect($response->json('suggestions'))
-            ->first(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11')
+            ->first(fn (array $suggestion): bool => Carbon::parse($suggestion['start'])->isSameDay('2026-06-11')
                 && $suggestion['extendedProps']['has_previous_appointment']
                 && $suggestion['extendedProps']['has_next_appointment']);
 
@@ -2026,13 +2029,13 @@ it('adds home previous and next route metrics to booking suggestions', function 
             ->and($props['travel_after_distance_km'])->toBeGreaterThanOrEqual(0)
             ->and($props['return_home_distance_km'])->toBeGreaterThanOrEqual(0);
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
 it('suggests appointments before and after an existing booking while preserving the lunch break', function () {
     config(['services.mapbox.token' => null]);
-    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+    Carbon::setTestNow('2026-06-11 09:00:00');
 
     try {
         $planner = User::factory()->create([
@@ -2071,9 +2074,9 @@ it('suggests appointments before and after an existing booking while preserving 
             'address' => '20 Place Bellecour, 69002 Lyon',
             'latitude' => 45.7578,
             'longitude' => 4.832,
-            'starts_at' => \Carbon\Carbon::parse('2026-06-11 14:00:00'),
+            'starts_at' => Carbon::parse('2026-06-11 14:00:00'),
             'duration_minutes' => 60,
-            'ends_at' => \Carbon\Carbon::parse('2026-06-11 15:00:00'),
+            'ends_at' => Carbon::parse('2026-06-11 15:00:00'),
         ]);
 
         $response = $this->actingAs($planner)
@@ -2092,7 +2095,7 @@ it('suggests appointments before and after an existing booking while preserving 
             ->assertOk();
 
         $daySuggestions = collect($response->json('suggestions'))
-            ->filter(fn (array $suggestion): bool => \Carbon\Carbon::parse($suggestion['start'])->isSameDay('2026-06-11'))
+            ->filter(fn (array $suggestion): bool => Carbon::parse($suggestion['start'])->isSameDay('2026-06-11'))
             ->values();
 
         $beforeExisting = $daySuggestions->first(fn (array $suggestion): bool => $suggestion['extendedProps']['next_appointment_id'] === $existingAppointment->id);
@@ -2100,18 +2103,18 @@ it('suggests appointments before and after an existing booking while preserving 
 
         expect($beforeExisting)->not->toBeNull()
             ->and($afterExisting)->not->toBeNull()
-            ->and(\Carbon\Carbon::parse($beforeExisting['end'])->lte($existingAppointment->starts_at))->toBeTrue()
-            ->and(\Carbon\Carbon::parse($afterExisting['start'])->gte($existingAppointment->ends_at))->toBeTrue()
+            ->and(Carbon::parse($beforeExisting['end'])->lte($existingAppointment->starts_at))->toBeTrue()
+            ->and(Carbon::parse($afterExisting['start'])->gte($existingAppointment->ends_at))->toBeTrue()
             ->and($beforeExisting['extendedProps']['has_next_appointment'])->toBeTrue()
             ->and($afterExisting['extendedProps']['has_previous_appointment'])->toBeTrue();
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
 it('keeps absent technicians visible but suppresses booking suggestions during absence', function () {
     config(['services.mapbox.token' => null]);
-    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+    Carbon::setTestNow('2026-06-11 09:00:00');
 
     try {
         $planner = User::factory()->create([
@@ -2166,13 +2169,13 @@ it('keeps absent technicians visible but suppresses booking suggestions during a
             ->assertJsonPath('technicians.0.absence_label', 'Abs du 11/06/2026 au 25/06/2026')
             ->assertJsonCount(0, 'suggestions');
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
 it('rejects booking creation during technician absence', function () {
     config(['services.mapbox.token' => null]);
-    \Carbon\Carbon::setTestNow('2026-06-11 09:00:00');
+    Carbon::setTestNow('2026-06-11 09:00:00');
 
     try {
         $planner = User::factory()->create([
@@ -2218,16 +2221,16 @@ it('rejects booking creation during technician absence', function () {
             ->assertUnprocessable()
             ->assertJsonValidationErrors('technician_id');
 
-        expect(\App\Models\Appointment::query()->exists())->toBeFalse();
+        expect(Appointment::query()->exists())->toBeFalse();
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
 it('replaces an existing appointment through the booking workflow without creating a duplicate', function () {
     config(['services.mapbox.token' => null]);
     Mail::fake();
-    \Carbon\Carbon::setTestNow('2026-06-10 08:00:00');
+    Carbon::setTestNow('2026-06-10 08:00:00');
 
     try {
         Department::query()->updateOrCreate(['code' => '69'], ['name' => 'Rhône']);
@@ -2325,7 +2328,7 @@ it('replaces an existing appointment through the booking workflow without creati
                 && $mail->appointment->id === $appointment->id,
         );
     } finally {
-        \Carbon\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 });
 
@@ -2337,7 +2340,7 @@ it('places a coffrac appointment without service when a service is selected at v
     ]);
     Mail::fake();
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+    Http::fake(function (Request $request) {
         if ($request->method() === 'GET') {
             return Http::response([
                 'result' => true,
@@ -2422,7 +2425,7 @@ it('places a coffrac appointment and moves it to attente visite', function () {
     ]);
     Mail::fake();
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+    Http::fake(function (Request $request) {
         if ($request->method() === 'GET') {
             return Http::response([
                 'result' => true,
@@ -2491,7 +2494,7 @@ it('places a coffrac appointment and moves it to attente visite', function () {
         ->and($appointment->customer_first_name)->toBe('Claire')
         ->and($appointment->customer_last_name)->toBe('DUPONT');
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/placed'
         && $request['technician_email'] === 'tech.coffrac@example.test'
         && $request['duration_minutes'] === 90
@@ -2513,7 +2516,7 @@ it('places a coffrac appointment locally when the coffrac technician mapping is 
     ]);
     Mail::fake();
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+    Http::fake(function (Request $request) {
         if ($request->method() === 'GET') {
             return Http::response([
                 'result' => true,
@@ -2603,7 +2606,7 @@ it('places a coffrac appointment locally when the coffrac technician mapping is 
         ->and($externalRequest->technician_email)->toBe('lucas.inconnu-coffrac@example.test')
         ->and(app(CoffracAppointmentService::class)->pending(15)->count())->toBe(0);
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/46/placed'
         && $request['technician_email'] === 'lucas.inconnu-coffrac@example.test'
         && $request['technician_name'] === 'Lucas TESTEUR');
@@ -2704,7 +2707,7 @@ it('links a placed appointment back to its lot appointment', function () {
     Queue::fake();
     Storage::fake('local');
 
-    Http::fake(function (\Illuminate\Http\Client\Request $request) {
+    Http::fake(function (Request $request) {
         if ($request->method() === 'POST' && $request->url() === 'https://coffrac.test/api/techcalendar/appointments') {
             return Http::response([
                 'result' => true,
@@ -2775,6 +2778,12 @@ it('links a placed appointment back to its lot appointment', function () {
         'company_name' => 'Entreprise Lot',
         'site_name' => 'Site Bellecour',
         'installer_name' => 'Installateur Lot SAS',
+        'installer_siren' => '348808007',
+        'internal_reference' => 'ALVEA-ACT-1616542/OP-2261616',
+        'customer_email' => 'beneficiaire@example.test',
+        'beneficiary_address' => '10 Rue du Siege',
+        'beneficiary_postal_code' => '75002',
+        'beneficiary_city' => 'Paris',
         'customer_phone' => '0600000003',
         'address' => '20 Place Bellecour, 69002 Lyon, France',
         'postal_code' => '69002',
@@ -2807,7 +2816,16 @@ it('links a placed appointment back to its lot appointment', function () {
             'comment' => 'Placement depuis lot',
         ])
         ->assertCreated()
-        ->assertJsonStructure(['appointment_id']);
+        ->assertJsonStructure(['appointment_id', 'global_plus'])
+        ->assertJsonPath('global_plus.id', $lotAppointment->id)
+        ->assertJsonPath('global_plus.lot_id', $lot->id)
+        ->assertJsonPath('global_plus.customer_name', 'Entreprise Lot')
+        ->assertJsonPath('global_plus.installer_name', 'Installateur Lot SAS')
+        ->assertJsonPath('global_plus.can_create_global_plus', true)
+        ->assertJsonPath('global_plus.can_sync_global_plus_documents', false)
+        ->assertJsonPath('global_plus.documents_count', 1)
+        ->assertJsonPath('global_plus.global_plus_status_label', 'Marqué localement')
+        ->assertJsonPath('global_plus.global_plus_store_url', route('planner.book.lots.appointments.global-plus.store', $lotAppointment));
 
     $lotAppointment->refresh();
     $lot->refresh();
@@ -2817,6 +2835,7 @@ it('links a placed appointment back to its lot appointment', function () {
         ->and($lotAppointment->status)->toBe(LotAppointment::STATUS_PLACED)
         ->and($lotAppointment->source)->toBe(CoffracAppointmentService::SOURCE)
         ->and($lotAppointment->external_reference)->toBe('9101')
+        ->and($lotAppointment->internalReference())->toBe('ALVEA-ACT-1616542/OP-2261616')
         ->and($lot->status)->toBe(Lot::STATUS_IN_PROGRESS);
     expect($lotDocument->refresh()->appointment_id)->toBe((int) $lotAppointment->appointment_id)
         ->and($lotDocument->status)->toBe(LotAppointmentDocument::STATUS_QUEUED)
@@ -2832,7 +2851,7 @@ it('links a placed appointment back to its lot appointment', function () {
         ->and($appointment->external_reference)->toBe('9101')
         ->and($externalRequest->appointment_id)->toBe($appointment->id);
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
         && $request['service_name'] === 'Audit interne'
         && $request['technician_email'] === 'tech.lot@example.test'
@@ -2844,10 +2863,16 @@ it('links a placed appointment back to its lot appointment', function () {
         && $request['beneficiary_name'] === 'Entreprise Lot'
         && $request['site_name'] === 'Site Bellecour'
         && $request['installer_name'] === 'Installateur Lot SAS'
+        && $request['installer_siren'] === '348808007'
+        && $request['internal_reference'] === 'ALVEA-ACT-1616542/OP-2261616'
+        && $request['email'] === 'beneficiaire@example.test'
+        && $request['lot_name'] === 'Lot à placer'
+        && $request['address_line'] === '20 Place Bellecour'
+        && $request['postal_code'] === '69002'
         && $request['nom_demandeur'] === 'Entreprise Lot'
-        && $request['adresse_demandeur'] === '20 Place Bellecour'
-        && $request['code_postale_demandeur'] === '69002'
-        && $request['ville_demandeur'] === 'Lyon');
+        && $request['adresse_demandeur'] === '10 Rue du Siege'
+        && $request['code_postale_demandeur'] === '75002'
+        && $request['ville_demandeur'] === 'Paris');
 
     Mail::assertQueued(
         TechnicianAppointmentNotificationMail::class,
@@ -2856,6 +2881,151 @@ it('links a placed appointment back to its lot appointment', function () {
             && $mail->appointment->id === $lotAppointment->appointment_id,
     );
     Queue::assertPushed(PushLotAppointmentDocumentToCoffracJob::class);
+});
+
+it('allows creating a Global Plus demand from the booking confirmation', function () {
+    Cache::flush();
+    config([
+        'services.global_plus.api_url' => 'https://global-plus.test',
+        'services.global_plus.api_key' => 'global-plus-secret',
+        'services.global_plus.bureau_id' => 1035,
+    ]);
+
+    Http::fake(function ($request) {
+        return match ($request->url()) {
+            'https://global-plus.test/api/Auth/token' => Http::response([
+                'message' => 'success',
+                'token' => 'global-plus-token',
+            ]),
+            'https://global-plus.test/api/Client/Liste' => Http::response([['adresseClient' => ['id' => 700, 'raisonSociale' => 'Delegataire choisi']]]),
+            'https://global-plus.test/api/Entreprise/Liste' => Http::response([
+                [
+                    'idEntreprise' => 42,
+                    'blocageActif' => false,
+                    'adresseEntreprise' => [
+                        'id' => 901,
+                        'raisonSociale' => 'INSTALLATEUR TEST',
+                        'siren' => '123456789',
+                        'adresse' => '1 Rue Pro',
+                        'codePostal' => '75001',
+                        'ville' => 'Paris',
+                        'phone' => '0101010101',
+                    ],
+                ],
+            ]),
+            'https://global-plus.test/api/Auth/Controllers' => Http::response([
+                [
+                    'id' => 2198,
+                    'nom' => 'Controle',
+                    'prenom' => 'Lucas',
+                    'email' => 'tech.globalplus@example.test',
+                    'etat' => true,
+                ],
+            ]),
+            'https://global-plus.test/api/VersionFormulaire/GetVersionFormulaires/true' => Http::response([
+                [
+                    'id' => 31,
+                    'idTypeIntervention' => 31,
+                    'libelle' => 'BAR EN 101',
+                    'codeRapport' => 'BAREN101',
+                    'versionFormulaireId' => 3310,
+                    'actif' => true,
+                    'enablePlanning' => true,
+                ],
+            ]),
+            'https://global-plus.test/api/Demande/5637' => Http::response(['id' => 5637, 'interventions' => [['id' => 8123, 'idDemande' => 5637]]]),
+            'https://global-plus.test/api/Intervention/Patch/8123' => Http::response(null, 204),
+            'https://global-plus.test/api/Intervention/8123' => Http::response([
+                'id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198,
+                'dateIntervention' => Appointment::latest('id')->first()->starts_at->format('Y-m-d\TH:i:s'),
+                'dateInterventionEnd' => Appointment::latest('id')->first()->ends_at->format('Y-m-d\TH:i:s'),
+            ]),
+            'https://global-plus.test/api/Demande' => Http::response('"5637"', 200, [
+                'Content-Type' => 'application/json',
+            ]),
+            default => Http::response(['message' => 'Unexpected request '.$request->url()], 404),
+        };
+    });
+
+    $planner = User::factory()->create([
+        'role' => 1,
+        'admin' => false,
+    ]);
+    $technician = User::factory()->create([
+        'role' => 2,
+        'email' => 'tech.globalplus@example.test',
+        'admin' => false,
+    ]);
+    $service = Service::query()->create([
+        'type' => 'BAR EN 101',
+        'name' => 'BAR EN 101',
+        'average_duration_minutes' => 90,
+    ]);
+    $startsAt = now()->addDay()->setTime(10, 0);
+    $appointment = Appointment::query()->create([
+        'service_id' => $service->id,
+        'technician_id' => $technician->id,
+        'created_by' => $planner->id,
+        'customer_first_name' => 'Client',
+        'customer_last_name' => 'Global',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre, 69002 Lyon',
+        'latitude' => 45.7597,
+        'longitude' => 4.8342,
+        'starts_at' => $startsAt,
+        'duration_minutes' => 90,
+        'ends_at' => $startsAt->copy()->addMinutes(90),
+    ]);
+    $lot = Lot::query()->create([
+        'name' => 'Lot Global+',
+        'type' => Lot::TYPE_FULL_CONTROL,
+        'service_id' => $service->id,
+        'created_by' => $planner->id,
+    ]);
+    $lotAppointment = LotAppointment::query()->create([
+        'lot_id' => $lot->id,
+        'service_id' => $service->id,
+        'appointment_id' => $appointment->id,
+        'row_number' => 7,
+        'customer_name' => 'HABITAT ENERGIE',
+        'company_name' => 'HABITAT ENERGIE',
+        'site_name' => 'BATIMENT A',
+        'installer_name' => 'INSTALLATEUR TEST',
+        'customer_phone' => '0600000000',
+        'address' => '10 Rue de la Barre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'status' => LotAppointment::STATUS_PLACED,
+        'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL,
+        'service_name' => 'BAR EN 101',
+    ]);
+
+    $this->actingAs($planner)
+        ->getJson(route('planner.book.lots.appointments.global-plus.references', $lotAppointment))
+        ->assertOk()
+        ->assertJsonPath('configured', true)
+        ->assertJsonPath('suggested_installer_address_id', 901)
+        ->assertJsonPath('suggested_controller_id', 2198)
+        ->assertJsonPath('suggested_version_formulaire_id', 3310);
+
+    $this->actingAs($planner)
+        ->postJson(route('planner.book.lots.appointments.global-plus.store', $lotAppointment), [
+            'version_formulaire_id' => 3310,
+            'controller_id' => 2198,
+            'client_address_id' => 700,
+            'installer_address_id' => 901,
+            'title' => 'Lot Global+',
+            'sub_title' => 'Ligne 7 - HABITAT',
+            'send_documents' => false,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('global_plus.global_plus_demand_id', '5637')
+        ->assertJsonPath('global_plus.global_plus_status_label', 'Créé dans Global+')
+        ->assertJsonPath('global_plus.can_create_global_plus', false)
+        ->assertJsonPath('global_plus.can_sync_global_plus_documents', true);
+
+    expect($lotAppointment->refresh()->global_plus_demand_id)->toBe('5637')
+        ->and($lotAppointment->added_to_global_plus)->toBeTrue();
 });
 
 it('rolls back a physical lot appointment when coffrac does not confirm attente visite', function () {
@@ -3121,7 +3291,7 @@ it('uses the coffrac service alias when creating a physical appointment from a l
         ])
         ->assertCreated();
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
         && $request['service_name'] === 'BAR 145 TRAVAUX'
         && $request['service_type'] === Service::TYPE_COFFRAC);
@@ -3229,7 +3399,7 @@ it('allows overriding the coffrac service alias for one physical lot appointment
         ])
         ->assertCreated();
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments'
         && $request['service_name'] === 'BAR TH 145 APRES TRAVAUX'
         && $request['service_type'] === Service::TYPE_COFFRAC);

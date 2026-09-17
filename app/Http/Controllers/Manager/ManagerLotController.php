@@ -453,12 +453,24 @@ class ManagerLotController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate([
-            'selected_rows' => ['required', 'array', 'min:1'],
+            'selected_rows' => ['nullable', 'array'],
             'selected_rows.*' => ['required', 'integer', 'min:1'],
+            'selected_keys' => ['nullable', 'array'],
+            'selected_keys.*' => ['required', 'string', 'max:80'],
         ]);
 
+        if (empty($payload['selected_rows'] ?? []) && empty($payload['selected_keys'] ?? [])) {
+            return response()->json([
+                'message' => 'Sélectionne au moins une ligne à importer.',
+            ], 422);
+        }
+
         try {
-            $lot = $confirmation->confirm($preview, $payload['selected_rows']);
+            $lot = $confirmation->confirm(
+                $preview,
+                $payload['selected_rows'] ?? [],
+                $payload['selected_keys'] ?? [],
+            );
         } catch (RuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -488,6 +500,12 @@ class ManagerLotController extends Controller
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
+            'customer_email' => ['nullable', 'email', 'max:255'],
+            'installer_siren' => ['nullable', 'string', 'regex:/^\d{9}$/'],
+            'internal_reference' => ['nullable', 'string', 'max:255'],
+            'beneficiary_address' => ['nullable', 'string', 'max:500'],
+            'beneficiary_postal_code' => ['nullable', 'string', 'max:20'],
+            'beneficiary_city' => ['nullable', 'string', 'max:120'],
             'address' => ['nullable', 'string', 'max:255'],
             'postal_code' => ['nullable', 'string', 'max:20'],
             'city' => ['nullable', 'string', 'max:120'],
@@ -684,6 +702,12 @@ class ManagerLotController extends Controller
             'customer_first_name' => ['nullable', 'string', 'max:120'],
             'customer_last_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['nullable', 'string', 'max:255'],
+            'customer_email' => ['nullable', 'email', 'max:255'],
+            'installer_siren' => ['nullable', 'string', 'regex:/^\d{9}$/'],
+            'internal_reference' => ['nullable', 'string', 'max:255'],
+            'beneficiary_address' => ['nullable', 'string', 'max:500'],
+            'beneficiary_postal_code' => ['nullable', 'string', 'max:20'],
+            'beneficiary_city' => ['nullable', 'string', 'max:120'],
             'address' => ['nullable', 'string', 'max:255'],
             'postal_code' => ['nullable', 'string', 'max:20'],
             'city' => ['nullable', 'string', 'max:120'],
@@ -805,6 +829,7 @@ class ManagerLotController extends Controller
         $payload = $request->validate([
             'version_formulaire_id' => ['required', 'integer', 'min:1'],
             'controller_id' => ['required', 'integer', 'min:1'],
+            'client_address_id' => ['required', 'integer', 'min:1'],
             'installer_address_id' => ['nullable', 'integer', 'min:1'],
             'installer_name' => ['nullable', 'string', 'max:255'],
             'installer_siren' => ['nullable', 'string', 'max:20'],
@@ -814,12 +839,13 @@ class ManagerLotController extends Controller
             'installer_city' => ['nullable', 'string', 'max:120'],
             'precariousness' => ['nullable', 'integer', 'min:0', 'max:10'],
             'title' => ['nullable', 'string', 'max:50'],
-            'sub_title' => ['nullable', 'string', 'max:25'],
+            'sub_title' => ['nullable', 'string', 'max:255'],
             'send_documents' => ['nullable', 'boolean'],
         ], [
             'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
             'version_formulaire_id.min' => 'Choisis une prestation Global+ valide.',
             'controller_id.required' => 'Choisis le technicien Global+ avant de créer le dossier.',
+            'client_address_id.required' => 'Choisis le délégataire dans la liste des clients Global+.',
             'controller_id.min' => 'Choisis un technicien Global+ valide.',
             'installer_address_id.integer' => 'L’installateur Global+ sélectionné est invalide.',
             'installer_name.max' => 'Le nom de l’installateur est trop long.',
@@ -839,7 +865,10 @@ class ManagerLotController extends Controller
         }
 
         return response()->json([
-            'message' => sprintf('Dossier créé dans Global+ avec la référence %s.', $lotAppointment->global_plus_demand_id),
+            'message' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED
+                ? 'Dossier Global+ créé, mais affectation du technicien à terminer : '.$lotAppointment->global_plus_error_message
+                : sprintf('Dossier créé dans Global+ avec la référence %s et technicien affecté.', $lotAppointment->global_plus_demand_id),
+            'warning' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED,
             'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
         ], 201);
     }
@@ -1653,6 +1682,12 @@ class ManagerLotController extends Controller
             'company_name' => $appointment->company_name,
             'site_name' => $appointment->site_name,
             'installer_name' => $appointment->installer_name,
+            'installer_siren' => $appointment->installer_siren,
+            'internal_reference' => $appointment->internalReference(),
+            'customer_email' => $appointment->customer_email,
+            'beneficiary_address' => $appointment->beneficiary_address,
+            'beneficiary_postal_code' => $appointment->beneficiary_postal_code,
+            'beneficiary_city' => $appointment->beneficiary_city,
             'customer_first_name' => $appointment->customer_first_name,
             'customer_last_name' => $appointment->customer_last_name,
             'customer_phone' => $appointment->customer_phone,
@@ -1816,7 +1851,7 @@ class ManagerLotController extends Controller
     {
         return filled($appointment->appointment_id)
             && $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
-            && ! filled($appointment->global_plus_demand_id);
+            && (! filled($appointment->global_plus_demand_id) || $appointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED);
     }
 
     private function globalPlusStatusLabel(LotAppointment $appointment): string
@@ -1825,6 +1860,7 @@ class ManagerLotController extends Controller
             return match ($appointment->global_plus_status) {
                 GlobalPlusAppointmentService::STATUS_DOCUMENTS_SYNCED => 'Créé, documents synchronisés',
                 GlobalPlusAppointmentService::STATUS_DOCUMENTS_FAILED => 'Créé, erreur documents',
+                GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED => 'Créé, technicien non confirmé',
                 default => 'Créé dans Global+',
             };
         }
@@ -1999,8 +2035,9 @@ class ManagerLotController extends Controller
         $payload = $preview->payload ?? [];
         $appointments = collect($payload['appointments'] ?? [])
             ->values()
-            ->map(function (array $appointment) use ($preview): array {
+            ->map(function (array $appointment, int $index) use ($preview): array {
                 $rowNumber = (int) ($appointment['row_number'] ?? 0);
+                $appointment['preview_key'] = LotImportPreview::appointmentPayloadKey($appointment, $index);
 
                 if ($rowNumber > 0 && $preview->status === LotImportPreview::STATUS_COMPLETED) {
                     $appointment['update_url'] = route('manager.lots.imports.rows.update', [$preview, $rowNumber]);

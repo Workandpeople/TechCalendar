@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 class LotImportConfirmationService
 {
-    public function confirm(LotImportPreview $preview, array $selectedRowNumbers): Lot
+    public function confirm(LotImportPreview $preview, array $selectedRowNumbers, array $selectedRowKeys = []): Lot
     {
         if ($preview->status === LotImportPreview::STATUS_CONFIRMED && $preview->confirmedLot) {
             return $preview->confirmedLot->load(['appointments']);
@@ -28,13 +28,26 @@ class LotImportConfirmationService
             ->unique()
             ->values();
 
-        if ($selectedRowNumbers->isEmpty()) {
+        $selectedRowKeys = collect($selectedRowKeys)
+            ->map(fn ($rowKey): string => trim((string) $rowKey))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($selectedRowNumbers->isEmpty() && $selectedRowKeys->isEmpty()) {
             throw new \RuntimeException('Sélectionne au moins une ligne à importer.');
         }
 
         $payload = $preview->payload ?? [];
         $appointments = collect($payload['appointments'] ?? [])
-            ->filter(fn (array $appointment): bool => $selectedRowNumbers->contains((int) ($appointment['row_number'] ?? 0)))
+            ->values()
+            ->filter(function (array $appointment, int $index) use ($selectedRowNumbers, $selectedRowKeys): bool {
+                if ($selectedRowKeys->isNotEmpty()) {
+                    return $selectedRowKeys->contains(LotImportPreview::appointmentPayloadKey($appointment, $index));
+                }
+
+                return $selectedRowNumbers->contains((int) ($appointment['row_number'] ?? 0));
+            })
             ->values();
 
         if ($appointments->isEmpty()) {
@@ -99,12 +112,18 @@ class LotImportConfirmationService
                     'lot_id' => $lot->id,
                     'service_id' => $service?->id,
                     'external_reference' => $this->nullableString($appointmentPayload['external_reference'] ?? null),
+                    'internal_reference' => $this->nullableString($appointmentPayload['internal_reference'] ?? $appointmentPayload['external_reference'] ?? null),
                     'row_number' => (int) ($appointmentPayload['row_number'] ?? 0) ?: null,
                     'source' => null,
                     'customer_name' => $this->requiredCustomerName($appointmentPayload),
                     'company_name' => $this->nullableString($appointmentPayload['company_name'] ?? null),
                     'site_name' => $this->nullableString($appointmentPayload['site_name'] ?? null),
                     'installer_name' => $this->nullableString($appointmentPayload['installer_name'] ?? null),
+                    'installer_siren' => $this->nullableString($appointmentPayload['installer_siren'] ?? null),
+                    'customer_email' => $this->nullableString($appointmentPayload['customer_email'] ?? null),
+                    'beneficiary_address' => $this->nullableString($appointmentPayload['beneficiary_address'] ?? null),
+                    'beneficiary_postal_code' => $this->nullableString($appointmentPayload['beneficiary_postal_code'] ?? null),
+                    'beneficiary_city' => $this->nullableString($appointmentPayload['beneficiary_city'] ?? null),
                     'customer_first_name' => $this->nullableString($appointmentPayload['customer_first_name'] ?? null),
                     'customer_last_name' => $this->nullableString($appointmentPayload['customer_last_name'] ?? null),
                     'customer_phone' => $this->phoneString($appointmentPayload['customer_phone'] ?? null),
@@ -136,8 +155,8 @@ class LotImportConfirmationService
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param Collection<int, string> $warnings
+     * @param  array<string, mixed>  $payload
+     * @param  Collection<int, string>  $warnings
      */
     private function statusForPayload(array $payload, Collection $warnings): string
     {
@@ -149,7 +168,7 @@ class LotImportConfirmationService
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
-        if ((float) ($payload['ai_confidence'] ?? 0) < 0.65 || $warnings->isNotEmpty()) {
+        if ((isset($payload['ai_confidence']) && (float) $payload['ai_confidence'] < 0.65) || $warnings->isNotEmpty()) {
             return LotAppointment::STATUS_NEEDS_REVIEW;
         }
 
@@ -157,7 +176,7 @@ class LotImportConfirmationService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function requiredCustomerName(array $payload): string
     {
@@ -186,7 +205,7 @@ class LotImportConfirmationService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function hasCustomerIdentity(array $payload): bool
     {

@@ -28,12 +28,19 @@ use Throwable;
 class CoffracAppointmentService
 {
     public const SOURCE = 'coffrac';
+
     public const REMOTE_STATUS_ALL = 'all';
+
     public const REMOTE_STATUS_PENDING = 'pending';
+
     public const REMOTE_STATUS_PLACED = 'placed';
+
     public const REMOTE_STATUS_PROBLEM = 'problem';
+
     public const PROBLEM_TYPE_RENVOI_CLIENT = 'Renvoi client';
+
     public const PROBLEM_TYPE_CALLBACK = 'Demande de rapl';
+
     public const PROBLEM_TYPE_DOCUMENT = 'Problème document';
 
     private const SYNC_MESSAGE_MAX_LENGTH = 240;
@@ -44,8 +51,7 @@ class CoffracAppointmentService
         private readonly MapboxAddressGeocoder $geocoder,
         private readonly ImportedAddressCleaner $addressCleaner,
         private readonly AppointmentDocumentSerializer $documentSerializer,
-    ) {
-    }
+    ) {}
 
     public function isConfigured(): bool
     {
@@ -193,7 +199,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $problemType
+     * @param  array<string, mixed>  $problemType
      * @return array{value:string,label:string,requires_recall:bool}|null
      */
     private function normalizeProblemTypeOption(array $problemType): ?array
@@ -353,7 +359,7 @@ class CoffracAppointmentService
     /**
      * Met à jour la copie locale d'une demande Coffrac avant placement dans TechCalendar.
      *
-     * @param array{service_id?: int|null, address?: string|null, comment?: string|null} $payload
+     * @param  array{service_id?: int|null, address?: string|null, comment?: string|null}  $payload
      * @return array<string, mixed>|null
      */
     public function updatePendingAppointment(string $id, array $payload): ?array
@@ -958,7 +964,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
+     * @param  array<string, mixed>  $crmAppointment
      */
     private function shouldCreateRemoteAppointmentFromLot(array $crmAppointment): bool
     {
@@ -967,7 +973,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
+     * @param  array<string, mixed>  $crmAppointment
      */
     private function createRemoteAppointmentFromLot(Appointment $appointment, array $crmAppointment): void
     {
@@ -1051,7 +1057,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
+     * @param  array<string, mixed>  $crmAppointment
      * @return array<string, mixed>
      */
     private function remoteLotCreationPayload(Appointment $appointment, array $crmAppointment): array
@@ -1090,6 +1096,11 @@ class CoffracAppointmentService
             $postalCode,
         );
 
+        $beneficiaryAddress = $this->firstFilledString($crmAppointment['beneficiary_address'] ?? null, $rawPayload['beneficiary_address'] ?? null);
+        $beneficiaryPostalCode = $beneficiaryAddress ? $this->firstFilledString($crmAppointment['beneficiary_postal_code'] ?? null, $rawPayload['beneficiary_postal_code'] ?? null) : $postalCode;
+        $beneficiaryCity = $beneficiaryAddress ? $this->firstFilledString($crmAppointment['beneficiary_city'] ?? null, $rawPayload['beneficiary_city'] ?? null) : $city;
+        $beneficiaryAddress ??= $addressLine;
+
         return [
             'service_type' => $appointment->service?->type,
             'service_name' => $this->coffracServiceNameForLotAppointment($appointment, $externalPayload),
@@ -1105,19 +1116,22 @@ class CoffracAppointmentService
             'beneficiary_name' => $beneficiaryName,
             'site_name' => $siteName,
             'installer_name' => $installerName,
+            'installer_siren' => $this->firstFilledString($crmAppointment['installer_siren'] ?? null, $rawPayload['installer_siren'] ?? null),
+            'internal_reference' => $this->firstFilledString($crmAppointment['internal_reference'] ?? null, $rawPayload['internal_reference'] ?? null, $rawPayload['external_reference'] ?? null),
+            'email' => $this->firstFilledString($crmAppointment['customer_email'] ?? null, $rawPayload['customer_email'] ?? null),
             'phone' => $crmAppointment['phone'] ?? null,
             'address' => $crmAppointment['address'] ?? null,
             'address_line' => $addressLine,
             'postal_code' => $postalCode,
             'city' => $city,
-            'beneficiary_address' => $crmAppointment['address'] ?? null,
-            'beneficiary_address_line' => $addressLine,
-            'beneficiary_postal_code' => $postalCode,
-            'beneficiary_city' => $city,
+            'beneficiary_address' => $beneficiaryAddress,
+            'beneficiary_address_line' => $beneficiaryAddress,
+            'beneficiary_postal_code' => $beneficiaryPostalCode,
+            'beneficiary_city' => $beneficiaryCity,
             'nom_demandeur' => $beneficiaryName,
-            'adresse_demandeur' => $addressLine,
-            'code_postale_demandeur' => $postalCode,
-            'ville_demandeur' => $city,
+            'adresse_demandeur' => $beneficiaryAddress,
+            'code_postale_demandeur' => $beneficiaryPostalCode,
+            'ville_demandeur' => $beneficiaryCity,
             'latitude' => $crmAppointment['latitude'] ?? null,
             'longitude' => $crmAppointment['longitude'] ?? null,
             'delegataire' => data_get($externalPayload, 'lot_delegataire'),
@@ -1183,7 +1197,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $externalPayload
+     * @param  array<string, mixed>  $externalPayload
      */
     private function coffracServiceNameForLotAppointment(Appointment $appointment, array $externalPayload): ?string
     {
@@ -1199,8 +1213,8 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
-     * @param array<string, mixed> $remotePayload
+     * @param  array<string, mixed>  $crmAppointment
+     * @param  array<string, mixed>  $remotePayload
      */
     private function markLotAppointmentAsRemoteLinked(Appointment $appointment, array $crmAppointment, string $externalReference, array $remotePayload): void
     {
@@ -1238,7 +1252,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $crmAppointment
+     * @param  array<string, mixed>  $crmAppointment
      */
     private function queueLotAppointmentDocuments(Appointment $appointment, array $crmAppointment): void
     {
@@ -1282,7 +1296,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed>|null $payload
+     * @param  array<string, mixed>|null  $payload
      */
     private function isMissingRemoteTechnicianError(?array $payload): bool
     {
@@ -1382,7 +1396,7 @@ class CoffracAppointmentService
      * Corrige l’adresse du dossier source Coffrac quand l’adresse d’un RDV déjà placé
      * est modifiée dans TechCalendar.
      *
-     * @param array{address?: string|null, latitude?: mixed, longitude?: mixed} $payload
+     * @param  array{address?: string|null, latitude?: mixed, longitude?: mixed}  $payload
      */
     public function updateAppointmentAddress(Appointment $appointment, array $payload): void
     {
@@ -1435,7 +1449,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function pushAddressCorrection(string $externalReference, array $payload): ?ExternalAppointmentRequest
     {
@@ -1466,7 +1480,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $updates
+     * @param  array<string, mixed>  $updates
      */
     private function updateStoredRequestAddressCorrection(ExternalAppointmentRequest $storedRequest, array $updates): void
     {
@@ -1498,7 +1512,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     private function filledPayload(array $payload): array
@@ -1507,7 +1521,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $updates
+     * @param  array<string, mixed>  $updates
      */
     private function addressCorrectionChanged(ExternalAppointmentRequest|Appointment $model, array $updates): bool
     {
@@ -1769,7 +1783,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $remoteDocument
+     * @param  array<string, mixed>  $remoteDocument
      */
     private function syncUploadedDocumentLocally(Appointment $appointment, string $externalReference, array $remoteDocument): void
     {
@@ -2187,7 +2201,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $appointment
+     * @param  array<string, mixed>  $appointment
      */
     private function normalizedCompanyName(array $appointment): ?string
     {
@@ -2211,7 +2225,6 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param mixed $comments
      * @return array<int, array<string, mixed>>
      */
     private function normalizeRemoteComments(mixed $comments): array
@@ -2629,9 +2642,9 @@ class CoffracAppointmentService
 
         $service = $this->serviceFromExternalAlias($type, $name)
             ?? Service::query()
-            ->where('type', $type)
-            ->where('name', $name)
-            ->first(['id', 'type', 'name', 'average_duration_minutes']);
+                ->where('type', $type)
+                ->where('name', $name)
+                ->first(['id', 'type', 'name', 'average_duration_minutes']);
 
         $service ??= Service::query()
             ->where('type', $type)
@@ -2772,7 +2785,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $metadata
+     * @param  array<string, mixed>  $metadata
      */
     public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...', array $metadata = []): ExternalApiSync
     {
@@ -2797,7 +2810,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $metadata
+     * @param  array<string, mixed>  $metadata
      */
     private function markSyncProgress(int $progress, string $stage, array $metadata = []): ExternalApiSync
     {
@@ -2822,7 +2835,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed> $metadata
+     * @param  array<string, mixed>  $metadata
      */
     private function persistSyncState(
         string $state,
@@ -2937,8 +2950,7 @@ class CoffracAppointmentService
         ?int $displayedCount = null,
         int $missingCoordinatesCount = 0,
         array $metadata = [],
-    ): array
-    {
+    ): array {
         return [
             'state' => $state,
             'label' => $label,
@@ -2960,7 +2972,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * @param array<string, mixed>|null $payload
+     * @param  array<string, mixed>|null  $payload
      */
     private function responseError(?array $payload, string $fallback): string
     {

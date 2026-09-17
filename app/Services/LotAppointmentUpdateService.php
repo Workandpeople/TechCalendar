@@ -10,11 +10,10 @@ class LotAppointmentUpdateService
     public function __construct(
         private readonly ImportedAddressCleaner $addressCleaner,
         private readonly MapboxAddressGeocoder $geocoder,
-    ) {
-    }
+    ) {}
 
     /**
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     public function update(LotAppointment $appointment, array $attributes): LotAppointment
     {
@@ -73,13 +72,19 @@ class LotAppointmentUpdateService
             $updatePayload['unsuccessful_visits_count'] = max(0, (int) $attributes['unsuccessful_visits_count']);
         }
 
+        foreach (['internal_reference', 'customer_email', 'installer_siren', 'beneficiary_address', 'beneficiary_postal_code', 'beneficiary_city'] as $field) {
+            if (array_key_exists($field, $attributes)) {
+                $updatePayload[$field] = $this->nullableString($attributes[$field]);
+            }
+        }
+
         $appointment->update($updatePayload);
 
         return $appointment->refresh();
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function customerName(array $payload): string
     {
