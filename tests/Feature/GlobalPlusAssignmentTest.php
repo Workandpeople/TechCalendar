@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Appointment;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
@@ -36,12 +37,14 @@ beforeEach(function () {
         'beneficiary_address' => '10 Rue Siege', 'beneficiary_postal_code' => '75002', 'beneficiary_city' => 'Paris',
         'installer_siren' => '348808007', 'installer_name' => 'Nouveau nom installateur',
     ]);
-    $this->payload = ['client_address_id' => 700, 'installer_address_id' => 901, 'controller_id' => 2198, 'version_formulaire_id' => 3310, 'send_documents' => false];
+    $this->payload = ['client_address_id' => 700, 'client_delegataire_confirmed' => true, 'installer_address_id' => 901, 'controller_id' => 2198, 'version_formulaire_id' => 3310, 'send_documents' => false];
     $this->remote = ['id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198, 'dateIntervention' => '2026-10-01T10:00:00', 'dateInterventionEnd' => '2026-10-01T11:30:00'];
     $this->remoteInterventions = [['id' => 8123, 'idDemande' => 5637]];
-    Http::fake(fn ($request) => match ($request->url()) {
+    $this->clients = [['clientId' => 1234, 'adresseClient' => ['id' => 700, 'raisonSociale' => 'Delegataire Global', 'adresse' => '1 Rue Delegataire']]];
+    $this->forbiddenPath = null;
+    Http::fake(fn ($request) => $this->forbiddenPath !== null && str_ends_with($request->url(), $this->forbiddenPath) ? Http::response('', 403) : match ($request->url()) {
         'https://global-plus.test/api/Auth/token' => Http::response(['token' => 'fake-token']),
-        'https://global-plus.test/api/Client/Liste' => Http::response([['adresseClient' => ['id' => 700, 'raisonSociale' => 'Delegataire Global', 'adresse' => '1 Rue Delegataire']]]),
+        'https://global-plus.test/api/Client/Liste' => Http::response($this->clients),
         'https://global-plus.test/api/Entreprise/Liste' => Http::response([['idEntreprise' => 42, 'adresseEntreprise' => ['id' => 901, 'raisonSociale' => 'Ancien nom installateur', 'siren' => '348 808 007']]]),
         'https://global-plus.test/api/Auth/Controllers' => Http::response([['id' => 2198, 'email' => 'tech@example.test', 'etat' => true]]),
         'https://global-plus.test/api/VersionFormulaire/GetVersionFormulaires/true' => Http::response([['versionFormulaireId' => 3310, 'id' => 31, 'libelle' => 'BAR EN 101', 'actif' => true]]),
@@ -70,13 +73,76 @@ it('matches by SIREN and sends beneficiary, inspection, client and reference to 
         && $request['beneficiaire']['codePostal'] === '75002'
         && $request['beneficiaire']['prenom'] === 'Camille' && $request['beneficiaire']['nom'] === 'Martin'
         && $request['beneficiaire']['email'] === 'client@example.test'
-        && collect(['client', 'lieuInspection', 'beneficiaire', 'entreprise'])->every(fn ($field) => $request[$field]['civilite'] === 'M')
+        && collect(['client', 'lieuInspection', 'beneficiaire', 'entreprise'])->every(fn ($field) => $request[$field]['civilite'] === 'M.')
     );
     Http::assertSent(fn ($request) => $request->method() === 'PATCH'
         && $request->url() === 'https://global-plus.test/api/Intervention/Patch/8123'
         && $request->data()[0] === ['op' => 'replace', 'path' => '/idControleur', 'value' => 2198]);
     expect($this->row->refresh()->global_plus_intervention_id)->toBe('8123');
 });
+
+it('suggests only the lot delegataire and rejects a different existing client', function () {
+    $this->row->lot->update(['delegataire' => 'DÉLÉGATAIRE GLOBAL']);
+    $this->clients[] = ['adresseClient' => ['id' => 701, 'raisonSociale' => 'Beneficiaire SAS']];
+    $references = app(GlobalPlusAppointmentService::class)->referenceDataFor($this->row);
+    expect($references['suggested_client_address_id'])->toBe(700)
+        ->and($references['matching_client_address_ids'])->toBe([700]);
+    $this->payload['client_address_id'] = 701;
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertUnprocessable()->assertJsonPath('message', 'Le client Global+ sélectionné ne correspond pas au délégataire du lot : DÉLÉGATAIRE GLOBAL.');
+    Http::assertNotSent(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande'));
+});
+
+it('matches the delegataire company name without matching the beneficiary company', function () {
+    ExternalDelegataire::create(['source' => 'coffrac', 'external_id' => '1', 'name' => 'Delegataire TC', 'company_name' => 'Delegataire Global', 'is_active' => true]);
+    $this->clients[] = ['adresseClient' => ['id' => 701, 'raisonSociale' => 'Beneficiaire SAS']];
+    expect(app(GlobalPlusAppointmentService::class)->referenceDataFor($this->row)['suggested_client_address_id'])->toBe(700);
+    unset($this->payload['client_delegataire_confirmed']);
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertCreated()->assertJsonPath('warning', false);
+});
+
+it('does not silently match a beneficiary when the delegataire is absent from Global', function () {
+    $this->clients[] = ['adresseClient' => ['id' => 701, 'raisonSociale' => 'Beneficiaire SAS']];
+    expect(app(GlobalPlusAppointmentService::class)->referenceDataFor($this->row)['suggested_client_address_id'])->toBeNull();
+    unset($this->payload['client_delegataire_confirmed']);
+    $this->postJson(route('planner.book.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertUnprocessable()->assertJsonPath('message', 'Confirme que le client Global+ sélectionné correspond bien au délégataire du lot, et non au bénéficiaire ou à l’installateur.');
+    Http::assertNotSent(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande'));
+});
+
+it('leaves ambiguous delegataire matches for explicit selection', function () {
+    $this->row->lot->update(['delegataire' => 'Delegataire Global']);
+    $this->clients[] = ['adresseClient' => ['id' => 701, 'raisonSociale' => 'Delegataire Global']];
+    $references = app(GlobalPlusAppointmentService::class)->referenceDataFor($this->row);
+    expect($references['suggested_client_address_id'])->toBeNull()->and($references['matching_client_address_ids'])->toBe([700, 701]);
+});
+
+it('identifies a forbidden assignment step and retries without duplicate demand or token renewal', function ($path, $stage, $method) {
+    $this->forbiddenPath = $path;
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertCreated()->assertJsonPath('warning', true)->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
+    $this->row->refresh();
+    $diagnostic = $this->row->global_plus_payload['appointment_assignment'];
+    expect($diagnostic['stage'])->toBe($stage)->and($diagnostic['http_status'])->toBe(403)
+        ->and($diagnostic['http_method'])->toBe($method)->and($diagnostic['api_path'])->toBe($path)
+        ->and($this->row->global_plus_error_message)->toContain($method.' '.$path, 'HTTP 403')
+        ->and($diagnostic['patch_accepted_at'] !== null)->toBe($stage === 'verify_assignment');
+    if ($stage === 'resolve_intervention') {
+        expect($this->row->global_plus_intervention_id)->toBeNull();
+        Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
+    }
+    $this->forbiddenPath = null;
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertCreated()->assertJsonPath('warning', false)->assertJsonPath('appointment.global_plus_status', 'created');
+    expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1)
+        ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Auth/token')))->toHaveCount(1)
+        ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Demande/5637')))->toHaveCount($stage === 'resolve_intervention' ? 2 : 1);
+})->with([
+    ['/api/Demande/5637', 'resolve_intervention', 'GET'],
+    ['/api/Intervention/Patch/8123', 'assign_technician', 'PATCH'],
+    ['/api/Intervention/8123', 'verify_assignment', 'GET'],
+]);
 
 it('requires an explicit Global client before creating a demand', function () {
     unset($this->payload['client_address_id']);
@@ -118,3 +184,13 @@ it('blocks concurrent creation requests', function () {
         $lock->release();
     }
 });
+
+it('retries only assignment without requiring or changing the existing client', function ($routeName) {
+    $this->forbiddenPath = '/api/Intervention/Patch/8123';
+    $this->postJson(route($routeName, $this->row), $this->payload)->assertCreated()->assertJsonPath('warning', true);
+    $this->forbiddenPath = null;
+    $this->postJson(route($routeName, $this->row), ['controller_id' => 2198])->assertCreated()->assertJsonPath('warning', false);
+    expect(data_get($this->row->refresh()->global_plus_payload, 'last_request.client.id'))->toBe(700);
+    Http::assertSentCount(10);
+    expect(Http::recorded(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande')))->toHaveCount(1);
+})->with(['manager.lots.appointments.global-plus.store', 'planner.book.lots.appointments.global-plus.store']);

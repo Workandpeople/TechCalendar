@@ -3013,6 +3013,7 @@ it('allows creating a Global Plus demand from the booking confirmation', functio
             'version_formulaire_id' => 3310,
             'controller_id' => 2198,
             'client_address_id' => 700,
+            'client_delegataire_confirmed' => true,
             'installer_address_id' => 901,
             'title' => 'Lot Global+',
             'sub_title' => 'Ligne 7 - HABITAT',

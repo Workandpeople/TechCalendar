@@ -2,6 +2,7 @@
 
 namespace App\Services\GlobalPlus;
 
+use App\Models\ExternalDelegataire;
 use App\Models\LotAppointment;
 use App\Models\LotAppointmentDocument;
 use App\Models\User;
@@ -43,6 +44,9 @@ class GlobalPlusAppointmentService
 
     private const SUB_TITLE_MAX_LENGTH = 255;
 
+    // Global+ radio buttons use "M.", despite the "Mr" default in their Swagger.
+    private const DEFAULT_CIVILITY = 'M.';
+
     public function __construct(private readonly GlobalPlusClient $client) {}
 
     public function isConfigured(): bool
@@ -72,6 +76,8 @@ class GlobalPlusAppointmentService
                 'controllers' => [],
                 'intervention_versions' => [],
                 'suggested_installer_address_id' => null,
+                'matching_client_address_ids' => [],
+                'suggested_client_address_id' => null,
                 'suggested_controller_id' => null,
                 'suggested_version_formulaire_id' => null,
             ];
@@ -80,16 +86,21 @@ class GlobalPlusAppointmentService
         $installers = $this->client->installers();
         $controllers = $this->client->controllers();
         $versions = $this->client->activeFormVersions();
+        $clients = $this->client->clients();
+        $matchingClientIds = $this->matchingClientAddressIds($lotAppointment, $clients);
 
         return [
             'configured' => true,
             'installers' => $this->publicReferences($installers),
-            'clients' => $this->publicReferences($this->client->clients()),
+            'clients' => $this->publicReferences($clients),
             'delegataire' => $lotAppointment->lot?->delegataire,
+            'matching_client_address_ids' => $matchingClientIds,
+            'suggested_client_address_id' => count($matchingClientIds) === 1 ? $matchingClientIds[0] : null,
+            'existing_client_address_id' => data_get($lotAppointment->global_plus_payload, 'last_request.client.id'),
             'controllers' => $this->publicReferences($controllers),
             'intervention_versions' => $this->publicReferences($versions),
             'suggested_installer_address_id' => $this->suggestInstallerAddressId($lotAppointment, $installers),
-            'suggested_controller_id' => $this->suggestControllerId($lotAppointment, $controllers),
+            'suggested_controller_id' => data_get($lotAppointment->global_plus_payload, 'appointment_assignment.controller_id') ?: $this->suggestControllerId($lotAppointment, $controllers),
             'suggested_version_formulaire_id' => $this->suggestVersionFormulaireId($lotAppointment, $versions),
         ];
     }
@@ -192,16 +203,22 @@ class GlobalPlusAppointmentService
     public function syncAppointment(LotAppointment $lotAppointment, int $controllerId): void
     {
         $lotAppointment->loadMissing('appointment');
+        $stage = 'resolve_intervention';
+        $patchAcceptedAt = null;
         try {
-            $demand = $this->client->demand((string) $lotAppointment->global_plus_demand_id);
-            $interventions = collect($demand['interventions'] ?? [])
-                ->filter(fn ($item): bool => is_array($item) && (int) ($item['id'] ?? 0) > 0
-                    && (string) ($item['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id);
-            if ($interventions->count() !== 1) {
-                throw new RuntimeException('L’intervention Global+ ne peut pas être identifiée de façon unique. Le dossier est créé, l’affectation du technicien reste à terminer.');
+            $interventionId = trim((string) $lotAppointment->global_plus_intervention_id);
+            if ($interventionId === '') {
+                $demand = $this->client->demand((string) $lotAppointment->global_plus_demand_id);
+                $interventions = collect($demand['interventions'] ?? [])
+                    ->filter(fn ($item): bool => is_array($item) && (int) ($item['id'] ?? 0) > 0
+                        && (string) ($item['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id);
+                if ($interventions->count() !== 1) {
+                    throw new RuntimeException('L’intervention Global+ ne peut pas être identifiée de façon unique. Le dossier est créé, l’affectation du technicien reste à terminer.');
+                }
+                $interventionId = (string) $interventions->first()['id'];
+                $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
             }
-            $interventionId = (string) $interventions->first()['id'];
-            $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
+            $stage = 'assign_technician';
             $startsAt = $lotAppointment->appointment?->starts_at?->format('Y-m-d\TH:i:s');
             $endsAt = $lotAppointment->appointment?->ends_at?->format('Y-m-d\TH:i:s');
             if (! $startsAt || ! $endsAt) {
@@ -212,6 +229,8 @@ class GlobalPlusAppointmentService
                 ['op' => 'replace', 'path' => '/dateIntervention', 'value' => $startsAt],
                 ['op' => 'replace', 'path' => '/dateInterventionEnd', 'value' => $endsAt],
             ]);
+            $patchAcceptedAt = now()->toIso8601String();
+            $stage = 'verify_assignment';
             $remote = $this->client->intervention($interventionId);
             if ((string) ($remote['idDemande'] ?? '') !== (string) $lotAppointment->global_plus_demand_id
                 || (int) ($remote['idControleur'] ?? 0) !== $controllerId
@@ -225,17 +244,36 @@ class GlobalPlusAppointmentService
                 'global_plus_synced_at' => now(),
                 'global_plus_payload' => [
                     ...($lotAppointment->global_plus_payload ?? []),
-                    'appointment_assignment' => ['controller_id' => $controllerId, 'intervention_id' => $interventionId, 'confirmed_at' => now()->toIso8601String()],
+                    'appointment_assignment' => [
+                        'controller_id' => $controllerId, 'intervention_id' => $interventionId,
+                        'stage' => 'confirmed', 'patch_accepted_at' => $patchAcceptedAt, 'confirmed_at' => now()->toIso8601String(),
+                    ],
                 ],
             ]);
         } catch (Throwable $exception) {
+            $context = $exception instanceof GlobalPlusApiException ? $exception->requestContext() : [];
+            $message = match ($stage) {
+                'resolve_intervention' => 'Affectation non envoyée : impossible de retrouver l’intervention du dossier créé. ',
+                'assign_technician' => 'Affectation du technicien non confirmée. ',
+                'verify_assignment' => 'Affectation envoyée, mais vérification impossible ou non conforme. ',
+            }.$exception->getMessage();
             $lotAppointment->update([
                 'global_plus_status' => self::STATUS_APPOINTMENT_FAILED,
-                'global_plus_error_message' => $exception->getMessage(),
+                'global_plus_error_message' => $message,
+                'global_plus_payload' => [
+                    ...($lotAppointment->global_plus_payload ?? []),
+                    'appointment_assignment' => [
+                        'controller_id' => $controllerId,
+                        'intervention_id' => $lotAppointment->global_plus_intervention_id,
+                        'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt,
+                        'failed_at' => now()->toIso8601String(), ...$context,
+                    ],
+                ],
             ]);
             Log::warning('Global+ : dossier créé, affectation du RDV incomplète.', [
                 'lot_appointment_id' => $lotAppointment->id, 'demand_id' => $lotAppointment->global_plus_demand_id,
-                'intervention_id' => $lotAppointment->global_plus_intervention_id, 'message' => $exception->getMessage(),
+                'intervention_id' => $lotAppointment->global_plus_intervention_id,
+                'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt, ...$context, 'message' => $message,
             ]);
         }
     }
@@ -329,7 +367,7 @@ class GlobalPlusAppointmentService
             'typeIntervention' => [
                 $versionFormulaire,
             ],
-            'client' => $this->clientAddress($payload),
+            'client' => $this->clientAddress($lotAppointment, $payload),
             'lieuInspection' => $this->inspectionAddress($lotAppointment, $payload),
             'beneficiaire' => $this->beneficiaryAddress($lotAppointment),
             'entreprise' => $installer,
@@ -346,18 +384,27 @@ class GlobalPlusAppointmentService
     /**
      * @return array<string, mixed>
      */
-    private function clientAddress(array $payload): array
+    private function clientAddress(LotAppointment $lotAppointment, array $payload): array
     {
-        $client = collect($this->client->clients())->firstWhere('address_id', (int) ($payload['client_address_id'] ?? 0));
+        $clients = $this->client->clients();
+        $clientId = (int) ($payload['client_address_id'] ?? 0);
+        $client = collect($clients)->firstWhere('address_id', $clientId);
         if (! $client) {
             throw new RuntimeException('Sélectionne le délégataire dans la liste des clients Global+.');
+        }
+        $matchingIds = $this->matchingClientAddressIds($lotAppointment, $clients);
+        if ($matchingIds !== [] && ! in_array($clientId, $matchingIds, true)) {
+            throw new RuntimeException('Le client Global+ sélectionné ne correspond pas au délégataire du lot : '.$lotAppointment->lot?->delegataire.'.');
+        }
+        if ($matchingIds === [] && ! ($payload['client_delegataire_confirmed'] ?? false)) {
+            throw new RuntimeException('Confirme que le client Global+ sélectionné correspond bien au délégataire du lot, et non au bénéficiaire ou à l’installateur.');
         }
         $address = $client['payload'];
 
         return [
             ...array_intersect_key($address, array_flip(['id', 'nom', 'prenom', 'raisonSociale', 'adresse', 'codePostal', 'ville', 'email', 'phone', 'siren', 'batiment'])),
             'idTypeAdresse' => 1,
-            'civilite' => 'M',
+            'civilite' => self::DEFAULT_CIVILITY,
         ];
     }
 
@@ -409,7 +456,7 @@ class GlobalPlusAppointmentService
             return array_filter([
                 'id' => (int) $installer['address_id'],
                 'idTypeAdresse' => 4,
-                'civilite' => 'M',
+                'civilite' => self::DEFAULT_CIVILITY,
                 'raisonSociale' => $this->limit($installer['name'] ?? $installer['label'] ?? null, self::ADDRESS_COMPANY_MAX_LENGTH),
                 'adresse' => $this->limit($installer['address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
                 'codePostal' => $this->limit($installer['postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
@@ -428,7 +475,7 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => 0,
             'idTypeAdresse' => 4,
-            'civilite' => 'M',
+            'civilite' => self::DEFAULT_CIVILITY,
             'raisonSociale' => $this->limit($name, self::ADDRESS_COMPANY_MAX_LENGTH),
             'adresse' => $this->limit($payload['installer_address'] ?? null, self::ADDRESS_LINE_MAX_LENGTH),
             'codePostal' => $this->limit($payload['installer_postal_code'] ?? null, self::POSTAL_CODE_MAX_LENGTH),
@@ -515,7 +562,7 @@ class GlobalPlusAppointmentService
         return array_filter([
             'id' => (int) ($overrides['id'] ?? 0),
             'idTypeAdresse' => $addressType,
-            'civilite' => 'M',
+            'civilite' => self::DEFAULT_CIVILITY,
             'nom' => $this->limit($overrides['nom'] ?? $lastName, self::ADDRESS_NAME_MAX_LENGTH),
             'prenom' => $this->limit($overrides['prenom'] ?? $firstName, self::ADDRESS_NAME_MAX_LENGTH),
             'raisonSociale' => $this->limit($overrides['raisonSociale'] ?? $this->customerCompanyName($lotAppointment), self::ADDRESS_COMPANY_MAX_LENGTH),
@@ -650,6 +697,23 @@ class GlobalPlusAppointmentService
         if ($lotAppointment->processing_mode !== LotAppointment::PROCESSING_MODE_PHYSICAL) {
             throw new RuntimeException('Seuls les dossiers traités en RDV physique peuvent être créés dans Global+.');
         }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $clients
+     */
+    private function matchingClientAddressIds(LotAppointment $lotAppointment, array $clients): array
+    {
+        $delegataire = trim((string) $lotAppointment->lot?->delegataire);
+        if ($delegataire === '') {
+            return [];
+        }
+        $names = ExternalDelegataire::query()->source('coffrac')->where('name', $delegataire)->pluck('company_name')
+            ->push($delegataire)->map(fn ($name) => $this->normalizeMatchValue($name))->filter()->unique();
+
+        return collect($clients)
+            ->filter(fn ($client) => $names->contains($this->normalizeMatchValue($client['label'] ?? '')))
+            ->pluck('address_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /**

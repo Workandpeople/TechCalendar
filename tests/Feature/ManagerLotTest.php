@@ -2672,6 +2672,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             'version_formulaire_id' => 3310,
             'controller_id' => 2198,
             'client_address_id' => 700,
+            'client_delegataire_confirmed' => true,
             'installer_address_id' => 901,
             'title' => 'Lot Global+',
             'sub_title' => 'Ligne 7 - HABITAT ENERGIE',
@@ -2703,7 +2704,7 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             && data_get($payload, 'typeIntervention.0.codeRapport') === 'BAREN101'
             && ! array_key_exists('jsonRapport', data_get($payload, 'typeIntervention.0', []))
             && data_get($payload, 'client.idTypeAdresse') === 1
-            && data_get($payload, 'client.civilite') === 'M'
+            && data_get($payload, 'client.civilite') === 'M.'
             && data_get($payload, 'client.raisonSociale') === 'Delegataire choisi'
             && data_get($payload, 'lieuInspection.idTypeAdresse') === 2
             && data_get($payload, 'lieuInspection.raisonSociale') === 'BATIMENT A'
@@ -2777,6 +2778,7 @@ it('prevents duplicate Global Plus creation for an already linked lot appointmen
             'version_formulaire_id' => 3310,
             'controller_id' => 2198,
             'client_address_id' => 700,
+            'client_delegataire_confirmed' => true,
             'send_documents' => true,
         ])
         ->assertStatus(422)

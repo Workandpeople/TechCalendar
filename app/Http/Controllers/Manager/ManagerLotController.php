@@ -827,9 +827,10 @@ class ManagerLotController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate([
-            'version_formulaire_id' => ['required', 'integer', 'min:1'],
+            'version_formulaire_id' => [Rule::requiredIf(blank($lotAppointment->global_plus_demand_id)), 'nullable', 'integer', 'min:1'],
             'controller_id' => ['required', 'integer', 'min:1'],
-            'client_address_id' => ['required', 'integer', 'min:1'],
+            'client_address_id' => [Rule::requiredIf(blank($lotAppointment->global_plus_demand_id)), 'nullable', 'integer', 'min:1'],
+            'client_delegataire_confirmed' => ['sometimes', 'boolean'],
             'installer_address_id' => ['nullable', 'integer', 'min:1'],
             'installer_name' => ['nullable', 'string', 'max:255'],
             'installer_siren' => ['nullable', 'string', 'max:20'],

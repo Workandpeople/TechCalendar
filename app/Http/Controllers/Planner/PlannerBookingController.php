@@ -672,7 +672,7 @@ class PlannerBookingController extends Controller
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
-        $payload = $request->validate($this->globalPlusDemandRules(), [
+        $payload = $request->validate($this->globalPlusDemandRules($lotAppointment), [
             'version_formulaire_id.required' => 'Choisis la prestation Global+ avant de créer le dossier.',
             'version_formulaire_id.min' => 'Choisis une prestation Global+ valide.',
             'controller_id.required' => 'Choisis le technicien Global+ avant de créer le dossier.',
@@ -1728,12 +1728,13 @@ class PlannerBookingController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function globalPlusDemandRules(): array
+    private function globalPlusDemandRules(LotAppointment $lotAppointment): array
     {
         return [
-            'version_formulaire_id' => ['required', 'integer', 'min:1'],
+            'version_formulaire_id' => [Rule::requiredIf(blank($lotAppointment->global_plus_demand_id)), 'nullable', 'integer', 'min:1'],
             'controller_id' => ['required', 'integer', 'min:1'],
-            'client_address_id' => ['required', 'integer', 'min:1'],
+            'client_address_id' => [Rule::requiredIf(blank($lotAppointment->global_plus_demand_id)), 'nullable', 'integer', 'min:1'],
+            'client_delegataire_confirmed' => ['sometimes', 'boolean'],
             'installer_address_id' => ['nullable', 'integer', 'min:1'],
             'installer_name' => ['nullable', 'string', 'max:255'],
             'installer_siren' => ['nullable', 'string', 'max:20'],

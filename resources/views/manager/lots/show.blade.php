@@ -855,7 +855,12 @@
                                 <select id="lot_physical_global_plus_client" class="gc-input" required>
                                     <option value="">Choisir le client Global+</option>
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne le délégataire du lot dans le référentiel Global+.</p>
+                                <p id="lot-physical-global-plus-delegataire" class="mt-1 text-sm font-semibold"></p>
+                                <p id="lot-physical-global-plus-client-summary" class="mt-1 text-xs" style="color:var(--gc-text-soft);"></p>
+                                <label id="lot-physical-global-plus-client-confirmation" class="mt-2 hidden items-start gap-2 text-sm">
+                                    <input id="lot_physical_global_plus_client_confirmed" type="checkbox" class="mt-1" />
+                                    <span>Je confirme que ce client Global+ correspond au délégataire du lot, et non au bénéficiaire ou à l’installateur.</span>
+                                </label>
                             </div>
                             <div>
                                 <label class="gc-label" for="lot_physical_global_plus_version">Prestation Global+</label>
@@ -1260,6 +1265,7 @@
         const physicalGlobalPlusFormStatus = document.getElementById('lot-physical-global-plus-form-status');
         const physicalGlobalPlusVersion = document.getElementById('lot_physical_global_plus_version');
         const physicalGlobalPlusClient = document.getElementById('lot_physical_global_plus_client');
+        const physicalGlobalPlusClientConfirmed = document.getElementById('lot_physical_global_plus_client_confirmed');
         const physicalGlobalPlusControllerSummary = document.getElementById('lot-physical-global-plus-controller-summary');
         const physicalGlobalPlusController = document.getElementById('lot_physical_global_plus_controller_id');
         const physicalGlobalPlusInstaller = document.getElementById('lot_physical_global_plus_installer');
@@ -2278,6 +2284,10 @@
             const canCreate = Boolean(appointment.can_create_global_plus);
             const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
 
+            if (physicalGlobalPlusClient) physicalGlobalPlusClient.disabled = hasDemand;
+            if (physicalGlobalPlusVersion) physicalGlobalPlusVersion.disabled = hasDemand;
+            if (hasDemand) document.getElementById('lot-physical-global-plus-client-confirmation').classList.add('hidden');
+
             if (physicalGlobalPlusBadge) {
                 physicalGlobalPlusBadge.textContent = appointment.global_plus_status_label || 'Non créé';
                 physicalGlobalPlusBadge.style.background = meta.background;
@@ -2314,6 +2324,21 @@
             return `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
         }
 
+        function updateGlobalPlusClientSelection() {
+            const client = (currentGlobalPlusReferences?.clients || []).find((item) => String(item.address_id) === physicalGlobalPlusClient.value);
+            const matched = (currentGlobalPlusReferences?.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value);
+            const needsConfirmation = Boolean(client) && !matched && !physicalGlobalPlusClient.disabled;
+            const confirmation = document.getElementById('lot-physical-global-plus-client-confirmation');
+            physicalGlobalPlusClientConfirmed.checked = false;
+            confirmation.classList.toggle('hidden', !needsConfirmation);
+            confirmation.classList.toggle('flex', needsConfirmation);
+            document.getElementById('lot-physical-global-plus-client-summary').textContent = client
+                ? [client.label, client.address, [client.postal_code, client.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
+                : 'Choisis le délégataire dans Global+, pas le client bénéficiaire de l’inspection.';
+        }
+
+        physicalGlobalPlusClient?.addEventListener('change', updateGlobalPlusClientSelection);
+
         function populateGlobalPlusReferences(appointment, references) {
             currentGlobalPlusReferences = references || {};
             const versions = Array.isArray(currentGlobalPlusReferences.intervention_versions)
@@ -2327,15 +2352,24 @@
                 : [];
             const suggestedVersion = String(currentGlobalPlusReferences.suggested_version_formulaire_id || '');
             if (physicalGlobalPlusClient) {
+                const selectedClient = String(currentGlobalPlusReferences.existing_client_address_id || currentGlobalPlusReferences.suggested_client_address_id || '');
                 physicalGlobalPlusClient.innerHTML = [
                     option('Choisir le client Global+', ''),
-                    ...(currentGlobalPlusReferences.clients || []).map((client) => option(client.label || `Client ${client.address_id}`, client.address_id)),
+                    ...(currentGlobalPlusReferences.clients || []).map((client) => option(
+                        client.label || `Client ${client.address_id}`, client.address_id, String(client.address_id) === selectedClient,
+                        (currentGlobalPlusReferences.matching_client_address_ids || []).length > 0 && !currentGlobalPlusReferences.matching_client_address_ids.map(String).includes(String(client.address_id)),
+                    )),
                 ].join('');
+                physicalGlobalPlusClient.disabled = Boolean(appointment.global_plus_demand_id);
             }
+            document.getElementById('lot-physical-global-plus-delegataire').textContent = `Délégataire du lot : ${currentGlobalPlusReferences.delegataire || 'non renseigné'}`;
+            updateGlobalPlusClientSelection();
+            physicalGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer le dossier Global+';
             const suggestedInstaller = String(currentGlobalPlusReferences.suggested_installer_address_id || '');
             const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
 
             if (physicalGlobalPlusVersion) {
+                physicalGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
                 physicalGlobalPlusVersion.innerHTML = [
                     option('Choisir une prestation Global+', ''),
                     ...versions.map((version) => option(
@@ -2485,13 +2519,18 @@
                 return;
             }
 
-            if (!physicalGlobalPlusVersion?.value) {
+            if (!appointment.global_plus_demand_id && !physicalGlobalPlusVersion?.value) {
                 setGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
                 return;
             }
 
-            if (!physicalGlobalPlusClient?.value) {
+            if (!appointment.global_plus_demand_id && !physicalGlobalPlusClient?.value) {
                 setGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
+                return;
+            }
+
+            if (!appointment.global_plus_demand_id && !(currentGlobalPlusReferences.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value) && !physicalGlobalPlusClientConfirmed.checked) {
+                setGlobalPlusFormStatus('Confirme la correspondance entre le client Global+ et le délégataire du lot.', '#be123c');
                 return;
             }
 
@@ -2502,7 +2541,7 @@
 
             physicalGlobalPlusSubmit.disabled = true;
             physicalGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
-            setGlobalPlusFormStatus('Création du dossier dans Global+...');
+            setGlobalPlusFormStatus(appointment.global_plus_demand_id ? 'Reprise de l’affectation du technicien, sans recréer le dossier ni modifier le client...' : 'Création du dossier dans Global+...');
 
             try {
                 const response = await fetch(appointment.global_plus_store_url, {
@@ -2512,9 +2551,10 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': lotDetailCsrfToken,
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify(appointment.global_plus_demand_id ? { controller_id: Number(physicalGlobalPlusController.value) } : {
                         version_formulaire_id: Number(physicalGlobalPlusVersion.value),
                         client_address_id: Number(physicalGlobalPlusClient.value),
+                        client_delegataire_confirmed: physicalGlobalPlusClientConfirmed.checked,
                         controller_id: Number(physicalGlobalPlusController.value),
                         installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
                         installer_name: physicalGlobalPlusInstallerName?.value || null,
@@ -2536,6 +2576,7 @@
                 }
 
                 const updatedAppointment = payload.appointment || appointment;
+                globalPlusReferencesCache.delete(String(appointment.id));
                 updateLotAppointmentState(updatedAppointment);
                 currentPhysicalLotAppointment = updatedAppointment;
                 configureGlobalPlusStatus(updatedAppointment);

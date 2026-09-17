@@ -138,7 +138,12 @@
                                 <select id="booking_confirmation_global_plus_client" class="gc-input" required>
                                     <option value="">Choisir le client Global+</option>
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne le délégataire du lot dans le référentiel Global+.</p>
+                                <p id="booking-confirmation-global-plus-delegataire" class="mt-1 text-sm font-semibold"></p>
+                                <p id="booking-confirmation-global-plus-client-summary" class="mt-1 text-xs" style="color:var(--gc-text-soft);"></p>
+                                <label id="booking-confirmation-global-plus-client-confirmation" class="mt-2 hidden items-start gap-2 text-sm">
+                                    <input id="booking_confirmation_global_plus_client_confirmed" type="checkbox" class="mt-1" />
+                                    <span>Je confirme que ce client Global+ correspond au délégataire du lot, et non au bénéficiaire ou à l’installateur.</span>
+                                </label>
                             </div>
                             <div>
                                 <label class="gc-label" for="booking_confirmation_global_plus_version">Prestation Global+</label>
@@ -1607,6 +1612,7 @@
         const confirmationGlobalPlusFormStatus = document.getElementById('booking-confirmation-global-plus-form-status');
         const confirmationGlobalPlusVersion = document.getElementById('booking_confirmation_global_plus_version');
         const confirmationGlobalPlusClient = document.getElementById('booking_confirmation_global_plus_client');
+        const confirmationGlobalPlusClientConfirmed = document.getElementById('booking_confirmation_global_plus_client_confirmed');
         const confirmationGlobalPlusControllerSummary = document.getElementById('booking-confirmation-global-plus-controller-summary');
         const confirmationGlobalPlusController = document.getElementById('booking_confirmation_global_plus_controller_id');
         const confirmationGlobalPlusInstaller = document.getElementById('booking_confirmation_global_plus_installer');
@@ -4702,6 +4708,21 @@
             if (confirmationGlobalPlusInstallerPhone) confirmationGlobalPlusInstallerPhone.value = installer.phone || '';
         };
 
+        const updateConfirmationGlobalPlusClientSelection = () => {
+            const client = (confirmationGlobalPlusReferences?.clients || []).find((item) => String(item.address_id) === confirmationGlobalPlusClient.value);
+            const matched = (confirmationGlobalPlusReferences?.matching_client_address_ids || []).map(String).includes(confirmationGlobalPlusClient.value);
+            const needsConfirmation = Boolean(client) && !matched && !confirmationGlobalPlusClient.disabled;
+            const confirmation = document.getElementById('booking-confirmation-global-plus-client-confirmation');
+            confirmationGlobalPlusClientConfirmed.checked = false;
+            confirmation.classList.toggle('hidden', !needsConfirmation);
+            confirmation.classList.toggle('flex', needsConfirmation);
+            document.getElementById('booking-confirmation-global-plus-client-summary').textContent = client
+                ? [client.label, client.address, [client.postal_code, client.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
+                : 'Choisis le délégataire dans Global+, pas le client bénéficiaire de l’inspection.';
+        };
+
+        confirmationGlobalPlusClient?.addEventListener('change', updateConfirmationGlobalPlusClientSelection);
+
         const populateConfirmationGlobalPlusReferences = (appointment, references) => {
             confirmationGlobalPlusReferences = references || {};
             const versions = Array.isArray(confirmationGlobalPlusReferences.intervention_versions)
@@ -4715,15 +4736,24 @@
                 : [];
             const suggestedVersion = String(confirmationGlobalPlusReferences.suggested_version_formulaire_id || '');
             if (confirmationGlobalPlusClient) {
+                const selectedClient = String(confirmationGlobalPlusReferences.existing_client_address_id || confirmationGlobalPlusReferences.suggested_client_address_id || '');
                 confirmationGlobalPlusClient.innerHTML = [
                     bookingGlobalPlusOption('Choisir le client Global+', ''),
-                    ...(confirmationGlobalPlusReferences.clients || []).map((client) => bookingGlobalPlusOption(client.label || `Client ${client.address_id}`, client.address_id)),
+                    ...(confirmationGlobalPlusReferences.clients || []).map((client) => bookingGlobalPlusOption(
+                        client.label || `Client ${client.address_id}`, client.address_id, String(client.address_id) === selectedClient,
+                        (confirmationGlobalPlusReferences.matching_client_address_ids || []).length > 0 && !confirmationGlobalPlusReferences.matching_client_address_ids.map(String).includes(String(client.address_id)),
+                    )),
                 ].join('');
+                confirmationGlobalPlusClient.disabled = Boolean(appointment.global_plus_demand_id);
             }
+            document.getElementById('booking-confirmation-global-plus-delegataire').textContent = `Délégataire du lot : ${confirmationGlobalPlusReferences.delegataire || 'non renseigné'}`;
+            updateConfirmationGlobalPlusClientSelection();
+            confirmationGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer dans Global+';
             const suggestedInstaller = String(confirmationGlobalPlusReferences.suggested_installer_address_id || '');
             const suggestedController = String(confirmationGlobalPlusReferences.suggested_controller_id || '');
 
             if (confirmationGlobalPlusVersion) {
+                confirmationGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
                 confirmationGlobalPlusVersion.innerHTML = [
                     bookingGlobalPlusOption('Choisir une prestation Global+', ''),
                     ...versions.map((version) => bookingGlobalPlusOption(
@@ -4899,13 +4929,18 @@
                 return;
             }
 
-            if (!confirmationGlobalPlusVersion?.value) {
+            if (!appointment.global_plus_demand_id && !confirmationGlobalPlusVersion?.value) {
                 setConfirmationGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
                 return;
             }
 
-            if (!confirmationGlobalPlusClient?.value) {
+            if (!appointment.global_plus_demand_id && !confirmationGlobalPlusClient?.value) {
                 setConfirmationGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
+                return;
+            }
+
+            if (!appointment.global_plus_demand_id && !(confirmationGlobalPlusReferences.matching_client_address_ids || []).map(String).includes(confirmationGlobalPlusClient.value) && !confirmationGlobalPlusClientConfirmed.checked) {
+                setConfirmationGlobalPlusFormStatus('Confirme la correspondance entre le client Global+ et le délégataire du lot.', '#be123c');
                 return;
             }
 
@@ -4916,7 +4951,7 @@
 
             confirmationGlobalPlusSubmit.disabled = true;
             confirmationGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
-            setConfirmationGlobalPlusFormStatus('Création du dossier dans Global+...');
+            setConfirmationGlobalPlusFormStatus(appointment.global_plus_demand_id ? 'Reprise de l’affectation du technicien, sans recréer le dossier ni modifier le client...' : 'Création du dossier dans Global+...');
 
             try {
                 const response = await fetch(appointment.global_plus_store_url, {
@@ -4926,9 +4961,10 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': bookingCsrfToken,
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify(appointment.global_plus_demand_id ? { controller_id: Number(confirmationGlobalPlusController.value) } : {
                         version_formulaire_id: Number(confirmationGlobalPlusVersion.value),
                         client_address_id: Number(confirmationGlobalPlusClient.value),
+                        client_delegataire_confirmed: confirmationGlobalPlusClientConfirmed.checked,
                         controller_id: Number(confirmationGlobalPlusController.value),
                         installer_address_id: confirmationGlobalPlusInstaller?.value ? Number(confirmationGlobalPlusInstaller.value) : null,
                         installer_name: confirmationGlobalPlusInstallerName?.value || null,
@@ -4950,13 +4986,14 @@
                 }
 
                 const updatedGlobalPlus = payload.global_plus || appointment;
+                confirmationGlobalPlusReferencesCache.delete(String(appointment.id));
                 configureConfirmationGlobalPlus(updatedGlobalPlus);
                 setConfirmationGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', payload.warning ? '#be123c' : '#15803d');
             } catch (error) {
                 setConfirmationGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
             } finally {
                 confirmationGlobalPlusSubmit.disabled = false;
-                confirmationGlobalPlusSubmit.textContent = 'Créer dans Global+';
+                confirmationGlobalPlusSubmit.textContent = confirmationGlobalPlusAppointment?.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer dans Global+';
             }
         };
 

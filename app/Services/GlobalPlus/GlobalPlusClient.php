@@ -65,6 +65,9 @@ class GlobalPlusClient
                 ->map(fn (array $client): array => [
                     'address_id' => (int) $client['adresseClient']['id'],
                     'label' => trim((string) ($client['adresseClient']['raisonSociale'] ?? '')) ?: trim(($client['adresseClient']['nom'] ?? '').' '.($client['adresseClient']['prenom'] ?? '')),
+                    'address' => $client['adresseClient']['adresse'] ?? null,
+                    'postal_code' => $client['adresseClient']['codePostal'] ?? null,
+                    'city' => $client['adresseClient']['ville'] ?? null,
                     'payload' => $client['adresseClient'],
                 ])->values()->all();
         });
@@ -200,7 +203,16 @@ class GlobalPlusClient
             return $this->request($method, $path, $payload, $upload, true);
         }
 
-        return $this->decodedResponse($response, 'Appel Global+ refusé.');
+        try {
+            return $this->decodedResponse($response, 'Appel Global+ refusé.');
+        } catch (GlobalPlusApiException $exception) {
+            $apiPath = '/api/'.ltrim($path, '/');
+            $message = $response->status() === 403
+                ? sprintf('Global+ refuse l’accès à %s %s (HTTP 403). Faire vérifier les droits de la clé API sur cette route par Global+.', $method, $apiPath)
+                : $exception->getMessage().' ('.$method.' '.$apiPath.')';
+
+            throw new GlobalPlusApiException($message, $response->status(), $method, $apiPath);
+        }
     }
 
     private function bearerToken(): string

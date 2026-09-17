@@ -15,7 +15,7 @@ Les nouveaux imports utilisent le modèle Excel à 14 colonnes validé le 17 sep
 | M : SIREN du professionnel | Rapprochement de l'installateur dans Coffrac et Global+ |
 | N : raison sociale du professionnel | Nom de l'installateur |
 
-Le délégataire reste choisi dans TechCalendar à la création du lot. Pour Global+, l'utilisateur sélectionne explicitement le client dans son référentiel. Une raison sociale identique au bénéficiaire n'est pas utilisée pour deviner ce client.
+Le délégataire reste choisi dans TechCalendar à la création du lot. Pour Global+, le client est proposé uniquement si son nom correspond exactement au délégataire (ou à sa raison sociale Coffrac), après normalisation des accents et de la casse. Les correspondances ambiguës restent à sélectionner. Sans correspondance, le choix manuel requiert une confirmation explicite. Le bénéficiaire et l'installateur ne servent jamais à choisir le client. Le bloc client transmet l'identifiant d'adresse et les coordonnées du client Global+ choisi, sans les remplacer par celles du bénéficiaire.
 
 ## Adresses et contrôles
 
@@ -31,7 +31,7 @@ Le POST de création transmet le nom du lot (`lot_name`, enregistré dans `numer
 
 ## Global+
 
-La civilité transmise est `M`. Le sous-titre porte la référence interne complète, y compris après association au dossier Coffrac.
+La civilité transmise est `M.` (avec le point), valeur exacte du bouton radio dans l'interface Global+ test consultée le 17 septembre 2026 (`/js/7235.091bf3b2.js`, composant client). Le défaut `Mr` indiqué dans Swagger ne correspond pas à ce bouton. Le sous-titre porte la référence interne complète, y compris après association au dossier Coffrac.
 
 Le DTO de création `POST /api/Demande` ne contient pas de champ `idControleur`. L'affectation du technicien s'effectue donc dans la même action utilisateur, par les appels suivants :
 
@@ -40,9 +40,11 @@ Le DTO de création `POST /api/Demande` ne contient pas de champ `idControleur`.
 3. Envoyer un JSON Patch vers `PATCH /api/Intervention/Patch/{id}` pour `/idControleur`, `/dateIntervention` et `/dateInterventionEnd`.
 4. Relire `GET /api/Intervention/{id}` et vérifier le technicien, les horaires et le rattachement à la demande.
 
-Ces routes et champs proviennent du Swagger de l'environnement de test consulté le 17 septembre 2026 : https://cee-api.test.globalplus.fr/swagger/v1/swagger.json.
+Ces routes et champs proviennent du Swagger de l'environnement de test consulté le 17 septembre 2026 : https://cee-api.test.globalplus.fr/swagger/v1/swagger.json. **Attention : présence dans Swagger ne signifie pas autorisation pour la clé d'intégration.** La documentation fournie par Global+ n'annonce pas les deux routes GET de lecture parmi les huit routes autorisées. Un HTTP 403 sur celles-ci nécessite l'ouverture de ces droits par Global+, ou une évolution de leur API renvoyant l'identifiant d'intervention à la création. Ne jamais utiliser l'identifiant de demande comme identifiant d'intervention.
 
 Si la demande existe mais que l'affectation n'est pas confirmée, l'état local est `appointment_failed`, un avertissement apparaît et le bouton permet de reprendre l'affectation sans recréer le dossier. Une synchronisation des documents ne masque pas cet état. Les appels de création concurrents sont verrouillés.
+
+Le message et les logs indiquent l'étape (`resolve_intervention`, `assign_technician`, `verify_assignment`), la méthode, la route et le statut HTTP, sans jeton ni contenu des documents. Le diagnostic est conservé dans `global_plus_payload.appointment_assignment`. Un PATCH accepté suivi d'un refus de lecture est distingué d'une affectation jamais envoyée. Une reprise réutilise l'identifiant d'intervention déjà obtenu et le technicien choisi. Elle ne modifie pas le client d'un dossier existant : aucune route de modification du client n'est fournie dans le contrat actuel ; corriger les anciens dossiers directement dans Global+.
 
 ## Déploiement
 
