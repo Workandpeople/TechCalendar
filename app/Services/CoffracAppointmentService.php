@@ -1066,6 +1066,9 @@ class CoffracAppointmentService
         $rawPayload = data_get($externalPayload, 'raw_payload', []);
         $rawPayload = is_array($rawPayload) ? $rawPayload : [];
         $lotAppointmentId = (int) ($crmAppointment['lot_appointment_id'] ?? data_get($externalPayload, 'lot_appointment_id', 0));
+        $lot = $lotAppointmentId > 0
+            ? LotAppointment::query()->select(['id', 'lot_id'])->with('lot:id,name,type,delegataire')->find($lotAppointmentId)?->lot
+            : null;
         $beneficiaryName = $this->firstFilledString(
             $crmAppointment['company_name'] ?? null,
             data_get($externalPayload, 'company_name'),
@@ -1134,10 +1137,10 @@ class CoffracAppointmentService
             'ville_demandeur' => $beneficiaryCity,
             'latitude' => $crmAppointment['latitude'] ?? null,
             'longitude' => $crmAppointment['longitude'] ?? null,
-            'delegataire' => data_get($externalPayload, 'lot_delegataire'),
-            'lot_id' => data_get($externalPayload, 'lot_id'),
-            'lot_name' => data_get($externalPayload, 'lot_name'),
-            'lot_type' => data_get($externalPayload, 'lot_type'),
+            'delegataire' => $lot ? $lot->delegataire : data_get($externalPayload, 'lot_delegataire'),
+            'lot_id' => $lot?->id ?? data_get($externalPayload, 'lot_id'),
+            'lot_name' => $lot?->name ?? data_get($externalPayload, 'lot_name'),
+            'lot_type' => $lot?->type ?? data_get($externalPayload, 'lot_type'),
             'lot_appointment_id' => $lotAppointmentId > 0 ? $lotAppointmentId : null,
             'row_number' => data_get($externalPayload, 'row_number'),
             'global_plus' => data_get($externalPayload, 'lot_global_plus', false),
