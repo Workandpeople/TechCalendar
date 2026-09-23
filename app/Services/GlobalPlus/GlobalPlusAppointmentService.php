@@ -413,23 +413,15 @@ class GlobalPlusAppointmentService
         }
 
         $demandId = (string) $appointment->global_plus_demand_id;
-        $demand = $this->client->demand($demandId);
-        $embedded = $demand['interventions'] ?? null;
-        $diagnostic['embedded_interventions_state'] = ! array_key_exists('interventions', $demand) ? 'absent'
-            : ($embedded === null ? 'null' : (is_array($embedded) && array_is_list($embedded) ? 'list' : 'invalid'));
-        $candidates = $this->interventionCandidates(is_array($embedded) && array_is_list($embedded) ? $embedded : [], $demandId, $diagnostic, 'embedded');
-        $diagnostic['resolution_source'] = 'demand';
+        // The integration-specific endpoint replaces the inaccessible generic list.
+        $diagnostic['resolution_source'] = 'intervention_by_demande';
+        $listed = $this->client->demandInterventions($demandId);
+        $candidates = $this->interventionCandidates($listed, $demandId, $diagnostic, 'list');
         if ($candidates === []) {
-            // The Demande relation may not be loaded; use the documented, demand-scoped list.
-            $diagnostic['resolution_source'] = 'intervention_list';
-            $listed = $this->client->demandInterventions($demandId);
-            $candidates = $this->interventionCandidates($listed, $demandId, $diagnostic, 'list');
-            if ($candidates === []) {
-                if ($listed !== []) {
-                    throw new RuntimeException('La liste Global+ contient des interventions, mais aucune ne peut être reliée à ce dossier. Vérifier le diagnostic avec Global+.');
-                }
-                throw new GlobalPlusAssignmentPendingException('La liste Global+ ne renvoie aucune intervention pour le dossier '.$demandId.' (GET /api/Intervention/ListInterventions?demandeId='.$demandId.').');
+            if ($listed !== []) {
+                throw new RuntimeException('La liste Global+ contient des interventions, mais aucune ne peut être reliée à ce dossier. Vérifier le diagnostic avec Global+.');
             }
+            throw new GlobalPlusAssignmentPendingException('Global+ ne renvoie aucune intervention pour le dossier '.$demandId.' (GET /api/Intervention/ByDemande/'.$demandId.').');
         }
         if (count($candidates) !== 1) {
             throw new RuntimeException('Plusieurs interventions Global+ correspondent au dossier. L’affectation nécessite une vérification manuelle.');

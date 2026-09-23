@@ -2937,7 +2937,7 @@ it('allows creating a Global Plus demand from the booking confirmation', functio
                     'enablePlanning' => true,
                 ],
             ]),
-            'https://global-plus.test/api/Demande/5637' => Http::response(['id' => 5637, 'interventions' => [['id' => 8123, 'idDemande' => 5637]]]),
+            'https://global-plus.test/api/Intervention/ByDemande/5637' => Http::response([['id' => 8123, 'idDemande' => 5637]]),
             'https://global-plus.test/api/Intervention/Patch/8123' => Http::response(null, 204),
             'https://global-plus.test/api/Intervention/8123' => Http::response([
                 'id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198,

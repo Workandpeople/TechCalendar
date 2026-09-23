@@ -101,15 +101,26 @@ class GlobalPlusClient
             throw new GlobalPlusApiException('Identifiant de dossier Global+ invalide pour rechercher son intervention.');
         }
 
-        $path = 'Intervention/ListInterventions';
-        $payload = $this->get($path, ['demandeId' => (int) $demandId]);
+        $path = 'Intervention/ByDemande/'.rawurlencode($demandId);
+        $payload = $this->get($path);
+        if ($payload === null) {
+            return [];
+        }
         if (is_array($payload)) {
             if (array_is_list($payload)) {
                 return $payload;
             }
+            if (array_key_exists('id', $payload)) {
+                return [$payload];
+            }
             foreach (['items', 'data', 'results', 'value'] as $key) {
-                if (isset($payload[$key]) && is_array($payload[$key]) && array_is_list($payload[$key])) {
-                    return $payload[$key];
+                if (isset($payload[$key]) && is_array($payload[$key])) {
+                    if (array_is_list($payload[$key])) {
+                        return $payload[$key];
+                    }
+                    if (array_key_exists('id', $payload[$key])) {
+                        return [$payload[$key]];
+                    }
                 }
             }
         }
@@ -220,8 +231,8 @@ class GlobalPlusClient
             'http_method' => $method,
             'api_path' => '/api/'.ltrim($path, '/'),
         ];
-        if ($path === 'Intervention/ListInterventions') {
-            $context['demand_id'] = (int) ($payload['demandeId'] ?? 0);
+        if (str_starts_with($path, 'Intervention/ByDemande/')) {
+            $context['demand_id'] = (int) basename($path);
         }
         $startedAt = hrtime(true);
         try {

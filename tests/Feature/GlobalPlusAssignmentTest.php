@@ -84,10 +84,8 @@ beforeEach(function () {
     ]);
     $this->payload = ['client_address_id' => 700, 'client_delegataire_confirmed' => true, 'installer_address_id' => 901, 'controller_id' => 2198, 'version_formulaire_id' => 3310, 'send_documents' => false];
     $this->remote = ['id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198, 'dateIntervention' => '2026-10-01T10:00:00', 'dateInterventionEnd' => '2026-10-01T11:30:00'];
-    $this->remoteInterventions = [['id' => 8123, 'idDemande' => 5637]];
-    $this->interventionList = [];
+    $this->interventionList = [['id' => 8123, 'idDemande' => 5637]];
     $this->interventionListStatus = 200;
-    $this->demandResponse = null;
     $this->verificationForbidden = false;
     $this->remoteReadCount = 0;
     $this->globalPlusLogs = new TestHandler;
@@ -101,14 +99,18 @@ beforeEach(function () {
         'https://global-plus.test/api/Auth/Controllers' => Http::response([['id' => 2198, 'email' => 'tech@example.test', 'etat' => true]]),
         'https://global-plus.test/api/VersionFormulaire/GetVersionFormulaires/true' => Http::response([['versionFormulaireId' => 3310, 'id' => 31, 'libelle' => 'BAR EN 101', 'actif' => true]]),
         'https://global-plus.test/api/Demande' => Http::response('"5637"'),
-        'https://global-plus.test/api/Demande/5637' => Http::response($this->demandResponse ?? ['id' => 5637, 'interventions' => $this->remoteInterventions]),
-        'https://global-plus.test/api/Intervention/ListInterventions?demandeId=5637' => Http::response($this->interventionList, $this->interventionListStatus),
+        'https://global-plus.test/api/Intervention/ByDemande/5637' => Http::response($this->interventionList, $this->interventionListStatus),
         'https://global-plus.test/api/Intervention/Patch/8123' => Http::response(null, 204),
         'https://global-plus.test/api/Intervention/8123' => $this->verificationForbidden && ++$this->remoteReadCount > 1 ? Http::response([], 403) : Http::response($this->remote),
         'https://global-plus.test/api/Demande/changeDemandFiles/5637' => Http::response(['result' => true]),
         default => throw new RuntimeException('Unexpected request: '.$request->url()),
     });
     $this->actingAs($actor);
+});
+
+afterEach(function () {
+    Http::assertNotSent(fn ($request) => $request->method() === 'GET'
+        && (str_contains($request->url(), 'ListInterventions') || preg_match('#/api/Demande/\d+(?:$|\?)#', $request->url())));
 });
 
 it('matches by SIREN and sends beneficiary, inspection, client and reference to their distinct destinations', function () {
@@ -190,9 +192,9 @@ it('identifies a forbidden assignment step and retries without duplicate demand 
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
     expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1)
         ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Auth/token')))->toHaveCount(1)
-        ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Demande/5637')))->toHaveCount(in_array($stage, ['resolve_intervention', 'verify_intervention']) ? 2 : 1);
+        ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Intervention/ByDemande/5637')))->toHaveCount(in_array($stage, ['resolve_intervention', 'verify_intervention']) ? 2 : 1);
 })->with([
-    ['/api/Demande/5637', 'resolve_intervention', 'GET'],
+    ['/api/Intervention/ByDemande/5637', 'resolve_intervention', 'GET'],
     ['/api/Intervention/Patch/8123', 'assign_technician', 'PATCH'],
     ['/api/Intervention/8123', 'verify_intervention', 'GET'],
 ]);
@@ -220,7 +222,7 @@ it('warns about unconfirmed assignment and retries without creating another dema
 })->with(['idControleur', 'dateIntervention']);
 
 it('does not assign an ambiguous intervention', function () {
-    $this->remoteInterventions[] = ['id' => 9999, 'idDemande' => 5637];
+    $this->interventionList[] = ['id' => 9999, 'idDemande' => 5637];
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk();
     Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
@@ -279,54 +281,56 @@ it('retries assignment when the created intervention is not immediately visible'
     $creation = Bus::dispatched(CreateGlobalPlusDemandJob::class)->first();
     $creation->handle(app(GlobalPlusAppointmentService::class));
     $assignment = unserialize($creation->chained[0]);
-    $this->remoteInterventions = [];
+    $this->interventionList = [];
     expect(fn () => $assignment->handle(app(GlobalPlusAppointmentService::class)))
         ->toThrow(GlobalPlusAssignmentPendingException::class);
     expect($this->row->refresh()->global_plus_status)->toBe('appointment_pending');
     app(GlobalPlusAppointmentService::class)->syncDocuments($this->row);
     expect($this->row->refresh()->global_plus_status)->toBe('appointment_pending');
-    $this->remoteInterventions = [['id' => 8123, 'idDemande' => 5637]];
+    $this->interventionList = [['id' => 8123, 'idDemande' => 5637]];
     $assignment->handle(app(GlobalPlusAppointmentService::class));
     expect($this->row->refresh()->global_plus_status)->toBe('created');
     expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1);
 });
 
 it('preserves the remote demand and reports failure after assignment retries are exhausted', function () {
-    $this->remoteInterventions = [];
+    $this->interventionList = [];
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed')
         ->assertJsonPath('appointment.can_create_global_plus', true);
-    expect(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Demande/5637')))->toHaveCount(5);
+    expect(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Intervention/ByDemande/5637')))->toHaveCount(5);
     expect($this->row->refresh()->global_plus_demand_id)->toBe('5637');
     expect($this->row->global_plus_error_message)->toContain('Affectation arrêtée après les tentatives automatiques', 'Diagnostic :');
     expect(data_get($this->row->global_plus_payload, 'appointment_assignment.list_interventions.count'))->toBe(0);
     expect($this->globalPlusLogs->hasErrorThatContains('traitement arrêté'))->toBeTrue();
 });
 
-it('uses the scoped intervention list when the demand relation is missing or empty', function ($embedded) {
-    $this->demandResponse = $embedded;
-    $this->interventionList = [['id' => 8123, 'idDemande' => 5637]];
+it('resolves the intervention directly through ByDemande for supported response shapes', function ($response) {
+    $this->interventionList = $response;
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
-    expect(data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment.resolution_source'))->toBe('intervention_list');
+    expect(data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment.resolution_source'))->toBe('intervention_by_demande');
     $calls = Http::recorded()->map(fn ($call) => $call[0]->method().' '.$call[0]->url())->values()->all();
     expect(array_search('GET https://global-plus.test/api/Intervention/8123', $calls, true))
         ->toBeLessThan(array_search('PATCH https://global-plus.test/api/Intervention/Patch/8123', $calls, true));
     Http::assertSent(fn ($request) => $request->method() === 'GET'
-        && $request->url() === 'https://global-plus.test/api/Intervention/ListInterventions?demandeId=5637');
+        && $request->url() === 'https://global-plus.test/api/Intervention/ByDemande/5637');
 })->with([
-    'absent' => [['id' => 5637]],
-    'null' => [['id' => 5637, 'interventions' => null]],
-    'empty' => [['id' => 5637, 'interventions' => []]],
+    'list' => [[['id' => 8123, 'idDemande' => 5637]]],
+    'object' => [['id' => 8123, 'idDemande' => 5637]],
+    'items list' => [['items' => [['id' => 8123, 'idDemande' => 5637]]]],
+    'data object' => [['data' => ['id' => 8123, 'idDemande' => 5637]]],
 ]);
 
-it('verifies an intervention whose list entry omits the demand backlink', function ($source) {
-    $this->remoteInterventions = $source === 'embedded' ? [['id' => 8123]] : [];
-    $this->interventionList = ['items' => [['id' => 8123]]];
+it('verifies an intervention whose response omits the demand backlink', function ($response) {
+    $this->interventionList = $response;
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
-    expect(data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment.'.$source.'_interventions.missing_demand_id'))->toBe(1);
-})->with(['embedded', 'list']);
+    expect(data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment.list_interventions.missing_demand_id'))->toBe(1);
+})->with([
+    'object' => [['id' => 8123]],
+    'items list' => [['items' => [['id' => 8123]]]],
+]);
 
 it('never patches an intervention belonging to another demand even if the list claims otherwise', function ($stored) {
     $this->remote['idDemande'] = 9999;
@@ -340,12 +344,11 @@ it('never patches an intervention belonging to another demand even if the list c
 })->with([false, true]);
 
 it('rejects malformed mismatched or ambiguous lists rather than guessing an intervention', function ($list) {
-    $this->remoteInterventions = [];
     $this->interventionList = $list;
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
     Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
-    expect(Http::recorded(fn ($request) => str_contains($request->url(), 'ListInterventions')))->toHaveCount(1);
+    expect(Http::recorded(fn ($request) => str_contains($request->url(), 'ByDemande')))->toHaveCount(1);
 })->with([
     'unknown envelope' => [['unexpected' => 'value']],
     'invalid id' => [[['id' => '8123-invalid', 'idDemande' => 5637]]],
@@ -354,25 +357,38 @@ it('rejects malformed mismatched or ambiguous lists rather than guessing an inte
 ]);
 
 it('records a forbidden scoped list explicitly without retries or another creation', function () {
-    $this->remoteInterventions = [];
+    $this->interventionList = [];
     $this->interventionListStatus = 403;
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
     $diagnostic = data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment');
     expect($diagnostic['http_status'])->toBe(403)
-        ->and($diagnostic['api_path'])->toBe('/api/Intervention/ListInterventions');
-    expect(Http::recorded(fn ($request) => str_contains($request->url(), 'ListInterventions')))->toHaveCount(1);
+        ->and($diagnostic['api_path'])->toBe('/api/Intervention/ByDemande/5637');
+    expect(Http::recorded(fn ($request) => str_contains($request->url(), 'ByDemande')))->toHaveCount(1);
     Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
 });
 
 it('keeps the dedicated diagnostics free of client fields document content and secrets', function () {
-    $this->demandResponse = ['id' => 5637, 'interventions' => [], 'adresseJson' => 'PERSONAL-ADDRESS', 'fileContent' => 'PRIVATE-DOCUMENT'];
-    $this->interventionList = [['id' => 0, 'idDemande' => 5637, 'email' => 'private@example.test', 'token' => 'PRIVATE-TOKEN']];
+    $this->interventionList = [['id' => 0, 'idDemande' => 5637, 'email' => 'private@example.test', 'token' => 'PRIVATE-TOKEN', 'adresseJson' => 'PERSONAL-ADDRESS', 'fileContent' => 'PRIVATE-DOCUMENT']];
     ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)->assertOk();
     $logs = json_encode($this->globalPlusLogs->getRecords());
-    expect($logs)->toContain('workflow_id', 'attempt', 'invalid', 'http_status', 'ListInterventions')
+    expect($logs)->toContain('workflow_id', 'attempt', 'invalid', 'http_status', 'ByDemande')
         ->not->toContain('PERSONAL-ADDRESS', 'PRIVATE-DOCUMENT', 'private@example.test', 'PRIVATE-TOKEN', 'fake-token', 'client@example.test', 'Camille');
 });
+
+it('retries an empty or not yet available ByDemande response without recreating the demand', function ($response, $status) {
+    $this->interventionList = $response;
+    $this->interventionListStatus = $status;
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
+    expect(Http::recorded(fn ($request) => str_contains($request->url(), 'ByDemande')))->toHaveCount(5);
+    expect(Http::recorded(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande')))->toHaveCount(1);
+    Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
+})->with([
+    'null' => [null, 200],
+    'not found yet' => [[], 404],
+    'no content yet' => [null, 204],
+]);
 
 it('distinguishes a verification refusal after an accepted patch', function () {
     $this->verificationForbidden = true;
@@ -390,7 +406,7 @@ it('stores the actual worker attempt with the resolution diagnostics', function 
     $queueJob = Mockery::mock(Job::class);
     $queueJob->shouldReceive('attempts')->andReturn(3);
     $assignment->setJob($queueJob);
-    $this->remoteInterventions = [];
+    $this->interventionList = [];
     expect(fn () => $assignment->handle(app(GlobalPlusAppointmentService::class)))->toThrow(GlobalPlusAssignmentPendingException::class);
     $diagnostic = data_get($this->row->refresh()->global_plus_payload, 'appointment_assignment');
     expect($diagnostic['attempt'])->toBe(3)->and($diagnostic['max_attempts'])->toBe(5)
