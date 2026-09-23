@@ -854,7 +854,7 @@ class ManagerLotController extends Controller
         ]);
 
         try {
-            $lotAppointment = $globalPlusAppointments->createDemandFromLotAppointment($lotAppointment, $payload, $request->user());
+            $lotAppointment = $globalPlusAppointments->queueDemand($lotAppointment, $payload, $request->user());
         } catch (GlobalPlusApiException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -866,12 +866,18 @@ class ManagerLotController extends Controller
         }
 
         return response()->json([
-            'message' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED
-                ? 'Dossier Global+ créé, mais affectation du technicien à terminer : '.$lotAppointment->global_plus_error_message
-                : sprintf('Dossier créé dans Global+ avec la référence %s et technicien affecté.', $lotAppointment->global_plus_demand_id),
-            'warning' => $lotAppointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED,
+            'message' => 'Envoi Global+ en arrière-plan : création du dossier, puis affectation du technicien.',
+            'warning' => false,
             'appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot),
-        ], 201);
+        ], 202);
+    }
+
+    public function globalPlusStatus(Request $request, LotAppointment $lotAppointment): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        return response()->json(['appointment' => $this->serializeLotAppointment($lotAppointment, $lotAppointment->lot)])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function syncAppointmentGlobalPlusDocuments(
@@ -1717,6 +1723,8 @@ class ManagerLotController extends Controller
             'global_plus_demand_id' => $appointment->global_plus_demand_id,
             'global_plus_intervention_id' => $appointment->global_plus_intervention_id,
             'global_plus_status' => $appointment->global_plus_status,
+            'global_plus_processing' => GlobalPlusAppointmentService::isProcessing($appointment),
+            'global_plus_status_url' => route('manager.lots.appointments.global-plus.status', $appointment),
             'global_plus_status_label' => $this->globalPlusStatusLabel($appointment),
             'global_plus_created_at' => $appointment->global_plus_created_at,
             'global_plus_synced_at' => $appointment->global_plus_synced_at,
@@ -1851,12 +1859,21 @@ class ManagerLotController extends Controller
     private function canCreateGlobalPlusDemand(LotAppointment $appointment): bool
     {
         return filled($appointment->appointment_id)
+            && ! GlobalPlusAppointmentService::isProcessing($appointment)
+            && $appointment->global_plus_status !== GlobalPlusAppointmentService::STATUS_CREATION_UNCERTAIN
             && $appointment->processing_mode === LotAppointment::PROCESSING_MODE_PHYSICAL
             && (! filled($appointment->global_plus_demand_id) || $appointment->global_plus_status === GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED);
     }
 
     private function globalPlusStatusLabel(LotAppointment $appointment): string
     {
+        if (GlobalPlusAppointmentService::isProcessing($appointment)) {
+            return $appointment->global_plus_status === GlobalPlusAppointmentService::STATUS_CREATION_PENDING
+                ? 'Création Global+ en attente / en cours' : 'Dossier créé, affectation en cours';
+        }
+        if ($appointment->global_plus_status === GlobalPlusAppointmentService::STATUS_CREATION_UNCERTAIN) {
+            return 'Création à vérifier avec Global+';
+        }
         if (filled($appointment->global_plus_demand_id)) {
             return match ($appointment->global_plus_status) {
                 GlobalPlusAppointmentService::STATUS_DOCUMENTS_SYNCED => 'Créé, documents synchronisés',

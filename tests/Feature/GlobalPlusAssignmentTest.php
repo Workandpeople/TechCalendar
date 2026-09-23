@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\AssignGlobalPlusTechnicianJob;
+use App\Jobs\CreateGlobalPlusDemandJob;
 use App\Models\Appointment;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
@@ -7,7 +9,9 @@ use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
+use App\Services\GlobalPlus\GlobalPlusAssignmentPendingException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -15,6 +19,44 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     Cache::flush();
+    Bus::fake([CreateGlobalPlusDemandJob::class, AssignGlobalPlusTechnicianJob::class]);
+    $this->runGlobalPlusJobs = function (): void {
+        $operation = data_get($this->row->refresh()->global_plus_payload, 'workflow.id');
+        $creation = Bus::dispatched(CreateGlobalPlusDemandJob::class)->first(fn ($job) => $job->operationId === $operation);
+        $assignment = Bus::dispatched(AssignGlobalPlusTechnicianJob::class)->first(fn ($job) => $job->operationId === $operation);
+        if ($creation) {
+            try {
+                $creation->handle(app(GlobalPlusAppointmentService::class));
+            } catch (Throwable $exception) {
+                $creation->failed($exception);
+
+                return;
+            }
+            $assignment = unserialize($creation->chained[0]);
+        }
+        if ($assignment) {
+            for ($attempt = 1; $attempt <= $assignment->tries; $attempt++) {
+                try {
+                    $assignment->handle(app(GlobalPlusAppointmentService::class));
+                    break;
+                } catch (Throwable $exception) {
+                    if ($attempt === $assignment->tries) {
+                        $assignment->failed($exception);
+                    }
+                }
+            }
+        }
+    };
+    $this->submitAndRun = function (string $routeName, array $payload) {
+        $response = $this->postJson(route($routeName, $this->row), $payload);
+        if (! $response->isSuccessful()) {
+            return $response;
+        }
+        $response->assertAccepted();
+        ($this->runGlobalPlusJobs)();
+
+        return $this->getJson(route('manager.lots.appointments.global-plus.status', $this->row));
+    };
     Http::preventStrayRequests();
     config(['services.global_plus.api_url' => 'https://global-plus.test', 'services.global_plus.api_key' => 'fake', 'services.global_plus.bureau_id' => 1035]);
     $actor = User::factory()->create(['role' => 0, 'admin' => false]);
@@ -61,8 +103,8 @@ beforeEach(function () {
 it('matches by SIREN and sends beneficiary, inspection, client and reference to their distinct destinations', function () {
     $service = app(GlobalPlusAppointmentService::class);
     expect($service->referenceDataFor($this->row)['suggested_installer_address_id'])->toBe(901);
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', false)->assertJsonPath('appointment.global_plus_status', 'created');
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
     Http::assertSent(fn ($request) => $request->method() === 'POST' && $request->url() === 'https://global-plus.test/api/Demande'
         && $request['subTitle'] === 'ALVEA-ACT-1616542/OP-2261616'
         && $request['title'] === 'Lot Lot client'
@@ -88,7 +130,7 @@ it('suggests only the lot delegataire and rejects a different existing client', 
     expect($references['suggested_client_address_id'])->toBe(700)
         ->and($references['matching_client_address_ids'])->toBe([700]);
     $this->payload['client_address_id'] = 701;
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertUnprocessable()->assertJsonPath('message', 'Le client Global+ sélectionné ne correspond pas au délégataire du lot : DÉLÉGATAIRE GLOBAL.');
     Http::assertNotSent(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande'));
 });
@@ -98,8 +140,8 @@ it('matches the delegataire company name without matching the beneficiary compan
     $this->clients[] = ['adresseClient' => ['id' => 701, 'raisonSociale' => 'Beneficiaire SAS']];
     expect(app(GlobalPlusAppointmentService::class)->referenceDataFor($this->row)['suggested_client_address_id'])->toBe(700);
     unset($this->payload['client_delegataire_confirmed']);
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', false);
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk();
 });
 
 it('does not silently match a beneficiary when the delegataire is absent from Global', function () {
@@ -120,8 +162,8 @@ it('leaves ambiguous delegataire matches for explicit selection', function () {
 
 it('identifies a forbidden assignment step and retries without duplicate demand or token renewal', function ($path, $stage, $method) {
     $this->forbiddenPath = $path;
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', true)->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
     $this->row->refresh();
     $diagnostic = $this->row->global_plus_payload['appointment_assignment'];
     expect($diagnostic['stage'])->toBe($stage)->and($diagnostic['http_status'])->toBe(403)
@@ -133,8 +175,8 @@ it('identifies a forbidden assignment step and retries without duplicate demand 
         Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
     }
     $this->forbiddenPath = null;
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', false)->assertJsonPath('appointment.global_plus_status', 'created');
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
     expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1)
         ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Auth/token')))->toHaveCount(1)
         ->and(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Demande/5637')))->toHaveCount($stage === 'resolve_intervention' ? 2 : 1);
@@ -146,7 +188,7 @@ it('identifies a forbidden assignment step and retries without duplicate demand 
 
 it('requires an explicit Global client before creating a demand', function () {
     unset($this->payload['client_address_id']);
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
         ->assertUnprocessable()->assertJsonValidationErrors('client_address_id');
     Http::assertNothingSent();
 });
@@ -155,21 +197,21 @@ it('warns about unconfirmed assignment and retries without creating another dema
     $expected = $this->remote;
     $this->remote[$mismatch] = $mismatch === 'idControleur' ? null : '2026-10-01T14:00:00';
     $service = app(GlobalPlusAppointmentService::class);
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', true)->assertJsonPath('appointment.can_create_global_plus', true)
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.can_create_global_plus', true)
         ->assertJsonPath('appointment.global_plus_status', 'appointment_failed');
     $service->syncDocuments($this->row->refresh());
     expect($this->row->refresh()->global_plus_status)->toBe('appointment_failed');
     $this->remote = $expected;
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', false)->assertJsonPath('appointment.global_plus_status', 'created');
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'created');
     expect(Http::recorded(fn ($request) => $request->method() === 'POST' && $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1);
 })->with(['idControleur', 'dateIntervention']);
 
 it('does not assign an ambiguous intervention', function () {
     $this->remoteInterventions[] = ['id' => 9999, 'idDemande' => 5637];
-    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
-        ->assertCreated()->assertJsonPath('warning', true);
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk();
     Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
 });
 
@@ -177,7 +219,7 @@ it('blocks concurrent creation requests', function () {
     $lock = Cache::lock('global_plus:lot_appointment:'.$this->row->id, 300);
     $lock->get();
     try {
-        $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
             ->assertUnprocessable()->assertJsonPath('message', 'Un envoi Global+ est déjà en cours pour ce dossier.');
         Http::assertNothingSent();
     } finally {
@@ -187,10 +229,85 @@ it('blocks concurrent creation requests', function () {
 
 it('retries only assignment without requiring or changing the existing client', function ($routeName) {
     $this->forbiddenPath = '/api/Intervention/Patch/8123';
-    $this->postJson(route($routeName, $this->row), $this->payload)->assertCreated()->assertJsonPath('warning', true);
+    ($this->submitAndRun)($routeName, $this->payload)->assertOk();
     $this->forbiddenPath = null;
-    $this->postJson(route($routeName, $this->row), ['controller_id' => 2198])->assertCreated()->assertJsonPath('warning', false);
+    ($this->submitAndRun)($routeName, ['controller_id' => 2198])->assertOk();
     expect(data_get($this->row->refresh()->global_plus_payload, 'last_request.client.id'))->toBe(700);
     Http::assertSentCount(10);
     expect(Http::recorded(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande')))->toHaveCount(1);
 })->with(['manager.lots.appointments.global-plus.store', 'planner.book.lots.appointments.global-plus.store']);
+
+it('queues creation then delayed assignment and rejects duplicate submissions while pending', function () {
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)
+        ->assertAccepted()->assertJsonPath('appointment.global_plus_processing', true)
+        ->assertJsonPath('appointment.can_create_global_plus', false);
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)->assertAccepted();
+    Bus::assertChained([CreateGlobalPlusDemandJob::class, AssignGlobalPlusTechnicianJob::class]);
+    Bus::assertDispatchedTimes(CreateGlobalPlusDemandJob::class, 1);
+    Http::assertNotSent(fn ($request) => in_array($request->method(), ['PATCH', 'POST']) && ! str_ends_with($request->url(), '/Auth/token'));
+    $creation = Bus::dispatched(CreateGlobalPlusDemandJob::class)->first();
+    expect($creation->connection)->toBe('database')->and($creation->tries)->toBe(1);
+    $assignment = unserialize($creation->chained[0]);
+    expect($assignment->delay)->toBe(10)->and($assignment->backoff())->toBe([15, 30, 60, 120]);
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    expect($this->row->refresh()->global_plus_demand_id)->toBe('5637')
+        ->and($this->row->global_plus_status)->toBe('appointment_pending');
+    Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
+    $assignment->handle(app(GlobalPlusAppointmentService::class));
+    $this->getJson(route('manager.lots.appointments.global-plus.status', $this->row))
+        ->assertOk()->assertJsonPath('appointment.global_plus_processing', false)
+        ->assertJsonPath('appointment.global_plus_status', 'created');
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    $assignment->handle(app(GlobalPlusAppointmentService::class));
+    expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1);
+    expect(Http::recorded(fn ($request) => $request->method() === 'PATCH'))->toHaveCount(1);
+});
+
+it('retries assignment when the created intervention is not immediately visible', function () {
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)->assertAccepted();
+    $creation = Bus::dispatched(CreateGlobalPlusDemandJob::class)->first();
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    $assignment = unserialize($creation->chained[0]);
+    $this->remoteInterventions = [];
+    expect(fn () => $assignment->handle(app(GlobalPlusAppointmentService::class)))
+        ->toThrow(GlobalPlusAssignmentPendingException::class);
+    expect($this->row->refresh()->global_plus_status)->toBe('appointment_pending');
+    app(GlobalPlusAppointmentService::class)->syncDocuments($this->row);
+    expect($this->row->refresh()->global_plus_status)->toBe('appointment_pending');
+    $this->remoteInterventions = [['id' => 8123, 'idDemande' => 5637]];
+    $assignment->handle(app(GlobalPlusAppointmentService::class));
+    expect($this->row->refresh()->global_plus_status)->toBe('created');
+    expect(Http::recorded(fn ($request) => $request->url() === 'https://global-plus.test/api/Demande'))->toHaveCount(1);
+});
+
+it('preserves the remote demand and reports failure after assignment retries are exhausted', function () {
+    $this->remoteInterventions = [];
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'appointment_failed')
+        ->assertJsonPath('appointment.can_create_global_plus', true);
+    expect(Http::recorded(fn ($request) => str_ends_with($request->url(), '/Demande/5637')))->toHaveCount(5);
+    expect($this->row->refresh()->global_plus_demand_id)->toBe('5637');
+});
+
+it('does not recreate a demand when its POST outcome is uncertain', function () {
+    Http::fake(['https://global-plus.test/api/Demande' => Http::failedConnection()]);
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)
+        ->assertOk()->assertJsonPath('appointment.global_plus_status', 'creation_uncertain')
+        ->assertJsonPath('appointment.can_create_global_plus', false);
+    Bus::assertDispatchedTimes(CreateGlobalPlusDemandJob::class, 1);
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)->assertUnprocessable();
+    Bus::assertDispatchedTimes(CreateGlobalPlusDemandJob::class, 1);
+    Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
+});
+
+it('does not let an obsolete assignment job overwrite a newer workflow', function () {
+    $this->postJson(route('manager.lots.appointments.global-plus.store', $this->row), $this->payload)->assertAccepted();
+    $creation = Bus::dispatched(CreateGlobalPlusDemandJob::class)->first();
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    $assignment = unserialize($creation->chained[0]);
+    $this->row->refresh()->update(['global_plus_payload' => array_replace_recursive($this->row->global_plus_payload, ['workflow' => ['id' => 'newer-operation']])]);
+    $assignment->handle(app(GlobalPlusAppointmentService::class));
+    $assignment->failed(new RuntimeException('Old failure'));
+    Http::assertNotSent(fn ($request) => $request->method() === 'PATCH');
+    expect($this->row->refresh()->global_plus_status)->toBe('appointment_pending');
+});

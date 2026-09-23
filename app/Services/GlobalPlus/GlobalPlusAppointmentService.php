@@ -2,12 +2,17 @@
 
 namespace App\Services\GlobalPlus;
 
+use App\Jobs\AssignGlobalPlusTechnicianJob;
+use App\Jobs\CreateGlobalPlusDemandJob;
 use App\Models\ExternalDelegataire;
 use App\Models\LotAppointment;
 use App\Models\LotAppointmentDocument;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -21,6 +26,12 @@ class GlobalPlusAppointmentService
     public const STATUS_CREATED = 'created';
 
     public const STATUS_FAILED = 'failed';
+
+    public const STATUS_CREATION_PENDING = 'creation_pending';
+
+    public const STATUS_CREATION_UNCERTAIN = 'creation_uncertain';
+
+    public const STATUS_APPOINTMENT_PENDING = 'appointment_pending';
 
     public const STATUS_APPOINTMENT_FAILED = 'appointment_failed';
 
@@ -52,6 +63,90 @@ class GlobalPlusAppointmentService
     public function isConfigured(): bool
     {
         return $this->client->isConfigured();
+    }
+
+    public static function isProcessing(LotAppointment $appointment): bool
+    {
+        return in_array($appointment->global_plus_status, [self::STATUS_CREATION_PENDING, self::STATUS_APPOINTMENT_PENDING], true);
+    }
+
+    public function queueDemand(LotAppointment $appointment, array $payload, ?User $actor = null): LotAppointment
+    {
+        $lock = Cache::lock('global_plus:lot_appointment:'.$appointment->id, 300);
+        if (! $lock->get()) {
+            throw new RuntimeException('Un envoi Global+ est déjà en cours pour ce dossier.');
+        }
+
+        try {
+            $appointment->refresh();
+            if (self::isProcessing($appointment)) {
+                return $appointment;
+            }
+            if ($appointment->global_plus_status === self::STATUS_CREATION_UNCERTAIN) {
+                throw new RuntimeException('La réponse de création Global+ est incertaine. Vérifie le dossier avec Global+ avant tout nouvel envoi pour éviter un doublon.');
+            }
+            $retryAssignment = filled($appointment->global_plus_demand_id)
+                && $appointment->global_plus_status === self::STATUS_APPOINTMENT_FAILED;
+            if (! $retryAssignment) {
+                $this->assertCanCreateDemand($appointment);
+                $appointment->loadMissing(['lot.service', 'lot.coffracServiceAlias', 'service', 'appointment.technician', 'appointment.service']);
+                // Validate references now; files are read by the worker, not embedded in the queue payload.
+                $this->demandPayload($appointment, [...$payload, 'send_documents' => false]);
+            }
+            $controllerId = $this->controllerId($payload);
+            $operationId = (string) Str::uuid();
+
+            try {
+                DB::transaction(function () use ($appointment, $payload, $actor, $retryAssignment, $controllerId, $operationId): void {
+                    $appointment->update([
+                        'global_plus_status' => $retryAssignment ? self::STATUS_APPOINTMENT_PENDING : self::STATUS_CREATION_PENDING,
+                        'global_plus_error_message' => null,
+                        'global_plus_payload' => [
+                            ...($appointment->global_plus_payload ?? []),
+                            'workflow' => ['id' => $operationId, 'queued_at' => now()->toIso8601String()],
+                            'appointment_assignment' => ['controller_id' => $controllerId, 'stage' => 'queued'],
+                        ],
+                    ]);
+                    $connection = (string) config('queue.default', 'database');
+                    if (in_array($connection, ['sync', 'deferred', 'background', 'null'], true)) {
+                        $connection = 'database';
+                    }
+                    $assignment = (new AssignGlobalPlusTechnicianJob($appointment->id, $operationId, $controllerId))->delay(10)->afterCommit();
+                    $jobs = $retryAssignment ? [$assignment] : [
+                        (new CreateGlobalPlusDemandJob($appointment->id, $operationId, $payload, $actor?->id))->afterCommit(),
+                        $assignment,
+                    ];
+                    Bus::chain($jobs)->onConnection($connection)->dispatch();
+                });
+            } catch (Throwable $exception) {
+                $this->failWorkflow($appointment->id, $operationId, $exception);
+                throw new RuntimeException('Mise en file Global+ impossible. Vérifie le service de queue puis réessaie.', 0, $exception);
+            }
+
+            return $appointment->refresh();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function failWorkflow(int $appointmentId, string $operationId, Throwable $exception): void
+    {
+        DB::transaction(function () use ($appointmentId, $operationId, $exception): void {
+            $appointment = LotAppointment::query()->lockForUpdate()->find($appointmentId);
+            if (! $appointment || data_get($appointment->global_plus_payload, 'workflow.id') !== $operationId
+                || ! self::isProcessing($appointment)) {
+                return;
+            }
+            $uncertain = ! filled($appointment->global_plus_demand_id)
+                && filled(data_get($appointment->global_plus_payload, 'workflow.creation_attempted_at'));
+            $appointment->update([
+                'global_plus_status' => filled($appointment->global_plus_demand_id) ? self::STATUS_APPOINTMENT_FAILED
+                    : ($uncertain ? self::STATUS_CREATION_UNCERTAIN : self::STATUS_FAILED),
+                'global_plus_error_message' => $appointment->global_plus_error_message ?: ($uncertain
+                    ? 'Réponse de création Global+ incertaine. Vérifie avec Global+ avant de renvoyer le dossier pour éviter un doublon.'
+                    : $exception->getMessage()),
+            ]);
+        });
     }
 
     /**
@@ -110,26 +205,8 @@ class GlobalPlusAppointmentService
      */
     public function createDemandFromLotAppointment(LotAppointment $lotAppointment, array $payload, ?User $actor = null): LotAppointment
     {
-        $ttl = max(300, (int) config('services.global_plus.upload_timeout', 120) + 6 * (int) config('services.global_plus.timeout', 45) + 60);
-        $lock = Cache::lock('global_plus:lot_appointment:'.$lotAppointment->id, $ttl);
-        if (! $lock->get()) {
-            throw new RuntimeException('Un envoi Global+ est déjà en cours pour ce dossier.');
-        }
-
-        try {
-            return $this->createOrCompleteDemand($lotAppointment->refresh(), $payload, $actor);
-        } finally {
-            $lock->release();
-        }
-    }
-
-    private function createOrCompleteDemand(LotAppointment $lotAppointment, array $payload, ?User $actor): LotAppointment
-    {
-        if (filled($lotAppointment->global_plus_demand_id) && $lotAppointment->global_plus_status === self::STATUS_APPOINTMENT_FAILED) {
-            $this->syncAppointment($lotAppointment, $this->controllerId($payload));
-
-            return $lotAppointment->refresh();
-        }
+        // Queue middleware serializes creation and assignment for this lot dossier.
+        $lotAppointment->refresh();
         $this->assertCanCreateDemand($lotAppointment);
 
         $lotAppointment->loadMissing([
@@ -143,13 +220,22 @@ class GlobalPlusAppointmentService
 
         $demandPayload = $this->demandPayload($lotAppointment, $payload);
 
+        if (filled(data_get($lotAppointment->global_plus_payload, 'workflow.creation_attempted_at'))) {
+            throw new RuntimeException('Un envoi de création a déjà été tenté. Vérifie le résultat dans Global+ avant de recommencer.');
+        }
+        $lotAppointment->update(['global_plus_payload' => array_replace_recursive($lotAppointment->global_plus_payload ?? [], [
+            'workflow' => ['creation_attempted_at' => now()->toIso8601String()],
+        ])]);
+
         try {
             $demandId = $this->client->createDemand($demandPayload);
         } catch (Throwable $exception) {
             $lotAppointment->update([
-                'global_plus_status' => self::STATUS_FAILED,
+                'global_plus_status' => $exception instanceof GlobalPlusApiException && in_array($exception->statusCode(), [400, 401, 403, 404, 422], true)
+                    ? self::STATUS_FAILED : self::STATUS_CREATION_UNCERTAIN,
                 'global_plus_error_message' => $exception->getMessage(),
                 'global_plus_payload' => [
+                    ...($lotAppointment->global_plus_payload ?? []),
                     'last_request' => $this->safeDemandPayload($demandPayload),
                     'failed_at' => now()->toIso8601String(),
                     'actor_id' => $actor?->id,
@@ -172,23 +258,21 @@ class GlobalPlusAppointmentService
         $lotAppointment->update([
             'added_to_global_plus' => true,
             'global_plus_demand_id' => $demandId,
-            'global_plus_status' => self::STATUS_APPOINTMENT_FAILED,
+            'global_plus_status' => self::STATUS_APPOINTMENT_PENDING,
             'global_plus_payload' => [
+                ...($lotAppointment->global_plus_payload ?? []),
                 'last_request' => $this->safeDemandPayload($demandPayload),
                 'created_at' => $now->toIso8601String(),
                 'actor_id' => $actor?->id,
             ],
             'global_plus_created_at' => $now,
             'global_plus_synced_at' => $now,
-            'global_plus_error_message' => 'Dossier créé ; affectation du technicien en attente de confirmation.',
+            'global_plus_error_message' => null,
         ]);
 
         if ($documentsWereSent) {
             $this->markDocumentsSynced($lotAppointment, $demandId, 'sent_in_creation');
         }
-
-        // The creation DTO ignores idControleur. Assign the actual Intervention after persisting the Demande ID.
-        $this->syncAppointment($lotAppointment, $this->controllerId($payload));
 
         return $lotAppointment->fresh([
             'lot.service',
@@ -212,8 +296,11 @@ class GlobalPlusAppointmentService
                 $interventions = collect($demand['interventions'] ?? [])
                     ->filter(fn ($item): bool => is_array($item) && (int) ($item['id'] ?? 0) > 0
                         && (string) ($item['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id);
+                if ($interventions->isEmpty()) {
+                    throw new GlobalPlusAssignmentPendingException('Global+ n’a pas encore rendu l’intervention disponible.');
+                }
                 if ($interventions->count() !== 1) {
-                    throw new RuntimeException('L’intervention Global+ ne peut pas être identifiée de façon unique. Le dossier est créé, l’affectation du technicien reste à terminer.');
+                    throw new RuntimeException('Plusieurs interventions Global+ correspondent au dossier. L’affectation nécessite une vérification manuelle.');
                 }
                 $interventionId = (string) $interventions->first()['id'];
                 $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
@@ -236,8 +323,9 @@ class GlobalPlusAppointmentService
                 || (int) ($remote['idControleur'] ?? 0) !== $controllerId
                 || ! $this->sameAppointmentTime($remote['dateIntervention'] ?? null, $startsAt)
                 || ! $this->sameAppointmentTime($remote['dateInterventionEnd'] ?? null, $endsAt)) {
-                throw new RuntimeException('Global+ n’a pas confirmé le technicien et les horaires sélectionnés. Le dossier est créé, mais l’affectation reste à terminer.');
+                throw new GlobalPlusAssignmentPendingException('Global+ n’a pas encore confirmé le technicien et les horaires sélectionnés.');
             }
+            $lotAppointment->refresh();
             $lotAppointment->update([
                 'global_plus_status' => self::STATUS_CREATED,
                 'global_plus_error_message' => null,
@@ -257,8 +345,9 @@ class GlobalPlusAppointmentService
                 'assign_technician' => 'Affectation du technicien non confirmée. ',
                 'verify_assignment' => 'Affectation envoyée, mais vérification impossible ou non conforme. ',
             }.$exception->getMessage();
+            $lotAppointment->refresh();
             $lotAppointment->update([
-                'global_plus_status' => self::STATUS_APPOINTMENT_FAILED,
+                'global_plus_status' => self::assignmentCanBeRetried($exception) ? self::STATUS_APPOINTMENT_PENDING : self::STATUS_APPOINTMENT_FAILED,
                 'global_plus_error_message' => $message,
                 'global_plus_payload' => [
                     ...($lotAppointment->global_plus_payload ?? []),
@@ -275,7 +364,16 @@ class GlobalPlusAppointmentService
                 'intervention_id' => $lotAppointment->global_plus_intervention_id,
                 'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt, ...$context, 'message' => $message,
             ]);
+            throw $exception;
         }
+    }
+
+    public static function assignmentCanBeRetried(Throwable $exception): bool
+    {
+        return $exception instanceof GlobalPlusAssignmentPendingException
+            || $exception instanceof ConnectionException
+            || ($exception instanceof GlobalPlusApiException
+                && (in_array($exception->statusCode(), [404, 408, 429], true) || $exception->statusCode() >= 500));
     }
 
     private function sameAppointmentTime(?string $remote, string $expected): bool
@@ -300,13 +398,13 @@ class GlobalPlusAppointmentService
         $files = $this->documentsPayload($lotAppointment);
 
         return $this->withDemandFilesLock($demandId, function () use ($lotAppointment, $demandId, $files): LotAppointment {
-            $lotAppointment->refresh();
-            $assignmentPending = $lotAppointment->global_plus_status === self::STATUS_APPOINTMENT_FAILED;
             try {
                 $response = $this->client->replaceDemandFiles($demandId, $files);
             } catch (Throwable $exception) {
+                $lotAppointment->refresh();
+                $assignmentPending = in_array($lotAppointment->global_plus_status, [self::STATUS_APPOINTMENT_FAILED, self::STATUS_APPOINTMENT_PENDING], true);
                 $lotAppointment->update([
-                    'global_plus_status' => $assignmentPending ? self::STATUS_APPOINTMENT_FAILED : self::STATUS_DOCUMENTS_FAILED,
+                    'global_plus_status' => $assignmentPending ? $lotAppointment->global_plus_status : self::STATUS_DOCUMENTS_FAILED,
                     'global_plus_error_message' => $assignmentPending ? $lotAppointment->global_plus_error_message : $exception->getMessage(),
                 ]);
 
@@ -317,8 +415,10 @@ class GlobalPlusAppointmentService
                 throw $exception;
             }
 
+            $lotAppointment->refresh();
+            $assignmentPending = in_array($lotAppointment->global_plus_status, [self::STATUS_APPOINTMENT_FAILED, self::STATUS_APPOINTMENT_PENDING], true);
             $lotAppointment->update([
-                'global_plus_status' => $assignmentPending ? self::STATUS_APPOINTMENT_FAILED : self::STATUS_DOCUMENTS_SYNCED,
+                'global_plus_status' => $assignmentPending ? $lotAppointment->global_plus_status : self::STATUS_DOCUMENTS_SYNCED,
                 'global_plus_synced_at' => now(),
                 'global_plus_error_message' => $assignmentPending ? $lotAppointment->global_plus_error_message : null,
                 'global_plus_payload' => [

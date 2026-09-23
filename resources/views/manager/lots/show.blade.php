@@ -659,6 +659,7 @@
                                     default => null,
                                 };
                                 $globalPlusMeta = match (true) {
+                                    $appointment['global_plus_processing'] ?? false => ['background' => '#e0f2fe', 'color' => '#075985'],
                                     ($appointment['global_plus_status'] ?? null) === 'appointment_failed' => ['background' => '#fef3c7', 'color' => '#92400e'],
                                     filled($appointment['global_plus_demand_id'] ?? null) => ['background' => '#dcfce7', 'color' => '#166534'],
                                     filled($appointment['global_plus_error_message'] ?? null) => ['background' => '#fee2e2', 'color' => '#991b1b'],
@@ -1601,6 +1602,9 @@
         }
 
         function globalPlusStatusMeta(appointment) {
+            if (appointment?.global_plus_processing) {
+                return { background: '#e0f2fe', color: '#075985' };
+            }
             if (appointment?.global_plus_demand_id) {
                 if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
                     return { background: '#fef3c7', color: '#92400e' };
@@ -2278,11 +2282,36 @@
             ].filter(Boolean).join(' - ');
         }
 
+        let globalPlusPollTimer;
+        let globalPlusPollGeneration = 0;
+
+        function watchGlobalPlusStatus(appointment, delay = 3000) {
+            window.clearTimeout(globalPlusPollTimer);
+            const generation = ++globalPlusPollGeneration;
+            if (!appointment?.global_plus_processing || !appointment.global_plus_status_url) return;
+            globalPlusPollTimer = window.setTimeout(async () => {
+                if (physicalModal?.classList.contains('hidden') || currentPhysicalLotAppointment?.id !== appointment.id) return;
+                try {
+                    const response = await fetch(appointment.global_plus_status_url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+                    if (!response.ok) throw new Error('Suivi Global+ indisponible');
+                    const payload = await response.json();
+                    if (generation !== globalPlusPollGeneration || currentPhysicalLotAppointment?.id !== appointment.id) return;
+                    currentPhysicalLotAppointment = payload.appointment;
+                    updateLotAppointmentState(payload.appointment);
+                    configureGlobalPlusStatus(payload.appointment);
+                } catch (error) {
+                    if (generation === globalPlusPollGeneration) watchGlobalPlusStatus(appointment, 10000);
+                }
+            }, delay);
+        }
+
         function configureGlobalPlusStatus(appointment) {
+            watchGlobalPlusStatus(appointment);
             const meta = globalPlusStatusMeta(appointment);
             const hasDemand = Boolean(appointment.global_plus_demand_id);
             const canCreate = Boolean(appointment.can_create_global_plus);
             const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
+            if (physicalGlobalPlusSubmit) physicalGlobalPlusSubmit.disabled = !canCreate;
 
             if (physicalGlobalPlusClient) physicalGlobalPlusClient.disabled = hasDemand;
             if (physicalGlobalPlusVersion) physicalGlobalPlusVersion.disabled = hasDemand;
@@ -2295,7 +2324,8 @@
             }
 
             if (physicalGlobalPlusSummary) {
-                physicalGlobalPlusSummary.textContent = hasDemand
+                physicalGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
+                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.' : hasDemand
                     ? `Référence Global+ ${appointment.global_plus_demand_id}.`
                     : (canCreate ? 'Prêt à créer dans Global+.' : 'Le dossier doit être placé physiquement avant l’envoi Global+.');
             }
@@ -2308,6 +2338,9 @@
             if (physicalGlobalPlusOpen) {
                 physicalGlobalPlusOpen.disabled = !canCreate;
                 physicalGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+');
+                if (appointment.global_plus_processing) {
+                    physicalGlobalPlusOpen.innerHTML = '<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span> Traitement Global+ en cours';
+                }
             }
 
             if (physicalGlobalPlusSyncDocuments) {
@@ -2586,7 +2619,7 @@
             } catch (error) {
                 setGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
             } finally {
-                physicalGlobalPlusSubmit.disabled = false;
+                physicalGlobalPlusSubmit.disabled = Boolean(currentPhysicalLotAppointment?.global_plus_processing);
                 physicalGlobalPlusSubmit.textContent = currentPhysicalLotAppointment?.global_plus_status === 'appointment_failed' ? 'Confirmer l’affectation' : 'Créer le dossier Global+';
             }
         }

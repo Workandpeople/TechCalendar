@@ -121,6 +121,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/manager/lots/{lot}/documents', [ManagerLotController::class, 'documents'])->name('manager.lots.documents.index');
     Route::patch('/manager/lots/appointments/{lotAppointment}/visits', [ManagerLotController::class, 'updateAppointmentVisits'])->name('manager.lots.appointments.visits.update');
     Route::patch('/manager/lots/appointments/{lotAppointment}/stats-exclusion', [ManagerLotController::class, 'updateAppointmentStatsExclusion'])->name('manager.lots.appointments.stats-exclusion.update');
+    Route::get('/manager/lots/appointments/{lotAppointment}/global-plus', [ManagerLotController::class, 'globalPlusStatus'])->name('manager.lots.appointments.global-plus.status');
     Route::get('/manager/lots/appointments/{lotAppointment}/global-plus/references', [ManagerLotController::class, 'globalPlusReferences'])->name('manager.lots.appointments.global-plus.references');
     Route::post('/manager/lots/appointments/{lotAppointment}/global-plus', [ManagerLotController::class, 'storeAppointmentGlobalPlus'])->name('manager.lots.appointments.global-plus.store');
     Route::put('/manager/lots/appointments/{lotAppointment}/global-plus/documents', [ManagerLotController::class, 'syncAppointmentGlobalPlusDocuments'])->name('manager.lots.appointments.global-plus.documents.sync');
@@ -150,6 +151,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/technicians/search', [PlannerBookingController::class, 'searchTechnicians'])->name('planner.book.technicians.search');
     Route::post('/planner/book/calendar-window', [PlannerBookingController::class, 'calendarWindow'])->name('planner.book.calendar-window');
     Route::post('/planner/book/lots/appointments/{lotAppointment}/contact', [PlannerBookingController::class, 'processLotContactAppointment'])->name('planner.book.lots.appointments.contact');
+    Route::get('/planner/book/lots/appointments/{lotAppointment}/global-plus', [PlannerBookingController::class, 'globalPlusStatus'])->name('planner.book.lots.appointments.global-plus.status');
     Route::get('/planner/book/lots/appointments/{lotAppointment}/global-plus/references', [PlannerBookingController::class, 'globalPlusReferences'])->name('planner.book.lots.appointments.global-plus.references');
     Route::post('/planner/book/lots/appointments/{lotAppointment}/global-plus', [PlannerBookingController::class, 'storeLotAppointmentGlobalPlus'])->name('planner.book.lots.appointments.global-plus.store');
     Route::put('/planner/book/lots/appointments/{lotAppointment}/global-plus/documents', [PlannerBookingController::class, 'syncLotAppointmentGlobalPlusDocuments'])->name('planner.book.lots.appointments.global-plus.documents.sync');

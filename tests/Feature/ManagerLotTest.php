@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\AssignGlobalPlusTechnicianJob;
+use App\Jobs\CreateGlobalPlusDemandJob;
 use App\Jobs\ProcessLotImportPreviewJob;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Jobs\SyncLotAppointmentDocumentsToGlobalPlusJob;
@@ -12,6 +14,7 @@ use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\CoffracAppointmentService;
+use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\ImportedAddressCleaner;
 use App\Services\LotAppointmentAiNormalizer;
 use App\Services\LotExcelImportService;
@@ -2536,6 +2539,7 @@ it('loads Global Plus reference data for a placed lot appointment', function () 
 
 it('creates a Global Plus demand from a placed physical lot appointment with documents', function () {
     Cache::flush();
+    Queue::fake([CreateGlobalPlusDemandJob::class, AssignGlobalPlusTechnicianJob::class]);
     Storage::fake('local');
     config([
         'services.global_plus.api_url' => 'https://global-plus.test',
@@ -2678,10 +2682,12 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             'sub_title' => 'Ligne 7 - HABITAT ENERGIE',
             'send_documents' => true,
         ])
-        ->assertCreated()
-        ->assertJsonPath('appointment.global_plus_demand_id', '5637')
-        ->assertJsonPath('appointment.global_plus_status', 'created')
-        ->assertJsonPath('appointment.added_to_global_plus', true);
+        ->assertAccepted()
+        ->assertJsonPath('appointment.global_plus_status', 'creation_pending');
+
+    $creation = Queue::pushed(CreateGlobalPlusDemandJob::class)->first();
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    unserialize($creation->chained[0])->handle(app(GlobalPlusAppointmentService::class));
 
     $lotAppointment->refresh();
     $document->refresh();

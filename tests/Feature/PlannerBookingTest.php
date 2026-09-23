@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\AssignGlobalPlusTechnicianJob;
+use App\Jobs\CreateGlobalPlusDemandJob;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Mail\TechnicianAppointmentNotificationMail;
@@ -15,6 +17,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\CoffracAppointmentService;
+use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\MapboxAddressGeocoder;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -2885,6 +2888,7 @@ it('links a placed appointment back to its lot appointment', function () {
 
 it('allows creating a Global Plus demand from the booking confirmation', function () {
     Cache::flush();
+    Queue::fake([CreateGlobalPlusDemandJob::class, AssignGlobalPlusTechnicianJob::class]);
     config([
         'services.global_plus.api_url' => 'https://global-plus.test',
         'services.global_plus.api_key' => 'global-plus-secret',
@@ -3019,7 +3023,16 @@ it('allows creating a Global Plus demand from the booking confirmation', functio
             'sub_title' => 'Ligne 7 - HABITAT',
             'send_documents' => false,
         ])
-        ->assertCreated()
+        ->assertAccepted()
+        ->assertJsonPath('global_plus.global_plus_status', 'creation_pending')
+        ->assertJsonPath('global_plus.can_create_global_plus', false);
+
+    $creation = Queue::pushed(CreateGlobalPlusDemandJob::class)->first();
+    $creation->handle(app(GlobalPlusAppointmentService::class));
+    unserialize($creation->chained[0])->handle(app(GlobalPlusAppointmentService::class));
+
+    $this->getJson(route('planner.book.lots.appointments.global-plus.status', $lotAppointment))
+        ->assertOk()
         ->assertJsonPath('global_plus.global_plus_demand_id', '5637')
         ->assertJsonPath('global_plus.global_plus_status_label', 'Créé dans Global+')
         ->assertJsonPath('global_plus.can_create_global_plus', false)

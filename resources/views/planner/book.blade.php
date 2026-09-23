@@ -4637,6 +4637,9 @@
         );
 
         const confirmationGlobalPlusStatusMeta = (appointment) => {
+            if (appointment?.global_plus_processing) {
+                return { background: '#e0f2fe', color: '#075985' };
+            }
             if (appointment?.global_plus_demand_id) {
                 if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
                     return { background: '#fef3c7', color: '#92400e' };
@@ -4846,7 +4849,29 @@
             return payload;
         };
 
+        let confirmationGlobalPlusPollTimer;
+        let confirmationGlobalPlusPollGeneration = 0;
+
+        function watchConfirmationGlobalPlus(appointment, delay = 3000) {
+            window.clearTimeout(confirmationGlobalPlusPollTimer);
+            const generation = ++confirmationGlobalPlusPollGeneration;
+            if (!appointment?.global_plus_processing || !appointment.global_plus_status_url) return;
+            confirmationGlobalPlusPollTimer = window.setTimeout(async () => {
+                if (placementConfirmationSection?.classList.contains('hidden') || confirmationGlobalPlusAppointment?.id !== appointment.id) return;
+                try {
+                    const response = await fetch(appointment.global_plus_status_url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+                    if (!response.ok) throw new Error('Suivi Global+ indisponible');
+                    const payload = await response.json();
+                    if (generation !== confirmationGlobalPlusPollGeneration || confirmationGlobalPlusAppointment?.id !== appointment.id) return;
+                    configureConfirmationGlobalPlus(payload.global_plus);
+                } catch (error) {
+                    if (generation === confirmationGlobalPlusPollGeneration) watchConfirmationGlobalPlus(appointment, 10000);
+                }
+            }, delay);
+        }
+
         const configureConfirmationGlobalPlus = (appointment) => {
+            watchConfirmationGlobalPlus(appointment);
             confirmationGlobalPlusAppointment = appointment || null;
             confirmationGlobalPlusReferences = null;
             clearConfirmationGlobalPlusFormStatus();
@@ -4875,7 +4900,8 @@
                     ? ` ${appointment.documents_count} document(s) seront proposés à l’envoi.`
                     : '';
 
-                confirmationGlobalPlusSummary.textContent = hasDemand
+                confirmationGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
+                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.' : hasDemand
                     ? `Référence Global+ ${appointment.global_plus_demand_id}.${documentsLabel}`
                     : (canCreate
                         ? `Ce RDV physique vient d’un lot et peut être créé dans Global+.${documentsLabel}`
@@ -4889,7 +4915,11 @@
 
             if (confirmationGlobalPlusOpen) {
                 confirmationGlobalPlusOpen.disabled = !canCreate;
+                if (confirmationGlobalPlusSubmit) confirmationGlobalPlusSubmit.disabled = !canCreate;
                 confirmationGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà créé dans Global+' : 'Préparer Global+');
+                if (appointment.global_plus_processing) {
+                    confirmationGlobalPlusOpen.innerHTML = '<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span> Traitement Global+ en cours';
+                }
             }
 
             if (confirmationGlobalPlusSyncDocuments) {
@@ -4992,7 +5022,7 @@
             } catch (error) {
                 setConfirmationGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
             } finally {
-                confirmationGlobalPlusSubmit.disabled = false;
+                confirmationGlobalPlusSubmit.disabled = Boolean(confirmationGlobalPlusAppointment?.global_plus_processing);
                 confirmationGlobalPlusSubmit.textContent = confirmationGlobalPlusAppointment?.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer dans Global+';
             }
         };
