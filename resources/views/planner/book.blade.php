@@ -163,16 +163,16 @@
                                 </label>
                             </div>
 
+                        </section>
+
+                        <section class="space-y-3">
                             <div>
                                 <label class="gc-label" for="booking_confirmation_global_plus_installer">Installateur Global+</label>
                                 <select id="booking_confirmation_global_plus_installer" class="gc-input">
                                     <option value="">Chargement...</option>
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle sera envoyée.</p>
+                                <p id="booking-confirmation-global-plus-installer-hint" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle sera envoyée.</p>
                             </div>
-                        </section>
-
-                        <section class="space-y-3">
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <label>
                                     <span class="gc-label">Installateur manuel</span>
@@ -4641,7 +4641,7 @@
                 return { background: '#e0f2fe', color: '#075985' };
             }
             if (appointment?.global_plus_demand_id) {
-                if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
+                if (['documents_failed', 'appointment_failed', 'appointment_sent'].includes(appointment.global_plus_status)) {
                     return { background: '#fef3c7', color: '#92400e' };
                 }
 
@@ -4752,8 +4752,12 @@
             document.getElementById('booking-confirmation-global-plus-delegataire').textContent = `Délégataire du lot : ${confirmationGlobalPlusReferences.delegataire || 'non renseigné'}`;
             updateConfirmationGlobalPlusClientSelection();
             confirmationGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer dans Global+';
-            const suggestedInstaller = String(confirmationGlobalPlusReferences.suggested_installer_address_id || '');
+            const savedInstaller = confirmationGlobalPlusReferences.existing_installer;
+            const suggestedInstaller = String((savedInstaller ? savedInstaller.address_id : confirmationGlobalPlusReferences.suggested_installer_address_id) || '');
             const suggestedController = String(confirmationGlobalPlusReferences.suggested_controller_id || '');
+            document.getElementById('booking-confirmation-global-plus-installer-hint').textContent = appointment.global_plus_demand_id
+                ? 'Installateur déjà transmis : conservé à l’identique. Cette reprise concerne uniquement le technicien et les horaires.'
+                : 'Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.';
 
             if (confirmationGlobalPlusVersion) {
                 confirmationGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
@@ -4768,8 +4772,11 @@
             }
 
             if (confirmationGlobalPlusInstaller) {
+                confirmationGlobalPlusInstaller.disabled = Boolean(appointment.global_plus_demand_id);
                 confirmationGlobalPlusInstaller.innerHTML = [
                     bookingGlobalPlusOption('Saisie manuelle / installateur du dossier', ''),
+                    ...(suggestedInstaller && savedInstaller && !installers.some((item) => String(item.address_id) === suggestedInstaller)
+                        ? [bookingGlobalPlusOption(savedInstaller.name || 'Installateur enregistré', suggestedInstaller, true)] : []),
                     ...installers.map((installer) => bookingGlobalPlusOption(
                         `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
                         installer.address_id,
@@ -4799,13 +4806,20 @@
                     : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
             }
 
-            if (confirmationGlobalPlusInstallerName) confirmationGlobalPlusInstallerName.value = appointment?.installer_name || '';
-            if (confirmationGlobalPlusInstallerSiren) confirmationGlobalPlusInstallerSiren.value = appointment?.installer_siren || '';
-            if (confirmationGlobalPlusInstallerAddress) confirmationGlobalPlusInstallerAddress.value = '';
-            if (confirmationGlobalPlusInstallerPostalCode) confirmationGlobalPlusInstallerPostalCode.value = '';
-            if (confirmationGlobalPlusInstallerCity) confirmationGlobalPlusInstallerCity.value = '';
-            if (confirmationGlobalPlusInstallerPhone) confirmationGlobalPlusInstallerPhone.value = '';
-            fillConfirmationGlobalPlusInstallerFieldsFromSelection();
+            const installerFields = [
+                [confirmationGlobalPlusInstallerName, 'name', appointment.installer_name],
+                [confirmationGlobalPlusInstallerSiren, 'siren', appointment.installer_siren],
+                [confirmationGlobalPlusInstallerAddress, 'address'],
+                [confirmationGlobalPlusInstallerPostalCode, 'postal_code'],
+                [confirmationGlobalPlusInstallerCity, 'city'],
+                [confirmationGlobalPlusInstallerPhone, 'phone'],
+            ];
+            installerFields.forEach(([field, key, fallback]) => {
+                if (!field) return;
+                field.value = savedInstaller ? (savedInstaller[key] || '') : (fallback || '');
+                field.readOnly = Boolean(appointment.global_plus_demand_id);
+            });
+            if (!savedInstaller) fillConfirmationGlobalPlusInstallerFieldsFromSelection();
 
             if (confirmationGlobalPlusTitle) {
                 confirmationGlobalPlusTitle.value = defaultConfirmationGlobalPlusTitle(appointment).slice(0, 50);
@@ -4901,7 +4915,8 @@
                     : '';
 
                 confirmationGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
-                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.' : hasDemand
+                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.'
+                    : appointment.global_plus_status === 'appointment_sent' ? `Dossier ${appointment.global_plus_demand_id} : Global+ a accepté l’affectation, mais ne renvoie pas les champs permettant de la vérifier. À contrôler dans Global+.` : hasDemand
                     ? `Référence Global+ ${appointment.global_plus_demand_id}.${documentsLabel}`
                     : (canCreate
                         ? `Ce RDV physique vient d’un lot et peut être créé dans Global+.${documentsLabel}`

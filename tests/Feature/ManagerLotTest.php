@@ -2591,9 +2591,8 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
                     'jsonRapport' => '{"ignored":"too-heavy-for-create"}',
                 ],
             ]),
-            'https://global-plus.test/api/Intervention/ByDemande/5637' => Http::response([['id' => 8123, 'idDemande' => 5637]]),
             'https://global-plus.test/api/Intervention/Patch/8123' => Http::response(null, 204),
-            'https://global-plus.test/api/Intervention/8123' => Http::response([
+            'https://global-plus.test/api/Intervention/ByDemande/5637' => Http::response([
                 'id' => 8123, 'idDemande' => 5637, 'idControleur' => 2198,
                 'dateIntervention' => Appointment::latest('id')->first()->starts_at->format('Y-m-d\TH:i:s'),
                 'dateInterventionEnd' => Appointment::latest('id')->first()->ends_at->format('Y-m-d\TH:i:s'),

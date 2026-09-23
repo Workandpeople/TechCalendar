@@ -660,7 +660,7 @@
                                 };
                                 $globalPlusMeta = match (true) {
                                     $appointment['global_plus_processing'] ?? false => ['background' => '#e0f2fe', 'color' => '#075985'],
-                                    ($appointment['global_plus_status'] ?? null) === 'appointment_failed' => ['background' => '#fef3c7', 'color' => '#92400e'],
+                                    in_array($appointment['global_plus_status'] ?? null, ['appointment_failed', 'appointment_sent'], true) => ['background' => '#fef3c7', 'color' => '#92400e'],
                                     filled($appointment['global_plus_demand_id'] ?? null) => ['background' => '#dcfce7', 'color' => '#166534'],
                                     filled($appointment['global_plus_error_message'] ?? null) => ['background' => '#fee2e2', 'color' => '#991b1b'],
                                     $appointment['added_to_global_plus'] => ['background' => '#fef3c7', 'color' => '#92400e'],
@@ -884,7 +884,7 @@
                                 <select id="lot_physical_global_plus_installer" class="gc-input">
                                     <option value="">Chargement...</option>
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.</p>
+                                <p id="lot-physical-global-plus-installer-hint" class="mt-1 text-xs" style="color:var(--gc-text-soft);">Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.</p>
                             </div>
                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <label>
@@ -1606,7 +1606,7 @@
                 return { background: '#e0f2fe', color: '#075985' };
             }
             if (appointment?.global_plus_demand_id) {
-                if (['documents_failed', 'appointment_failed'].includes(appointment.global_plus_status)) {
+                if (['documents_failed', 'appointment_failed', 'appointment_sent'].includes(appointment.global_plus_status)) {
                     return { background: '#fef3c7', color: '#92400e' };
                 }
 
@@ -2325,7 +2325,8 @@
 
             if (physicalGlobalPlusSummary) {
                 physicalGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
-                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.' : hasDemand
+                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.'
+                    : appointment.global_plus_status === 'appointment_sent' ? `Dossier ${appointment.global_plus_demand_id} : Global+ a accepté l’affectation, mais ne renvoie pas les champs permettant de la vérifier. À contrôler dans Global+.` : hasDemand
                     ? `Référence Global+ ${appointment.global_plus_demand_id}.`
                     : (canCreate ? 'Prêt à créer dans Global+.' : 'Le dossier doit être placé physiquement avant l’envoi Global+.');
             }
@@ -2398,8 +2399,12 @@
             document.getElementById('lot-physical-global-plus-delegataire').textContent = `Délégataire du lot : ${currentGlobalPlusReferences.delegataire || 'non renseigné'}`;
             updateGlobalPlusClientSelection();
             physicalGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer le dossier Global+';
-            const suggestedInstaller = String(currentGlobalPlusReferences.suggested_installer_address_id || '');
+            const savedInstaller = currentGlobalPlusReferences.existing_installer;
+            const suggestedInstaller = String((savedInstaller ? savedInstaller.address_id : currentGlobalPlusReferences.suggested_installer_address_id) || '');
             const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
+            document.getElementById('lot-physical-global-plus-installer-hint').textContent = appointment.global_plus_demand_id
+                ? 'Installateur déjà transmis : conservé à l’identique. Cette reprise concerne uniquement le technicien et les horaires.'
+                : 'Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.';
 
             if (physicalGlobalPlusVersion) {
                 physicalGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
@@ -2414,8 +2419,11 @@
             }
 
             if (physicalGlobalPlusInstaller) {
+                physicalGlobalPlusInstaller.disabled = Boolean(appointment.global_plus_demand_id);
                 physicalGlobalPlusInstaller.innerHTML = [
                     option('Saisie manuelle / installateur du dossier', ''),
+                    ...(suggestedInstaller && savedInstaller && !installers.some((item) => String(item.address_id) === suggestedInstaller)
+                        ? [option(savedInstaller.name || 'Installateur enregistré', suggestedInstaller, true)] : []),
                     ...installers.map((installer) => option(
                         `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
                         installer.address_id,
@@ -2445,13 +2453,20 @@
                     : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
             }
 
-            physicalGlobalPlusInstallerName.value = appointment.installer_name || '';
-            physicalGlobalPlusInstallerSiren.value = appointment?.installer_siren || '';
-            physicalGlobalPlusInstallerAddress.value = '';
-            physicalGlobalPlusInstallerPostalCode.value = '';
-            physicalGlobalPlusInstallerCity.value = '';
-            physicalGlobalPlusInstallerPhone.value = '';
-            fillGlobalPlusInstallerFieldsFromSelection();
+            const installerFields = [
+                [physicalGlobalPlusInstallerName, 'name', appointment.installer_name],
+                [physicalGlobalPlusInstallerSiren, 'siren', appointment.installer_siren],
+                [physicalGlobalPlusInstallerAddress, 'address'],
+                [physicalGlobalPlusInstallerPostalCode, 'postal_code'],
+                [physicalGlobalPlusInstallerCity, 'city'],
+                [physicalGlobalPlusInstallerPhone, 'phone'],
+            ];
+            installerFields.forEach(([field, key, fallback]) => {
+                if (!field) return;
+                field.value = savedInstaller ? (savedInstaller[key] || '') : (fallback || '');
+                field.readOnly = Boolean(appointment.global_plus_demand_id);
+            });
+            if (!savedInstaller) fillGlobalPlusInstallerFieldsFromSelection();
 
             if (physicalGlobalPlusTitle) {
                 physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 50);

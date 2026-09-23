@@ -1791,6 +1791,7 @@ class PlannerBookingController extends Controller
                 GlobalPlusAppointmentService::STATUS_DOCUMENTS_SYNCED => 'Créé, documents synchronisés',
                 GlobalPlusAppointmentService::STATUS_DOCUMENTS_FAILED => 'Créé, erreur documents',
                 GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED => 'Créé, technicien non confirmé',
+                GlobalPlusAppointmentService::STATUS_APPOINTMENT_SENT => 'Affectation envoyée, non vérifiée',
                 default => 'Créé dans Global+',
             };
         }

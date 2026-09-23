@@ -50,7 +50,7 @@ class SyncLotAppointmentDocumentsToGlobalPlusJob implements ShouldQueue
     {
         LotAppointment::query()
             ->whereKey($this->lotAppointmentId)
-            ->whereNotIn('global_plus_status', [GlobalPlusAppointmentService::STATUS_APPOINTMENT_PENDING, GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED])
+            ->whereNotIn('global_plus_status', [GlobalPlusAppointmentService::STATUS_APPOINTMENT_PENDING, GlobalPlusAppointmentService::STATUS_APPOINTMENT_FAILED, GlobalPlusAppointmentService::STATUS_APPOINTMENT_SENT])
             ->update([
                 'global_plus_status' => GlobalPlusAppointmentService::STATUS_DOCUMENTS_FAILED,
                 'global_plus_error_message' => $exception->getMessage(),
