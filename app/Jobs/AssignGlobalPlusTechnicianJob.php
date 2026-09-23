@@ -44,7 +44,7 @@ class AssignGlobalPlusTechnicianJob implements ShouldQueue
             return;
         }
         try {
-            $service->syncAppointment($appointment, $this->controllerId);
+            $service->syncAppointment($appointment, $this->controllerId, $this->attempts(), $this->tries);
         } catch (Throwable $exception) {
             if (! GlobalPlusAppointmentService::assignmentCanBeRetried($exception)) {
                 $this->fail($exception);

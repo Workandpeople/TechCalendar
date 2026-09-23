@@ -36,8 +36,8 @@ La civilité transmise est `M.` (avec le point), valeur exacte du bouton radio d
 Le DTO de création `POST /api/Demande` ne contient pas de champ `idControleur`. L'affectation du technicien s'effectue donc dans la même action utilisateur, par les appels suivants :
 
 1. Créer la demande et enregistrer immédiatement son identifiant dans TechCalendar.
-2. Lire `GET /api/Demande/{id}` et identifier son unique intervention.
-3. Envoyer un JSON Patch vers `PATCH /api/Intervention/Patch/{id}` pour `/idControleur`, `/dateIntervention` et `/dateInterventionEnd`.
+2. Un second job différé lit `GET /api/Demande/{id}`. Si sa relation `interventions` ne fournit aucun candidat exploitable, lire `GET /api/Intervention/ListInterventions?demandeId={id}` (route confirmée dans Swagger le 23 septembre 2026). Une relation absente ou vide ne prouve pas que l'intervention n'existe pas. La liste est strictement limitée à la demande, jamais à tous les dossiers.
+3. Relire `GET /api/Intervention/{id}` pour confirmer le rattachement à la demande **avant** toute modification. Un identifiant absent dans la liste peut être confirmé par cette lecture, mais plusieurs candidats restent bloquants. Envoyer ensuite un JSON Patch vers `PATCH /api/Intervention/Patch/{id}` pour `/idControleur`, `/dateIntervention` et `/dateInterventionEnd`.
 4. Relire `GET /api/Intervention/{id}` et vérifier le technicien, les horaires et le rattachement à la demande.
 
 Ces routes et champs proviennent du Swagger de l'environnement de test consulté le 17 septembre 2026 : https://cee-api.test.globalplus.fr/swagger/v1/swagger.json. **Attention : présence dans Swagger ne signifie pas autorisation pour la clé d'intégration.** La documentation fournie par Global+ n'annonce pas les deux routes GET de lecture parmi les huit routes autorisées. Un HTTP 403 sur celles-ci nécessite l'ouverture de ces droits par Global+, ou une évolution de leur API renvoyant l'identifiant d'intervention à la création. Ne jamais utiliser l'identifiant de demande comme identifiant d'intervention.
@@ -45,6 +45,27 @@ Ces routes et champs proviennent du Swagger de l'environnement de test consulté
 Si la demande existe mais que l'affectation n'est pas confirmée, l'état local est `appointment_failed`, un avertissement apparaît et le bouton permet de reprendre l'affectation sans recréer le dossier. Une synchronisation des documents ne masque pas cet état. Les appels de création concurrents sont verrouillés.
 
 Le message et les logs indiquent l'étape (`resolve_intervention`, `assign_technician`, `verify_assignment`), la méthode, la route et le statut HTTP, sans jeton ni contenu des documents. Le diagnostic est conservé dans `global_plus_payload.appointment_assignment`. Un PATCH accepté suivi d'un refus de lecture est distingué d'une affectation jamais envoyée. Une reprise réutilise l'identifiant d'intervention déjà obtenu et le technicien choisi. Elle ne modifie pas le client d'un dossier existant : aucune route de modification du client n'est fournie dans le contrat actuel ; corriger les anciens dossiers directement dans Global+.
+
+### Diagnostic de l'affectation
+
+Les traces dédiées sont écrites dans `storage/logs/global-plus-YYYY-MM-DD.log`, avec rotation sur 14 jours et niveau `info` indépendant de `LOG_LEVEL`. Elles contiennent l'identifiant d'opération, le dossier, le numéro de tentative, les routes/statuts HTTP, le nombre de candidats et la raison de leur exclusion. Aucun corps de requête/réponse, clé, adresse, email ou document n'est journalisé. Le détail de l'étape reste également en base, même si le journal Laravel principal filtre les avertissements ou utilise un autre canal.
+
+Une liste vide déclenche les tentatives espacées prévues. Une ambiguïté, un mauvais rattachement ou un 403 arrête le traitement sans PATCH. Après épuisement des tentatives, le message indique explicitement l'arrêt et l'identifiant de diagnostic ; le dossier existant n'est pas recréé. La présence de `ListInterventions` dans Swagger ne garantit pas que la clé possède les droits requis sur cette route.
+
+Après déploiement de ces diagnostics :
+
+```sh
+php artisan config:cache
+php artisan queue:restart
+```
+
+Relancer **Réessayer l'affectation du technicien**, puis lire le journal :
+
+```sh
+tail -n 100 -f storage/logs/global-plus-$(date +%F).log
+```
+
+Si aucun fichier n'est créé après l'essai, vérifier le redémarrage effectif du worker, les permissions de `storage/logs` pour son utilisateur et son journal système. Le `LOG_CHANNEL` du worker peut différer du processus web tant qu'il n'a pas été redémarré.
 
 ## Déploiement
 

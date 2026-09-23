@@ -3,10 +3,12 @@
 namespace App\Services\GlobalPlus;
 
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -91,6 +93,28 @@ class GlobalPlusClient
         }
 
         return $payload;
+    }
+
+    public function demandInterventions(string $demandId): array
+    {
+        if (! ctype_digit($demandId) || (int) $demandId <= 0) {
+            throw new GlobalPlusApiException('Identifiant de dossier Global+ invalide pour rechercher son intervention.');
+        }
+
+        $path = 'Intervention/ListInterventions';
+        $payload = $this->get($path, ['demandeId' => (int) $demandId]);
+        if (is_array($payload)) {
+            if (array_is_list($payload)) {
+                return $payload;
+            }
+            foreach (['items', 'data', 'results', 'value'] as $key) {
+                if (isset($payload[$key]) && is_array($payload[$key]) && array_is_list($payload[$key])) {
+                    return $payload[$key];
+                }
+            }
+        }
+
+        throw new GlobalPlusApiException('Global+ a renvoyé un format de liste d’interventions inexploitable.', 200, 'GET', '/api/'.$path);
     }
 
     /**
@@ -191,11 +215,31 @@ class GlobalPlusClient
     {
         $this->ensureConfigured();
 
-        $response = $this->baseRequest($upload)
-            ->withToken($this->bearerToken())
-            ->send($method, $this->endpoint($path), $method === 'GET'
-                ? ['query' => $payload]
-                : ['json' => $payload]);
+        $context = [
+            'api_host' => parse_url($this->endpoint($path), PHP_URL_HOST),
+            'http_method' => $method,
+            'api_path' => '/api/'.ltrim($path, '/'),
+        ];
+        if ($path === 'Intervention/ListInterventions') {
+            $context['demand_id'] = (int) ($payload['demandeId'] ?? 0);
+        }
+        $startedAt = hrtime(true);
+        try {
+            $response = $this->baseRequest($upload)
+                ->withToken($this->bearerToken())
+                ->send($method, $this->endpoint($path), $method === 'GET'
+                    ? ['query' => $payload]
+                    : ['json' => $payload]);
+        } catch (ConnectionException $exception) {
+            Log::channel('global_plus')->warning('Global+ HTTP : connexion interrompue.', $context + ['elapsed_ms' => (int) ((hrtime(true) - $startedAt) / 1000000)]);
+            throw $exception;
+        }
+        // Never log request/response bodies: they contain addresses, tokens and documents.
+        Log::channel('global_plus')->log($response->failed() ? 'warning' : 'info', 'Global+ HTTP : réponse reçue.', $context + [
+            'http_status' => $response->status(),
+            'elapsed_ms' => (int) ((hrtime(true) - $startedAt) / 1000000),
+            'response_type' => get_debug_type($response->json()),
+        ]);
 
         if ($response->status() === 401 && ! $retried) {
             $this->forgetToken();

@@ -118,6 +118,10 @@ class GlobalPlusAppointmentService
                     ];
                     Bus::chain($jobs)->onConnection($connection)->dispatch();
                 });
+                Log::channel('global_plus')->info('Global+ : traitement mis en file.', [
+                    'workflow_id' => $operationId, 'lot_appointment_id' => $appointment->id,
+                    'demand_id' => $appointment->global_plus_demand_id, 'assignment_only' => $retryAssignment,
+                ]);
             } catch (Throwable $exception) {
                 $this->failWorkflow($appointment->id, $operationId, $exception);
                 throw new RuntimeException('Mise en file Global+ impossible. Vérifie le service de queue puis réessaie.', 0, $exception);
@@ -139,13 +143,26 @@ class GlobalPlusAppointmentService
             }
             $uncertain = ! filled($appointment->global_plus_demand_id)
                 && filled(data_get($appointment->global_plus_payload, 'workflow.creation_attempted_at'));
+            $message = $appointment->global_plus_error_message ?: ($uncertain
+                ? 'Réponse de création Global+ incertaine. Vérifie avec Global+ avant de renvoyer le dossier pour éviter un doublon.'
+                : $exception->getMessage());
+            if (filled($appointment->global_plus_demand_id)) {
+                $message = 'Affectation arrêtée après les tentatives automatiques. '.$message.' Diagnostic : '.$operationId.'.';
+            }
             $appointment->update([
                 'global_plus_status' => filled($appointment->global_plus_demand_id) ? self::STATUS_APPOINTMENT_FAILED
                     : ($uncertain ? self::STATUS_CREATION_UNCERTAIN : self::STATUS_FAILED),
-                'global_plus_error_message' => $appointment->global_plus_error_message ?: ($uncertain
-                    ? 'Réponse de création Global+ incertaine. Vérifie avec Global+ avant de renvoyer le dossier pour éviter un doublon.'
-                    : $exception->getMessage()),
+                'global_plus_error_message' => $message,
             ]);
+            $context = [
+                'workflow_id' => $operationId, 'lot_appointment_id' => $appointmentId,
+                'demand_id' => $appointment->global_plus_demand_id, 'status' => $appointment->global_plus_status,
+                'stage' => data_get($appointment->global_plus_payload, 'appointment_assignment.stage'),
+                'attempt' => data_get($appointment->global_plus_payload, 'appointment_assignment.attempt'),
+                'exception_class' => $exception::class,
+            ];
+            Log::error('Global+ : traitement arrêté.', $context);
+            Log::channel('global_plus')->error('Global+ : traitement arrêté.', $context);
         });
     }
 
@@ -226,6 +243,10 @@ class GlobalPlusAppointmentService
         $lotAppointment->update(['global_plus_payload' => array_replace_recursive($lotAppointment->global_plus_payload ?? [], [
             'workflow' => ['creation_attempted_at' => now()->toIso8601String()],
         ])]);
+        Log::channel('global_plus')->info('Global+ : création démarrée.', [
+            'workflow_id' => data_get($lotAppointment->global_plus_payload, 'workflow.id'),
+            'lot_appointment_id' => $lotAppointment->id,
+        ]);
 
         try {
             $demandId = $this->client->createDemand($demandPayload);
@@ -269,6 +290,10 @@ class GlobalPlusAppointmentService
             'global_plus_synced_at' => $now,
             'global_plus_error_message' => null,
         ]);
+        Log::channel('global_plus')->info('Global+ : dossier créé, affectation en attente.', [
+            'workflow_id' => data_get($lotAppointment->global_plus_payload, 'workflow.id'),
+            'lot_appointment_id' => $lotAppointment->id, 'demand_id' => $demandId,
+        ]);
 
         if ($documentsWereSent) {
             $this->markDocumentsSynced($lotAppointment, $demandId, 'sent_in_creation');
@@ -284,27 +309,27 @@ class GlobalPlusAppointmentService
         ]);
     }
 
-    public function syncAppointment(LotAppointment $lotAppointment, int $controllerId): void
+    public function syncAppointment(LotAppointment $lotAppointment, int $controllerId, int $attempt = 1, int $maxAttempts = 5): void
     {
         $lotAppointment->loadMissing('appointment');
         $stage = 'resolve_intervention';
         $patchAcceptedAt = null;
+        $diagnostic = [
+            'workflow_id' => data_get($lotAppointment->global_plus_payload, 'workflow.id'),
+            'lot_appointment_id' => $lotAppointment->id, 'demand_id' => $lotAppointment->global_plus_demand_id,
+            'controller_id' => $controllerId, 'attempt' => $attempt, 'max_attempts' => $maxAttempts,
+        ];
+        Log::channel('global_plus')->info('Global+ : tentative d’affectation démarrée.', $diagnostic);
         try {
-            $interventionId = trim((string) $lotAppointment->global_plus_intervention_id);
-            if ($interventionId === '') {
-                $demand = $this->client->demand((string) $lotAppointment->global_plus_demand_id);
-                $interventions = collect($demand['interventions'] ?? [])
-                    ->filter(fn ($item): bool => is_array($item) && (int) ($item['id'] ?? 0) > 0
-                        && (string) ($item['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id);
-                if ($interventions->isEmpty()) {
-                    throw new GlobalPlusAssignmentPendingException('Global+ n’a pas encore rendu l’intervention disponible.');
-                }
-                if ($interventions->count() !== 1) {
-                    throw new RuntimeException('Plusieurs interventions Global+ correspondent au dossier. L’affectation nécessite une vérification manuelle.');
-                }
-                $interventionId = (string) $interventions->first()['id'];
-                $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
+            $interventionId = $this->resolveIntervention($lotAppointment, $diagnostic);
+            $stage = 'verify_intervention';
+            $remote = $this->client->intervention($interventionId);
+            $diagnostic['intervention_demand_id'] = filter_var($remote['idDemande'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+            if ((string) ($remote['idDemande'] ?? '') !== (string) $lotAppointment->global_plus_demand_id) {
+                throw new RuntimeException('Le rattachement de l’intervention au dossier Global+ n’est pas confirmé. Aucun changement n’a été envoyé.');
             }
+            // Verify ownership before any PATCH, including on a resumed assignment.
+            $lotAppointment->update(['global_plus_intervention_id' => $interventionId]);
             $stage = 'assign_technician';
             $startsAt = $lotAppointment->appointment?->starts_at?->format('Y-m-d\TH:i:s');
             $endsAt = $lotAppointment->appointment?->ends_at?->format('Y-m-d\TH:i:s');
@@ -319,10 +344,13 @@ class GlobalPlusAppointmentService
             $patchAcceptedAt = now()->toIso8601String();
             $stage = 'verify_assignment';
             $remote = $this->client->intervention($interventionId);
-            if ((string) ($remote['idDemande'] ?? '') !== (string) $lotAppointment->global_plus_demand_id
-                || (int) ($remote['idControleur'] ?? 0) !== $controllerId
-                || ! $this->sameAppointmentTime($remote['dateIntervention'] ?? null, $startsAt)
-                || ! $this->sameAppointmentTime($remote['dateInterventionEnd'] ?? null, $endsAt)) {
+            $diagnostic['verification'] = [
+                'demand_matches' => (string) ($remote['idDemande'] ?? '') === (string) $lotAppointment->global_plus_demand_id,
+                'controller_matches' => (int) ($remote['idControleur'] ?? 0) === $controllerId,
+                'starts_at_matches' => $this->sameAppointmentTime($remote['dateIntervention'] ?? null, $startsAt),
+                'ends_at_matches' => $this->sameAppointmentTime($remote['dateInterventionEnd'] ?? null, $endsAt),
+            ];
+            if (in_array(false, $diagnostic['verification'], true)) {
                 throw new GlobalPlusAssignmentPendingException('Global+ n’a pas encore confirmé le technicien et les horaires sélectionnés.');
             }
             $lotAppointment->refresh();
@@ -333,15 +361,18 @@ class GlobalPlusAppointmentService
                 'global_plus_payload' => [
                     ...($lotAppointment->global_plus_payload ?? []),
                     'appointment_assignment' => [
+                        ...$diagnostic,
                         'controller_id' => $controllerId, 'intervention_id' => $interventionId,
                         'stage' => 'confirmed', 'patch_accepted_at' => $patchAcceptedAt, 'confirmed_at' => now()->toIso8601String(),
                     ],
                 ],
             ]);
+            Log::channel('global_plus')->info('Global+ : affectation confirmée.', $diagnostic + ['intervention_id' => $interventionId]);
         } catch (Throwable $exception) {
             $context = $exception instanceof GlobalPlusApiException ? $exception->requestContext() : [];
             $message = match ($stage) {
                 'resolve_intervention' => 'Affectation non envoyée : impossible de retrouver l’intervention du dossier créé. ',
+                'verify_intervention' => 'Affectation non envoyée : rattachement de l’intervention non vérifié. ',
                 'assign_technician' => 'Affectation du technicien non confirmée. ',
                 'verify_assignment' => 'Affectation envoyée, mais vérification impossible ou non conforme. ',
             }.$exception->getMessage();
@@ -352,6 +383,7 @@ class GlobalPlusAppointmentService
                 'global_plus_payload' => [
                     ...($lotAppointment->global_plus_payload ?? []),
                     'appointment_assignment' => [
+                        ...$diagnostic,
                         'controller_id' => $controllerId,
                         'intervention_id' => $lotAppointment->global_plus_intervention_id,
                         'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt,
@@ -359,13 +391,89 @@ class GlobalPlusAppointmentService
                     ],
                 ],
             ]);
-            Log::warning('Global+ : dossier créé, affectation du RDV incomplète.', [
-                'lot_appointment_id' => $lotAppointment->id, 'demand_id' => $lotAppointment->global_plus_demand_id,
+            $logContext = [
+                ...$diagnostic,
                 'intervention_id' => $lotAppointment->global_plus_intervention_id,
-                'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt, ...$context, 'message' => $message,
-            ]);
+                'stage' => $stage, 'patch_accepted_at' => $patchAcceptedAt, ...$context,
+                'retryable' => self::assignmentCanBeRetried($exception), 'exception_class' => $exception::class,
+            ];
+            Log::warning('Global+ : dossier créé, affectation du RDV incomplète.', $logContext);
+            Log::channel('global_plus')->warning('Global+ : dossier créé, affectation du RDV incomplète.', $logContext);
             throw $exception;
         }
+    }
+
+    private function resolveIntervention(LotAppointment $appointment, array &$diagnostic): string
+    {
+        $storedId = trim((string) $appointment->global_plus_intervention_id);
+        if ($storedId !== '') {
+            $diagnostic['resolution_source'] = 'stored_intervention';
+
+            return $storedId;
+        }
+
+        $demandId = (string) $appointment->global_plus_demand_id;
+        $demand = $this->client->demand($demandId);
+        $embedded = $demand['interventions'] ?? null;
+        $diagnostic['embedded_interventions_state'] = ! array_key_exists('interventions', $demand) ? 'absent'
+            : ($embedded === null ? 'null' : (is_array($embedded) && array_is_list($embedded) ? 'list' : 'invalid'));
+        $candidates = $this->interventionCandidates(is_array($embedded) && array_is_list($embedded) ? $embedded : [], $demandId, $diagnostic, 'embedded');
+        $diagnostic['resolution_source'] = 'demand';
+        if ($candidates === []) {
+            // The Demande relation may not be loaded; use the documented, demand-scoped list.
+            $diagnostic['resolution_source'] = 'intervention_list';
+            $listed = $this->client->demandInterventions($demandId);
+            $candidates = $this->interventionCandidates($listed, $demandId, $diagnostic, 'list');
+            if ($candidates === []) {
+                if ($listed !== []) {
+                    throw new RuntimeException('La liste Global+ contient des interventions, mais aucune ne peut être reliée à ce dossier. Vérifier le diagnostic avec Global+.');
+                }
+                throw new GlobalPlusAssignmentPendingException('La liste Global+ ne renvoie aucune intervention pour le dossier '.$demandId.' (GET /api/Intervention/ListInterventions?demandeId='.$demandId.').');
+            }
+        }
+        if (count($candidates) !== 1) {
+            throw new RuntimeException('Plusieurs interventions Global+ correspondent au dossier. L’affectation nécessite une vérification manuelle.');
+        }
+        $diagnostic['resolved_intervention_id'] = $candidates[0];
+
+        return $candidates[0];
+    }
+
+    private function interventionCandidates(array $items, string $demandId, array &$diagnostic, string $source): array
+    {
+        $candidates = [];
+        $summary = ['count' => count($items), 'invalid' => 0, 'other_demand' => 0, 'missing_demand_id' => 0, 'candidates' => []];
+        foreach ($items as $item) {
+            $id = is_array($item) ? ($item['id'] ?? null) : null;
+            if ((! is_int($id) && ! is_string($id)) || ! ctype_digit((string) $id) || (int) $id <= 0) {
+                $summary['invalid']++;
+
+                continue;
+            }
+            $parentId = $item['idDemande'] ?? null;
+            if ($parentId === null || $parentId === '') {
+                $summary['missing_demand_id']++;
+            } elseif ((! is_int($parentId) && ! is_string($parentId)) || (string) $parentId !== $demandId) {
+                $summary['other_demand']++;
+
+                continue;
+            }
+            $candidates[] = (string) $id;
+        }
+        $candidates = array_values(array_unique($candidates));
+        $summary['candidates'] = array_slice($candidates, 0, 10);
+        $summary['candidate_count'] = count($candidates);
+        // Only known schema field names and types, never arbitrary fields or their values.
+        $summary['item_shapes'] = array_map(static function ($item): array {
+            if (! is_array($item)) {
+                return ['type' => get_debug_type($item)];
+            }
+
+            return array_map(get_debug_type(...), array_intersect_key($item, array_flip(['id', 'idIntervention', 'interventionId', 'idDemande', 'demandeId'])));
+        }, array_slice($items, 0, 3));
+        $diagnostic[$source.'_interventions'] = $summary;
+
+        return $candidates;
     }
 
     public static function assignmentCanBeRetried(Throwable $exception): bool

@@ -73,6 +73,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'global_plus' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/global-plus.log'),
+            // Integration diagnostics must remain available even when LOG_LEVEL is error.
+            'level' => 'info',
+            'days' => 14,
+            'permission' => 0660,
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
