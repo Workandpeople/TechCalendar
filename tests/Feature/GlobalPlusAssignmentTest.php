@@ -123,6 +123,9 @@ it('matches by SIREN and sends beneficiary, inspection, client and reference to 
         && $request['client']['id'] === 700 && $request['client']['raisonSociale'] === 'Delegataire Global'
         && $request['lieuInspection']['adresse'] === '12 Rue Inspection'
         && $request['lieuInspection']['codePostal'] === '60110'
+        && $request['lieuInspection']['nom'] === 'Beneficiaire SAS'
+        && $request['lieuInspection']['raisonSociale'] === 'Beneficiaire SAS'
+        && ! array_key_exists('prenom', $request['lieuInspection'])
         && $request['beneficiaire']['adresse'] === '10 Rue Siege'
         && $request['beneficiaire']['codePostal'] === '75002'
         && $request['beneficiaire']['prenom'] === 'Camille' && $request['beneficiaire']['nom'] === 'Martin'
@@ -133,6 +136,32 @@ it('matches by SIREN and sends beneficiary, inspection, client and reference to 
         && $request->url() === 'https://global-plus.test/api/Intervention/Patch/8123'
         && $request->data()[0] === ['op' => 'replace', 'path' => '/idControleur', 'value' => 2198]);
     expect($this->row->refresh()->global_plus_intervention_id)->toBe('8123');
+});
+
+it('never substitutes the contact or site name for a missing inspection owner in column I', function () {
+    $this->row->update(['company_name' => null, 'site_name' => 'Inspection building']);
+    ($this->submitAndRun)('manager.lots.appointments.global-plus.store', $this->payload)->assertOk();
+    Http::assertSent(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande')
+        && ! array_key_exists('nom', $request['lieuInspection'])
+        && ! array_key_exists('prenom', $request['lieuInspection'])
+        && ! array_key_exists('raisonSociale', $request['lieuInspection'])
+        && $request['lieuInspection']['batiment'] === 'Inspection building'
+        && $request['lieuInspection']['adresse'] === '12 Rue Inspection'
+        && $request['beneficiaire']['nom'] === 'Martin'
+        && $request['beneficiaire']['prenom'] === 'Camille');
+});
+
+it('uses column I for the inspection owner without mixing it with the site name', function () {
+    $this->row->update(['site_name' => 'Inspection building']);
+    ($this->submitAndRun)('planner.book.lots.appointments.global-plus.store', $this->payload)->assertOk();
+    Http::assertSent(fn ($request) => $request->method() === 'POST' && str_ends_with($request->url(), '/Demande')
+        && $request['lieuInspection']['nom'] === 'Beneficiaire SAS'
+        && $request['lieuInspection']['raisonSociale'] === 'Beneficiaire SAS'
+        && $request['lieuInspection']['batiment'] === 'Inspection building'
+        && ! array_key_exists('prenom', $request['lieuInspection'])
+        && $request['beneficiaire']['nom'] === 'Martin'
+        && $request['client']['id'] === 700
+        && $request['entreprise']['id'] === 901);
 });
 
 it('suggests only the lot delegataire and rejects a different existing client', function () {

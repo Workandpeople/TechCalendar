@@ -637,7 +637,10 @@ class GlobalPlusAppointmentService
     private function inspectionAddress(LotAppointment $lotAppointment, array $payload): array
     {
         return $this->addressDto(2, $lotAppointment, [
-            'raisonSociale' => $lotAppointment->site_name ?: $this->customerCompanyName($lotAppointment),
+            // The inspection owner is column I, not the contact's surname/first name (B/C).
+            'nom' => $this->nullableString($lotAppointment->company_name),
+            'prenom' => null,
+            'raisonSociale' => $this->nullableString($lotAppointment->company_name),
             'precariousness' => $payload['precariousness'] ?? null,
         ]);
     }
@@ -785,9 +788,9 @@ class GlobalPlusAppointmentService
             'id' => (int) ($overrides['id'] ?? 0),
             'idTypeAdresse' => $addressType,
             'civilite' => self::DEFAULT_CIVILITY,
-            'nom' => $this->limit($overrides['nom'] ?? $lastName, self::ADDRESS_NAME_MAX_LENGTH),
-            'prenom' => $this->limit($overrides['prenom'] ?? $firstName, self::ADDRESS_NAME_MAX_LENGTH),
-            'raisonSociale' => $this->limit($overrides['raisonSociale'] ?? $this->customerCompanyName($lotAppointment), self::ADDRESS_COMPANY_MAX_LENGTH),
+            'nom' => $this->limit(array_key_exists('nom', $overrides) ? $overrides['nom'] : $lastName, self::ADDRESS_NAME_MAX_LENGTH),
+            'prenom' => $this->limit(array_key_exists('prenom', $overrides) ? $overrides['prenom'] : $firstName, self::ADDRESS_NAME_MAX_LENGTH),
+            'raisonSociale' => $this->limit(array_key_exists('raisonSociale', $overrides) ? $overrides['raisonSociale'] : $this->customerCompanyName($lotAppointment), self::ADDRESS_COMPANY_MAX_LENGTH),
             'adresse' => $this->limit($overrides['adresse'] ?? $lotAppointment->address, self::ADDRESS_LINE_MAX_LENGTH),
             'codePostal' => $this->limit(array_key_exists('codePostal', $overrides) ? $overrides['codePostal'] : $lotAppointment->postal_code, self::POSTAL_CODE_MAX_LENGTH),
             'ville' => $this->limit(array_key_exists('ville', $overrides) ? $overrides['ville'] : $lotAppointment->city, self::CITY_MAX_LENGTH),

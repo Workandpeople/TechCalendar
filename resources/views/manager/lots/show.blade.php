@@ -609,40 +609,44 @@
                 <p class="mt-3 text-xs" style="color:var(--gc-text-soft);">Les filtres se mettent à jour automatiquement.</p>
             </form>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y text-sm" style="border-color:var(--gc-border);">
+            @php
+                $lotFileColumnFields = [
+                    'internal_reference', 'customer_last_name', 'customer_first_name',
+                    'address', 'postal_code', 'city', 'customer_phone', 'customer_email',
+                    'company_name', 'beneficiary_address', 'beneficiary_postal_code',
+                    'beneficiary_city', 'installer_siren', 'installer_name',
+                ];
+            @endphp
+            <p id="lot-dossiers-table-help" class="px-5 pb-3 text-xs" style="color:var(--gc-text-soft);">
+                Colonnes A à N dans le même ordre que le fichier Excel. Fais défiler horizontalement pour voir toutes les données et le suivi du dossier.
+            </p>
+            <div class="overflow-x-auto" role="region" aria-label="Dossiers du lot" tabindex="0">
+                <table id="lot-dossiers-table" aria-describedby="lot-dossiers-table-help" class="min-w-full divide-y text-sm" style="border-color:var(--gc-border);">
                     <thead style="background:var(--gc-panel-muted);color:var(--gc-text-soft);">
                         <tr>
-                            <th class="px-4 py-3 text-left font-semibold">Ligne</th>
-                            <th class="px-4 py-3 text-left font-semibold">Client / site</th>
-                            <th class="px-4 py-3 text-left font-semibold">Installateur</th>
-                            <th class="px-4 py-3 text-left font-semibold">Contact</th>
-                            <th class="px-4 py-3 text-left font-semibold">Adresse</th>
-                            <th class="px-4 py-3 text-left font-semibold">Traitement</th>
-                            <th class="px-4 py-3 text-left font-semibold">Résultat</th>
-                            <th class="px-4 py-3 text-center font-semibold">Global +</th>
-                            <th class="px-4 py-3 text-left font-semibold">Action</th>
+                            <th scope="col" class="px-4 py-3 text-left font-semibold">Ligne</th>
+                            @foreach ($lotFileColumnFields as $columnIndex => $field)
+                                <th scope="col" data-lot-file-column="{{ chr(65 + $columnIndex) }}" class="min-w-[180px] max-w-[260px] px-4 py-3 text-left align-top font-semibold">
+                                    <span class="mb-1 block text-xs font-medium" style="color:var(--gc-text-soft);">{{ chr(65 + $columnIndex) }}</span>
+                                    {{ preg_replace('/ 2$/', '', \App\Services\LotTemplateMapper::HEADERS[$columnIndex]) }}
+                                </th>
+                            @endforeach
+                            <th scope="col" class="min-w-[200px] px-4 py-3 text-left font-semibold">Traitement</th>
+                            <th scope="col" class="px-4 py-3 text-left font-semibold">Résultat</th>
+                            <th scope="col" class="px-4 py-3 text-center font-semibold">Global +</th>
+                            <th scope="col" class="sticky right-0 z-10 px-4 py-3 text-left font-semibold" style="background:var(--gc-panel-muted);">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y" style="border-color:var(--gc-border);">
                         @if ($lot['appointments']->isEmpty())
                             <tr>
-                                <td colspan="9" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
+                                <td colspan="{{ count($lotFileColumnFields) + 5 }}" class="px-4 py-10 text-center" style="color:var(--gc-text-soft);">
                                     Aucun dossier ne correspond aux filtres.
                                 </td>
                             </tr>
                         @else
                             @foreach ($lot['appointments'] as $appointment)
                             @php
-                                $clientLabel = $appointment['company_name'] ?: $appointment['customer_name'];
-                                $siteLabel = $appointment['site_name'] ?: null;
-                                $postalCity = trim(implode(' ', array_filter([$appointment['postal_code'] ?? null, $appointment['city'] ?? null])));
-                                $fullAddress = trim((string) ($appointment['address'] ?? ''));
-
-                                if ($postalCity !== '' && ! str_contains(mb_strtolower($fullAddress), mb_strtolower($postalCity))) {
-                                    $fullAddress = trim($fullAddress.', '.$postalCity, ' ,');
-                                }
-
                                 $resultLabel = match (true) {
                                     $appointment['excluded_from_lot_stats'] => 'Sorti des statistiques',
                                     $appointment['contact_satisfaction'] === true => 'Contact satisfaisant',
@@ -678,20 +682,11 @@
                                 data-lot-appointment-id="{{ $appointment['id'] }}"
                             >
                                 <td class="whitespace-nowrap px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['row_number'] ?: '-' }}</td>
-                                <td class="min-w-[220px] px-4 py-3">
-                                    <p class="font-semibold" style="color:var(--gc-text);">{{ $clientLabel ?: 'Client à qualifier' }}</p>
-                                    @if ($siteLabel)
-                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Site : {{ $siteLabel }}</p>
-                                    @endif
-                                    @if ($appointment['external_reference'])
-                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Réf. {{ $appointment['external_reference'] }}</p>
-                                    @endif
-                                </td>
-                                <td class="min-w-[180px] px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['installer_name'] ?: '-' }}</td>
-                                <td class="whitespace-nowrap px-4 py-3" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: '-' }}</td>
-                                <td class="min-w-[280px] px-4 py-3" style="color:var(--gc-text);">{{ $fullAddress !== '' ? $fullAddress : 'Adresse à qualifier' }}</td>
-                                <td class="px-4 py-3">
-                                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
+                                @foreach ($lotFileColumnFields as $field)
+                                    <td data-lot-file-field="{{ $field }}" class="min-w-[180px] max-w-[260px] break-words px-4 py-3" style="color:var(--gc-text);">{{ filled($appointment[$field] ?? null) ? $appointment[$field] : '-' }}</td>
+                                @endforeach
+                                <td class="min-w-[200px] px-4 py-3">
+                                    <span class="inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
                                         {{ $appointment['status_label'] }}
                                     </span>
                                     @if ($appointment['excluded_from_lot_stats'])
@@ -731,7 +726,7 @@
                                         <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Réf. {{ $appointment['global_plus_demand_id'] }}</p>
                                     @endif
                                 </td>
-                                <td class="whitespace-nowrap px-4 py-3">
+                                <td class="sticky right-0 whitespace-nowrap px-4 py-3" style="background:{{ $rowTone === 'satisfied' ? '#ecfdf5' : ($rowTone === 'unsatisfied' ? '#fff1f2' : '#ffffff') }};">
                                     <button
                                         type="button"
                                         class="lot-appointment-detail-trigger inline-flex h-9 w-9 items-center justify-center rounded-xl border transition hover:shadow-sm"
@@ -1640,6 +1635,14 @@
             }
 
             lotAppointmentDetails.set(String(appointment.id), appointment);
+
+            document.querySelectorAll('[data-lot-appointment-row]').forEach((row) => {
+                if (row.dataset.lotAppointmentId !== String(appointment.id)) return;
+                row.querySelectorAll('[data-lot-file-field]').forEach((cell) => {
+                    const value = appointment[cell.dataset.lotFileField];
+                    cell.textContent = value === null || value === undefined || String(value).trim() === '' ? '-' : String(value);
+                });
+            });
 
             const lotDocumentsIndex = lotDocumentsAppointments.findIndex((item) => String(item.id) === String(appointment.id));
 

@@ -19,6 +19,8 @@ use App\Services\ImportedAddressCleaner;
 use App\Services\LotAppointmentAiNormalizer;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportPreviewProcessor;
+use App\Services\LotSpreadsheetExtractor;
+use App\Services\LotTemplateMapper;
 use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -130,9 +132,11 @@ it('renders manager lots from database', function () {
         ->assertSee('Dossiers du fichier')
         ->assertSee('Camille Martin')
         ->assertSee('20 Rue Bellecordiere')
-        ->assertSee('69002 Lyon')
+        ->assertSee('69002')
+        ->assertSee('Lyon')
         ->assertSee('Lucie Placee')
-        ->assertSee('69100 Villeurbanne')
+        ->assertSee('69100')
+        ->assertSee('Villeurbanne')
         ->assertSee('RDV physique placé')
         ->assertSee('Voir dans la gestion des RDV')
         ->assertSee('Portes : 0')
@@ -570,6 +574,65 @@ it('paginates manager lots by nine cards', function () {
         ->assertOk()
         ->assertSee('Lot pagination 01')
         ->assertDontSee('Lot pagination 02');
+});
+
+it('renders the fourteen Excel columns in order before the lot tracking columns', function () {
+    $manager = User::factory()->create(['role' => 0, 'admin' => false]);
+    $lot = Lot::create(['name' => 'Lot modele', 'type' => Lot::TYPE_FULL_CONTROL, 'created_by' => $manager->id]);
+    $sourceRow = LotTemplateFile::row([0 => 'REF-EXCEL-A', 8 => 'Beneficiaire <b>colonne I</b>']);
+    $mapped = app(LotTemplateMapper::class)->normalize(
+        app(LotSpreadsheetExtractor::class)->extract(LotTemplateFile::upload([$sourceRow]))
+    )['appointments'][0];
+    $fields = [
+        'internal_reference', 'customer_last_name', 'customer_first_name', 'address', 'postal_code', 'city',
+        'customer_phone', 'customer_email', 'company_name', 'beneficiary_address', 'beneficiary_postal_code',
+        'beneficiary_city', 'installer_siren', 'installer_name',
+    ];
+    $appointment = LotAppointment::create([
+        ...array_intersect_key($mapped, array_flip($fields)),
+        'lot_id' => $lot->id, 'row_number' => 2, 'customer_name' => $mapped['customer_name'],
+        'external_reference' => 'COFFRAC-REMOTE-ID', 'source' => 'coffrac', 'status' => LotAppointment::STATUS_PENDING,
+    ]);
+    $response = $this->actingAs($manager)->get(route('manager.lots.show', $lot))->assertOk();
+    $dom = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    try {
+        $dom->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+    }
+    $xpath = new DOMXPath($dom);
+    $table = '//*[@id="lot-dossiers-table"]';
+    $headings = $xpath->query($table.'//thead/tr/th');
+    expect($headings)->toHaveCount(19);
+    foreach ($fields as $index => $field) {
+        $heading = $headings->item($index + 1);
+        $letter = chr(65 + $index);
+        expect($heading->getAttribute('data-lot-file-column'))->toBe($letter)
+            ->and(preg_replace('/\s+/u', ' ', trim($heading->textContent)))->toBe(
+                $letter.' '.preg_replace('/ 2$/', '', LotTemplateMapper::HEADERS[$index])
+            );
+    }
+    $row = $table.'//tr[@data-lot-appointment-id="'.$appointment->id.'"]';
+    $values = $xpath->query($row.'/td[@data-lot-file-field]');
+    expect($values)->toHaveCount(14);
+    foreach ($fields as $index => $field) {
+        expect($values->item($index)->getAttribute('data-lot-file-field'))->toBe($field)
+            ->and(trim($values->item($index)->textContent))->toBe((string) $mapped[$field]);
+    }
+    expect($xpath->query($row.'/td[@data-lot-file-field="company_name"]//b'))->toHaveCount(0)
+        ->and($xpath->query($row.'//button[contains(@class,"lot-appointment-detail-trigger")]'))->toHaveCount(1);
+    expect(array_map(fn ($i) => trim($headings->item($i)->textContent), range(15, 18)))
+        ->toBe(['Traitement', 'Résultat', 'Global +', 'Action']);
+});
+
+it('spans all Excel and tracking columns when the lot filter returns no dossiers', function () {
+    $manager = User::factory()->create(['role' => 0, 'admin' => false]);
+    $lot = Lot::create(['name' => 'Lot vide', 'type' => Lot::TYPE_FULL_CONTROL, 'created_by' => $manager->id]);
+    $this->actingAs($manager)->get(route('manager.lots.show', $lot))->assertOk()
+        ->assertSee('colspan="19"', false)
+        ->assertSee('Aucun dossier ne correspond aux filtres.');
 });
 
 it('paginates lot detail appointments', function () {
@@ -2712,7 +2775,9 @@ it('creates a Global Plus demand from a placed physical lot appointment with doc
             && data_get($payload, 'client.civilite') === 'M.'
             && data_get($payload, 'client.raisonSociale') === 'Delegataire choisi'
             && data_get($payload, 'lieuInspection.idTypeAdresse') === 2
-            && data_get($payload, 'lieuInspection.raisonSociale') === 'BATIMENT A'
+            && data_get($payload, 'lieuInspection.nom') === 'HABITAT ENERGIE'
+            && data_get($payload, 'lieuInspection.raisonSociale') === 'HABITAT ENERGIE'
+            && data_get($payload, 'lieuInspection.batiment') === 'BATIMENT A'
             && data_get($payload, 'beneficiaire.idTypeAdresse') === 3
             && data_get($payload, 'beneficiaire.raisonSociale') === 'HABITAT ENERGIE'
             && data_get($payload, 'entreprise.id') === 901

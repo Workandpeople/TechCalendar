@@ -10,7 +10,7 @@ Les nouveaux imports utilisent le modèle Excel à 14 colonnes validé le 17 sep
 | B, C : nom, prénom du bénéficiaire | Identité du bénéficiaire |
 | D, E, F : adresse, code postal, ville de l'opération | Lieu d'inspection, géocodage Mapbox, lieu d'intervention dans les CRM |
 | G, H : téléphone, email du bénéficiaire | Coordonnées du bénéficiaire |
-| I : raison sociale du bénéficiaire | Société cliente, jamais l'installateur |
+| I : raison sociale du bénéficiaire | Société bénéficiaire et propriétaire du lieu d'inspection Global+, jamais l'installateur |
 | J, K, L : adresse, code postal, ville du siège | Adresse du bénéficiaire, distincte du lieu d'inspection |
 | M : SIREN du professionnel | Rapprochement de l'installateur dans Coffrac et Global+ |
 | N : raison sociale du professionnel | Nom de l'installateur |
@@ -30,6 +30,8 @@ Les imports libres de l'ancien format sont désormais refusés avec l'indication
 Le POST de création transmet le nom du lot (`lot_name`, enregistré dans `numero_lot`), la référence interne, les deux adresses, le bénéficiaire, l'email et l'installateur/SIREN. Coffrac ajoute la référence interne au commentaire de création. Le rapprochement par SIREN prend priorité sur le nom ; plusieurs entreprises avec le même SIREN provoquent une erreur explicite plutôt qu'un choix arbitraire.
 
 ## Global+
+
+Le propriétaire du lieu d'inspection (`lieuInspection.nom` et `raisonSociale`) provient de la colonne I. Le prénom de ce bloc n'est pas renseigné : les colonnes B/C restent réservées à l'identité personnelle du bloc bénéficiaire. Si I est vide, elle n'est pas remplacée par B ni par le nom du site. Le bâtiment reste dans `batiment` et l'adresse d'inspection dans D/E/F. Ce changement concerne les nouveaux envois, sans modifier les dossiers déjà créés dans Global+.
 
 La civilité transmise est `M.` (avec le point), valeur exacte du bouton radio dans l'interface Global+ test consultée le 17 septembre 2026 (`/js/7235.091bf3b2.js`, composant client). Le défaut `Mr` indiqué dans Swagger ne correspond pas à ce bouton. Le sous-titre porte la référence interne complète, y compris après association au dossier Coffrac.
 
