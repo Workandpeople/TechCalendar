@@ -254,13 +254,20 @@ it('cleans up a stored file when persisting its metadata fails', function () {
     expect(Storage::disk('local')->allFiles())->toBe([])->and(DossierDocument::count())->toBe(0);
 });
 
-it('paginates documents and history independently', function () {
+it('paginates documents comments and history independently', function () {
     $dossier = app(DossierRegistry::class)->create($this->manager, $this->data);
     foreach (range(1, 28) as $i) {
         $dossier->activities()->create(['kind' => 'comment', 'body' => 'Note '.$i]);
+        $dossier->activities()->create(['kind' => 'updated', 'body' => 'Modification '.$i]);
         $dossier->documents()->create(['name' => 'Pièce '.$i, 'path' => 'crm/test/'.$i.'.pdf', 'mime_type' => 'application/pdf', 'size' => 123]);
     }
     $this->actingAs($this->manager)->get(route('v2.dossiers.show', ['dossier' => $dossier, 'documents_page' => 2]))
         ->assertOk()->assertViewHas('documents', fn ($rows) => $rows->count() === 3)
+        ->assertViewHas('comments', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 25 && $rows->total() === 28)
         ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 25);
+
+    $this->get(route('v2.dossiers.show', [$dossier, 'comments_page' => 2, 'history_page' => 2]))->assertOk()
+        ->assertViewHas('documents', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 25)
+        ->assertViewHas('comments', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 3)
+        ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 4);
 });

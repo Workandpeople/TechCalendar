@@ -223,8 +223,10 @@ it('paginates appointments and history independently', function () {
 
     $this->get(route('v2.dossiers.show', [$this->dossier, 'appointments_page' => 2]))->assertOk()
         ->assertViewHas('appointments', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 2 && $rows->total() === 22)
-        ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 25);
+        ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 23)
+        ->assertViewHas('comments', fn ($rows) => $rows->count() === 5);
     $this->get(route('v2.dossiers.show', [$this->dossier, 'history_page' => 2]))->assertOk()
         ->assertViewHas('appointments', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 20)
-        ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 3);
+        ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 0)
+        ->assertViewHas('comments', fn ($rows) => $rows->currentPage() === 1 && $rows->count() === 5);
 });

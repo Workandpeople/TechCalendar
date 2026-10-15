@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\DossierRequest;
 use App\Models\Appointment;
 use App\Models\Dossier;
+use App\Models\DossierActivity;
 use App\Models\DossierDocument;
 use App\Services\Capcee\CapceeReports;
 use App\Services\Crm\CollectedDossierDocuments;
@@ -108,7 +109,10 @@ class DossierController extends Controller
             'legacyAppointments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
                 ->where('source_table', 'dossier_fiche_rdv')->orderByDesc('source_id')
                 ->paginate(20, ['source_id', 'payload'], 'legacy_appointments_page')->withQueryString()->fragment('rendez-vous'),
-            'activities' => $dossier->activities()->with('author')->latest('created_at')->latest('id')->paginate(25, ['*'], 'history_page')->withQueryString()->fragment('historique'),
+            'comments' => $dossier->comments()->with('author')->latest('created_at')->latest('id')
+                ->paginate(25, ['*'], 'comments_page')->withQueryString()->fragment('commentaires'),
+            'activities' => $dossier->activities()->whereNotIn('kind', DossierActivity::COMMENT_KINDS)
+                ->with('author')->latest('created_at')->latest('id')->paginate(25, ['*'], 'history_page')->withQueryString()->fragment('historique'),
             'documents' => $dossier->documents()->latest('id')->paginate(25, ['*'], 'documents_page')->withQueryString()->fragment('documents'),
             'appointments' => $dossier->appointments()->withTrashed()
                 ->with(['technician' => fn ($query) => $query->withTrashed(), 'service', 'lotAppointments.lot'])
@@ -139,7 +143,7 @@ class DossierController extends Controller
         $data = $request->validate(['body' => ['required', 'string', 'max:10000'], 'client_visible' => ['sometimes', 'boolean']]);
         $registry->addComment($request->user(), $dossier, $data['body'], $request->boolean('client_visible'));
 
-        return redirect()->to(route('v2.dossiers.show', $dossier).'#historique')->with('status', $request->boolean('client_visible') ? 'Commentaire partagé avec le client.' : 'Commentaire interne ajouté.');
+        return redirect()->to(route('v2.dossiers.show', $dossier).'#commentaires')->with('status', $request->boolean('client_visible') ? 'Commentaire partagé avec le client.' : 'Commentaire interne ajouté.');
     }
 
     public function document(Request $request, Dossier $dossier, DossierRegistry $registry): RedirectResponse

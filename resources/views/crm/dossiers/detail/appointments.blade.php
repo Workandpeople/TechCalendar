@@ -1,0 +1,65 @@
+<section id="rendez-vous" class="gc-card gc-dossier-panel" aria-labelledby="dossier-appointments-title">
+    <header class="gc-dossier-panel-heading"><h2 id="dossier-appointments-title"><x-nav-icon name="planning" />Rendez-vous et lots <span class="gc-dossier-count">{{ $appointments->total() }}</span></h2></header>
+    <div class="gc-dossier-panel-body">
+        <p class="text-xs text-slate-500">Un créneau passé ne signifie pas que le contrôle a été effectué.</p>
+        <ul class="mt-5 divide-y divide-slate-100">
+            @forelse ($appointments as $appointment)
+                <li class="space-y-3 py-4">
+                    <div>
+                        <p class="text-xs text-slate-500">RDV #{{ $appointment->id }} · Prestation #{{ $appointment->dossier_operation_id }}</p>
+                        <p class="mt-1 font-semibold">{{ $appointment->starts_at?->format('d/m/Y H:i') }} à {{ $appointment->ends_at?->format('H:i') }}</p>
+                        <p class="mt-1 text-sm">{{ $appointment->service->name }}</p>
+                        <p class="mt-1 text-sm text-slate-600">{{ $appointment->technician?->full_name ?: 'Technicien indisponible' }}</p>
+                        @if ($appointment->trashed())
+                            <span class="mt-2 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">Retiré du planning</span>
+                        @elseif ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)
+                            <span class="mt-2 inline-block rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800">Problème RDV</span>
+                        @else
+                            <span class="mt-2 inline-block rounded-full bg-sky-50 px-3 py-1 text-xs text-sky-800">{{ $appointment->ends_at?->isPast() ? 'Créneau passé' : 'Planifié' }}</span>
+                        @endif
+                    </div>
+                    <div class="min-w-0">
+                        <p class="break-words text-sm">{{ $appointment->address }}</p>
+                        @foreach ($appointment->lotAppointments as $row)
+                            @if ($row->lot)<a class="mt-2 block text-sm underline" href="{{ route('manager.lots.show', $row->lot) }}">Lot {{ $row->lot->name }} · Ligne {{ $row->row_number ?? $row->id }}</a>@endif
+                        @endforeach
+                        @if ($appointment->comment)<details class="mt-3 text-sm"><summary class="cursor-pointer text-slate-600">Commentaire du rendez-vous</summary><x-comment-body :body="$appointment->comment" class="mt-2 max-h-48 overflow-y-auto" /></details>@endif
+                    </div>
+                    <div class="space-y-3">
+                        @unless ($appointment->trashed())
+                            <a class="gc-btn-secondary" href="{{ route($planningRoute, ['appointment_id' => $appointment->id, 'technician_id' => $appointment->technician_id, 'date' => $appointment->starts_at?->toDateString()]) }}">Voir / modifier dans le planning</a>
+                        @endunless
+                        @unless ($dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)
+                        <details class="text-sm">
+                            <summary class="cursor-pointer text-slate-500">Corriger le rattachement</summary>
+                            <p class="mt-2 text-xs text-slate-500">Retire uniquement le lien avec ce dossier. Le RDV, les documents et le lot ne sont pas supprimés.</p>
+                            <form class="mt-3" method="POST" action="{{ route('v2.dossiers.appointments.destroy', [$dossier, $appointment->dossier_operation_id, $appointment->id]) }}">
+                                @csrf @method('DELETE')
+                                <input type="hidden" name="version" value="{{ $dossier->version }}">
+                                <button class="text-sm font-semibold text-rose-700 underline" type="submit">Retirer la liaison</button>
+                            </form>
+                        </details>
+                        @endunless
+                    </div>
+                </li>
+            @empty
+                <li class="py-6 text-sm text-slate-500">Aucun rendez-vous lié. Utilise « Planifier le RDV » sur la prestation à traiter, ou « Liaison existante » si le rendez-vous a déjà été créé.</li>
+            @endforelse
+        </ul>
+        {{ $appointments->links() }}
+        <a href="{{ route($planningRoute) }}" class="gc-btn-secondary mt-3"><x-nav-icon name="planning" />Ouvrir le planning</a>
+        @if ($legacyAppointments->total())
+            <details class="mt-5 rounded-lg border border-slate-200 p-4">
+                <summary class="cursor-pointer text-sm font-semibold">Toutes les dates source Coffrac ({{ $legacyAppointments->total() }})</summary>
+                <p class="mt-2 text-xs text-slate-500">Inclut les lignes incomplètes conservées hors planning. Le technicien historique par visite n’est pas enregistré dans la source : les RDV importés reprennent celui du dossier.</p>
+                <ul class="mt-3 divide-y divide-slate-100">
+                    @foreach ($legacyAppointments as $record)
+                        @php($sourceRdv = json_decode($record->payload, true))
+                        <li class="py-2 text-sm">#{{ $record->source_id }} · {{ $sourceRdv['date_rdv'] ?: 'Date manquante' }} {{ $sourceRdv['heure'] ?: 'Heure manquante' }} · {{ $sourceRdv['rdv_duree'] }} h · Fiche {{ $sourceRdv['dossier_fiche'] }}</li>
+                    @endforeach
+                </ul>
+                {{ $legacyAppointments->links() }}
+            </details>
+        @endif
+    </div>
+</section>

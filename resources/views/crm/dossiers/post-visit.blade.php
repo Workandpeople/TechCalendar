@@ -1,7 +1,7 @@
 <section id="apres-visite" class="gc-card scroll-mt-24 p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-            <h2 class="gc-workspace-section-title text-lg font-semibold"><x-nav-icon name="check" />Après la visite</h2>
+            <h2 class="gc-workspace-section-title text-lg font-semibold"><x-nav-icon name="check" />Avis et contrôle après la visite</h2>
             <p class="mt-1 max-w-3xl text-sm text-slate-600">Visite effectuée → contrôle RT → rapport validé. En cas de non-conformité : réponse du client → recontrôle → nouvelle non-conformité ou rapport validé. Chaque prestation suit son propre parcours.</p>
         </div>
         <a href="#documents-dossier" class="gc-btn-soft">Ajouter un rapport PDF</a>
@@ -112,7 +112,7 @@
                 @if ($controlState === 'non_compliant')<p class="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Action attendue du client : transmettre un commentaire ou un justificatif depuis son espace. Le recontrôle démarrera après cet envoi explicite.</p>@endif
                 @if ($controlState === 'recontrol')<p class="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Réponse reçue du client. Consulte les documents et commentaires partagés, puis décide d’une nouvelle correction ou de la validation du rapport.</p>@endif
                 @if (in_array($controlState, ['rt_control', 'recontrol'], true) && ! $canReview)<p class="mt-4 text-sm text-slate-500">En attente de décision d’un gérant ou administrateur. Aucun résultat n’alimente encore le lot.</p>@endif
-                @if (in_array($controlState, ['pending', 'problem']))<p class="mt-4 text-sm text-slate-500">Planifie ou reprends le rendez-vous depuis les prestations ci-dessus avant de traiter la visite.</p>@endif
+                @if (in_array($controlState, ['pending', 'problem']))<p class="mt-4 text-sm text-slate-500">Planifie ou reprends le rendez-vous depuis <a href="#prestations" class="gc-link underline">Statut et fiches</a> avant de traiter la visite.</p>@endif
             </article>
         @empty
             <p class="text-sm text-slate-500">Aucune prestation à contrôler.</p>

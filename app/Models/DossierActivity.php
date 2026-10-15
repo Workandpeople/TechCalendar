@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DossierActivity extends Model
 {
+    public const COMMENT_KINDS = ['comment', 'legacy_comment', 'post_visit'];
+
     protected $fillable = ['author_id', 'kind', 'body', 'changed_fields', 'client_visible', 'visibility_reviewed_at'];
 
     protected function casts(): array

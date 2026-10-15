@@ -3,6 +3,7 @@ import { initSidebarSections } from './sidebar-sections';
 import { initDossierComments } from './dossier-comments';
 import { initDossierMapPreview } from './dossier-map-preview';
 import { initDossierList } from './dossier-list';
+import { initDossierDetail } from './dossier-detail';
 import { commentHtml, commentText, initCommentMarkup } from './comment-markup';
 import { initCapceeReports } from './capcee-reports';
 import { initSelectMenus } from './select-menu';
@@ -15,6 +16,7 @@ initSidebarSections();
 initDossierComments();
 initDossierMapPreview();
 initDossierList();
+initDossierDetail();
 initCapceeReports();
 initSelectMenus();
 

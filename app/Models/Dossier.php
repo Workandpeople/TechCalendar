@@ -59,7 +59,7 @@ class Dossier extends Model
 
     public function comments(): HasMany
     {
-        return $this->activities()->whereIn('kind', ['comment', 'legacy_comment', 'post_visit']);
+        return $this->activities()->whereIn('kind', DossierActivity::COMMENT_KINDS);
     }
 
     public function appointments(): HasManyThrough

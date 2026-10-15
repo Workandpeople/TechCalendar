@@ -1,0 +1,61 @@
+<?php
+
+use App\Models\Dossier;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    config(['crm.v2_enabled' => true]);
+    Http::preventStrayRequests();
+    $this->manager = User::factory()->create(['role' => 0]);
+    $this->dossier = Dossier::create(['reference' => 'LAYOUT-TEST', 'company_name' => 'Entreprise exemple', 'address' => 'Rue du Test', 'city' => 'Paris', 'postal_code' => '75001']);
+});
+
+it('keeps the familiar Coffrac columns with unique sections and protected forms', function () {
+    $this->dossier->activities()->create(['kind' => 'legacy_comment', 'body' => 'COMMENT-ONLY']);
+    $this->dossier->activities()->create(['kind' => 'post_visit', 'body' => 'CONTROL-COMMENT']);
+    $this->dossier->activities()->create(['kind' => 'updated', 'body' => 'HISTORY-ONLY']);
+    $response = $this->actingAs($this->manager)->get(route('v2.dossiers.show', $this->dossier))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="utf-8" ?>'.$response->getContent(), LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+
+    foreach (['documents', 'commentaires', 'synthese', 'apres-visite', 'capcee'] as $id) {
+        expect($xpath->query('//div[@class="gc-dossier-main"]//*[@id="'.$id.'"]')->length)->toBe(1);
+    }
+    foreach (['prestations', 'rendez-vous', 'intervenants', 'historique'] as $id) {
+        expect($xpath->query('//aside[@class="gc-dossier-side"]//*[@id="'.$id.'"]')->length)->toBe(1);
+    }
+    expect($xpath->query('//*[@id="commentaires"]')->item(0)->textContent)->toContain('COMMENT-ONLY', 'CONTROL-COMMENT')->not->toContain('HISTORY-ONLY');
+    expect($xpath->query('//*[@id="historique"]')->item(0)->textContent)->toContain('HISTORY-ONLY')->not->toContain('COMMENT-ONLY', 'CONTROL-COMMENT');
+    expect($xpath->query('//*[@id="documents"]//table/thead/tr/th')->length)->toBe(3);
+    foreach (['document', 'comment_body'] as $id) {
+        expect($xpath->query('//*[@id="'.$id.'"]')->length)->toBe(1);
+    }
+    foreach ($xpath->query('//form[@method="POST"]') as $form) {
+        expect($xpath->query('.//input[@name="_token"]', $form)->length)->toBe(1);
+    }
+    expect($xpath->query('//*[@id="documents-dossier" or @id="ajouter-commentaire"]//input[@name="client_visible"][@checked]')->length)->toBe(0);
+    $response->assertSeeInOrder(['id="documents"', 'id="commentaires"', 'id="synthese"'], false);
+    Http::assertNothingSent();
+});
+
+it('returns to comments after posting a private note', function () {
+    $this->actingAs($this->manager)->post(route('v2.dossiers.comments.store', $this->dossier), ['body' => 'Note de suivi'])
+        ->assertRedirect(route('v2.dossiers.show', $this->dossier).'#commentaires');
+    expect($this->dossier->comments()->sole()->client_visible)->toBeFalse();
+});
+
+it('reopens an invalid document form with its name', function () {
+    // Match the error bag stored by the application's JSON session serializer.
+    $errors = ['default' => ['format' => ':message', 'messages' => ['document' => ['Le fichier est obligatoire.']]]];
+    $response = $this->actingAs($this->manager)->withSession(['errors' => $errors, '_old_input' => ['name' => 'Justificatif']])
+        ->get(route('v2.dossiers.show', $this->dossier))->assertOk()
+        ->assertSee('value="Justificatif"', false);
+    $dom = new DOMDocument;
+    @$dom->loadHTML($response->getContent(), LIBXML_NONET);
+    expect((new DOMXPath($dom))->query('//details[@id="documents-dossier"][@open]')->length)->toBe(1);
+});
