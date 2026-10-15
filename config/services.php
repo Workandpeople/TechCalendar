@@ -39,6 +39,16 @@ return [
         'token' => env('MAPBOX_TOKEN'),
     ],
 
+    // Configuration recovered from Coffrac; native SMS sending is not wired yet.
+    'smsfactor' => [
+        'enabled' => (bool) env('SMSFACTOR_ENABLED', false),
+        'base_url' => 'https://api.smsfactor.com',
+        'token' => env('SMSFACTOR_API_TOKEN'),
+        'sender' => env('SMSFACTOR_SENDER', ''),
+        'timeout' => (int) env('SMSFACTOR_TIMEOUT', 20),
+        'connect_timeout' => (int) env('SMSFACTOR_CONNECT_TIMEOUT', 5),
+    ],
+
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),

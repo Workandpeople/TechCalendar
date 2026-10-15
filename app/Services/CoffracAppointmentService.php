@@ -14,6 +14,7 @@ use App\Models\LotAppointmentDocument;
 use App\Models\Service;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
@@ -55,15 +56,19 @@ class CoffracAppointmentService
 
     public function isConfigured(): bool
     {
-        return filled(config('services.coffrac.api_url'))
+        return ! config('crm.v2_enabled') && filled(config('services.coffrac.api_url'))
             && filled(config('services.coffrac.api_token'));
     }
 
     /**
      * @return array<int, array{value:string,label:string,requires_recall:bool}>
      */
-    public function problemTypes(): array
+    public function problemTypes(bool $allowRemote = true): array
     {
+        if (! $allowRemote) {
+            return Cache::get('coffrac:problem-types') ?? $this->fallbackProblemTypes();
+        }
+
         if (! $this->isConfigured()) {
             return $this->fallbackProblemTypes();
         }
@@ -277,6 +282,41 @@ class CoffracAppointmentService
     }
 
     /**
+     * Read the local backlog without requiring a connector or updating its sync state.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function pendingLocally(int $limit = 300, bool $shuffle = false): Collection
+    {
+        $appointments = $this->pendingQuery()
+            ->orderByDesc('remote_updated_at')
+            ->orderByDesc('fetched_at')
+            ->orderByDesc('id')
+            ->limit(max(0, $limit))
+            ->get()
+            ->map(fn (ExternalAppointmentRequest $appointment): array => $this->appointmentFromStoredRequest($appointment))
+            ->values();
+
+        return $shuffle ? $appointments->shuffle()->values() : $appointments;
+    }
+
+    public function pendingCountLocally(): int
+    {
+        return $this->pendingQuery()->count();
+    }
+
+    private function pendingQuery(): Builder
+    {
+        $ignoredReferences = $this->ignoredExternalReferences();
+
+        return ExternalAppointmentRequest::query()
+            ->where('source', self::SOURCE)
+            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
+            ->whereNull('appointment_id')
+            ->when($ignoredReferences->isNotEmpty(), fn ($query) => $query->whereNotIn('external_reference', $ignoredReferences->all()));
+    }
+
+    /**
      * @return array{appointments: Collection<int, array<string, mixed>>, status: array<string, mixed>}
      */
     public function pendingWithStatus(int $limit = 300, bool $shuffle = false): array
@@ -299,30 +339,13 @@ class CoffracAppointmentService
             ];
         }
 
-        $ignoredReferences = $this->ignoredExternalReferences();
-        $baseQuery = ExternalAppointmentRequest::query()
-            ->where('source', self::SOURCE)
-            ->where('status', ExternalAppointmentRequest::STATUS_PENDING)
-            ->whereNull('appointment_id')
-            ->when($ignoredReferences->isNotEmpty(), fn ($query) => $query->whereNotIn('external_reference', $ignoredReferences->all()));
+        $baseQuery = $this->pendingQuery();
         $totalPendingAppointments = (clone $baseQuery)->count();
         $missingCoordinatesCount = (clone $baseQuery)
             ->where(fn ($query) => $query->whereNull('latitude')->orWhereNull('longitude'))
             ->count();
 
-        $query = (clone $baseQuery)
-            ->orderByDesc('remote_updated_at')
-            ->orderByDesc('fetched_at')
-            ->orderByDesc('id')
-            ->limit($limit);
-
-        $appointments = $query->get()
-            ->map(fn (ExternalAppointmentRequest $appointment): array => $this->appointmentFromStoredRequest($appointment))
-            ->values();
-
-        if ($shuffle) {
-            $appointments = $appointments->shuffle()->values();
-        }
+        $appointments = $this->pendingLocally($limit, $shuffle);
 
         return [
             'appointments' => $appointments,
@@ -1327,6 +1350,14 @@ class CoffracAppointmentService
 
     public function markProblem(Appointment $appointment, array|string $problem): void
     {
+        if (config('crm.v2_enabled')) {
+            if ($operation = $appointment->dossierOperation) {
+                app(\App\Services\Crm\DossierWorkflow::class)->recordProblem(auth()->user(), $operation,
+                    is_array($problem) ? $problem : ['comment' => $problem]);
+            }
+
+            return;
+        }
         if ($appointment->external_source !== self::SOURCE) {
             if ($this->isUnlinkedLotBackedAppointment($appointment)) {
                 throw new RuntimeException('Ce rendez-vous vient d’un lot, mais il n’est pas lié à un dossier Coffrac. Impossible de le passer en problème RDV côté Coffrac.');
@@ -1403,6 +1434,9 @@ class CoffracAppointmentService
      */
     public function updateAppointmentAddress(Appointment $appointment, array $payload): void
     {
+        if (config('crm.v2_enabled')) {
+            return;
+        }
         if ($appointment->external_source !== self::SOURCE) {
             return;
         }

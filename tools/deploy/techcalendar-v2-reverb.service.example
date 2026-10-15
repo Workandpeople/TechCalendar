@@ -1,0 +1,16 @@
+[Unit]
+Description=TechCalendar V2 demo Reverb (separate from V1)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/TechCalendar-v2
+ExecStart=/usr/bin/php8.4 artisan reverb:start --host=127.0.0.1 --port=8081
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

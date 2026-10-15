@@ -15,15 +15,12 @@ class AdminSettingController extends Controller
 {
     public function index(
         Request $request,
-        ApplicationSettings $settings,
-        ExternalAppointmentSourceRegistry $externalSources
-    ): View
-    {
+        ApplicationSettings $settings
+    ): View {
         abort_unless((bool) $request->user()?->admin, 403);
 
         return view('admin.settings', [
             'groups' => collect($settings->formRows())->groupBy('group'),
-            'externalAppointmentSources' => $externalSources->resetRows(),
         ]);
     }
 
@@ -64,8 +61,7 @@ class AdminSettingController extends Controller
     public function resetExternalAppointments(
         Request $request,
         ExternalAppointmentSourceRegistry $externalSources
-    ): RedirectResponse
-    {
+    ): RedirectResponse {
         abort_unless((bool) $request->user()?->admin, 403);
 
         $payload = $request->validate([

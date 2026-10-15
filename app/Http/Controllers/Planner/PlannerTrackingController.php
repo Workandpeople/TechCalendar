@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Planner;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncCoffracAppointmentsJob;
 use App\Models\Appointment;
+use App\Models\Dossier;
 use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\TechnicianDailyRouteMetric;
@@ -13,11 +14,12 @@ use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\AppointmentEditor;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -30,13 +32,14 @@ class PlannerTrackingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $technicians = User::query()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->withTrashed())
             ->with(['services:id', 'departments:code'])
             ->where('role', 2)
             ->where('admin', false)
-            ->whereNull('deleted_at')
+            ->when(! config('crm.v2_enabled'), fn ($query) => $query->whereNull('deleted_at'))
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code', 'role']);
+            ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code', 'role', 'deleted_at']);
         $mailTemplates = MailTemplate::query()
             ->with('sender:id,name,logo_path,is_active')
             ->where('is_active', true)
@@ -57,17 +60,17 @@ class PlannerTrackingController extends Controller
 
         return view('planner.tracking', [
             'technicians' => $technicians,
-            'services' => Service::query()
+            'services' => Service::query()->catalog()
                 ->orderBy('type')
                 ->orderBy('name')
                 ->get(['id', 'type', 'name']),
             'section' => $request->routeIs('manager.appointments') ? 'Gérant' : 'Planning',
-            'title' => $request->routeIs('manager.appointments') ? 'Gestion des RDV' : 'Suivi des RDV',
+            'title' => 'Les RDV',
             'mapboxToken' => config('services.mapbox.token'),
             'coffracProblemTypes' => $coffracAppointments->problemTypes(),
             'mailTemplates' => $mailTemplates,
             'trackingMailTemplates' => $trackingMailTemplates,
-            'coffracSyncStatus' => $coffracAppointments->currentSyncStatus(),
+            'coffracSyncStatus' => config('crm.v2_enabled') ? [] : $coffracAppointments->currentSyncStatus(),
             'searchAppointmentsUrl' => route($request->routeIs('manager.appointments')
                 ? 'manager.appointments.search'
                 : 'planner.tracking.search'),
@@ -85,6 +88,7 @@ class PlannerTrackingController extends Controller
         CoffracAppointmentService $coffracAppointments,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'Les rendez-vous sont gérés localement.');
 
         return response()->json([
             'coffrac_api_status' => $coffracAppointments->currentSyncStatus(),
@@ -96,6 +100,7 @@ class PlannerTrackingController extends Controller
         CoffracAppointmentService $coffracAppointments,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'Les rendez-vous sont gérés localement.');
 
         if (! $coffracAppointments->isConfigured()) {
             return response()->json([
@@ -133,6 +138,7 @@ class PlannerTrackingController extends Controller
         CoffracAppointmentService $coffracAppointments,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'Le dossier est désormais local.');
 
         $appointment = Appointment::query()->findOrFail($appointment);
 
@@ -187,7 +193,7 @@ class PlannerTrackingController extends Controller
             ->when(! empty($payload['service_id']), fn ($query) => $query->where('service_id', (int) $payload['service_id']));
 
         match ($payload['appointment_status'] ?? 'all') {
-            'active' => $appointmentsQuery->where('status', Appointment::STATUS_SCHEDULED),
+            'active' => $appointmentsQuery->whereNull('appointments.deleted_at')->where('status', Appointment::STATUS_SCHEDULED),
             'problem' => $appointmentsQuery->where('status', Appointment::STATUS_PROBLEM),
             default => null,
         };
@@ -218,6 +224,7 @@ class PlannerTrackingController extends Controller
             'service_id' => ['nullable', 'integer', Rule::exists('services', 'id')],
             'appointment_status' => ['nullable', Rule::in(['all', 'active', 'problem'])],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
         ]);
 
         $technicianIds = collect($payload['technician_ids'] ?? [])
@@ -233,7 +240,7 @@ class PlannerTrackingController extends Controller
             ->when(! empty($payload['date_to']), fn ($query) => $query->where('starts_at', '<=', Carbon::parse($payload['date_to'])->endOfDay()));
 
         match ($payload['appointment_status'] ?? 'all') {
-            'active' => $appointmentsQuery->where('status', Appointment::STATUS_SCHEDULED),
+            'active' => $appointmentsQuery->whereNull('appointments.deleted_at')->where('status', Appointment::STATUS_SCHEDULED),
             'problem' => $appointmentsQuery->where('status', Appointment::STATUS_PROBLEM),
             default => null,
         };
@@ -270,8 +277,12 @@ class PlannerTrackingController extends Controller
             });
         }
 
+        $page = (int) ($payload['page'] ?? 1);
+        $total = (clone $appointmentsQuery)->count();
         $appointments = $appointmentsQuery
             ->orderByDesc('starts_at')
+            ->orderByDesc('id')
+            ->offset(($page - 1) * $limit)
             ->limit($limit)
             ->get();
 
@@ -279,18 +290,23 @@ class PlannerTrackingController extends Controller
             'appointments' => $this->appointmentEvents($appointments, $appointmentMailData),
             'count' => $appointments->count(),
             'limit' => $limit,
+            'total' => $total,
+            'page' => $page,
+            'last_page' => max(1, (int) ceil($total / $limit)),
         ]);
     }
 
     private function appointmentDetailsQuery()
     {
         return Appointment::query()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->withTrashed()
+                ->where(fn ($query) => $query->whereNull('deleted_at')->orWhere('external_source', 'coffrac_archive')))
             ->with([
                 'service:id,type,name',
-                'technician:id,first_name,last_name,email,address,department_code,latitude,longitude,role',
+                'technician' => fn ($query) => $query->withTrashed()->select('id', 'first_name', 'last_name', 'email', 'address', 'department_code', 'latitude', 'longitude', 'role'),
                 'technician.departments:code',
                 'creator:id,first_name,last_name',
-            ]);
+            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,inspected_on'));
     }
 
     /**
@@ -303,8 +319,10 @@ class PlannerTrackingController extends Controller
             ->groupBy('technician_id')
             ->map(fn ($technicianAppointments) => $technicianAppointments->sortBy('starts_at')->values());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
+        $commentsByAppointment = config('crm.v2_enabled')
+            ? app(\App\Services\Crm\AppointmentComments::class)->forAppointments($appointments) : [];
 
-        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment, $appointmentMailData): array {
+        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment, $commentsByAppointment, $appointmentMailData): array {
             $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
             $serviceLabel = $appointment->service
                 ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
@@ -318,8 +336,8 @@ class PlannerTrackingController extends Controller
                 ->sortByDesc('ends_at')
                 ->first();
 
-            $originLatitude = $previousAppointment?->latitude ?? $appointment->technician?->latitude;
-            $originLongitude = $previousAppointment?->longitude ?? $appointment->technician?->longitude;
+            $originLatitude = $previousAppointment ? $previousAppointment->latitude : $appointment->technician?->latitude;
+            $originLongitude = $previousAppointment ? $previousAppointment->longitude : $appointment->technician?->longitude;
             $originName = $previousAppointment
                 ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
                 : ($appointment->technician?->address ?: 'Domicile technicien');
@@ -341,7 +359,16 @@ class PlannerTrackingController extends Controller
                     'service_label' => $serviceLabel,
                     'external_source' => $appointment->external_source,
                     'external_reference' => $appointment->external_reference,
+                    'dossier_url' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation
+                        ? route('v2.dossiers.show', $appointment->dossierOperation->dossier_id)
+                        : null,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
+                    'customer_first_name' => $appointment->customer_first_name,
+                    'customer_last_name' => $appointment->customer_last_name,
+                    'updated_at' => $appointment->updated_at?->toIso8601String(),
+                    'is_historical' => $appointment->trashed(),
+                    'can_edit' => ! $appointment->trashed(),
+                    'post_visit_locked' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation?->inspected_on !== null,
                     'customer_phone' => $appointment->customer_phone,
                     'customer_email' => $appointmentMailData->defaultRecipientEmail($appointment),
                     'address' => $appointment->address,
@@ -364,7 +391,7 @@ class PlannerTrackingController extends Controller
                     'recall_time' => data_get($externalPayload, 'recall_time') ?: data_get($externalPayload, 'techcalendar_problem.recall_time'),
                     'recall_at' => data_get($externalPayload, 'recall_at') ?: data_get($externalPayload, 'date_rappel'),
                     'created_by_name' => $appointment->creator?->full_name,
-                    'comments' => $this->externalComments($appointment),
+                    'comments' => $commentsByAppointment[$appointment->id] ?? $this->externalComments($appointment),
                     'documents' => $documentsByAppointment[$appointment->id] ?? [],
                 ],
             ];
@@ -386,9 +413,32 @@ class PlannerTrackingController extends Controller
         int $appointment,
         AppointmentTechnicianMailService $appointmentMails,
         CoffracAppointmentService $coffracAppointments,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+
+        if (config('crm.v2_enabled')) {
+            $payload = $request->validate([
+                'starts_at' => ['required', 'date'],
+                'duration_minutes' => ['required', 'integer', 'min:5', 'max:1440'],
+                'address' => ['required', 'string', 'max:255'],
+                'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
+                'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
+                'customer_first_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+                'customer_last_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+                'customer_phone' => ['sometimes', 'nullable', 'string', 'max:255'],
+                'comment' => ['sometimes', 'nullable', 'string', 'max:5000'],
+                'technician_id' => ['sometimes', 'integer', Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 2)->where('admin', false)->whereNull('deleted_at'))],
+                'service_id' => ['sometimes', 'integer', Rule::exists('services', 'id')],
+                'updated_at' => ['nullable', 'date'],
+            ]);
+            $updated = app(AppointmentEditor::class)->update($appointment, $payload, $request->user());
+            $appointmentMails->detailsUpdated($updated);
+            $record = $this->appointmentDetailsQuery()->findOrFail($updated->id);
+            $event = $this->appointmentEvents(collect([$record]), app(AppointmentMailTemplateData::class))->first();
+
+            return response()->json(['message' => 'Rendez-vous mis à jour.', 'event' => $event,
+                'appointment' => ['id' => $record->id, 'start' => $event['start'], 'end' => $event['end'], ...$event['extendedProps']]]);
+        }
 
         $appointment = Appointment::query()
             ->with('service:id,type,name')
@@ -468,8 +518,7 @@ class PlannerTrackingController extends Controller
         Request $request,
         int $appointment,
         AppointmentTechnicianMailService $appointmentMails,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
         $appointment = Appointment::query()
@@ -555,8 +604,7 @@ class PlannerTrackingController extends Controller
         Request $request,
         int $appointment,
         AppointmentTechnicianMailService $appointmentMails,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
         $appointment = Appointment::query()->findOrFail($appointment);
@@ -565,9 +613,11 @@ class PlannerTrackingController extends Controller
             'comment' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $appointment->update([
-            'comment' => $payload['comment'] ?? null,
-        ]);
+        if (config('crm.v2_enabled')) {
+            $appointment = app(AppointmentEditor::class)->updateComment($appointment, $request->user(), $payload['comment'] ?? null);
+        } else {
+            $appointment->update(['comment' => $payload['comment'] ?? null]);
+        }
 
         $appointmentMails->commentUpdated($appointment);
 
@@ -582,8 +632,7 @@ class PlannerTrackingController extends Controller
         int $appointment,
         CoffracAppointmentService $coffracAppointments,
         AppointmentTechnicianMailService $appointmentMails,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
         $appointment = Appointment::query()->findOrFail($appointment);

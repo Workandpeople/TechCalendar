@@ -52,7 +52,7 @@ it('renders the manager mail templates page for managers', function () {
     $this->actingAs($manager)
         ->get(route('manager.mail-templates'))
         ->assertOk()
-        ->assertSee('Templates de mails')
+        ->assertSee('Modèles de mails')
         ->assertSee('Confirmation RDV')
         ->assertSee('appointment_date');
 });

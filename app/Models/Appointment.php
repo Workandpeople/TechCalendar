@@ -3,8 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
@@ -50,9 +51,20 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function dossierOperation(): BelongsTo
+    {
+        return $this->belongsTo(DossierOperation::class);
+    }
+
+    public function lotAppointments(): HasMany
+    {
+        return $this->hasMany(LotAppointment::class);
+    }
+
     protected function casts(): array
     {
         return [
+            'dossier_operation_id' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',
             'duration_minutes' => 'integer',

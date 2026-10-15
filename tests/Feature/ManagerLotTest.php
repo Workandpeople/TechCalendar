@@ -107,7 +107,7 @@ it('renders manager lots from database', function () {
     $this->actingAs($manager)
         ->get(route('manager.lots'))
         ->assertOk()
-        ->assertSee('Gestion des lots')
+        ->assertSee('Les lots')
         ->assertSee('Importer un lot')
         ->assertSee('Lot Audit Juin')
         ->assertSee('100% contrôle contact')

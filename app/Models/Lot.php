@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'contact_appointment_target_count',
     'source',
     'delegataire',
+    'delegataire_id',
     'received_at',
     'comment',
     'original_filename',
@@ -38,6 +39,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Lot extends Model
 {
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(ExternalDelegataire::class, 'delegataire_id');
+    }
+
     public const TYPE_FULL_CONTACT_CONTROL = '100% controle contact';
     public const TYPE_SAMPLE_CONTACT_CONTROL = 'echantillonage controle contact';
     public const TYPE_FULL_CONTROL = '100% controle';

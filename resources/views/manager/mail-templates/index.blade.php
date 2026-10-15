@@ -40,11 +40,7 @@ MD;
     @endphp
 
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Templates de mails</h1>
-            <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Templates Markdown modifiables, prêts à être utilisés par des Mailables.</p>
-        </div>
+        <x-workspace-heading title="Modèles de mails" eyebrow="Communication" description="Préparez vos messages et leurs expéditeurs. Consultez l’aperçu avant d’utiliser un modèle pour un rendez-vous." />
 
         @if ($errors->any())
             <div class="gc-alert" style="border-color:#f5c2c7;background:#fff1f2;color:#9f1239;">
@@ -73,7 +69,7 @@ MD;
                 </div>
 
                 <div class="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <button type="button" class="gc-btn-primary" data-template-create>Ajouter un template</button>
+                    <button type="button" class="gc-btn-primary" data-template-create><x-nav-icon name="plus" /> Ajouter un modèle</button>
                     <a href="{{ route('manager.mail-templates') }}" class="gc-link">Réinitialiser les filtres</a>
                 </div>
             </form>
@@ -82,8 +78,8 @@ MD;
         <section class="gc-card overflow-hidden">
             <div class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between" style="border-color:var(--gc-border);">
                 <div>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Expéditeurs</h2>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Comptes SMTP utilisés par les templates de mails.</p>
+                    <h2 class="gc-workspace-section-title text-lg font-semibold" style="color:var(--gc-text);"><x-nav-icon name="mail" />Expéditeurs</h2>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Adresses et comptes de messagerie utilisés pour envoyer les mails.</p>
                 </div>
                 <button type="button" class="gc-btn-primary" data-mail-sender-create>Ajouter un expéditeur</button>
             </div>
@@ -94,7 +90,7 @@ MD;
                             <th class="px-4 py-3 font-semibold">Expéditeur</th>
                             <th class="px-4 py-3 font-semibold">SMTP</th>
                             <th class="px-4 py-3 font-semibold">Adresse d’envoi</th>
-                            <th class="px-4 py-3 font-semibold">Templates</th>
+                            <th class="px-4 py-3 font-semibold">Modèles</th>
                             <th class="px-4 py-3 font-semibold">Statut</th>
                             <th class="px-4 py-3 font-semibold">Actions</th>
                         </tr>
@@ -171,7 +167,7 @@ MD;
                 <table class="min-w-full text-left text-sm">
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
                         <tr>
-                            <th class="px-4 py-3 font-semibold">Template</th>
+                            <th class="px-4 py-3 font-semibold">Modèle</th>
                             <th class="px-4 py-3 font-semibold">Expéditeur</th>
                             <th class="px-4 py-3 font-semibold">Sujet</th>
                             <th class="px-4 py-3 font-semibold">Variables</th>
@@ -208,7 +204,7 @@ MD;
                                         @endif
                                         <div class="min-w-0">
                                             <div class="font-semibold" style="color:var(--gc-text);">{{ $template->name }}</div>
-                                            <div class="mt-0.5 text-xs" style="color:var(--gc-text-soft);">Template Markdown</div>
+                                            <div class="mt-0.5 text-xs" style="color:var(--gc-text-soft);">Modèle de mail</div>
                                         </div>
                                     </div>
                                 </td>
@@ -253,7 +249,7 @@ MD;
                                         <button
                                             type="button"
                                             class="gc-btn-soft"
-                                            aria-label="Voir le template {{ $template->name }}"
+                                            aria-label="Voir le modèle {{ $template->name }}"
                                             data-template-edit='@json($templatePayload)'
                                         >
                                             <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -271,7 +267,7 @@ MD;
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucun template de mail.</td>
+                                <td colspan="7" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucun modèle de mail.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -284,16 +280,16 @@ MD;
     </div>
 
     <div id="mail-template-editor-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl">
-            <div class="flex flex-col gap-3 border-b pb-4 md:flex-row md:items-start md:justify-between" style="border-color:var(--gc-border);">
+        <div class="gc-modal-panel gc-modal-panel-xl gc-form-modal">
+            <div class="gc-form-modal-heading flex flex-col gap-3 md:flex-row md:items-start md:justify-between" style="border-color:var(--gc-border);">
                 <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Template de mail</p>
-                    <h2 id="mail-template-editor-title" class="mt-1 text-xl font-semibold" style="color:var(--gc-text);">Ajouter un template</h2>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Modèle de mail</p>
+                    <h2 id="mail-template-editor-title" class="mt-1 text-xl font-semibold" style="color:var(--gc-text);">Ajouter un modèle</h2>
                 </div>
                 <button type="button" class="gc-link" data-mail-template-editor-close>Fermer</button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
+            <div class="gc-form-modal-content grid grid-cols-1 gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
                 <form id="mail-template-editor-form" method="POST" action="{{ route('manager.mail-templates.store') }}" class="space-y-4" data-validate-form>
                     @csrf
                     <input id="mail_template_method" type="hidden" name="_method" value="POST" disabled />
@@ -321,18 +317,18 @@ MD;
                     </div>
 
                     <div>
-                        <label class="gc-label" for="mail_template_markdown_body">Vue Markdown</label>
+                        <label class="gc-label" for="mail_template_markdown_body">Contenu du mail (Markdown)</label>
                         <textarea id="mail_template_markdown_body" name="markdown_body" rows="18" maxlength="60000" class="gc-input font-mono text-xs leading-relaxed" required></textarea>
                         <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">Markdown uniquement. Les variables s’écrivent sous la forme <span class="font-mono">@{{ client_name }}</span>. Le Blade stocké en BDD n’est volontairement pas exécuté.</p>
                     </div>
 
                     <label class="inline-flex items-center gap-3 rounded-xl border px-3 py-2 text-sm" style="border-color:var(--gc-border);">
                         <input id="mail_template_is_active" name="is_active" type="checkbox" value="1" class="gc-check" checked />
-                        <span style="color:var(--gc-text);">Template actif</span>
+                        <span style="color:var(--gc-text);">Modèle actif</span>
                     </label>
 
                     <div class="rounded-xl border p-3" style="border-color:var(--gc-border);background:var(--gc-accent-soft);">
-                        <p class="text-sm font-semibold" style="color:var(--gc-text);">Variables disponibles en preview</p>
+                        <p class="text-sm font-semibold" style="color:var(--gc-text);">Informations à insérer</p>
                         <div class="mt-3 flex flex-wrap gap-1.5">
                             @foreach ($sampleVariables as $variable => $sampleValue)
                                 <button
@@ -347,31 +343,30 @@ MD;
                             @endforeach
                         </div>
                     </div>
-
-                    <div class="gc-modal-actions">
-                        <button type="button" class="gc-link" data-mail-template-editor-close>Annuler</button>
-                        <button id="mail-template-submit" type="submit" class="gc-btn-primary">Créer</button>
-                    </div>
                 </form>
 
                 <aside class="min-h-0 rounded-2xl border bg-white p-4" style="border-color:var(--gc-border);">
                     <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                            <p class="text-xs uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Preview réelle</p>
+                            <p class="text-xs uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Aperçu du mail</p>
                             <h3 id="mail-template-preview-subject" class="mt-1 text-base font-semibold" style="color:var(--gc-text);">Sujet du mail</h3>
                         </div>
                         <span id="mail-template-preview-status" class="text-xs" style="color:var(--gc-text-soft);">En attente</span>
                     </div>
-                    <iframe id="mail-template-preview-frame" title="Preview du mail" class="h-[680px] w-full rounded-xl border bg-white" style="border-color:var(--gc-border);"></iframe>
+                    <iframe id="mail-template-preview-frame" title="Aperçu du mail" class="h-[680px] w-full rounded-xl border bg-white" style="border-color:var(--gc-border);"></iframe>
                 </aside>
+            </div>
+            <div class="gc-modal-actions">
+                <button type="button" class="gc-btn-secondary" data-mail-template-editor-close>Annuler</button>
+                <button id="mail-template-submit" type="submit" form="mail-template-editor-form" class="gc-btn-primary">Créer</button>
             </div>
         </div>
     </div>
 
     <div id="delete-mail-template-modal" class="gc-modal hidden">
         <div class="gc-modal-panel">
-            <h2 class="text-lg font-semibold">Supprimer le template</h2>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le template <span id="delete-mail-template-name" class="font-semibold" style="color:var(--gc-text);"></span> sera supprimé.</p>
+            <h2 class="text-lg font-semibold">Supprimer le modèle</h2>
+            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le modèle <span id="delete-mail-template-name" class="font-semibold" style="color:var(--gc-text);"></span> sera supprimé.</p>
             <form id="delete-mail-template-form" method="POST" action="#" class="mt-5 flex justify-end gap-2">
                 @csrf
                 @method('DELETE')
@@ -382,8 +377,8 @@ MD;
     </div>
 
     <div id="mail-sender-editor-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl">
-            <div class="flex flex-col gap-3 border-b pb-4 md:flex-row md:items-start md:justify-between" style="border-color:var(--gc-border);">
+        <div class="gc-modal-panel gc-modal-panel-xl gc-form-modal">
+            <div class="gc-form-modal-heading flex flex-col gap-3 md:flex-row md:items-start md:justify-between" style="border-color:var(--gc-border);">
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Expéditeur</p>
                     <h2 id="mail-sender-editor-title" class="mt-1 text-xl font-semibold" style="color:var(--gc-text);">Ajouter un expéditeur</h2>
@@ -392,6 +387,7 @@ MD;
             </div>
 
             <form id="mail-sender-editor-form" method="POST" action="{{ route('manager.mail-templates.senders.store') }}" enctype="multipart/form-data" class="mt-5 space-y-4" data-validate-form>
+                <div class="gc-form-modal-content space-y-4">
                 @csrf
                 <input id="mail_sender_method" type="hidden" name="_method" value="POST" disabled />
 
@@ -468,6 +464,7 @@ MD;
                     <span style="color:var(--gc-text);">Expéditeur actif</span>
                 </label>
 
+                </div>
                 <div class="gc-modal-actions">
                     <button type="button" class="gc-link" data-mail-sender-editor-close>Annuler</button>
                     <button id="mail-sender-submit" type="submit" class="gc-btn-primary">Créer</button>
@@ -547,12 +544,21 @@ MD;
         let editingSenderLogoUrl = null;
         let selectedSenderLogoObjectUrl = null;
 
-        const openModal = (modal) => modal?.classList.remove('hidden');
-        const closeModal = (modal) => modal?.classList.add('hidden');
+        const openModal = (modal) => {
+            modal?.classList.remove('hidden');
+            modal?.querySelectorAll('form[data-validate-form]').forEach((form) => window.TechCalendarForms?.refresh(form));
+        };
+        const closeModal = (modal) => {
+            modal?.classList.add('hidden');
+            if (modal === editorModal) {
+                window.clearTimeout(previewTimer);
+                previewAbortController?.abort();
+            }
+        };
 
         const setEditorMode = (template = null) => {
             editingTemplateId = template?.id || null;
-            editorTitle.textContent = template ? `Modifier ${template.name}` : 'Ajouter un template';
+            editorTitle.textContent = template ? `Modifier ${template.name}` : 'Ajouter un modèle';
             editorForm.action = template ? template.update_url : mailTemplateStoreUrl;
             methodInput.disabled = !template;
             methodInput.value = template ? 'PUT' : 'POST';
@@ -570,11 +576,19 @@ MD;
         };
 
         const renderPreviewFallback = (message) => {
-            previewFrame.srcdoc = `<!doctype html><html><body style="font-family:sans-serif;color:#31424c;padding:24px;">${message}</body></html>`;
+            const content = document.createElement('p');
+            content.textContent = message;
+            previewFrame.srcdoc = `<!doctype html><html lang="fr"><body style="font-family:sans-serif;color:#31424c;padding:24px;">${content.outerHTML}</body></html>`;
         };
 
         const updatePreview = async () => {
             previewAbortController?.abort();
+            if (!subjectInput.value.trim() || !markdownInput.value.trim()) {
+                previewSubject.textContent = 'Aperçu du mail';
+                previewStatus.textContent = 'À compléter';
+                renderPreviewFallback('Renseigne le sujet et le contenu du mail pour afficher son aperçu. Aucun mail ne sera envoyé.');
+                return;
+            }
             previewAbortController = new AbortController();
             previewStatus.textContent = 'Génération...';
 
@@ -598,7 +612,7 @@ MD;
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
-                    throw new Error(firstError || 'Preview impossible.');
+                    throw new Error(firstError || 'Aperçu indisponible.');
                 }
 
                 previewSubject.textContent = payload.subject || 'Sujet du mail';
@@ -607,8 +621,8 @@ MD;
             } catch (error) {
                 if (error.name === 'AbortError') return;
 
-                previewStatus.textContent = 'Erreur preview';
-                renderPreviewFallback(error.message || 'Preview impossible.');
+                previewStatus.textContent = 'Aperçu indisponible';
+                renderPreviewFallback(error.message || 'Aperçu indisponible.');
             }
         };
 

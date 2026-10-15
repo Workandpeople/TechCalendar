@@ -19,6 +19,7 @@
     <input id="{{ $prefix }}_name" name="name" type="text" class="gc-input" maxlength="190" required />
 </div>
 
+@unless(config('crm.v2_enabled'))
 <div>
     <label class="gc-label" for="{{ $prefix }}_external_aliases">Alias Coffrac</label>
     <textarea
@@ -29,3 +30,5 @@
     >{{ old('external_aliases') }}</textarea>
     <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ces alias permettent de relier automatiquement les prestations reçues depuis Coffrac à cette prestation interne.</p>
 </div>
+
+@endunless

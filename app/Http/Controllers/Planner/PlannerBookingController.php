@@ -17,6 +17,8 @@ use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\DossierBooking;
+use App\Services\Crm\NativeAppointmentPlacement;
 use App\Services\ExternalAppointmentSourceRegistry;
 use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
@@ -52,7 +54,7 @@ class PlannerBookingController extends Controller
 
         $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify');
         $isManagerRoute = $request->routeIs('manager.*');
-        $services = Service::query()
+        $services = Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->orderBy('external_name')])
@@ -76,13 +78,19 @@ class PlannerBookingController extends Controller
                 'logo_url' => $template->logo_url,
             ])
             ->values();
-        $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
-        $externalAppointmentSources = $this->externalAppointmentSources($coffracPending['status']);
+        $bookingConnectorsEnabled = ! config('crm.v2_enabled');
+        $coffracPending = $bookingConnectorsEnabled
+            ? $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT)
+            : ['appointments' => app(DossierBooking::class)->pending($request->user()), 'status' => null];
+        $externalAppointmentSources = $bookingConnectorsEnabled
+            ? $this->externalAppointmentSources($coffracPending['status'])
+            : [];
 
         return view('planner.book', [
             'crmAppointments' => $coffracPending['appointments'],
             'coffracApiStatus' => $coffracPending['status'],
             'externalAppointmentSources' => $externalAppointmentSources,
+            'bookingConnectorsEnabled' => $bookingConnectorsEnabled,
             'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'initialReplaceAppointmentId' => $request->query('replace_appointment_id') ?: $request->query('appointment_id'),
@@ -91,12 +99,12 @@ class PlannerBookingController extends Controller
             'bookingTitle' => $isReplacementMode ? 'Modifier un RDV' : 'Prise de RDV',
             'bookingSubtitle' => $isReplacementMode
                 ? 'Recherche un RDV existant, consulte son détail ou relance un workflow complet de replacement.'
-                : 'Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.',
+                : 'Sélectionne un RDV à placer, un dossier de lot ou saisis un RDV manuel pour identifier les techniciens éligibles.',
             'replaceSearchUrl' => route($isManagerRoute ? 'manager.appointments.search' : 'planner.tracking.search'),
             'replacementPageUrl' => route($isManagerRoute ? 'manager.appointments.modify' : 'planner.appointments.modify'),
             'bookingTrackingUrl' => route($isManagerRoute ? 'manager.appointments' : 'planner.tracking'),
             'mapboxToken' => config('services.mapbox.token'),
-            'coffracProblemTypes' => $coffracAppointments->problemTypes(),
+            'coffracProblemTypes' => $coffracAppointments->problemTypes(allowRemote: $bookingConnectorsEnabled),
             'services' => $services,
             'mailTemplates' => $mailTemplates,
             'bookingMailTemplates' => $bookingMailTemplates,
@@ -106,7 +114,7 @@ class PlannerBookingController extends Controller
                     'type' => $service->type,
                     'name' => $service->name,
                     'average_duration_minutes' => $service->average_duration_minutes,
-                    'coffrac_aliases' => $service->externalAliases
+                    'coffrac_aliases' => (config('crm.v2_enabled') ? collect() : $service->externalAliases)
                         ->map(fn (ExternalServiceAlias $alias): array => [
                             'id' => $alias->id,
                             'label' => $alias->external_name,
@@ -189,6 +197,7 @@ class PlannerBookingController extends Controller
         CoffracAppointmentService $coffracAppointments
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'La collecte par connecteur est désactivée en V2.');
 
         if ($coffracAppointments->isConfigured()) {
             $coffracAppointments->markSyncQueued('Récupération des RDV à placer Coffrac lancée en arrière-plan...', [
@@ -217,6 +226,14 @@ class PlannerBookingController extends Controller
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
 
+        if (config('crm.v2_enabled')) {
+            return response()->json([
+                'appointments' => app(DossierBooking::class)->pending($request->user()),
+                'coffrac_api_status' => null,
+                'external_sources' => [],
+            ]);
+        }
+
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT, shuffle: true);
 
         return response()->json([
@@ -242,6 +259,10 @@ class PlannerBookingController extends Controller
             'address' => ['sometimes', 'required', 'string', 'max:500'],
             'comment' => ['nullable', 'string', 'max:5000'],
         ]);
+
+        if (config('crm.v2_enabled')) {
+            return $this->nativeBookingResponse($request, app(DossierBooking::class)->update($request->user(), $crmAppointmentId, $payload), 'Dossier mis à jour.');
+        }
 
         try {
             $appointment = $coffracAppointments->updatePendingAppointment($crmAppointmentId, $payload);
@@ -270,6 +291,13 @@ class PlannerBookingController extends Controller
         CoffracAppointmentService $coffracAppointments
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+
+        if (config('crm.v2_enabled')) {
+            $appointment = app(DossierBooking::class)->find($request->user(), $crmAppointmentId);
+            abort_unless($appointment, 404, 'Ce dossier n’est plus à placer.');
+
+            return $this->nativeBookingResponse($request, $appointment, 'Dossier actualisé.');
+        }
 
         try {
             $appointment = $coffracAppointments->refreshPendingAppointment($crmAppointmentId);
@@ -300,6 +328,10 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate($this->problemReportRules($coffracAppointments));
+
+        if (config('crm.v2_enabled')) {
+            return $this->nativeBookingResponse($request, app(DossierBooking::class)->markProblem($request->user(), $crmAppointmentId, $payload), 'Dossier passé en problème rendez-vous.');
+        }
 
         try {
             $appointment = $coffracAppointments->markPendingAppointmentProblem($crmAppointmentId, $payload);
@@ -493,6 +525,22 @@ class PlannerBookingController extends Controller
                 $request,
                 $startsAt
             ): Appointment {
+                if (config('crm.v2_enabled')) {
+                    // Serialize reservations of the same technician before checking the slot again.
+                    User::query()->where('role', 2)->lockForUpdate()->findOrFail($payload['technician_id']);
+                    if (Appointment::query()->where('technician_id', $payload['technician_id'])
+                        ->where('starts_at', '<', $endsAt)->where('ends_at', '>', $startsAt)
+                        ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))->exists()) {
+                        throw ValidationException::withMessages(['starts_at' => 'Ce créneau vient d’être occupé. Choisis une autre proposition.']);
+                    }
+                    if ($replacementAppointment) {
+                        $locked = Appointment::query()->lockForUpdate()->findOrFail($replacementAppointment->id);
+                        if (! $locked->updated_at->equalTo($replacementAppointment->updated_at)) {
+                            throw ValidationException::withMessages(['replace_appointment_id' => 'Ce RDV a changé. Rouvre sa fiche avant de le replacer.']);
+                        }
+                        $replacementAppointment = $locked;
+                    }
+                }
                 $appointmentAttributes = [
                     'service_id' => $crmAppointment['service']['id'],
                     'technician_id' => $payload['technician_id'],
@@ -537,7 +585,11 @@ class PlannerBookingController extends Controller
                     }
                 }
 
-                $coffracAppointments->markPlaced($appointment, $crmAppointment);
+                if (config('crm.v2_enabled')) {
+                    app(NativeAppointmentPlacement::class)->place($request->user(), $appointment, $crmAppointment);
+                } else {
+                    $coffracAppointments->markPlaced($appointment, $crmAppointment);
+                }
 
                 if ($lotAppointment) {
                     $appointment->refresh();
@@ -546,10 +598,11 @@ class PlannerBookingController extends Controller
                     if (
                         (int) $lotAppointment->appointment_id !== (int) $appointment->id
                         || $lotAppointment->status !== LotAppointment::STATUS_PLACED
-                        || $appointment->external_source !== CoffracAppointmentService::SOURCE
-                        || ! filled($appointment->external_reference)
+                        || (config('crm.v2_enabled')
+                            ? ! $appointment->dossier_operation_id
+                            : ($appointment->external_source !== CoffracAppointmentService::SOURCE || ! filled($appointment->external_reference)))
                     ) {
-                        throw new RuntimeException('Placement Coffrac incomplet: le RDV n’a pas été confirmé en attente visite.');
+                        throw new RuntimeException('Placement incomplet : le dossier n’a pas été confirmé en attente de visite.');
                     }
 
                     $this->refreshLotStatus($lotAppointment->lot);
@@ -734,6 +787,18 @@ class PlannerBookingController extends Controller
         return response()->json([
             'message' => 'Documents synchronisés avec Global+.',
             'global_plus' => $this->serializeBookingGlobalPlus($lotAppointment),
+        ]);
+    }
+
+    private function nativeBookingResponse(Request $request, array $appointment, string $message): JsonResponse
+    {
+        return response()->json([
+            'message' => $message,
+            'appointment' => $appointment,
+            'appointments' => app(DossierBooking::class)->pending($request->user())
+                ->map(fn ($row) => $row['id'] === $appointment['id'] ? $appointment : $row),
+            'coffrac_api_status' => null,
+            'external_sources' => [],
         ]);
     }
 
@@ -1121,7 +1186,7 @@ class PlannerBookingController extends Controller
     private function appointmentRequestRules(): array
     {
         return [
-            'crm_appointment_id' => ['nullable', 'string', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id'],
+            'crm_appointment_id' => ['nullable', 'string', 'prohibits:manual_appointment,lot_appointment_id,replace_appointment_id', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id'],
             'crm_service_id' => [
                 'nullable',
                 'integer',
@@ -1130,6 +1195,7 @@ class PlannerBookingController extends Controller
             'lot_appointment_id' => [
                 'nullable',
                 'integer',
+                'prohibits:manual_appointment,crm_appointment_id,replace_appointment_id',
                 'required_without_all:crm_appointment_id,manual_appointment,replace_appointment_id',
                 Rule::exists('lot_appointments', 'id'),
             ],
@@ -1147,10 +1213,11 @@ class PlannerBookingController extends Controller
             'replace_appointment_id' => [
                 'nullable',
                 'integer',
+                'prohibits:manual_appointment,crm_appointment_id,lot_appointment_id',
                 'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id',
                 Rule::exists('appointments', 'id')->whereNull('deleted_at'),
             ],
-            'manual_appointment' => ['nullable', 'array', 'required_without_all:crm_appointment_id,lot_appointment_id,replace_appointment_id'],
+            'manual_appointment' => ['nullable', 'array', 'prohibits:crm_appointment_id,lot_appointment_id,replace_appointment_id', 'required_without_all:crm_appointment_id,lot_appointment_id,replace_appointment_id'],
             'manual_appointment.first_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.last_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:255'],
@@ -1190,11 +1257,13 @@ class PlannerBookingController extends Controller
         if (! empty($payload['crm_appointment_id'])) {
             $crmAppointmentId = (string) $payload['crm_appointment_id'];
 
-            if (! str_starts_with($crmAppointmentId, CoffracAppointmentService::SOURCE.'-')) {
+            if (! config('crm.v2_enabled') && ! str_starts_with($crmAppointmentId, CoffracAppointmentService::SOURCE.'-')) {
                 return null;
             }
 
-            $appointment = $coffracAppointments->find($crmAppointmentId);
+            $appointment = config('crm.v2_enabled')
+                ? app(DossierBooking::class)->find(auth()->user(), $crmAppointmentId)
+                : $coffracAppointments->find($crmAppointmentId);
 
             if (! $appointment) {
                 return null;
@@ -1430,6 +1499,10 @@ class PlannerBookingController extends Controller
      */
     private function coffracAliasesForService(?Service $service): Collection
     {
+        if (config('crm.v2_enabled')) {
+            return collect();
+        }
+
         if (! $service) {
             return collect();
         }
@@ -1967,8 +2040,10 @@ class PlannerBookingController extends Controller
         $appointmentsByTechnicianAndDay = $appointments
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at?->toDateString());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
+        $commentsByAppointment = config('crm.v2_enabled')
+            ? app(\App\Services\Crm\AppointmentComments::class)->forAppointments($appointments) : [];
 
-        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment, $replacementAppointmentId): array {
+        return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment, $commentsByAppointment, $replacementAppointmentId): array {
             $serviceLabel = $appointment->service
                 ? $appointment->service->type.' - '.$appointment->service->name
                 : 'Prestation';
@@ -1980,8 +2055,8 @@ class PlannerBookingController extends Controller
             $previousAppointment = $sameDayAppointments
                 ->filter(fn (Appointment $candidate): bool => $candidate->starts_at?->lt($appointment->starts_at))
                 ->last();
-            $originLat = $previousAppointment ? (float) $previousAppointment->latitude : (float) $appointment->technician?->latitude;
-            $originLng = $previousAppointment ? (float) $previousAppointment->longitude : (float) $appointment->technician?->longitude;
+            $originLat = $previousAppointment ? $previousAppointment->latitude : $appointment->technician?->latitude;
+            $originLng = $previousAppointment ? $previousAppointment->longitude : $appointment->technician?->longitude;
             $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
 
             return [
@@ -2007,8 +2082,8 @@ class PlannerBookingController extends Controller
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                     'customer_phone' => $appointment->customer_phone,
                     'address' => $appointment->address,
-                    'latitude' => (float) $appointment->latitude,
-                    'longitude' => (float) $appointment->longitude,
+                    'latitude' => $appointment->latitude,
+                    'longitude' => $appointment->longitude,
                     'duration_minutes' => (int) $appointment->duration_minutes,
                     'comment' => $appointment->comment,
                     'status' => $appointment->status,
@@ -2024,7 +2099,7 @@ class PlannerBookingController extends Controller
                     'origin_name' => $previousAppointment
                         ? trim($previousAppointment->customer_first_name.' '.$previousAppointment->customer_last_name)
                         : 'Domicile',
-                    'comments' => $this->externalComments($appointment),
+                    'comments' => $commentsByAppointment[$appointment->id] ?? $this->externalComments($appointment),
                     'documents' => $documentsByAppointment[$appointment->id] ?? [],
                 ],
             ];
@@ -2036,6 +2111,10 @@ class PlannerBookingController extends Controller
      */
     private function externalComments(Appointment $appointment): array
     {
+        if (config('crm.v2_enabled')) {
+            return app(\App\Services\Crm\AppointmentComments::class)->forAppointments(collect([$appointment]))[$appointment->id] ?? [];
+        }
+
         $comments = data_get($appointment->external_payload, 'comments', []);
 
         return is_array($comments) ? array_values($comments) : [];
@@ -2186,6 +2265,9 @@ class PlannerBookingController extends Controller
         Carbon $date,
         MapboxDrivingRouteService $drivingRoutes
     ): array {
+        if ($dayAppointments->contains(fn (Appointment $row): bool => $row->latitude === null || $row->longitude === null)) {
+            return []; // Cannot promise travel feasibility for an unknown location.
+        }
         $dayStart = Carbon::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
         $dayEnd = Carbon::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
 
@@ -2551,6 +2633,9 @@ class PlannerBookingController extends Controller
         Carbon $preferredStartsAt,
         MapboxDrivingRouteService $drivingRoutes
     ): ?array {
+        if ($dayAppointments->contains(fn (Appointment $row): bool => $row->latitude === null || $row->longitude === null)) {
+            return null;
+        }
         $dayStart = Carbon::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
         $dayEnd = Carbon::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
         $startsAt = $this->roundUpToNextHalfHour($preferredStartsAt);

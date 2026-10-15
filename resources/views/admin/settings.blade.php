@@ -1,10 +1,6 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color:var(--gc-text-soft);">Admin</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Paramètres</h1>
-            <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Overrides applicatifs stockes de facon chiffree en BDD. Priorite: BDD si renseignée, sinon .env/config, sinon fallback applicatif.</p>
-        </div>
+        <x-workspace-heading title="Paramètres" eyebrow="Administration" description="Configurez les connexions et les règles de l’application. Les valeurs enregistrées ici sont chiffrées et prioritaires sur la configuration du serveur." />
 
         @if (session('status'))
             <div class="gc-alert">{{ session('status') }}</div>
@@ -15,48 +11,6 @@
                 {{ $errors->first() }}
             </div>
         @endif
-
-        <section class="gc-card p-5">
-            <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Maintenance API</p>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Réinitialisation des RDV externes</h2>
-                    <p class="mt-2 max-w-3xl text-sm" style="color:var(--gc-text-soft);">
-                        Vide uniquement le cache local des demandes récupérées depuis les APIs externes. Les rendez-vous déjà créés dans TechCalendar sont conservés.
-                    </p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                @foreach ($externalAppointmentSources ?? [] as $source)
-                    <div class="rounded-xl border p-4" style="border-color:var(--gc-border);background:#ffffff;">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <h3 class="font-semibold" style="color:var(--gc-text);">{{ $source['label'] }}</h3>
-                                <p class="mt-1 text-xs leading-5" style="color:var(--gc-text-soft);">{{ $source['description'] }}</p>
-                            </div>
-                            <span class="shrink-0 rounded-full px-2 py-1 text-xs font-semibold" style="background:#f8fafc;color:var(--gc-text);border:1px solid var(--gc-border);">
-                                {{ $source['appointments_count'] }} RDV
-                            </span>
-                        </div>
-
-                        <form
-                            method="POST"
-                            action="{{ route('admin.settings.external-appointments.reset') }}"
-                            class="mt-4"
-                            onsubmit="return confirm('Réinitialiser le cache local {{ addslashes($source['label']) }} ? Les RDV déjà créés dans TechCalendar seront conservés.');"
-                        >
-                            @csrf
-                            @method('DELETE')
-                            <input type="hidden" name="source" value="{{ $source['key'] }}">
-                            <button type="submit" class="gc-btn-danger w-full justify-center">
-                                {{ $source['reset_label'] }}
-                            </button>
-                        </form>
-                    </div>
-                @endforeach
-            </div>
-        </section>
 
         <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6" data-validate-form>
             @csrf

@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'physical_sampling_percentage',
     'contact_sampling_percentage',
     'delegataire',
+    'delegataire_id',
     'received_at',
     'comment',
     'original_filename',

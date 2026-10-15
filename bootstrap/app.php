@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [App\Http\Middleware\RestrictExternalAccounts::class]);
         $middleware->alias([
             'mobile.token' => App\Http\Middleware\AuthenticateMobileToken::class,
         ]);

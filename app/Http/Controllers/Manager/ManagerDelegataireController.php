@@ -21,10 +21,16 @@ class ManagerDelegataireController extends Controller
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:120'],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
+            'kind' => ['nullable', Rule::in(array_keys(ExternalDelegataire::KINDS))],
         ]);
 
         $query = ExternalDelegataire::query()
-            ->where('source', CoffracAppointmentService::SOURCE);
+            ->assignable();
+
+        if (config('crm.v2_enabled')) {
+            app(\App\Services\Crm\ClientAccess::class)->manage($request->user());
+            $query->withCount('accounts')->when($filters['kind'] ?? null, fn ($q, $kind) => $q->where('kind', $kind));
+        }
 
         if (filled($filters['q'] ?? null)) {
             $search = trim((string) $filters['q']);
@@ -51,11 +57,12 @@ class ManagerDelegataireController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        return view('manager.delegataires.index', [
+        return view(config('crm.v2_enabled') ? 'manager.clients.index' : 'manager.delegataires.index', [
             'delegataires' => $delegataires,
             'filters' => [
                 'q' => $filters['q'] ?? '',
                 'status' => $filters['status'] ?? '',
+                'kind' => $filters['kind'] ?? '',
             ],
             'stats' => [
                 'total' => ExternalDelegataire::query()->where('source', CoffracAppointmentService::SOURCE)->count(),
@@ -67,6 +74,7 @@ class ManagerDelegataireController extends Controller
 
     public function sync(Request $request, CoffracDelegataireService $delegataires): RedirectResponse
     {
+        abort_if(config('crm.v2_enabled'), 410, 'Le référentiel est désormais local.');
         abort_unless($this->canManageDelegataires($request), 403);
 
         try {

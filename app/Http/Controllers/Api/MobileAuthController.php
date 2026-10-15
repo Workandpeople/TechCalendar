@@ -38,7 +38,7 @@ class MobileAuthController extends Controller
             ]);
         }
 
-        if ((int) $user->role !== 2 || (bool) $user->admin) {
+        if ((int) $user->role !== 2 || (bool) $user->admin || $user->isExternal()) {
             throw ValidationException::withMessages([
                 'email' => 'Cette application est réservée aux techniciens.',
             ]);

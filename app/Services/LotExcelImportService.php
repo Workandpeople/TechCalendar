@@ -35,6 +35,7 @@ class LotExcelImportService
         ?int $coffracServiceAliasId = null,
         ?string $receivedAt = null,
         ?string $comment = null,
+        ?int $delegataireId = null,
     ): Lot {
         $rows = $this->extractor->extract($file);
         $normalized = $this->normalizer->normalize($rows, $requestedLotName, $lotType);
@@ -52,7 +53,7 @@ class LotExcelImportService
         $service = $serviceId ? Service::query()->find($serviceId) : null;
 
         try {
-            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $storedFile, $service): Lot {
+            return DB::transaction(function () use ($file, $userId, $requestedLotName, $lotType, $samplingPercentage, $source, $delegataire, $physicalSamplingPercentage, $contactSamplingPercentage, $coffracServiceAliasId, $receivedAt, $comment, $rows, $normalized, $storedFile, $service, $delegataireId): Lot {
                 $lot = Lot::query()->create([
                     'name' => filled($requestedLotName) ? trim((string) $requestedLotName) : ($normalized['lot_name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
                     'type' => filled($lotType) ? trim((string) $lotType) : null,
@@ -64,6 +65,7 @@ class LotExcelImportService
                     'contact_sampling_percentage' => $contactSamplingPercentage,
                     'source' => filled($source) ? trim((string) $source) : null,
                     'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
+                    'delegataire_id' => $delegataireId,
                     'received_at' => $receivedAt,
                     'comment' => filled($comment) ? trim((string) $comment) : null,
                     'original_filename' => $file->getClientOriginalName(),

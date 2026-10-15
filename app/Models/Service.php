@@ -37,6 +37,11 @@ class Service extends Model
         return $this->belongsToMany(User::class)->withTimestamps();
     }
 
+    public function scopeCatalog($query)
+    {
+        return $query->when(config('crm.v2_enabled'), fn ($query) => $query->whereNull('retired_at'));
+    }
+
     public function externalAliases(): HasMany
     {
         return $this->hasMany(ExternalServiceAlias::class);

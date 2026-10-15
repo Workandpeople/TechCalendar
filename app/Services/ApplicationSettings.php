@@ -22,7 +22,25 @@ class ApplicationSettings
      */
     public function definitions(): array
     {
-        return config('application_settings.definitions', []);
+        return collect(config('application_settings.definitions', []))
+            ->reject(fn ($definition, $key) => config('crm.v2_enabled') && str_starts_with($key, 'services.coffrac.'))
+            ->all();
+    }
+
+    public function missingCount(): int
+    {
+        $values = $this->databaseValues();
+
+        return collect($this->definitions())->filter(function ($definition, $key) use ($values) {
+            $value = collect([
+                $values[$key] ?? null,
+                isset($definition['env']) ? env($definition['env']) : null,
+                isset($definition['config']) ? $this->initialConfigValue($definition['config']) : null,
+                $definition['fallback'] ?? null,
+            ])->first(fn ($value) => $value !== null && $value !== '');
+
+            return blank($value);
+        })->count();
     }
 
     public function applyToConfig(): void

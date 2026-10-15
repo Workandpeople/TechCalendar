@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Planner;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\DossierBooking;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +16,7 @@ class PlannerDashboardController extends Controller
     public function __invoke(
         Request $request,
         CoffracAppointmentService $coffracAppointments
-    ): View
-    {
+    ): View {
         abort_unless($this->canAccess($request), 403);
 
         $now = now();
@@ -84,7 +84,9 @@ class PlannerDashboardController extends Controller
                 'serviceTypes' => $this->serviceTypeDistribution($weekStart, $weekEnd),
                 'plannerEfficiency' => $this->plannerEfficiency($weekStart, $weekEnd),
             ],
-            'crmAppointments' => $coffracAppointments->pending(15),
+            'crmAppointments' => config('crm.v2_enabled')
+                ? app(DossierBooking::class)->pending($request->user(), 15)
+                : $coffracAppointments->pending(15),
         ]);
     }
 

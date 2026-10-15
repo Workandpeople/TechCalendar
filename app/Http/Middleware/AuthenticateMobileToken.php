@@ -30,7 +30,7 @@ class AuthenticateMobileToken
 
         $user = $accessToken?->user;
 
-        if (! $accessToken || ! $user || (int) $user->role !== 2 || (bool) $user->admin) {
+        if (! $accessToken || ! $user || (int) $user->role !== 2 || (bool) $user->admin || $user->isExternal()) {
             return $this->unauthorized();
         }
 

@@ -7,6 +7,7 @@ use App\Models\ExternalServiceAlias;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\CoffracAppointmentService;
+use App\Services\ServiceDeletion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ class ManagerServiceController extends Controller
             'type' => ['nullable', Rule::in(Service::TYPES)],
         ]);
 
-        $query = Service::query()
+        $query = Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->orderBy('external_name')]);
@@ -95,11 +96,11 @@ class ManagerServiceController extends Controller
         return redirect()->route('manager.services')->with('status', 'Prestation mise à jour.');
     }
 
-    public function destroy(Request $request, Service $service): RedirectResponse
+    public function destroy(Request $request, Service $service, ServiceDeletion $deletion): RedirectResponse
     {
         abort_unless($this->canManageServices($request), 403);
 
-        $service->delete();
+        $deletion->delete($service);
 
         return redirect()->route('manager.services')->with('status', 'Prestation supprimée.');
     }
@@ -158,6 +159,10 @@ class ManagerServiceController extends Controller
      */
     private function validateExternalAliases(Request $request, ?int $serviceId = null): array
     {
+        if (config('crm.v2_enabled')) {
+            return [];
+        }
+
         $payload = $request->validate([
             'external_aliases' => ['nullable', 'string', 'max:20000'],
         ]);
@@ -220,10 +225,14 @@ class ManagerServiceController extends Controller
     }
 
     /**
-     * @param array<int, array{source:string,external_type:string,external_name:string,normalized_external_type:string,normalized_external_name:string}> $aliases
+     * @param  array<int, array{source:string,external_type:string,external_name:string,normalized_external_type:string,normalized_external_name:string}>  $aliases
      */
     private function syncExternalAliases(Service $service, array $aliases): void
     {
+        if (config('crm.v2_enabled')) {
+            return;
+        }
+
         $service->externalAliases()
             ->where('source', CoffracAppointmentService::SOURCE)
             ->delete();

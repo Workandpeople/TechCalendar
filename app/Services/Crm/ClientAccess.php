@@ -1,0 +1,134 @@
+<?php
+
+namespace App\Services\Crm;
+
+use App\Models\Dossier;
+use App\Models\DossierActivity;
+use App\Models\Lot;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+
+class ClientAccess
+{
+    public const PERMISSIONS = [
+        'documents' => 'Consulter les documents partagés',
+        'comments' => 'Lire les commentaires partagés',
+        'add_comments' => 'Ajouter des commentaires',
+        'upload_documents' => 'Ajouter des documents',
+        'lots' => 'Consulter les lots attribués',
+    ];
+
+    public static function defaults(string $kind): array
+    {
+        return ['documents' => true, 'comments' => $kind === 'client',
+            'add_comments' => $kind === 'client', 'upload_documents' => $kind === 'client', 'lots' => true];
+    }
+
+    public function active(User $user): bool
+    {
+        return config('crm.v2_enabled') && $user->isExternal() && $user->role === User::ROLE_EXTERNAL
+            && ! $user->admin && ! $user->trashed() && $user->portal_enabled
+            && (bool) $user->externalClient?->is_active;
+    }
+
+    public function allows(User $user, string $permission): bool
+    {
+        $readPermission = ['add_comments' => 'comments', 'upload_documents' => 'documents'][$permission] ?? null;
+
+        return $this->active($user) && ! $user->must_change_password
+            && in_array($permission, array_keys(self::PERMISSIONS), true)
+            && ($readPermission === null || ($user->portal_permissions[$readPermission] ?? false) === true)
+            && ($user->portal_permissions[$permission] ?? false) === true;
+    }
+
+    public function dossiers(User $user): Builder
+    {
+        abort_unless($this->active($user) && ! $user->must_change_password, 403);
+
+        return Dossier::query()->where('delegataire_id', $user->external_client_id);
+    }
+
+    public function viewDossier(User $user, Dossier $dossier): bool
+    {
+        return $this->active($user) && ! $user->must_change_password
+            && $dossier->delegataire_id !== null
+            && (int) $dossier->delegataire_id === $user->external_client_id;
+    }
+
+    public function lots(User $user): Builder
+    {
+        abort_unless($this->allows($user, 'lots'), 403);
+
+        return Lot::query()->where('delegataire_id', $user->external_client_id);
+    }
+
+    public function comments(User $user, Dossier $dossier): Builder
+    {
+        abort_unless($this->viewDossier($user, $dossier) && $this->allows($user, 'comments'), 403);
+
+        return $dossier->comments()->getQuery()->where(function ($query) use ($user): void {
+            $query->where('client_visible', true);
+            // Coffrac clients saw public comments; delegataires had no comment section.
+            if ($user->externalClient->kind === 'client') {
+                $query->orWhere(fn ($query) => $this->whereLegacyFlag($query->where('kind', 'legacy_comment')
+                    ->whereNull('visibility_reviewed_at'), 'changed_fields->is_private', false));
+            }
+        });
+    }
+
+    public function commentVisibleToClient(DossierActivity $comment, string $kind = 'client'): bool
+    {
+        return $comment->client_visible || ($kind === 'client' && $comment->kind === 'legacy_comment'
+            && $comment->visibility_reviewed_at === null
+            && in_array($comment->changed_fields['is_private'] ?? null, [false, 0, '0'], true));
+    }
+
+    public function legacyDocumentVisibility(array $payload, ?bool $override = null): array
+    {
+        $public = $override ?? in_array($payload['is_private'] ?? null, [false, 0, '0'], true);
+
+        return ['client_visible' => $public, 'delegataire_visible' => $public
+            && ($override === true || in_array($payload['is_delegataire'] ?? null, [true, 1, '1'], true))];
+    }
+
+    public function filterLegacyDocuments(QueryBuilder $query, User $user): QueryBuilder
+    {
+        abort_unless($this->allows($user, 'documents'), 403);
+
+        return $query->where(function ($query) use ($user): void {
+            $query->where('client_visible_override', true)
+                ->orWhere(function ($query) use ($user): void {
+                    $this->whereLegacyFlag($query->whereNull('client_visible_override'), 'payload->is_private', false);
+                    if ($user->externalClient->kind === 'delegataire') {
+                        $this->whereLegacyFlag($query, 'payload->is_delegataire', true);
+                    }
+                });
+        });
+    }
+
+    public function canReadLegacyDocument(User $user, array $payload, ?bool $override = null): bool
+    {
+        if (! $this->allows($user, 'documents')) {
+            return false;
+        }
+
+        // An explicit local decision overrides the archive; missing metadata stays private.
+        $visibility = $this->legacyDocumentVisibility($payload, $override);
+
+        return $visibility[$user->externalClient->kind === 'client' ? 'client_visible' : 'delegataire_visible'];
+    }
+
+    public function manage(User $actor): void
+    {
+        abort_unless(config('crm.v2_enabled') && ! $actor->isExternal() && ! $actor->trashed()
+            && ! $actor->must_change_password && ($actor->admin || $actor->role === 0), 403);
+    }
+
+    private function whereLegacyFlag(Builder|QueryBuilder $query, string $field, bool $value): Builder|QueryBuilder
+    {
+        // Historical exports contain booleans, integers and strings; match only these exact values.
+        return $query->where(fn ($query) => $query->whereJsonContains($field, $value)
+            ->orWhereJsonContains($field, (int) $value)->orWhereJsonContains($field, $value ? '1' : '0'));
+    }
+}

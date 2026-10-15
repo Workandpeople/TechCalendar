@@ -12,6 +12,7 @@ use App\Services\LotTemplateMapper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\Support\LotTemplateFile;
@@ -21,6 +22,27 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     config(['services.openai.api_key' => null, 'services.mapbox.token' => 'test-mapbox']);
     Http::preventStrayRequests();
+});
+
+it('logs actionable OpenAI failures without exposing addresses credentials or raw provider errors', function () {
+    config(['services.openai.api_key' => 'private-key']);
+    Log::spy();
+    Http::fake(['api.openai.com/*' => Http::response(['error' => ['message' => 'private-key should not be logged']], 401, ['x-request-id' => 'req-test'])]);
+    $result = app(LotAddressNormalizer::class)->normalize([['address' => '12 RUE DU TEST', 'company_name' => 'Private customer']]);
+    expect($result[0]['address'])->toBe('12 RUE DU TEST');
+    Log::shouldHaveReceived('warning')->once()->withArgs(function ($message, $context) {
+        expect($context['http_status'])->toBe(401)->and($context['request_id'])->toBe('req-test')
+            ->and(json_encode($context))->not->toContain('private-key', '12 RUE DU TEST', 'Private customer');
+
+        return true;
+    });
+});
+
+it('reports skipped AI cleaning when the key is absent without sending data', function () {
+    Log::spy();
+    app(LotAddressNormalizer::class)->normalize([['address' => '12 RUE DU TEST']]);
+    Http::assertNothingSent();
+    Log::shouldHaveReceived('notice')->once()->withArgs(fn ($message, $context) => str_contains($message, 'clé OpenAI absente') && $context['addresses_count'] === 1);
 });
 
 it('uses the same template columns for every row without borrowing the installer identity', function () {

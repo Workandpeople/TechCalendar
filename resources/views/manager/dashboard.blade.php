@@ -1,13 +1,6 @@
 <x-layouts.app>
     <div class="space-y-6" data-manager-dashboard data-data-url="{{ $dataUrl }}" data-refresh-url="{{ $refreshUrl }}">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Gérant</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Dashboard gérant</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                    Efficacité planning, chargé terrain et kilomètres calculés en tâche de fond puis cachés en base.
-                </p>
-            </div>
+        <x-workspace-heading title="Tableau de bord gérant" eyebrow="Vue d’ensemble" description="Suivez l’activité de votre équipe, l’occupation du planning et les déplacements.">
 
             <div class="flex flex-wrap items-center gap-3">
                 <span id="manager-dashboard-generated-at" class="text-sm" style="color:var(--gc-text-soft);"></span>
@@ -15,14 +8,14 @@
                     Recalculer
                 </button>
             </div>
-        </div>
+        </x-workspace-heading>
 
         <section id="manager-dashboard-loader" class="gc-card p-5">
             <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <p class="text-sm font-semibold" style="color:var(--gc-text);">Calcul des widgets</p>
                     <p id="manager-dashboard-loader-message" class="mt-1 text-sm" style="color:var(--gc-text-soft);">
-                        Préparation du job de calcul...
+                        Préparation des indicateurs…
                     </p>
                 </div>
                 <span id="manager-dashboard-progress-label" class="rounded-full px-3 py-1 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">

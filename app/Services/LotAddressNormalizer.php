@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -31,6 +32,9 @@ class LotAddressNormalizer
         $chunks = array_chunk($unique, $chunkSize);
 
         if (filled(config('services.openai.api_key'))) {
+            Log::info('Lot import: nettoyage des adresses OpenAI démarré.', [
+                'model' => config('services.openai.model'), 'addresses_count' => count($unique), 'chunks_count' => count($chunks),
+            ]);
             foreach ($chunks as $chunkIndex => $chunk) {
                 try {
                     $response = Http::withToken((string) config('services.openai.api_key'))
@@ -76,15 +80,25 @@ class LotAddressNormalizer
                         }
                         $normalized[$original] = $candidate;
                     }
+                    Log::info('Lot import: réponse OpenAI reçue et vérifiée.', [
+                        'chunk' => $chunkIndex, 'addresses_count' => count($chunk),
+                        'http_status' => $response->status(), 'request_id' => $response->header('x-request-id'),
+                    ]);
                 } catch (Throwable $exception) {
                     Log::warning('Lot import: nettoyage IA indisponible, conservation des adresses du fichier nettoyées localement.', [
                         'chunk' => $chunkIndex, 'addresses_count' => count($chunk), 'exception_type' => $exception::class,
+                        'http_status' => $exception instanceof RequestException ? $exception->response->status() : null,
+                        'request_id' => $exception instanceof RequestException ? $exception->response->header('x-request-id') : null,
                     ]);
                 }
                 if ($progress) {
                     $progress($chunkIndex + 1, count($chunks));
                 }
             }
+        } elseif ($unique !== []) {
+            Log::notice('Lot import: clé OpenAI absente, nettoyage local des adresses uniquement.', [
+                'addresses_count' => count($unique),
+            ]);
         }
 
         foreach ($appointments as &$appointment) {

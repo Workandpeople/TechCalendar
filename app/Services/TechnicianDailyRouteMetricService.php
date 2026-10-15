@@ -47,7 +47,7 @@ class TechnicianDailyRouteMetricService
             $progressCallback($processed, $total);
         }
 
-        $metrics = $groups->map(function (Collection $dayAppointments) use (&$processed, $total, $progressCallback): TechnicianDailyRouteMetric {
+        $metrics = $groups->map(function (Collection $dayAppointments) use (&$processed, $total, $progressCallback): ?TechnicianDailyRouteMetric {
             $metric = $this->ensureForDay($dayAppointments);
             $processed++;
 
@@ -58,7 +58,7 @@ class TechnicianDailyRouteMetricService
             return $metric;
         });
 
-        return $metrics->values();
+        return $metrics->filter()->values();
     }
 
     /**
@@ -79,20 +79,26 @@ class TechnicianDailyRouteMetricService
 
         return $appointments
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at->toDateString())
-            ->map(fn (Collection $dayAppointments): TechnicianDailyRouteMetric => $this->ensureForDay($dayAppointments))
+            ->map(fn (Collection $dayAppointments): ?TechnicianDailyRouteMetric => $this->ensureForDay($dayAppointments))
+            ->filter()
             ->values();
     }
 
     /**
      * @param Collection<int, Appointment> $appointments
      */
-    private function ensureForDay(Collection $appointments): TechnicianDailyRouteMetric
+    private function ensureForDay(Collection $appointments): ?TechnicianDailyRouteMetric
     {
         /** @var Appointment $firstAppointment */
         $firstAppointment = $appointments->first();
         /** @var User $technician */
         $technician = $firstAppointment->technician;
         $serviceDate = $firstAppointment->starts_at->toDateString();
+        if ($appointments->contains(fn (Appointment $row): bool => $row->latitude === null || $row->longitude === null)) {
+            TechnicianDailyRouteMetric::query()->where('technician_id', $technician->id)->whereDate('service_date', $serviceDate)->delete();
+
+            return null;
+        }
         $routePoints = $this->routePoints($technician, $appointments);
         $routeHash = hash('sha256', json_encode([
             'route_points' => $routePoints,

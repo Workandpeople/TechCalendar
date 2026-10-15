@@ -1,9 +1,6 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des users</h1>
-        </div>
+        <x-workspace-heading title="Utilisateurs internes" eyebrow="Votre équipe" description="Gérez les rôles, les disponibilités et les habilitations de vos collaborateurs. Les comptes clients sont dans Clients et délégataires." />
 
         @if ($errors->any())
             <div class="gc-alert" style="border-color:#f5c2c7;background:#fff1f2;color:#9f1239;">
@@ -148,11 +145,13 @@
     </div>
 
     <div id="create-user-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl">
+        <div class="gc-modal-panel gc-modal-panel-xl gc-form-modal">
             <h2 class="text-lg font-semibold">Creer un utilisateur</h2>
             <form method="POST" action="{{ route('manager.users.store') }}" class="mt-4 space-y-4" data-validate-form>
                 @csrf
-                @include('manager.users.partials.form-fields', ['prefix' => 'create', 'user' => null])
+                <div class="gc-form-modal-content space-y-4">
+                    @include('manager.users.partials.form-fields', ['prefix' => 'create', 'user' => null])
+                </div>
                 <div class="gc-modal-actions">
                     <button type="button" class="gc-link" data-modal-close="create-user-modal">Annuler</button>
                     <button type="submit" class="gc-btn-primary">Creer</button>
@@ -162,12 +161,14 @@
     </div>
 
     <div id="edit-user-modal" class="gc-modal hidden">
-        <div class="gc-modal-panel gc-modal-panel-xl">
+        <div class="gc-modal-panel gc-modal-panel-xl gc-form-modal">
             <h2 class="text-lg font-semibold">Modifier un utilisateur</h2>
             <form id="edit-user-form" method="POST" action="#" class="mt-4 space-y-4" data-validate-form>
                 @csrf
                 @method('PUT')
-                @include('manager.users.partials.form-fields', ['prefix' => 'edit', 'user' => null])
+                <div class="gc-form-modal-content space-y-4">
+                    @include('manager.users.partials.form-fields', ['prefix' => 'edit', 'user' => null])
+                </div>
                 <div class="gc-modal-actions">
                     <button type="button" class="gc-link" data-modal-close="edit-user-modal">Annuler</button>
                     <button type="submit" class="gc-btn-primary">Enregistrer</button>
@@ -242,6 +243,7 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <script>
+        const escapeMapboxText = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
         const MAPBOX_TOKEN = @json(config('services.mapbox.token'));
         const DEPARTMENT_GEOJSON_URL = @json(asset('geo/departements.geojson'));
         const openButtons = document.querySelectorAll('[data-modal-open]');
@@ -541,7 +543,8 @@
 
         const openModal = (id) => {
             const modal = document.getElementById(id);
-            if (modal) modal.classList.remove('hidden');
+            modal?.classList.remove('hidden');
+            modal?.querySelectorAll('form[data-validate-form]').forEach((form) => window.TechCalendarForms?.refresh(form));
         };
 
         const initMapboxAutocomplete = (prefix) => {
@@ -595,7 +598,7 @@
                         }
 
                         list.innerHTML = features
-                            .map((feature) => `<button type="button" class="gc-mapbox-item" data-address="${feature.place_name}" data-department-code="${extractDepartmentCode(feature)}" data-lng="${feature.center?.[0] ?? ''}" data-lat="${feature.center?.[1] ?? ''}">${feature.place_name}</button>`)
+                            .map((feature) => `<button type="button" class="gc-mapbox-item" data-address="${escapeMapboxText(feature.place_name)}" data-department-code="${extractDepartmentCode(feature)}" data-lng="${feature.center?.[0] ?? ''}" data-lat="${feature.center?.[1] ?? ''}">${escapeMapboxText(feature.place_name)}</button>`)
                             .join('');
                         list.classList.remove('hidden');
 

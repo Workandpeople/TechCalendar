@@ -933,7 +933,11 @@ class GlobalPlusAppointmentService
         if ($delegataire === '') {
             return [];
         }
-        $names = ExternalDelegataire::query()->source('coffrac')->where('name', $delegataire)->pluck('company_name')
+        $names = ExternalDelegataire::query()->assignable()
+            ->when($lotAppointment->lot?->delegataire_id,
+                fn ($query, $id) => $query->whereKey($id),
+                fn ($query) => $query->where('name', $delegataire))
+            ->pluck('company_name')
             ->push($delegataire)->map(fn ($name) => $this->normalizeMatchValue($name))->filter()->unique();
 
         return collect($clients)

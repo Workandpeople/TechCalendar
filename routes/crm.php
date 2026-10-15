@@ -1,0 +1,44 @@
+<?php
+
+use App\Http\Controllers\Crm\CapceeReportController;
+use App\Http\Controllers\Crm\DossierController;
+use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
+use App\Http\Controllers\Crm\DossierPlanningController;
+use App\Http\Controllers\Crm\DossierWorkflowController;
+use App\Http\Middleware\EnsureCrmV2Enabled;
+use App\Models\Dossier;
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class, 'can:viewAny,'.Dossier::class])->group(function (): void {
+    Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
+    Route::get('/dossiers/nouveau', [DossierController::class, 'create'])->name('dossiers.create');
+    Route::get('/documents/{document}', [DossierController::class, 'download'])->name('documents.download');
+    Route::patch('/documents/{document}/partage', [DossierController::class, 'shareDocument'])->name('documents.sharing');
+    Route::patch('/dossiers/{dossier}/commentaires/{comment}/partage', [DossierController::class, 'shareComment'])->whereNumber('comment')->name('dossiers.comments.sharing');
+    Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
+    Route::get('/dossiers/{dossier}/modifier', [DossierController::class, 'edit'])->name('dossiers.edit');
+    Route::get('/dossiers/{dossier}/carte', [DossierController::class, 'mapPreview'])->middleware('throttle:60,1')->name('dossiers.map');
+    Route::get('/dossiers/{dossier}/capcee/suivi', [CapceeReportController::class, 'status'])->middleware('throttle:60,1')->name('capcee.status');
+    Route::get('/dossiers/{dossier}/capcee/envois/{delivery}/pdf', [CapceeReportController::class, 'download'])->name('capcee.download');
+    Route::get('/dossiers/{dossier}/prestations/{operation}/capcee/nouveau', [CapceeReportController::class, 'create'])->name('capcee.create');
+    Route::get('/dossiers/{dossier}/prestations/{operation}/capcee/{report}/nouvelle-version', [CapceeReportController::class, 'create'])->name('capcee.revision');
+    Route::get('/dossiers/{dossier}/documents-lots/{document}', [DossierController::class, 'downloadLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.download');
+    Route::get('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'downloadCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.download');
+    Route::patch('/dossiers/{dossier}/documents-collectes/{document}/partage', [DossierController::class, 'shareCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.sharing');
+    Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
+    Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
+    Route::middleware('throttle:30,1')->group(function (): void {
+        Route::patch('/dossiers/{dossier}/suivi-planning', DossierPlanningAssignmentController::class)->name('dossiers.planning-assignment');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/apres-visite', [DossierWorkflowController::class, 'postVisit'])->name('dossiers.operations.post-visit');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/reprendre', [DossierWorkflowController::class, 'reopen'])->name('dossiers.operations.reopen');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/capcee', [CapceeReportController::class, 'store'])->name('capcee.store');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/capcee/{report}/versions', [CapceeReportController::class, 'store'])->name('capcee.versions.store');
+        Route::post('/dossiers/{dossier}/capcee/envois/{delivery}/reprendre', [CapceeReportController::class, 'retry'])->name('capcee.retry');
+        Route::post('/dossiers', [DossierController::class, 'store'])->name('dossiers.store');
+        Route::put('/dossiers/{dossier}', [DossierController::class, 'update'])->name('dossiers.update');
+        Route::post('/dossiers/{dossier}/commentaires', [DossierController::class, 'comment'])->name('dossiers.comments.store');
+        Route::post('/dossiers/{dossier}/documents', [DossierController::class, 'document'])->name('dossiers.documents.store');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'store'])->name('dossiers.appointments.store');
+        Route::delete('/dossiers/{dossier}/prestations/{operation}/rendez-vous/{appointment}', [DossierPlanningController::class, 'destroy'])->whereNumber('appointment')->name('dossiers.appointments.destroy');
+    });
+});

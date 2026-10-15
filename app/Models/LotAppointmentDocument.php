@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'mime',
     'size',
     'is_private',
+    'client_visible',
     'status',
     'pushed_at',
     'remote_document',
@@ -73,6 +74,7 @@ class LotAppointmentDocument extends Model
         return [
             'size' => 'integer',
             'is_private' => 'boolean',
+            'client_visible' => 'boolean',
             'pushed_at' => 'datetime',
             'remote_document' => 'array',
             'global_plus_pushed_at' => 'datetime',

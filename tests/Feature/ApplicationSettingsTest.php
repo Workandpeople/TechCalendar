@@ -248,7 +248,7 @@ it('renders OpenAI model as a select list', function () {
         ->assertSee('OpenAI lignes par paquet');
 });
 
-it('resets local external appointment cache from settings without deleting placed appointments', function () {
+it('keeps the legacy reset endpoint but removes it from settings without deleting placed appointments', function () {
     $admin = User::query()->create([
         'first_name' => 'Ada',
         'last_name' => 'Admin',
@@ -311,9 +311,9 @@ it('resets local external appointment cache from settings without deleting place
     $this->actingAs($admin)
         ->get(route('admin.settings'))
         ->assertOk()
-        ->assertSee('Réinitialisation des RDV externes')
-        ->assertSee('Réinitialiser Coffrac')
-        ->assertSee('1 RDV');
+        ->assertDontSee('Maintenance API')
+        ->assertDontSee('Réinitialisation des RDV externes')
+        ->assertDontSee('Réinitialiser Coffrac');
 
     $this->actingAs($admin)
         ->delete(route('admin.settings.external-appointments.reset'), [

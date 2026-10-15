@@ -31,7 +31,7 @@ class ManagerUserController extends Controller
             'status' => ['nullable', Rule::in(['active', 'trashed', 'all'])],
         ]);
 
-        $query = User::query()
+        $query = User::query()->internal()
             ->with([
                 'services:id',
                 'departments:code',
@@ -68,7 +68,7 @@ class ManagerUserController extends Controller
 
         return view('manager.users.index', [
             'users' => $users,
-            'services' => Service::query()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
+            'services' => Service::query()->catalog()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
             'departments' => Department::query()->orderBy('code')->get(['code', 'name']),
             'filters' => [
                 'q' => $validated['q'] ?? '',
@@ -105,7 +105,7 @@ class ManagerUserController extends Controller
         $payload = UserNameNormalizer::normalizePayload($payload);
 
         $plainPassword = Str::password(10);
-        $user = User::query()->create([
+        $user = User::query()->internal()->create([
             'first_name' => $payload['first_name'],
             'last_name' => $payload['last_name'],
             'email' => $payload['email'],
@@ -126,7 +126,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $target = User::withTrashed()->where('admin', false)->findOrFail($user);
+        $target = User::withTrashed()->internal()->where('admin', false)->findOrFail($user);
 
         $this->normalizeTechTimeInputs($request);
 
@@ -169,7 +169,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $target = User::where('admin', false)->findOrFail($user);
+        $target = User::internal()->where('admin', false)->findOrFail($user);
 
         if ($request->user()->is($target)) {
             return back()->withErrors(['user' => 'Impossible de désactiver votre propre compte.']);
@@ -184,7 +184,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $target = User::withTrashed()->where('admin', false)->findOrFail($user);
+        $target = User::withTrashed()->internal()->where('admin', false)->findOrFail($user);
         $target->restore();
 
         return redirect()->route('manager.users', ['status' => 'trashed'])->with('status', 'Utilisateur restaure.');
@@ -194,7 +194,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $target = User::withTrashed()->where('admin', false)->findOrFail($user);
+        $target = User::withTrashed()->internal()->where('admin', false)->findOrFail($user);
 
         if (! $target->trashed()) {
             return back()->withErrors(['user' => 'Suppression définitive autorisée uniquement après soft delete.']);
@@ -213,7 +213,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $target = User::withTrashed()->where('admin', false)->findOrFail($user);
+        $target = User::withTrashed()->internal()->where('admin', false)->findOrFail($user);
 
         if ($target->trashed()) {
             return back()->withErrors(['user' => 'Impossible d envoyér un lien de reset à un compte supprimé.']);
@@ -232,7 +232,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $technician = User::query()
+        $technician = User::query()->internal()
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
@@ -274,7 +274,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        User::query()
+        User::query()->internal()
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')

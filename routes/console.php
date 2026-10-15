@@ -108,6 +108,17 @@ Artisan::command('coffrac:sync {--incremental : Ne récupère que les changement
     return $result['available'] ? 0 : 1;
 })->purpose('Synchronise les RDV Coffrac a placer et deja places dans la base locale.');
 
+// Only explicitly approved reports enter this outbox, including local development.
+if (config('crm.v2_enabled') && config('capcee.enabled')
+    && (! config('simulation.enabled') || config('simulation.allow_external_apis'))) {
+    Schedule::command('capcee:dispatch')->everyMinute()->withoutOverlapping(5);
+}
+
+// No automatic imports, notifications or external checks on production snapshots.
+if (config('simulation.enabled')) {
+    return;
+}
+
 Schedule::command('health:check')
     ->everyFiveMinutes();
 
@@ -122,10 +133,12 @@ Schedule::command('system-tests:schedule --suite=all')
 Schedule::command('route-metrics:compute')
     ->hourly();
 
-Schedule::command('coffrac:sync --incremental')
-    ->everyTenMinutes()
-    ->withoutOverlapping(60);
+if (! config('crm.v2_enabled')) {
+    Schedule::command('coffrac:sync --incremental')
+        ->everyTenMinutes()
+        ->withoutOverlapping(60);
 
-Schedule::command('coffrac:sync --status=placed')
-    ->cron('5-59/10 * * * *')
-    ->withoutOverlapping(60);
+    Schedule::command('coffrac:sync --status=placed')
+        ->cron('5-59/10 * * * *')
+        ->withoutOverlapping(60);
+}

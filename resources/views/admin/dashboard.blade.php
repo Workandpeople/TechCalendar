@@ -1,21 +1,16 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Admin</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Santé du site</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Monitoring applicatif, erreurs, jobs, disque, storage et configuration.</p>
-            </div>
+        <x-workspace-heading title="Santé du site" eyebrow="Administration" description="Surveillez les erreurs, les traitements et les connexions. Ouvrez un contrôle pour comprendre ce qui demande votre attention.">
             <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
                 <form method="POST" action="{{ route('admin.dashboard.health.run') }}">
                     @csrf
-                    <button type="submit" class="gc-btn-primary">Relancer les checks</button>
+                    <button type="submit" class="gc-btn-primary">Relancer les contrôles</button>
                 </form>
                 <div class="rounded-xl px-4 py-3 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">
                     Statut: {{ strtoupper($latestSnapshot->overall_status) }}
                 </div>
             </div>
-        </div>
+        </x-workspace-heading>
 
         <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             @foreach ($stats as $stat)
@@ -135,6 +130,7 @@
                 </div>
             </article>
 
+            @unless (config('crm.v2_enabled'))
             <article class="gc-card min-w-0 p-5 xl:col-span-2">
                 <div class="mb-4 flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div class="min-w-0">
@@ -169,6 +165,7 @@
                 <div id="coffrac_logs_status" class="mb-3 min-w-0 rounded-xl border px-4 py-3 text-sm" style="display:none;border-color:var(--gc-border);color:var(--gc-text-soft);overflow-wrap:anywhere;"></div>
                 <pre id="coffrac_logs_output" class="max-h-[32rem] min-w-0 max-w-full overflow-auto rounded-xl border p-4 text-xs leading-relaxed" style="display:none;border-color:var(--gc-border);background:#111827;color:#f9fafb;white-space:pre-wrap;overflow-wrap:anywhere;"></pre>
             </article>
+            @endunless
         </section>
 
         <section class="gc-card p-5">

@@ -1,13 +1,8 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">Planning</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Dashboard planning</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Pilotage des placements existants et de la chargé equipe.</p>
-            </div>
-            <a href="{{ route('planner.book') }}" class="gc-btn-primary self-start md:self-auto">Prendre un rdv</a>
-        </div>
+        <x-workspace-heading title="Tableau de bord planning" eyebrow="Organisation des visites" description="Retrouvez l’activité des techniciens et les rendez-vous à organiser.">
+            <a href="{{ route('planner.book') }}" class="gc-btn-primary self-start md:self-auto"><x-nav-icon name="book" /> Prendre un rdv</a>
+        </x-workspace-heading>
 
         <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             @foreach ($stats as $stat)

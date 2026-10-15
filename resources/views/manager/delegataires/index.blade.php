@@ -4,12 +4,14 @@
             <div>
                 <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
                 <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des délégataires</h1>
-                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Liste synchronisée depuis Coffrac. Les délégataires sont consultables uniquement ici.</p>
+                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Référentiel des délégataires intégré à TechCalendar.' : 'Liste synchronisée depuis Coffrac. Les délégataires sont consultables uniquement ici.' }}</p>
             </div>
+            @unless(config('crm.v2_enabled'))
             <form method="POST" action="{{ route('manager.delegataires.sync') }}">
                 @csrf
                 <button type="submit" class="gc-btn-primary">Récupérer depuis Coffrac</button>
             </form>
+            @endunless
         </div>
 
         @if ($errors->any())

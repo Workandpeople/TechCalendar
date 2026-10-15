@@ -20,6 +20,9 @@ use App\Http\Controllers\Planner\PlannerTrackingController;
 use App\Http\Controllers\Tech\TechPlanningController;
 use Illuminate\Support\Facades\Route;
 
+require __DIR__.'/crm.php';
+require __DIR__.'/clients.php';
+
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
@@ -39,6 +42,10 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/', function () {
         $user = auth()->user();
+
+        if ($user->isExternal()) {
+            return redirect()->route($user->must_change_password ? 'profile' : 'client.dossiers');
+        }
 
         if ($user->admin) {
             return redirect()->route('admin.dashboard');

@@ -36,6 +36,23 @@ use Illuminate\Notifications\Notifiable;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
+    public const ROLE_EXTERNAL = 3;
+
+    public function isExternal(): bool
+    {
+        return $this->role === self::ROLE_EXTERNAL || $this->external_client_id !== null;
+    }
+
+    public function externalClient(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(ExternalDelegataire::class, 'external_client_id');
+    }
+
+    public function scopeInternal(\Illuminate\Database\Eloquent\Builder $query): void
+    {
+        $query->whereNull('external_client_id')->where('role', '!=', self::ROLE_EXTERNAL);
+    }
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, SoftDeletes;
 
@@ -47,6 +64,9 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'external_client_id' => 'integer',
+            'portal_permissions' => 'array',
+            'portal_enabled' => 'boolean',
             'role' => 'integer',
             'admin' => 'boolean',
             'must_change_password' => 'boolean',

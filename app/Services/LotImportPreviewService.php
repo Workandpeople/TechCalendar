@@ -24,6 +24,7 @@ class LotImportPreviewService
         ?string $delegataire = null,
         ?string $receivedAt = null,
         ?string $comment = null,
+        ?int $delegataireId = null,
     ): LotImportPreview {
         $storedFile = $this->storeOriginalFile($file);
 
@@ -40,6 +41,7 @@ class LotImportPreviewService
             'physical_sampling_percentage' => $physicalSamplingPercentage,
             'contact_sampling_percentage' => $contactSamplingPercentage,
             'delegataire' => filled($delegataire) ? trim((string) $delegataire) : null,
+            'delegataire_id' => $delegataireId,
             'received_at' => $receivedAt,
             'comment' => filled($comment) ? trim((string) $comment) : null,
             'original_filename' => $file->getClientOriginalName(),

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 #[Fillable([
     'source',
+    'kind',
     'external_id',
     'name',
     'company_name',
@@ -19,6 +20,18 @@ use Illuminate\Database\Eloquent\Model;
 ])]
 class ExternalDelegataire extends Model
 {
+    public const KINDS = ['delegataire' => 'Délégataire', 'client' => 'Client'];
+
+    public function accounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(User::class, 'external_client_id');
+    }
+
+    public function scopeAssignable(Builder $query): Builder
+    {
+        return $query->when(! config('crm.v2_enabled'), fn ($query) => $query->where('source', 'coffrac'));
+    }
+
     protected function casts(): array
     {
         return [

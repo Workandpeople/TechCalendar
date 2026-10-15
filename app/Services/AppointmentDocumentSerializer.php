@@ -3,8 +3,12 @@
 namespace App\Services;
 
 use App\Models\Appointment;
+use App\Models\Dossier;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\LotAppointmentDocument;
+use App\Services\Crm\CollectedDossierDocuments;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 
 class AppointmentDocumentSerializer
 {
@@ -14,6 +18,10 @@ class AppointmentDocumentSerializer
      */
     public function forAppointments(Collection $appointments): array
     {
+        if (config('crm.v2_enabled')) {
+            return $this->nativeDocumentsByAppointment($appointments);
+        }
+
         $fallbackDocuments = $this->fallbackDocumentsByExternalReference($appointments);
 
         return $appointments
@@ -36,6 +44,10 @@ class AppointmentDocumentSerializer
      */
     public function forAppointment(Appointment $appointment, array $fallbackDocuments = []): array
     {
+        if (config('crm.v2_enabled')) {
+            return $this->nativeDocumentsByAppointment(collect([$appointment]))[$appointment->id] ?? [];
+        }
+
         $documents = $this->documentsFromPayload($appointment->external_payload);
 
         if (! is_array($documents) || $documents === []) {
@@ -45,8 +57,63 @@ class AppointmentDocumentSerializer
         return $this->normalize($documents, $appointment->external_source);
     }
 
+    /** Load shared dossier files once per calendar, never from the retired Coffrac connector. */
+    private function nativeDocumentsByAppointment(Collection $appointments): array
+    {
+        if ($appointments->isEmpty() || ! Gate::allows('viewAny', Dossier::class)) {
+            return [];
+        }
+
+        $models = (new Appointment)->newCollection($appointments->all());
+        $models->loadMissing('dossierOperation.dossier.documents');
+        $dossiers = $models->map(fn ($appointment) => $appointment->dossierOperation?->dossier)->filter()->unique('id');
+        $byDossier = $dossiers->mapWithKeys(fn (Dossier $dossier): array => [
+            $dossier->id => $dossier->documents->map(fn ($document): array => [
+                'id' => 'dossier-'.$document->id, 'name' => $document->name,
+                'url' => route('v2.documents.download', $document),
+                'scope' => 'Dossier', 'is_private' => true, 'is_delegataire' => false,
+            ])->all(),
+        ])->all();
+
+        if ($dossiers->isNotEmpty()) {
+            foreach (app(CollectedDossierDocuments::class)->forDossiers(auth()->user(), $dossiers) as $dossierId => $documents) {
+                $byDossier[$dossierId] = array_merge($byDossier[$dossierId] ?? [], $documents);
+            }
+            $dossierIds = $dossiers->pluck('id')->all();
+            $linked = LotAppointmentDocument::query()
+                ->where(fn ($query) => $query
+                    ->whereHas('appointment', fn ($appointment) => $appointment->withTrashed()
+                        ->whereHas('dossierOperation', fn ($operation) => $operation->whereIn('dossier_id', $dossierIds)))
+                    ->orWhereHas('lotAppointment.appointment', fn ($appointment) => $appointment->withTrashed()
+                        ->whereHas('dossierOperation', fn ($operation) => $operation->whereIn('dossier_id', $dossierIds))))
+                ->with([
+                    'appointment' => fn ($query) => $query->withTrashed()->with('dossierOperation'),
+                    'lotAppointment.appointment' => fn ($query) => $query->withTrashed()->with('dossierOperation'),
+                ])->get();
+
+            foreach ($linked as $document) {
+                $owners = array_unique(array_filter([
+                    $document->appointment?->dossierOperation?->dossier_id,
+                    $document->lotAppointment?->appointment?->dossierOperation?->dossier_id,
+                ]));
+                foreach ($owners as $dossierId) {
+                    if (array_key_exists($dossierId, $byDossier)) {
+                        $byDossier[$dossierId][] = [
+                            'id' => 'lot-'.$document->id, 'name' => $document->name,
+                            'url' => route('v2.dossiers.lot-documents.download', [$dossierId, $document->id]),
+                            'scope' => 'Lot', 'is_private' => $document->is_private, 'is_delegataire' => false,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $models->mapWithKeys(fn ($appointment): array => [
+            $appointment->id => $byDossier[$appointment->dossierOperation?->dossier_id] ?? [],
+        ])->all();
+    }
+
     /**
-     * @param  mixed  $documents
      * @return array<int, array<string, mixed>>
      */
     public function normalize(mixed $documents, ?string $source = null): array
@@ -85,7 +152,6 @@ class AppointmentDocumentSerializer
     }
 
     /**
-     * @param  mixed  $payload
      * @return array<int, array<string, mixed>>
      */
     public function fromPayload(mixed $payload, ?string $source = null): array
@@ -142,7 +208,6 @@ class AppointmentDocumentSerializer
     }
 
     /**
-     * @param  mixed  $payload
      * @return array<int, array<string, mixed>>
      */
     private function documentsFromPayload(mixed $payload): array
@@ -183,7 +248,6 @@ class AppointmentDocumentSerializer
     }
 
     /**
-     * @param  mixed  $documents
      * @return array<int, array<string, mixed>>
      */
     private function normalizeDocumentList(mixed $documents): array

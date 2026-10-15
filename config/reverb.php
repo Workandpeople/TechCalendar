@@ -15,6 +15,13 @@ return [
 
     'default' => env('REVERB_SERVER', 'reverb'),
 
+    // The browser can use a different hostname from the queue worker (Docker/proxy).
+    'client' => [
+        'host' => env('VITE_REVERB_HOST') ?: env('REVERB_HOST'),
+        'port' => env('VITE_REVERB_PORT') ?: env('REVERB_PORT', 443),
+        'scheme' => env('VITE_REVERB_SCHEME') ?: env('REVERB_SCHEME', 'https'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Reverb Servers
@@ -82,7 +89,7 @@ return [
                     'scheme' => env('REVERB_SCHEME', 'https'),
                     'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 ],
-                'allowed_origins' => ['*'],
+                'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', env('REVERB_ALLOWED_ORIGINS', '*'))))),
                 'ping_interval' => env('REVERB_APP_PING_INTERVAL', 60),
                 'activity_timeout' => env('REVERB_APP_ACTIVITY_TIMEOUT', 30),
                 'max_connections' => env('REVERB_APP_MAX_CONNECTIONS'),

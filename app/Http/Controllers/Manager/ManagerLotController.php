@@ -77,7 +77,7 @@ class ManagerLotController extends Controller
             'services' => $services,
             'serviceAliasOptions' => $this->lotServiceAliasOptions($services),
             'delegataires' => ExternalDelegataire::query()
-                ->where('source', CoffracAppointmentService::SOURCE)
+                ->assignable()
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'company_name', 'email']),
@@ -134,7 +134,7 @@ class ManagerLotController extends Controller
             'services' => $services,
             'serviceAliasOptions' => $this->lotServiceAliasOptions($services),
             'delegataires' => ExternalDelegataire::query()
-                ->where('source', CoffracAppointmentService::SOURCE)
+                ->assignable()
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'company_name', 'email']),
@@ -151,7 +151,7 @@ class ManagerLotController extends Controller
                 'nullable',
                 'integer',
                 Rule::exists('external_delegataires', 'id')->where(fn ($query) => $query
-                    ->where('source', CoffracAppointmentService::SOURCE)
+                    ->when(! config('crm.v2_enabled'), fn ($query) => $query->where('source', CoffracAppointmentService::SOURCE))
                     ->where('is_active', true)),
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
@@ -207,6 +207,7 @@ class ManagerLotController extends Controller
                 coffracServiceAliasId: $coffracServiceAliasId,
                 receivedAt: $payload['received_at'] ?? null,
                 comment: $payload['comment'] ?? null,
+                delegataireId: isset($payload['delegataire_id']) ? (int) $payload['delegataire_id'] : null,
             );
         } catch (Throwable $exception) {
             return back()
@@ -223,23 +224,25 @@ class ManagerLotController extends Controller
     {
         abort_unless($this->canAccess($request), 403);
 
-        $payload = $this->validatedLotPayload($request);
+        $payload = $this->validatedLotPayload($request, $lot);
         $samplingPayload = $this->normalizedSamplingPayload($payload);
         $coffracServiceAliasId = $this->coffracAliasIdForService((int) $payload['service_id'], $payload['coffrac_service_alias_id'] ?? null);
         $currentStatus = Lot::normalizedStatus($lot->status);
 
-        $lot->fill([
+        app(\App\Services\Crm\LotClientAssignment::class)->update($request->user(), $lot, [
             'name' => trim((string) $payload['name']),
             'type' => $payload['type'],
             'sampling_percentage' => $samplingPayload['sampling_percentage'],
             'physical_sampling_percentage' => $samplingPayload['physical_sampling_percentage'],
             'contact_sampling_percentage' => $samplingPayload['contact_sampling_percentage'],
-            'delegataire' => filled($payload['delegataire'] ?? null) ? trim((string) $payload['delegataire']) : null,
+            'delegataire' => array_key_exists('delegataire_id', $payload) || array_key_exists('delegataire', $payload)
+                ? ($this->delegataireNameFromPayload($payload) ?: null) : $lot->delegataire,
+            'delegataire_id' => array_key_exists('delegataire_id', $payload) ? $payload['delegataire_id'] : $lot->delegataire_id,
             'received_at' => $payload['received_at'] ?? null,
             'comment' => filled($payload['comment'] ?? null) ? trim((string) $payload['comment']) : null,
             'service_id' => (int) $payload['service_id'],
             'coffrac_service_alias_id' => $coffracServiceAliasId,
-        ])->save();
+        ]);
 
         $this->syncOpenLotAppointmentsService($lot, (int) $payload['service_id']);
 
@@ -359,7 +362,7 @@ class ManagerLotController extends Controller
                 'nullable',
                 'integer',
                 Rule::exists('external_delegataires', 'id')->where(fn ($query) => $query
-                    ->where('source', CoffracAppointmentService::SOURCE)
+                    ->when(! config('crm.v2_enabled'), fn ($query) => $query->where('source', CoffracAppointmentService::SOURCE))
                     ->where('is_active', true)),
             ],
             'delegataire' => ['nullable', 'string', 'max:190', 'required_without:delegataire_id'],
@@ -413,6 +416,7 @@ class ManagerLotController extends Controller
             delegataire: $delegataireName,
             receivedAt: $payload['received_at'] ?? null,
             comment: $payload['comment'] ?? null,
+            delegataireId: isset($payload['delegataire_id']) ? (int) $payload['delegataire_id'] : null,
         );
 
         return response()->json([
@@ -910,9 +914,14 @@ class ManagerLotController extends Controller
     public function resetAppointmentProcessing(Request $request, LotAppointment $lotAppointment): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
-        abort_unless($this->canResetLotAppointmentProcessing($lotAppointment), 422, "Ce dossier n'a pas encore été traité.");
+        abort_unless($this->canResetLotAppointmentProcessing($lotAppointment), 422, 'Ce dossier ne peut pas être réinitialisé : il n’est pas traité ou son contrôle après visite est déjà engagé.');
 
         $lotAppointment = DB::transaction(function () use ($lotAppointment): LotAppointment {
+            if (config('crm.v2_enabled') && ($operation = $lotAppointment->appointment?->dossierOperation)) {
+                $dossier = \App\Models\Dossier::query()->lockForUpdate()->findOrFail($operation->dossier_id);
+                $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
+                \App\Services\Crm\PostVisitWorkflow::assertPlanningMutable($operation);
+            }
             $lotAppointment->loadMissing('appointment');
 
             if ($lotAppointment->appointment) {
@@ -974,11 +983,15 @@ class ManagerLotController extends Controller
         ]);
     }
 
-    private function validatedLotPayload(Request $request): array
+    private function validatedLotPayload(Request $request, Lot $lot): array
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:190'],
             'delegataire' => ['nullable', 'string', 'max:190'],
+            'delegataire_id' => ['nullable', 'integer', Rule::exists('external_delegataires', 'id')
+                ->where(fn ($query) => $query
+                    ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', $lot->delegataire_id))
+                    ->when(! config('crm.v2_enabled'), fn ($query) => $query->where('source', CoffracAppointmentService::SOURCE)))],
             'received_at' => ['nullable', 'date'],
             'comment' => ['nullable', 'string', 'max:5000'],
             'type' => ['required', 'string', Rule::in(array_keys(Lot::types()))],
@@ -1050,8 +1063,7 @@ class ManagerLotController extends Controller
     {
         if (filled($payload['delegataire_id'] ?? null)) {
             $delegataire = ExternalDelegataire::query()
-                ->where('source', CoffracAppointmentService::SOURCE)
-                ->where('is_active', true)
+                ->assignable()
                 ->findOrFail((int) $payload['delegataire_id']);
 
             return $delegataire->name;
@@ -1062,7 +1074,7 @@ class ManagerLotController extends Controller
 
     private function lotServicesForForms()
     {
-        return Service::query()
+        return Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
                 ->where('source', CoffracAppointmentService::SOURCE)
                 ->orderBy('external_name')])
@@ -1091,6 +1103,10 @@ class ManagerLotController extends Controller
 
     private function coffracAliasIdForService(int $serviceId, mixed $aliasId): ?int
     {
+        if (config('crm.v2_enabled')) {
+            return null;
+        }
+
         if (! filled($aliasId)) {
             return null;
         }
@@ -1232,7 +1248,8 @@ class ManagerLotController extends Controller
     private function lotAppointmentRelations(): array
     {
         return [
-            'appointment:id,technician_id,service_id,starts_at,ends_at',
+            'appointment:id,technician_id,service_id,starts_at,ends_at,dossier_operation_id',
+            ...((bool) config('crm.v2_enabled') ? ['appointment.dossierOperation:id,dossier_id,legacy_status,inspected_on,control_outcome,control_submitted_at,control_validated_at'] : []),
             'service:id,type,name,average_duration_minutes',
             'appointment.service:id,type,name',
             'appointment.technician:id,first_name,last_name,department_code,role',
@@ -1360,6 +1377,7 @@ class ManagerLotController extends Controller
             'supports_contact' => $lot->supportsContactProcessing(),
             'is_hybrid' => $lot->isHybrid(),
             'delegataire' => $lot->delegataire,
+            'delegataire_id' => $lot->delegataire_id,
             'received_at' => $lot->received_at,
             'received_at_formatted' => $lot->received_at?->format('d/m/Y'),
             'received_at_input' => $lot->received_at?->format('Y-m-d'),
@@ -1670,6 +1688,7 @@ class ManagerLotController extends Controller
     private function serializeLotAppointment(LotAppointment $appointment, Lot $lot): array
     {
         $rawPayload = $appointment->raw_payload ?? [];
+        $operation = config('crm.v2_enabled') ? $appointment->appointment?->dossierOperation : null;
 
         return [
             'id' => $appointment->id,
@@ -1681,6 +1700,10 @@ class ManagerLotController extends Controller
             'global_plus_store_url' => route('manager.lots.appointments.global-plus.store', $appointment),
             'global_plus_documents_sync_url' => route('manager.lots.appointments.global-plus.documents.sync', $appointment),
             'reset_processing_url' => route('manager.lots.appointments.reset-processing', $appointment),
+            'post_visit_url' => $operation ? route('v2.dossiers.show', $operation->dossier_id).'#apres-visite' : null,
+            'post_visit_status' => $operation ? \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['label'] : null,
+            'post_visit_outcome' => isset(\App\Services\Crm\PostVisitWorkflow::OUTCOMES[$operation?->control_outcome])
+                ? \App\Services\Crm\PostVisitWorkflow::OUTCOMES[$operation->control_outcome].($operation->control_validated_at ? ' (validé)' : ' (à valider)') : null,
             'documents_upload_url' => route('manager.lots.appointments.documents.store', $appointment),
             'external_reference' => $appointment->external_reference,
             'row_number' => $appointment->row_number,
@@ -1818,7 +1841,7 @@ class ManagerLotController extends Controller
         $appointment = $document->appointment ?: $document->lotAppointment?->appointment;
         $queuedTargets = [];
 
-        if ($appointment && $appointment->external_source === CoffracAppointmentService::SOURCE && filled($appointment->external_reference)) {
+        if (! config('crm.v2_enabled') && $appointment && $appointment->external_source === CoffracAppointmentService::SOURCE && filled($appointment->external_reference)) {
             $document->update([
                 'appointment_id' => $appointment->id,
                 'status' => LotAppointmentDocument::STATUS_QUEUED,
@@ -2004,6 +2027,10 @@ class ManagerLotController extends Controller
 
     private function canResetLotAppointmentProcessing(LotAppointment $appointment): bool
     {
+        if (config('crm.v2_enabled') && $appointment->appointment?->dossierOperation?->inspected_on) {
+            return false;
+        }
+
         return $this->isPlacedLotAppointment($appointment)
             || $this->isContactProcessedLotAppointment($appointment)
             || $appointment->processing_mode !== null

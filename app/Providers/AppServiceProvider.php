@@ -25,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
 
-        if ($this->app->isProduction()) {
+        if ($this->app->environment('production', 'demo')) {
             URL::forceScheme('https');
         }
 
@@ -34,5 +34,7 @@ class AppServiceProvider extends ServiceProvider
         } catch (Throwable) {
             // Fallback .env: settings DB must never block application boot.
         }
+
+        app(\App\Services\Simulation\SimulationSafety::class)->boot();
     }
 }

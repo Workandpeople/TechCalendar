@@ -24,26 +24,28 @@ class ProcessLotImportPreviewJob implements ShouldQueue
 
     public int $timeout = 1500;
 
-    public function __construct(private readonly int $previewId)
-    {
-    }
+    public function __construct(private readonly int $previewId) {}
 
     public function handle(LotImportPreviewProcessor $processor): void
     {
         $preview = LotImportPreview::query()->findOrFail($this->previewId);
 
-        Log::warning('Lot import preview job started.', [
+        Log::info('Lot import preview job started.', [
             'preview_id' => $preview->id,
             'status' => $preview->status,
             'name' => $preview->name,
             'type' => $preview->type,
             'original_filename' => $preview->original_filename,
+            'worker_pid' => getmypid(),
+            'mapbox_configured' => filled(config('services.mapbox.token')),
+            'openai_configured' => filled(config('services.openai.api_key')),
+            'broadcast_connection' => config('broadcasting.default'),
         ]);
 
         try {
             $processor->process($preview);
 
-            Log::warning('Lot import preview job completed.', [
+            Log::info('Lot import preview job completed.', [
                 'preview_id' => $preview->id,
                 'status' => $preview->refresh()->status,
                 'normalized_rows' => $preview->normalized_rows,

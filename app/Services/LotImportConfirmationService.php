@@ -82,6 +82,7 @@ class LotImportConfirmationService
                 'physical_sampling_percentage' => $preview->physical_sampling_percentage,
                 'contact_sampling_percentage' => $preview->contact_sampling_percentage,
                 'delegataire' => $preview->delegataire,
+                'delegataire_id' => $preview->delegataire_id,
                 'received_at' => $preview->received_at,
                 'comment' => $preview->comment,
                 'original_filename' => $preview->original_filename,

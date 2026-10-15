@@ -1,9 +1,6 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div>
-            <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
-            <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des prestations</h1>
-        </div>
+        <x-workspace-heading title="Prestations" eyebrow="Référentiel métier" description="Définissez les prestations et leur durée pour préparer des rendez-vous adaptés aux habilitations des techniciens." />
 
         @if ($errors->any())
             <div class="gc-alert" style="border-color:#f5c2c7;background:#fff1f2;color:#9f1239;">
@@ -49,7 +46,7 @@
                             <th class="px-4 py-3 font-semibold">Type</th>
                             <th class="px-4 py-3 font-semibold">Nom de la prestation</th>
                             <th class="px-4 py-3 font-semibold">Temps moyen</th>
-                            <th class="px-4 py-3 font-semibold">Alias Coffrac</th>
+                            @unless(config('crm.v2_enabled'))<th class="px-4 py-3 font-semibold">Alias Coffrac</th>@endunless
                             <th class="px-4 py-3 font-semibold">Actions</th>
                         </tr>
                     </thead>
@@ -59,6 +56,7 @@
                                 <td class="px-4 py-3">{{ $service->type }}</td>
                                 <td class="px-4 py-3">{{ $service->name }}</td>
                                 <td class="px-4 py-3">{{ $service->average_duration_minutes }} min</td>
+@unless(config('crm.v2_enabled'))
                                 <td class="px-4 py-3">
                                     @if ($service->externalAliases->isNotEmpty())
                                         <div class="flex max-w-lg flex-wrap gap-1">
@@ -73,6 +71,7 @@
                                         <span class="text-sm" style="color:var(--gc-text-soft);">Aucun alias</span>
                                     @endif
                                 </td>
+@endunless
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
                                         <button
@@ -215,7 +214,7 @@
                     document.getElementById('edit_type').value = button.dataset.serviceType || '';
                     document.getElementById('edit_name').value = button.dataset.serviceName || '';
                     document.getElementById('edit_average_duration_minutes').value = button.dataset.serviceDuration || '';
-                    document.getElementById('edit_external_aliases').value = JSON.parse(button.dataset.serviceAliases || '[]').join('\n');
+                    if (document.getElementById('edit_external_aliases')) document.getElementById('edit_external_aliases').value = JSON.parse(button.dataset.serviceAliases || '[]').join('\n');
                     window.TechCalendarForms?.refresh(form);
                 }
 

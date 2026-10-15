@@ -1,3 +1,23 @@
+import { initSidebar } from './sidebar';
+import { initSidebarSections } from './sidebar-sections';
+import { initDossierComments } from './dossier-comments';
+import { initDossierMapPreview } from './dossier-map-preview';
+import { initDossierList } from './dossier-list';
+import { commentHtml, commentText, initCommentMarkup } from './comment-markup';
+import { initCapceeReports } from './capcee-reports';
+import { initSelectMenus } from './select-menu';
+
+window.TechCalendarComments = { html: commentHtml, text: commentText };
+initCommentMarkup();
+
+initSidebar();
+initSidebarSections();
+initDossierComments();
+initDossierMapPreview();
+initDossierList();
+initCapceeReports();
+initSelectMenus();
+
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,
     host: window.TechCalendarReverbConfig?.host || import.meta.env.VITE_REVERB_HOST || window.location.hostname,
@@ -63,6 +83,8 @@ const subscribePrivateReverbChannel = (channelName, eventName, callback, options
 
         const auth = await response.json();
 
+        if (closedByClient || socket?.readyState !== WebSocket.OPEN) return;
+
         socket?.send(JSON.stringify({
             event: 'pusher:subscribe',
             data: {
@@ -81,15 +103,20 @@ const subscribePrivateReverbChannel = (channelName, eventName, callback, options
     });
 
     socket.addEventListener('message', async (message) => {
+        if (closedByClient) return;
         const envelope = safeJsonParse(message.data, {});
         const payload = safeJsonParse(envelope.data, envelope.data || {});
+
+        if (envelope.event === 'pusher:ping') {
+            socket.send(JSON.stringify({ event: 'pusher:pong', data: {} }));
+            return;
+        }
 
         if (envelope.event === 'pusher:connection_established') {
             try {
                 await subscribe(payload?.socket_id);
-                options.onState?.('subscribed');
             } catch (error) {
-                options.onError?.(error);
+                if (!closedByClient) options.onError?.(error);
             }
 
             return;
@@ -101,6 +128,11 @@ const subscribePrivateReverbChannel = (channelName, eventName, callback, options
         }
 
         if (envelope.channel !== privateChannelName) {
+            return;
+        }
+
+        if (envelope.event === 'pusher_internal:subscription_succeeded') {
+            options.onState?.('subscribed');
             return;
         }
 
@@ -118,7 +150,7 @@ const subscribePrivateReverbChannel = (channelName, eventName, callback, options
     });
 
     socket.addEventListener('error', () => {
-        options.onError?.(new Error('Reverb websocket error.'));
+        if (!closedByClient) options.onError?.(new Error('Reverb websocket error.'));
     });
 
     return {
@@ -332,9 +364,7 @@ const validateForm = (form, showErrors = false) => {
         setGroupState(group, error === '', showErrors || group.dataset.touched === '1' ? error : '');
     });
 
-    form.querySelectorAll('[type="submit"]').forEach((button) => {
-        if (button.form !== form) return;
-
+    Array.from(form.elements).filter((field) => field.type === 'submit').forEach((button) => {
         button.disabled = !isValid;
     });
 

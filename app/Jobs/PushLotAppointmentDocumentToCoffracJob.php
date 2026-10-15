@@ -33,6 +33,14 @@ class PushLotAppointmentDocumentToCoffracJob implements ShouldQueue
 
     public function handle(CoffracAppointmentService $coffracAppointments): void
     {
+        if (config('crm.v2_enabled')) {
+            LotAppointmentDocument::query()->whereKey($this->documentId)
+                ->where('status', LotAppointmentDocument::STATUS_QUEUED)
+                ->update(['status' => LotAppointmentDocument::STATUS_PENDING, 'error_message' => null]);
+
+            return;
+        }
+
         $document = LotAppointmentDocument::query()
             ->with(['lotAppointment.appointment', 'appointment', 'uploader'])
             ->find($this->documentId);

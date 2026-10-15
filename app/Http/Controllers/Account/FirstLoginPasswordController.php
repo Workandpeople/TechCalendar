@@ -29,6 +29,12 @@ class FirstLoginPasswordController extends Controller
             'must_change_password' => false,
         ])->save();
 
+        if ($user->isExternal()) {
+            $request->session()->regenerate();
+
+            return redirect()->route('client.dossiers')->with('status', 'Mot de passe mis à jour.');
+        }
+
         return back()->with('status', 'Mot de passe mis à jour.');
     }
 }

@@ -1,17 +1,10 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-                <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des lots</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                    Un lot regroupe des dossiers à traiter depuis un fichier d’import, avec suivi physique, contact ou hybride.
-                </p>
-            </div>
+        <x-workspace-heading title="Les lots" eyebrow="Campagnes de contrôle" description="Importez vos dossiers, suivez les objectifs et retrouvez les résultats. Ouvrez une carte pour accéder au détail du lot.">
             <button id="lot-import-form-open" type="button" class="gc-btn-primary justify-center">
-                Importer un lot
+                <x-nav-icon name="upload" /> Importer un lot
             </button>
-        </div>
+        </x-workspace-heading>
 
         @if (session('status'))
             <div class="gc-alert">{{ session('status') }}</div>
@@ -90,6 +83,7 @@
                         'received_at' => $lot['received_at_input'],
                         'comment' => $lot['comment'],
                         'delegataire' => $lot['delegataire'],
+                        'delegataire_id' => $lot['delegataire_id'],
                         'appointments_count' => $lot['appointments_count'],
                         'placed_count' => $lot['placed_count'],
                         'contact_processed_count' => $lot['contact_processed_count'],
@@ -140,7 +134,7 @@
                     $lotCardCharts = $satisfactionCharts->concat($dissatisfactionCharts)->values();
 
                     $lotCardChartGridClass = match (true) {
-                        $lotCardCharts->count() >= 4 => 'grid-cols-2 xl:grid-cols-4',
+                        $lotCardCharts->count() >= 4 => 'grid-cols-2',
                         $lotCardCharts->count() >= 3 => 'grid-cols-3',
                         $lotCardCharts->count() === 2 => 'grid-cols-2',
                         default => 'grid-cols-1',
@@ -319,11 +313,11 @@
                                 <input id="lot_action_name" name="name" type="text" class="gc-input" maxlength="190" required />
                             </div>
                             <div class="md:col-span-2">
-                                <label class="gc-label" for="lot_action_delegataire">Délégataire</label>
-                                <select id="lot_action_delegataire" name="delegataire" class="gc-input">
+                                <label class="gc-label" for="lot_action_delegataire">Client (classique ou délégataire)</label>
+                                <select id="lot_action_delegataire" name="{{ config('crm.v2_enabled') ? 'delegataire_id' : 'delegataire' }}" class="gc-input">
                                     <option value="">Sélectionner</option>
                                     @foreach ($delegataires as $delegataire)
-                                        <option value="{{ $delegataire->name }}">
+                                        <option value="{{ config('crm.v2_enabled') ? $delegataire->id : $delegataire->name }}">
                                             {{ $delegataire->name }}
                                             @if ($delegataire->company_name)
                                                 · {{ $delegataire->company_name }}
@@ -359,13 +353,15 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div>
+                            @unless(config('crm.v2_enabled'))
+<div>
                                 <label class="gc-label" for="lot_action_coffrac_service_alias_id">Alias Coffrac du lot</label>
                                 <select id="lot_action_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                     <option value="">Sélectionner une prestation</option>
                                 </select>
                                 <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac lors d’un RDV physique issu de ce lot.</p>
                             </div>
+@endunless
                             <div>
                                 <span class="gc-label">Statut du lot</span>
                                 <div id="lot_action_status_text" class="rounded-xl border px-4 py-3 text-sm font-semibold" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);"></div>
@@ -509,19 +505,19 @@
         </div>
 
         <div id="lot-import-form-modal" class="gc-modal hidden">
-            <div class="gc-modal-panel flex max-w-5xl flex-col overflow-hidden p-0">
-                <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
+            <div class="gc-modal-panel gc-form-modal max-w-5xl">
+                <div class="gc-form-modal-heading flex items-start justify-between gap-4" style="border-color:var(--gc-border);">
                     <div>
                         <p class="text-sm" style="color:var(--gc-text-soft);">Nouveau lot</p>
                         <h2 class="text-xl font-semibold" style="color:var(--gc-text);">Importer un lot</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Modèle TechCalendar à 14 colonnes, au format .xlsx ou export CSV. Les informations sont lues directement ; seules les adresses sont nettoyées avant géocodage.</p>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ajoutez le modèle TechCalendar à 14 colonnes (.xlsx ou CSV). Vous pourrez vérifier les lignes avant de créer le lot.</p>
                     </div>
                     <button id="lot-import-form-close" type="button" class="gc-link">Fermer</button>
                 </div>
 
-                <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data" class="space-y-5 overflow-y-auto p-5">
+                <form id="lot-import-form" method="POST" action="{{ route('manager.lots.imports.store') }}" enctype="multipart/form-data">
                     @csrf
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div class="gc-form-modal-content grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                         <div id="lot-file-field" class="xl:col-span-2">
                             <label class="gc-label" for="lot_file">Fichier du lot</label>
                             <input id="lot_file" name="file" type="file" class="gc-input" accept=".xlsx,.csv,.txt" required />
@@ -540,7 +536,7 @@
                             <input id="lot_received_at" name="received_at" type="date" value="{{ old('received_at') }}" class="gc-input" required />
                         </div>
                         <div>
-                            <label class="gc-label" for="lot_delegataire">Délégataire</label>
+                            <label class="gc-label" for="lot_delegataire">Client (classique ou délégataire)</label>
                             <select id="lot_delegataire" name="delegataire_id" class="gc-input" required>
                                 <option value="">Sélectionner</option>
                                 @foreach ($delegataires as $delegataire)
@@ -550,7 +546,7 @@
                                 @endforeach
                             </select>
                             @if ($delegataires->isEmpty())
-                                <p class="mt-1 text-xs" style="color:#9f1239;">Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.</p>
+                                <p class="mt-1 text-xs" style="color:#9f1239;">{{ config('crm.v2_enabled') ? 'Aucun client actif. Ajoutez un client dans Clients et délégataires avant de créer le lot.' : 'Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.' }}</p>
                             @endif
                         </div>
                         <div>
@@ -573,13 +569,15 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div>
+                        @unless(config('crm.v2_enabled'))
+<div>
                             <label class="gc-label" for="lot_coffrac_service_alias_id">Alias Coffrac du lot</label>
                             <select id="lot_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                 <option value="">Sélectionner une prestation</option>
                             </select>
                             <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne l’intitulé exact attendu par Coffrac pour ce lot.</p>
                         </div>
+@endunless
                         <div id="lot-single-sampling-wrap">
                             <label class="gc-label" for="lot_sampling_percentage">% d'échantillonnage</label>
                             <input id="lot_sampling_percentage" name="sampling_percentage" type="number" min="0.01" max="100" step="0.01" value="{{ old('sampling_percentage') }}" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" placeholder="Ex: 10" disabled />
@@ -594,7 +592,7 @@
                         </div>
                     </div>
 
-                    <div class="flex justify-end gap-2 border-t pt-4" style="border-color:var(--gc-border);">
+                    <div class="gc-modal-actions">
                         <button id="lot-import-form-cancel" type="button" class="gc-btn-soft">Annuler</button>
                         <button id="lot-import-submit" type="submit" class="gc-btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled>Importer</button>
                     </div>
@@ -1027,8 +1025,9 @@
             if (lotActionContactSamplingPercentage) lotActionContactSamplingPercentage.value = lot.contact_sampling_percentage ?? '';
             if (lotActionReceivedAt) lotActionReceivedAt.value = lot.received_at || '';
             if (lotActionComment) lotActionComment.value = lot.comment || '';
-            ensureSelectOption(lotActionDelegataire, lot.delegataire || '');
-            lotActionDelegataire.value = lot.delegataire || '';
+            const clientValue = @json((bool) config('crm.v2_enabled')) ? String(lot.delegataire_id || '') : lot.delegataire || '';
+            ensureSelectOption(lotActionDelegataire, clientValue, lot.delegataire || clientValue);
+            lotActionDelegataire.value = clientValue;
             updateLotActionSamplingState();
 
             const placedCount = Number(lot.placed_count || 0);
@@ -1221,14 +1220,14 @@
             lotImportActualProgress = Math.max(lotImportActualProgress, safeProgress);
 
             if (safeProgress >= 100 || ['completed', 'failed', 'confirmed'].includes(currentLotImport?.status)) {
-                lotImportActualProgress = 100;
+                resetLotImportProgressAnimation(100);
+            } else {
+                if (lotImportVisualProgress === 0 || safeProgress <= 5) {
+                    setLotImportProgressVisual(safeProgress);
+                }
+                startLotImportProgressAnimation();
             }
 
-            if (lotImportVisualProgress === 0 || safeProgress <= 5) {
-                setLotImportProgressVisual(safeProgress);
-            }
-
-            startLotImportProgressAnimation();
             lotImportStatus.textContent = statusText;
 
             if (stageText !== null && lotImportStage) {
@@ -1612,7 +1611,7 @@
                 },
                 {
                     onState: (state) => {
-                        if (state === 'closed' && (currentLotImportCompleted || currentLotImport?.status === 'failed')) {
+                        if (currentLotImportCompleted || currentLotImport?.status === 'failed') {
                             return;
                         }
 
@@ -1627,6 +1626,7 @@
                         setLotImportRealtimeState(labels[state] || 'Etat Reverb inconnu.', state === 'subscribed' ? 'succèss' : 'muted');
                     },
                     onError: () => {
+                        if (currentLotImportCompleted || currentLotImport?.status === 'failed') return;
                         setLotImportRealtimeState('Reverb indisponible, polling de secours actif.', 'error');
                     },
                 },

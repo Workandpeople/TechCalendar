@@ -14,6 +14,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (config('simulation.enabled')) {
+            $this->call(ProductionSnapshotSeeder::class);
+
+            return;
+        }
+
         if ($this->command?->getLaravel()->environment('production')) {
             $this->call([
                 AdminUserSeeder::class,

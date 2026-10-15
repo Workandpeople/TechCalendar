@@ -1,45 +1,28 @@
 <x-layouts.app>
     <div class="space-y-6">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-                <a href="{{ route('manager.lots') }}" class="gc-link">Retour à la gestion des lots</a>
-                <p class="mt-3 text-sm" style="color:var(--gc-text-soft);">Gérant · Lot</p>
-                <div class="mt-1 flex flex-wrap items-center gap-3">
-                    <h1 class="text-2xl font-semibold" style="color:var(--gc-text);">{{ $lot['title'] }}</h1>
-                    <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">
-                        {{ $lot['status_label'] }}
-                    </span>
-                </div>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
-                    {{ $lot['type_label'] }}
-                    @if ($lot['delegataire'])
-                        · Délégataire : {{ $lot['delegataire'] }}
-                    @endif
-                    @if ($lot['imported_at'])
-                        · Importé le {{ $lot['imported_at']->format('d/m/Y H:i') }}
-                    @endif
-                </p>
-                @if ($lot['comment'])
-                    <p class="mt-3 max-w-4xl whitespace-pre-line rounded-2xl border px-4 py-3 text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text);">
-                        {{ $lot['comment'] }}
-                    </p>
-                @endif
-            </div>
-
+        <a href="{{ route('manager.lots') }}" class="gc-link">← Retour à la gestion des lots</a>
+        <x-workspace-heading :title="$lot['title']" :eyebrow="$lot['type_label']" :description="$lot['delegataire'] ? 'Client : '.$lot['delegataire'] : 'Suivi des dossiers et des objectifs du lot.'">
             <div class="flex flex-wrap items-center gap-2">
                 @if ($lot['can_download_original_file'])
                     <a href="{{ $lot['download_url'] }}" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4 leading-none">
-                        Télécharger le fichier source
+                        <x-nav-icon name="document" /> Télécharger le fichier source
                     </a>
                 @endif
                 <button id="lot-detail-documents-open" type="button" class="gc-btn-soft inline-flex h-[42px] items-center justify-center px-4">
-                    Gérer les documents
+                    <x-nav-icon name="document" /> Gérer les documents
                 </button>
                 <button id="lot-detail-edit-open" type="button" class="gc-btn-primary inline-flex h-[42px] items-center justify-center px-4">
-                    Modifier
+                    <x-nav-icon name="edit" /> Modifier
                 </button>
             </div>
+        </x-workspace-heading>
+        <div class="flex flex-wrap items-center gap-3 text-sm">
+            <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background:{{ $lot['status_background'] }};color:{{ $lot['status_color'] }};">{{ $lot['status_label'] }}</span>
+            @if ($lot['imported_at'])<span class="text-slate-500">Importé le {{ $lot['imported_at']->format('d/m/Y H:i') }}</span>@endif
         </div>
+        @if ($lot['comment'])
+            <p class="whitespace-pre-line rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">{{ $lot['comment'] }}</p>
+        @endif
 
         @php
             $lotDelegataireNames = $delegataires->pluck('name');
@@ -67,18 +50,21 @@
                         </div>
 
                         <div class="md:col-span-2">
-                            <label class="gc-label" for="lot_detail_edit_delegataire">Délégataire</label>
-                            <select id="lot_detail_edit_delegataire" name="delegataire" class="gc-input">
+                            <label class="gc-label" for="lot_detail_edit_delegataire">Client (classique ou délégataire)</label>
+                            <select id="lot_detail_edit_delegataire" name="{{ config('crm.v2_enabled') ? 'delegataire_id' : 'delegataire' }}" class="gc-input">
                                 <option value="">Sélectionner</option>
                                 @foreach ($delegataires as $delegataire)
-                                    <option value="{{ $delegataire->name }}" @selected($lot['delegataire'] === $delegataire->name)>
+                                    <option value="{{ config('crm.v2_enabled') ? $delegataire->id : $delegataire->name }}" @selected(config('crm.v2_enabled') ? $lot['delegataire_id'] == $delegataire->id : $lot['delegataire'] === $delegataire->name)>
                                         {{ $delegataire->name }}
                                         @if ($delegataire->company_name)
                                             · {{ $delegataire->company_name }}
                                         @endif
                                     </option>
                                 @endforeach
-                                @if ($lot['delegataire'] && ! $lotDelegataireNames->contains($lot['delegataire']))
+                                @if (config('crm.v2_enabled') && $lot['delegataire_id'] && ! $delegataires->contains('id', $lot['delegataire_id']))
+                                    <option value="{{ $lot['delegataire_id'] }}" selected>{{ $lot['delegataire'] }} · Désactivé</option>
+                                @endif
+                                @if (! config('crm.v2_enabled') && $lot['delegataire'] && ! $lotDelegataireNames->contains($lot['delegataire']))
                                     <option value="{{ $lot['delegataire'] }}" selected>{{ $lot['delegataire'] }}</option>
                                 @endif
                             </select>
@@ -115,13 +101,15 @@
                             </select>
                         </div>
 
-                        <div>
+                        @unless(config('crm.v2_enabled'))
+<div>
                             <label class="gc-label" for="lot_detail_edit_coffrac_service_alias_id">Alias Coffrac du lot</label>
                             <select id="lot_detail_edit_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                 <option value="">Sélectionner une prestation</option>
                             </select>
                             <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac pour les RDV physiques issus de ce lot.</p>
                         </div>
+@endunless
 
                         <div>
                             <span class="gc-label">Statut du lot</span>
@@ -236,7 +224,7 @@
                     <div class="max-w-3xl">
                         <p class="text-xs font-semibold uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Documents du lot</p>
                         <h2 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Gérer les documents dossier par dossier</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ajoute les pièces au bon dossier. Les documents suivront automatiquement le RDV physique vers Coffrac.</p>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Ajoute les pièces au bon dossier. Elles restent accessibles depuis le dossier natif et le rendez-vous, sans duplication.' : 'Ajoute les pièces au bon dossier. Les documents suivront automatiquement le RDV physique vers Coffrac.' }}</p>
                     </div>
                     <div class="flex shrink-0 items-center gap-3">
                         <span id="lot-documents-counter" class="inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0 / 0</span>
@@ -769,6 +757,7 @@
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail physique</p>
                     <h2 id="lot-physical-detail-title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
                     <p id="lot-physical-detail-subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
+                    @if (config('crm.v2_enabled'))<a id="lot-physical-post-visit" class="mt-2 hidden text-sm font-semibold underline">Traiter la visite et valider la satisfaction</a>@endif
                 </div>
                 <button id="lot-physical-detail-close" type="button" class="gc-link">Fermer</button>
             </div>
@@ -777,7 +766,7 @@
                 <section class="gc-appointment-modal-map-pane space-y-4">
                     <section class="gc-appointment-section">
                         <div class="mb-3">
-                            <h3 class="gc-appointment-section-title">Localisation</h3>
+                            <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="location" />Localisation</h3>
                             <p id="lot-physical-detail-map-status" class="gc-appointment-section-subtitle">Chargement du point GPS...</p>
                         </div>
                         <div id="lot-physical-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
@@ -786,13 +775,13 @@
 
                     <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="gc-appointment-section-title">Documents</h3>
+                            <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="document" />Documents</h3>
                             <span id="lot-physical-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
                         </div>
                         <div id="lot-physical-documents-list" class="mt-3 space-y-2"></div>
                         <div id="lot-physical-documents-dropzone" class="gc-document-dropzone mt-4 rounded-2xl border-2 border-dashed p-4 text-center transition">
                             <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ils partiront vers Coffrac dès que possible.</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Stockage privé dans TechCalendar, sans envoi vers Coffrac.' : 'Ils partiront vers Coffrac dès que possible.' }}</p>
                             <input id="lot_physical_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
                         </div>
                         <form id="lot-physical-documents-upload-form" class="mt-3 hidden space-y-3">
@@ -805,7 +794,7 @@
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
                     <section class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="appointments" />Informations du RDV</h3>
                         <dl id="lot-physical-detail-infos" class="gc-appointment-info-grid mt-4"></dl>
                     </section>
 
@@ -830,7 +819,7 @@
                     <section id="lot-physical-global-plus-card" class="gc-appointment-section">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h3 class="gc-appointment-section-title">Global+</h3>
+                                <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="services" />Global+</h3>
                                 <p id="lot-physical-global-plus-summary" class="gc-appointment-section-subtitle"></p>
                             </div>
                             <span id="lot-physical-global-plus-badge" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold"></span>
@@ -932,7 +921,7 @@
                     </section>
 
                     <section class="gc-appointment-section gc-appointment-section-muted">
-                        <h3 class="gc-appointment-section-title">Statistiques du lot</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="dashboard" />Statistiques du lot</h3>
                         <p id="lot-physical-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                         <button id="lot-physical-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 w-full justify-center">
                             Sortir des stats du lot
@@ -940,7 +929,7 @@
                     </section>
 
                     <section class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Remise à traiter</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="tracking" />Remise à traiter</h3>
                         <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                             Remet le dossier en statut « ne pas placer » et supprime son état de traitement.
                         </p>
@@ -969,7 +958,7 @@
                 <section class="gc-appointment-modal-map-pane space-y-4">
                     <section class="gc-appointment-section">
                         <div class="mb-3">
-                            <h3 class="gc-appointment-section-title">Localisation</h3>
+                            <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="location" />Localisation</h3>
                             <p id="lot-contact-detail-map-status" class="gc-appointment-section-subtitle">Chargement du point GPS...</p>
                         </div>
                         <div id="lot-contact-detail-map" class="gc-appointment-modal-map overflow-hidden rounded-2xl border bg-white" style="border-color:var(--gc-border);"></div>
@@ -977,20 +966,20 @@
                     </section>
 
                     <section class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Commentaire</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="comment" />Commentaire</h3>
                         <p id="lot-contact-detail-comment" class="mt-2 whitespace-pre-line text-sm" style="color:var(--gc-text);"></p>
                     </section>
                 </section>
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
                     <section class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Informations du contact</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="users" />Informations du contact</h3>
                         <dl id="lot-contact-detail-infos" class="gc-appointment-info-grid mt-4"></dl>
                     </section>
 
                     <section class="gc-appointment-section">
                     <div class="flex items-center justify-between gap-3">
-                        <h3 class="gc-appointment-section-title">Documents</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="document" />Documents</h3>
                         <span id="lot-contact-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
                     </div>
                     <div id="lot-contact-documents-list" class="mt-3 space-y-2"></div>
@@ -1007,7 +996,7 @@
                 </section>
 
                 <section class="gc-appointment-section gc-appointment-section-muted">
-                    <h3 class="gc-appointment-section-title">Statistiques du lot</h3>
+                    <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="dashboard" />Statistiques du lot</h3>
                     <p id="lot-contact-stats-exclusion-status" class="mt-2 text-sm" style="color:var(--gc-text-soft);"></p>
                     <button id="lot-contact-stats-exclusion-toggle" type="button" class="gc-btn-soft mt-3 justify-center">
                         Sortir des stats du lot
@@ -1015,7 +1004,7 @@
                 </section>
 
                 <section class="gc-appointment-section">
-                    <h3 class="gc-appointment-section-title">Remise à traiter</h3>
+                    <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="tracking" />Remise à traiter</h3>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">
                         Remet le dossier en statut « ne pas placer » et supprime son état de satisfaction.
                     </p>
@@ -1461,7 +1450,7 @@
         }
 
         function limitTooltipText(value, maxLength = 260) {
-            const text = String(value || '').replace(/\s+/g, ' ').trim();
+            const text = String(window.TechCalendarComments?.text(value) ?? value ?? '').replace(/\s+/g, ' ').trim();
 
             return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
         }
@@ -2683,12 +2672,20 @@
 
         function openPhysicalDetail(appointment) {
             currentPhysicalLotAppointment = appointment;
+            const postVisitLink = document.getElementById('lot-physical-post-visit');
+            if (postVisitLink) {
+                postVisitLink.classList.toggle('hidden', !appointment.post_visit_url);
+                if (appointment.post_visit_url) postVisitLink.href = appointment.post_visit_url;
+                else postVisitLink.removeAttribute('href');
+            }
             physicalTitle.textContent = customerLabel(appointment);
             physicalSubtitle.textContent = appointment.is_placed
                 ? 'RDV physique placé'
                 : 'Dossier non encore placé physiquement';
             physicalInfos.innerHTML = infoGrid([
                 ['Statut', appointment.status_label],
+                ...(appointment.post_visit_status ? [['Traitement du dossier', appointment.post_visit_status]] : []),
+                ...(appointment.post_visit_outcome ? [['Conclusion du contrôle', appointment.post_visit_outcome]] : []),
                 ['Technicien', appointment.placed_technician_name],
                 ['Date du RDV', formatDateTime(appointment.placed_at)],
                 ['Prestation', appointment.placed_service_label],

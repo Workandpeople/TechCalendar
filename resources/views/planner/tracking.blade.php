@@ -11,17 +11,12 @@
     @endphp
 
     <div class="space-y-6">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-                <p class="text-sm" style="color: var(--gc-text-soft);">{{ $section ?? 'Planning' }}</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">{{ $title ?? 'Suivi des RDV' }}</h1>
-            </div>
-        </div>
+        <x-workspace-heading :title="$title ?? 'Les RDV'" :eyebrow="$section ?? 'Planning'" description="Sélectionnez vos techniciens, puis consultez leurs rendez-vous en calendrier ou en liste. Ouvrez un RDV pour le consulter ou le modifier." />
 
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Techniciens</h2>
+                    <h2 class="gc-workspace-section-title text-lg font-semibold" style="color:var(--gc-text);"><x-nav-icon name="users" />Techniciens</h2>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Filtre puis coche les techniciens à afficher dans le calendrier.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -69,9 +64,10 @@
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Rendez-vous des techniciens sélectionnés</h2>
+                    <h2 class="gc-workspace-section-title text-lg font-semibold" style="color:var(--gc-text);"><x-nav-icon name="planning" />Rendez-vous des techniciens sélectionnés</h2>
                     <p id="calendar-helper" class="text-sm" style="color:var(--gc-text-soft);">Coche au moins un technicien pour afficher ses rendez-vous.</p>
                 </div>
+                @unless(config('crm.v2_enabled'))
                 <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center lg:justify-end">
                     <button
                         id="tracking-coffrac-placed-refresh"
@@ -96,6 +92,7 @@
                         style="color:var(--gc-text-soft);"
                     >{{ $coffracSyncIsRunning ? ($coffracSyncStatus['stage'] ?? 'Synchronisation Coffrac en cours...') : '' }}</span>
                 </div>
+                @endunless
             </div>
 
             <div id="calendar-legend" class="mb-4 flex flex-wrap gap-2"></div>
@@ -123,7 +120,18 @@
                 </div>
             </div>
 
-            <div class="relative min-h-[780px]">
+@if(config('crm.v2_enabled'))
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex gap-2" role="group" aria-label="Affichage des rendez-vous">
+            <button id="tracking-view-calendar" type="button" class="gc-btn-primary" aria-pressed="true">Calendrier</button>
+            <button id="tracking-view-list" type="button" class="gc-btn-soft" aria-pressed="false">Liste</button>
+        </div>
+        <p class="text-xs text-slate-500">Les RDV historiques restent consultables, sans bloquer les disponibilités.</p>
+    </div>
+    @include('planner.partials.tracking-list')
+@endif
+<div id="tracking-calendar-panel" class="relative min-h-[780px]">
+
                 <div id="tracking-calendar"></div>
                 <div id="tracking-calendar-loading" class="absolute inset-0 z-10 hidden items-start justify-center rounded-xl bg-white/85 px-4 pt-24 backdrop-blur-sm">
                     <div class="w-full max-w-md rounded-2xl border bg-white p-5 shadow-lg" style="border-color:var(--gc-border);">
@@ -150,7 +158,14 @@
                 <div>
                     <p class="text-sm" style="color:var(--gc-text-soft);">Rendez-vous</p>
                     <h2 id="tracking_detail_service" class="text-lg font-semibold" style="color:var(--gc-text);"></h2>
+                    @can('viewAny', \App\Models\Dossier::class)
+                        <a id="tracking-detail-dossier" class="mt-2 hidden text-sm font-semibold underline">Ouvrir le dossier complet</a>
+                        <a id="tracking-detail-post-visit" class="mt-2 ml-3 hidden text-sm font-semibold underline">Après la visite / satisfaction</a>
+                    @endcan
                 </div>
+                @if(config('crm.v2_enabled'))
+                    <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier</button>
+                @endif
                 <button type="button" id="tracking-detail-close" class="gc-link">Fermer</button>
             </div>
 
@@ -169,7 +184,7 @@
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
                     <section class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="appointments" />Informations du RDV</h3>
                         <dl class="gc-appointment-info-grid mt-4">
                             <div>
                                 <dt>Technicien</dt>
@@ -209,7 +224,7 @@
                     <section class="gc-appointment-section">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h3 class="gc-appointment-section-title">Connecteurs</h3>
+                                <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="services" />Connecteurs</h3>
                                 <p id="tracking_connector_summary" class="gc-appointment-section-subtitle"></p>
                             </div>
                             <span id="tracking_connector_badge" class="gc-status-pill gc-status-pill-neutral shrink-0">Local</span>
@@ -228,7 +243,7 @@
 
                     <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <h3 class="gc-workspace-section-title text-sm font-semibold" style="color:var(--gc-text);"><x-nav-icon name="comment" />Commentaires existants</h3>
                             <span id="tracking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
                         </div>
                         <div id="tracking_detail_comments" class="mt-3 space-y-2"></div>
@@ -236,9 +251,11 @@
 
                     <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <h3 class="gc-workspace-section-title text-sm font-semibold" style="color:var(--gc-text);"><x-nav-icon name="document" />Documents</h3>
                             <div class="flex items-center gap-2">
-                                <button id="tracking-refresh-documents-btn" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                @unless(config('crm.v2_enabled'))
+                                    <button id="tracking-refresh-documents-btn" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                @endunless
                                 <span id="tracking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
                             </div>
                         </div>
@@ -311,6 +328,7 @@
                         </div>
                     </section>
 
+                    @unless(config('crm.v2_enabled'))
                     <details class="gc-appointment-action-details">
                         <summary>Modifier le RDV</summary>
                         <form id="tracking-details-form" class="gc-appointment-action-details-body" data-validate-form>
@@ -370,6 +388,7 @@
                             </div>
                         </form>
                     </details>
+                    @endunless
 
                     <details class="gc-appointment-action-details">
                         <summary>Commentaire et problème RDV</summary>
@@ -381,12 +400,12 @@
                             <div class="mt-3 flex flex-wrap justify-end gap-2">
                                 <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
                             </div>
-                            <details id="tracking-problem-section" class="gc-appointment-action-details mt-4">
+                            <details id="tracking-problem-section" class="gc-appointment-action-details mt-4" data-action-tone="danger">
                                 <summary>Problème RDV</summary>
                                 <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="tracking_problem_comment">Commentaire du problème</label>
-                                    <textarea id="tracking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                    <textarea id="tracking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré et la suite à donner"></textarea>
                                 </div>
                                 <div>
                                     <label class="gc-label" for="tracking_problem_type">Type de problème</label>
@@ -420,6 +439,10 @@
             </div>
         </div>
     </div>
+
+    @if(config('crm.v2_enabled'))
+        @include('planner.partials.tracking-edit')
+    @endif
 
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
@@ -489,6 +512,7 @@
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingSearchUrl = @json($searchAppointmentsUrl);
         const trackingInitialCoffracSyncStatus = @json($coffracSyncStatus);
+        const trackingNativeDossiers = @json((bool) config('crm.v2_enabled'));
         const trackingCsrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const trackingMapboxToken = @json($mapboxToken ?? null);
         const trackingMailTemplates = @json($trackingMailTemplates);
@@ -514,6 +538,8 @@
             .map((value) => String(value).trim())
             .filter((value) => value !== ''));
         const trackingInitialDate = trackingQueryParams.get('date');
+        const trackingInitialAppointmentId = trackingQueryParams.get('appointment_id') || '';
+        let trackingPendingAppointmentId = /^[1-9]\d*$/.test(trackingInitialAppointmentId) ? trackingInitialAppointmentId : null;
         let trackingCalendar = null;
         let trackingInitialComment = '';
         let trackingDetailMap = null;
@@ -564,6 +590,15 @@
 
         const trackingConnectorMeta = (props = {}) => {
             const source = String(props.external_source || '').toLowerCase();
+
+            if (trackingNativeDossiers && (props.dossier_url || ['coffrac', 'coffrac_archive'].includes(source))) {
+                return {
+                    badge: props.dossier_url ? 'Dossier local' : 'Historique',
+                    className: 'gc-status-pill gc-status-pill-neutral shrink-0',
+                    origin: ['coffrac', 'coffrac_archive'].includes(source) ? 'Historique Coffrac repris' : 'TechCalendar',
+                    summary: 'Gestion native dans TechCalendar. Aucun échange avec l’ancien CRM Coffrac.',
+                };
+            }
 
             if (source === 'coffrac') {
                 return {
@@ -722,7 +757,7 @@
             list.innerHTML = safeComments.map((comment) => {
                 const authorName = comment.author_name || 'Coffrac';
                 const createdAt = trackingFormatExternalCommentDate(comment.created_at);
-                const text = comment.text || comment.comment || '';
+                const text = comment.text || comment.comment || comment.body || '';
                 const privateBadge = comment.is_private
                     ? '<span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:#fee2e2;color:#be123c;">Privé</span>'
                     : '';
@@ -734,7 +769,7 @@
                             ${createdAt ? `<span>${trackingEscapeHtml(createdAt)}</span>` : ''}
                             ${privateBadge}
                         </div>
-                        <p class="whitespace-pre-line text-sm" style="color:var(--gc-text);">${trackingEscapeHtml(text)}</p>
+                        <div class="gc-comment-body text-sm" style="color:var(--gc-text);">${window.TechCalendarComments?.html(text) ?? trackingEscapeHtml(text)}</div>
                     </article>
                 `;
             }).join('');
@@ -1891,7 +1926,56 @@
             trackingCurrentDetailEvent = event;
             const props = event.extendedProps;
 
+            const dossierLink = document.getElementById('tracking-detail-dossier');
+            if (dossierLink) {
+                dossierLink.classList.toggle('hidden', !props.dossier_url);
+                if (props.dossier_url) {
+                    dossierLink.href = props.dossier_url;
+                } else {
+                    dossierLink.removeAttribute('href');
+                }
+            }
+
+            const editButton = document.getElementById('tracking-open-edit');
+            const postVisitLink = document.getElementById('tracking-detail-post-visit');
+            if (postVisitLink) {
+                postVisitLink.classList.toggle('hidden', !props.dossier_url);
+                if (props.dossier_url) postVisitLink.href = `${props.dossier_url}#apres-visite`;
+                else postVisitLink.removeAttribute('href');
+            }
+            if (editButton) {
+                editButton.disabled = props.can_edit === false || props.post_visit_locked === true;
+                editButton.title = props.post_visit_locked ? 'Le contrôle est engagé : utilise le traitement après visite.' : (props.can_edit === false ? 'Ce rendez-vous historique est en lecture seule.' : '');
+            }
+            ['tracking-reassign-form', 'tracking-comment-form', 'tracking-mail-form'].forEach((id) => {
+                document.getElementById(id)?.querySelectorAll('button,input,select,textarea').forEach((field) => {
+                    field.disabled = props.can_edit === false;
+                });
+            });
+            const serviceSelect = document.getElementById('tracking_edit_service_id');
+            if (serviceSelect) {
+                serviceSelect.querySelectorAll('[data-historical-service]').forEach((option) => option.remove());
+                if (props.service_id && !Array.from(serviceSelect.options).some((option) => option.value === String(props.service_id))) {
+                    const option = new Option(`${props.service_label} (historique)`, String(props.service_id));
+                    option.dataset.historicalService = '1';
+                    serviceSelect.add(option);
+                }
+            }
+            const editValues = {
+                customer_first_name: props.customer_first_name,
+                customer_last_name: props.customer_last_name,
+                customer_phone: props.customer_phone,
+                technician_id: props.technician_id,
+                service_id: props.service_id,
+                comment: props.comment,
+                updated_at: props.updated_at,
+            };
+            Object.entries(editValues).forEach(([key, value]) => {
+                const field = document.getElementById(`tracking_edit_${key}`);
+                if (field) field.value = value ?? '';
+            });
             document.getElementById('tracking_detail_appointment_id').value = event.id;
+
             setText('tracking_detail_service', props.service_label);
             setText('tracking_detail_technician', props.technician_name);
             setText('tracking_detail_customer', props.customer_name);
@@ -1919,6 +2003,13 @@
             resetTrackingProblemSection();
             updateTrackingCommentButtonVisibility();
             resetTrackingMailComposer(event);
+            if (props.can_edit === false) {
+                ['tracking-reassign-form', 'tracking-comment-form', 'tracking-mail-form'].forEach((id) => {
+                    document.getElementById(id)?.querySelectorAll('button,input,select,textarea').forEach((field) => {
+                        field.disabled = true;
+                    });
+                });
+            }
             trackingAppointmentModal.classList.remove('hidden');
             initTrackingDetailAddressAutocomplete();
             window.TechCalendarForms?.refresh(trackingDetailsForm);
@@ -2004,13 +2095,15 @@
                 const props = event.extendedProps || {};
                 const fullAddress = trackingAppointmentFullAddress(props);
                 const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
-                const statusLabel = props.status === 'problem' ? 'Problème RDV' : 'Planifié';
-                const statusStyle = props.status === 'problem'
-                    ? 'background:#fff7ed;color:#9a3412;border-color:#fdba74;'
-                    : 'background:#ecfdf5;color:#047857;border-color:#86efac;';
+                const statusLabel = props.is_historical ? 'Historique' : (props.status === 'problem' ? 'Problème RDV' : 'Planifié');
+                const statusStyle = props.is_historical
+                    ? 'background:#f1f5f9;color:#334155;border-color:#94a3b8;'
+                    : (props.status === 'problem'
+                        ? 'background:#fff7ed;color:#9a3412;border-color:#fdba74;'
+                        : 'background:#ecfdf5;color:#047857;border-color:#86efac;');
 
                 return `
-                    <article class="grid grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_92px] lg:items-center lg:gap-3">
+                    <article data-tracking-search-open="${trackingEscapeHtml(event.id)}" class="cursor-pointer grid grid-cols-1 gap-2 px-4 py-3 text-sm transition hover:bg-[color:var(--gc-accent-soft)] lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_92px] lg:items-center lg:gap-3">
                         <div class="min-w-0">
                             <p class="truncate font-semibold" style="color:var(--gc-text);">${trackingEscapeHtml(props.customer_name || 'Client non renseigné')}</p>
                             <p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${trackingEscapeHtml([props.customer_phone, props.external_reference ? `Ref. ${props.external_reference}` : null].filter(Boolean).join(' · '))}</p>
@@ -2037,11 +2130,14 @@
             }).join('');
         };
 
-        const runTrackingAppointmentSearch = async () => {
+        let trackingSearchPage = 1;
+        const runTrackingAppointmentSearch = async (page = 1) => {
+            trackingSearchPage = page;
             if (!trackingSearchUrl || !trackingSearchSubmit) return;
 
             trackingSearchAbortController?.abort();
-            trackingSearchAbortController = new AbortController();
+            const controller = new AbortController();
+            trackingSearchAbortController = controller;
             trackingSearchSubmit.disabled = true;
             trackingSearchSubmit.textContent = 'Recherche...';
             setTrackingSearchStatus('Recherche des RDV en cours...');
@@ -2049,7 +2145,7 @@
             try {
                 const response = await fetch(trackingSearchUrl, {
                     method: 'POST',
-                    signal: trackingSearchAbortController.signal,
+                    signal: controller.signal,
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': trackingCsrfToken,
@@ -2062,9 +2158,12 @@
                         technician_ids: selectedTechnicianIds(),
                         ...trackingCalendarFilters(),
                         limit: 50,
+                        page: trackingSearchPage,
                     }),
                 });
                 const payload = await response.json();
+
+                if (controller !== trackingSearchAbortController) return;
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : payload?.message;
@@ -2072,14 +2171,22 @@
                 }
 
                 renderTrackingSearchResults(payload.appointments || []);
+                if (trackingSearchSummary) trackingSearchSummary.textContent = `${payload.total ?? payload.count} RDV · page ${payload.page || 1}/${payload.last_page || 1}`;
+                const previousPage = document.getElementById('tracking-list-previous');
+                const nextPage = document.getElementById('tracking-list-next');
+                if (previousPage) previousPage.disabled = (payload.page || 1) <= 1;
+                if (nextPage) nextPage.disabled = (payload.page || 1) >= (payload.last_page || 1);
+
                 setTrackingSearchStatus(payload.count > 0 ? 'Recherche terminée.' : '', 'success');
             } catch (error) {
-                if (error.name === 'AbortError') return;
+                if (error.name === 'AbortError' || controller !== trackingSearchAbortController) return;
 
                 setTrackingSearchStatus(error.message || 'Recherche impossible.', 'error');
             } finally {
-                trackingSearchSubmit.disabled = false;
-                trackingSearchSubmit.textContent = 'Rechercher';
+                if (controller === trackingSearchAbortController) {
+                    trackingSearchSubmit.disabled = false;
+                    trackingSearchSubmit.textContent = 'Rechercher';
+                }
             }
         };
 
@@ -2255,6 +2362,9 @@
         };
 
         const styleTrackingEvent = (event) => {
+            if (event.extendedProps?.is_historical) {
+                return {...event, backgroundColor: '#f1f5f9', borderColor: '#64748b', textColor: '#334155', classNames: ['appointment-historical']};
+            }
             const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
@@ -2312,6 +2422,17 @@
             });
         };
 
+        const openInitialTrackingAppointment = (events) => {
+            if (!trackingPendingAppointmentId) return;
+
+            const appointment = events.find((event) => String(event.id) === trackingPendingAppointmentId);
+            if (!appointment) return;
+
+            // Open only an authorized event already loaded by the calendar, and only once.
+            trackingPendingAppointmentId = null;
+            openTrackingAppointmentModal(appointment);
+        };
+
         const initTrackingCalendar = () => {
             const calendarEl = document.getElementById('tracking-calendar');
             if (!calendarEl || !window.FullCalendar || trackingCalendar) return;
@@ -2359,6 +2480,7 @@
                 nowIndicator: true,
                 hiddenDays: [0],
                 allDaySlot: false,
+                eventsSet: openInitialTrackingAppointment,
 	                events: async (fetchInfo, succèssCallback, failureCallback) => {
 	                    const technicianIds = selectedTechnicianIds();
 	
@@ -2399,7 +2521,7 @@
                     return {
                         html: `
                             <div class="min-w-0 leading-tight">
-                                <div class="truncate text-[11px] font-semibold">${time} ${trackingEscapeHtml(technicianName)}</div>
+                                <div class="truncate text-[11px] font-semibold">${props.is_historical ? 'Historique · ' : ''}${time} ${trackingEscapeHtml(technicianName)}</div>
                                 <div class="truncate text-[11px]">${trackingEscapeHtml(serviceLabel)}</div>
                                 <div class="truncate text-[10px] opacity-90">${trackingEscapeHtml(fullAddress)}</div>
                             </div>
@@ -2416,6 +2538,7 @@
                     const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
 
                     info.el.setAttribute('aria-label', [
+                        props.is_historical ? 'Historique, lecture seule' : null,
                         props.status === 'problem' ? 'Problème RDV' : null,
                         props.technician_name ? `Technicien: ${props.technician_name}` : null,
                         serviceLabel ? `Type de RDV: ${serviceLabel}` : null,
@@ -2728,8 +2851,12 @@
                         duration_minutes: Number(durationMinutes),
                         address,
                         latitude: latitude === '' ? null : Number(latitude),
-                        longitude: longitude === '' ? null : Number(longitude),
-                    }),
+    longitude: longitude === '' ? null : Number(longitude),
+    ...Object.fromEntries(['customer_first_name','customer_last_name','customer_phone','technician_id','service_id','comment','updated_at']
+        .map((key) => [key, document.getElementById(`tracking_edit_${key}`)])
+        .filter(([, field]) => field).map(([key, field]) => [key, field.value])),
+}),
+
                 });
                 const payload = await response.json();
 
@@ -2758,7 +2885,16 @@
                 setText('tracking_detail_start', formatDateTime(updatedAppointment.start));
                 setText('tracking_detail_end', formatDateTime(updatedAppointment.end));
                 setText('tracking_detail_address', updatedAppointment.address);
-                setTrackingDetailsStatus('Rendez-vous mis à jour.');
+if (payload.event) {
+    const refreshed = trackingNormalizeEventPayload(payload.event);
+    trackingCurrentDetailEvent = refreshed;
+    trackingSearchResultEvents.set(String(refreshed.id), refreshed);
+    document.getElementById('tracking-edit-modal')?.classList.add('hidden');
+    openTrackingAppointmentModal(refreshed);
+    if (!document.getElementById('tracking-list-panel')?.classList.contains('hidden')) runTrackingAppointmentSearch(trackingSearchPage);
+}
+setTrackingDetailsStatus('Rendez-vous mis à jour.');
+
                 refetchCalendar();
             } catch (error) {
                 setTrackingDetailsStatus(error.message || 'Impossible de modifier le RDV.', '#9f1239');
@@ -2952,7 +3088,8 @@
         applyInitialTechnicianSelection();
         initTrackingCalendar();
         updateLegend();
-        subscribeTrackingCoffracSync();
+        if (!@json((bool) config('crm.v2_enabled'))) subscribeTrackingCoffracSync();
+        @include('planner.partials.tracking-views-script')
 
         window.addEventListener('techcalendar:layout-resized', () => {
             trackingCalendar?.updateSize();

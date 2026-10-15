@@ -31,6 +31,10 @@ use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    config(['crm.v2_enabled' => false]);
+});
+
 it('does not fallback to simulated appointments on the planning dashboard', function () {
     $planner = User::factory()->create([
         'role' => 1,

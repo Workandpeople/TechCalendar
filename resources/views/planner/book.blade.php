@@ -1,5 +1,6 @@
 <x-layouts.app>
     @php
+        $bookingConnectorsEnabled = $bookingConnectorsEnabled ?? ! config('crm.v2_enabled');
         $coffracApiStatus = $coffracApiStatus ?? [
             'state' => 'unavailable',
             'label' => 'API Coffrac indisponible',
@@ -44,16 +45,16 @@
     @endphp
 
     <div class="space-y-6">
-        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-                <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingSection ?? 'Planning' }}</p>
-                <h1 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">{{ $bookingTitle ?? 'Prise de RDV' }}</h1>
-                <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">{{ $bookingSubtitle ?? 'Sélectionne une demande externe ou saisis un RDV manuel pour identifier les techniciens éligibles.' }}</p>
-            </div>
-            <button id="manual-booking-toggle" type="button" class="gc-btn-primary self-start md:self-auto {{ $isReplacementMode ? 'hidden' : '' }}">
-                RDV manuel
+        <x-workspace-heading :title="$bookingTitle ?? 'Prise de RDV'" :eyebrow="$bookingSection ?? 'Planning'" :description="$bookingSubtitle ?? 'Sélectionnez un dossier à placer pour trouver le technicien et le créneau adaptés.'">
+            <button id="manual-booking-toggle" type="button" class="gc-btn-secondary self-start md:self-auto {{ $isReplacementMode ? 'hidden' : '' }}">
+                <x-nav-icon name="plus" /> RDV manuel
             </button>
-        </div>
+        </x-workspace-heading>
+        <ol class="gc-workflow-guide" aria-label="Parcours de prise de rendez-vous">
+            <li><span class="gc-workspace-step" aria-hidden="true">1</span><div><strong>Choisir un dossier</strong><p>Une demande à placer ou un dossier issu d’un lot.</p></div></li>
+            <li><span class="gc-workspace-step" aria-hidden="true">2</span><div><strong>Trouver un créneau</strong><p>Comparez les techniciens, disponibilités et trajets.</p></div></li>
+            <li><span class="gc-workspace-step" aria-hidden="true">3</span><div><strong>Confirmer le RDV</strong><p>Vérifiez les informations avant de valider. Pour un contact téléphonique, renseignez directement le résultat.</p></div></li>
+        </ol>
 
         <section id="booking-placement-confirmation" class="gc-card hidden overflow-hidden p-0">
             <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -351,6 +352,7 @@
 
         <section id="crm-booking-section" class="gc-card p-5 {{ $isReplacementMode ? 'hidden' : '' }}">
             <div class="mb-4 space-y-3">
+                @if ($bookingConnectorsEnabled)
                 <div id="booking-external-controls" class="flex flex-col gap-2">
                     <div class="flex flex-wrap items-center gap-2">
                         @foreach ($externalAppointmentSources as $source)
@@ -389,10 +391,11 @@
                     </div>
                     <span id="booking-crm-refresh-status" class="hidden text-sm" style="color:var(--gc-text-soft);"></span>
                 </div>
+                @endif
 
                 <div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV externes à placer</h2>
+                        <h2 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $bookingConnectorsEnabled ? 'RDV externes à placer' : 'RDV à placer' }}</h2>
                         <label class="inline-flex cursor-pointer items-center gap-3">
                             <button id="booking-source-switch" type="button" class="relative h-4 w-8 rounded-full transition" style="background:var(--gc-primary);" role="switch" aria-checked="false" aria-label="Basculer vers les lots">
                                 <span id="booking-source-switch-knob" class="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition"></span>
@@ -400,7 +403,7 @@
                             <span class="text-lg font-semibold" style="color:var(--gc-text);">depuis des lots</span>
                         </label>
                     </div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens.</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Hors lots : dossiers au statut « Prise de RDV », avec une ligne par prestation à planifier.' }}</p>
                 </div>
             </div>
 
@@ -410,11 +413,11 @@
             </div>
 
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                Aucun RDV externe ne correspond à cette recherche.
+                Aucun RDV ne correspond à cette recherche.
             </div>
 
             <div id="booking-crm-source">
-                <div id="booking-crm-grid" class="space-y-2">
+                <div id="booking-crm-grid" class="gc-booking-request-list space-y-2">
                     @foreach ($crmAppointments as $appointment)
                         @php
                             $companyName = trim((string) ($appointment['company_name'] ?? ''));
@@ -439,30 +442,30 @@
                         <div
                             role="button"
                             tabindex="0"
-                            class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1fr)_140px_130px_minmax(220px,1.35fr)_auto]"
+                            class="crm-appointment-card gc-booking-request-row grid w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm"
                             style="border-color:var(--gc-border);background:#ffffff;"
                             data-crm-id="{{ $appointment['id'] }}"
                             data-client="{{ str($searchHaystack)->lower() }}"
                             data-has-coordinates="{{ is_numeric($appointment['latitude'] ?? null) && is_numeric($appointment['longitude'] ?? null) ? '1' : '0' }}"
                         >
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
-                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
+                            <div class="gc-booking-request-client min-w-0">
+                                <p class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
+                                <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="{{ $companyName !== '' ? $companyName : $appointment['source'] }}">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
                             </div>
-                            <p class="truncate text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>
-                            <p class="truncate text-sm" style="color:var(--gc-text-soft);">Créé le {{ $createdAtLabel }}</p>
-                            <p class="truncate text-sm" style="color:var(--gc-text);">{{ $appointment['address'] }}</p>
-                            <div class="flex flex-wrap items-center gap-2 md:justify-end">
-                                <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
+                            <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
+                            <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le {{ $createdAtLabel }}">Créé le {{ $createdAtLabel }}</p>
+                            <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="{{ $appointment['address'] }}">{{ $appointment['address'] }}</p>
+                            <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
+                                <span class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
                                 @if ($serviceBadgeLabel !== '')
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $serviceBadgeLabel }}</span>
+                                    <span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="{{ $serviceBadgeLabel }}">{{ $serviceBadgeLabel }}</span>
                                 @else
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>
+                                    <span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>
                                 @endif
-                                @if (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null))
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;">GPS à recalculer</span>
+                                @if ($bookingConnectorsEnabled && (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null)))
+                                    <span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>
                                 @endif
-                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                         <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                         <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -472,7 +475,7 @@
                         </div>
                     @endforeach
                 </div>
-                <div id="booking-crm-pagination" class="mt-4 flex flex-wrap items-center justify-center gap-2"></div>
+                <nav id="booking-crm-pagination" class="gc-pagination mt-4 hidden" aria-label="{{ __('pagination.navigation') }}"></nav>
             </div>
 
             <div id="booking-lot-source" class="hidden space-y-3">
@@ -941,7 +944,7 @@
         <div class="gc-modal-panel gc-appointment-modal-panel">
             <div class="gc-appointment-modal-header">
                 <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Demande externe</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingConnectorsEnabled ? 'Demande externe' : 'Dossier à placer' }}</p>
                     <h2 id="booking_crm_detail_title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
                     <p id="booking_crm_detail_subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
                 </div>
@@ -955,7 +958,12 @@
                 </section>
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
+                    <div class="gc-appointment-section">
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="dossiers" />Informations du dossier</h3>
+                        <dl id="booking_crm_detail_infos" class="gc-appointment-info-grid mt-4"></dl>
+                    </div>
                     <form id="booking-crm-detail-form" class="gc-appointment-section">
+                        <h3 class="gc-appointment-section-title mb-4"><x-nav-icon name="edit" />Modifier les informations</h3>
                         <div class="grid grid-cols-1 gap-3">
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_service_id">Prestation</label>
@@ -973,7 +981,7 @@
                                     <button id="booking-crm-detail-save" type="submit" class="gc-btn-primary">Enregistrer</button>
                                     <span class="gc-help-tooltip">
                                         <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement de l’adresse">?</button>
-                                        <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.</span>
+                                        <span class="gc-help-tooltip-content" role="tooltip">{{ $bookingConnectorsEnabled ? 'Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.' : 'Enregistre l’adresse dans le dossier et recalcule sa position avec Mapbox pour préparer le placement.' }}</span>
                                     </span>
                                 </div>
                             </div>
@@ -984,12 +992,12 @@
                                     <button id="booking-crm-detail-save-comment" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                                 </div>
                             </div>
-                            <details id="booking-crm-problem-section" class="gc-appointment-action-details">
+                            <details id="booking-crm-problem-section" class="gc-appointment-action-details" data-action-tone="danger">
                                 <summary>Problème RDV</summary>
                                 <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                     <div>
                                         <label class="gc-label" for="booking_crm_problem_comment">Commentaire du problème</label>
-                                        <textarea id="booking_crm_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                        <textarea id="booking_crm_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré"></textarea>
                                     </div>
                                     <div>
                                         <label class="gc-label" for="booking_crm_problem_type">Type de problème</label>
@@ -1025,13 +1033,8 @@
                     </form>
 
                     <div class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Informations du dossier</h3>
-                        <dl id="booking_crm_detail_infos" class="gc-appointment-info-grid mt-4"></dl>
-                    </div>
-
-                    <div class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <h3 class="gc-workspace-section-title font-semibold" style="color:var(--gc-text);"><x-nav-icon name="comment" />Commentaires existants</h3>
                             <span id="booking_crm_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
                         </div>
                         <div id="booking_crm_detail_comments" class="mt-3 space-y-2"></div>
@@ -1039,7 +1042,7 @@
 
                     <div class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <h3 class="gc-workspace-section-title font-semibold" style="color:var(--gc-text);"><x-nav-icon name="document" />Documents</h3>
                             <div class="flex items-center gap-2">
                                 <button id="booking-crm-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
                                 <span id="booking_crm_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
@@ -1073,7 +1076,7 @@
 
                 <section class="gc-appointment-modal-info-pane space-y-4">
                     <div class="gc-appointment-section">
-                        <h3 class="gc-appointment-section-title">Informations du RDV</h3>
+                        <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="appointments" />Informations du RDV</h3>
                         <dl class="gc-appointment-info-grid mt-4">
                             <div>
                                 <dt style="color:var(--gc-text-soft);">Technicien</dt>
@@ -1125,7 +1128,7 @@
                     <section class="gc-appointment-section">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h3 class="gc-appointment-section-title">Connecteurs</h3>
+                                <h3 class="gc-workspace-section-title gc-appointment-section-title"><x-nav-icon name="services" />Connecteurs</h3>
                                 <p id="booking_detail_connector_summary" class="gc-appointment-section-subtitle"></p>
                             </div>
                             <span id="booking_detail_connector_badge" class="gc-status-pill gc-status-pill-neutral shrink-0">Local</span>
@@ -1148,7 +1151,7 @@
 
                     <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Commentaires existants</h3>
+                            <h3 class="gc-workspace-section-title text-sm font-semibold" style="color:var(--gc-text);"><x-nav-icon name="comment" />Commentaires existants</h3>
                             <span id="booking_detail_comments_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
                         </div>
                         <div id="booking_detail_comments" class="mt-3 space-y-2"></div>
@@ -1156,9 +1159,11 @@
 
                     <section class="gc-appointment-section">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Documents</h3>
+                            <h3 class="gc-workspace-section-title text-sm font-semibold" style="color:var(--gc-text);"><x-nav-icon name="document" />Documents</h3>
                             <div class="flex items-center gap-2">
-                                <button id="booking-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                @unless(config('crm.v2_enabled'))
+                                    <button id="booking-detail-refresh-documents" type="button" class="gc-btn-soft px-3 py-1.5 text-xs">Mettre à jour</button>
+                                @endunless
                                 <span id="booking_detail_documents_count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
                             </div>
                         </div>
@@ -1195,12 +1200,12 @@
                             </div>
                         </div>
 
-                        <details id="booking-problem-section" class="gc-appointment-action-details mt-4">
+                        <details id="booking-problem-section" class="gc-appointment-action-details mt-4" data-action-tone="danger">
                             <summary>Problème RDV</summary>
                             <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="booking_problem_comment">Commentaire du problème</label>
-                                    <textarea id="booking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème à transmettre à Coffrac"></textarea>
+                                    <textarea id="booking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré"></textarea>
                                 </div>
                                 <div>
                                     <label class="gc-label" for="booking_problem_type">Type de problème</label>
@@ -1257,7 +1262,7 @@
                         <p class="text-sm" style="color:var(--gc-text-soft);">Mode contact</p>
                         <h3 class="mt-1 text-lg font-semibold" style="color:var(--gc-text);">Qualification téléphonique</h3>
                         <p class="mt-2 text-sm leading-6" style="color:var(--gc-text-soft);">
-                            Ce mode ne crée pas de dossier Coffrac. Il qualifie uniquement le dossier dans TechCalendar et met à jour les statistiques contact du lot.
+                            Ce mode qualifie le dossier du lot dans TechCalendar et met à jour les statistiques contact. Il ne crée pas de rendez-vous physique.
                         </p>
                     </div>
 
@@ -1427,6 +1432,8 @@
         const bookingIsReplacementMode = bookingMode === 'replace';
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
         const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
+        const bookingConnectorsEnabled = @json($bookingConnectorsEnabled);
+        const bookingPaginationLabels = @json(__('pagination'));
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
         const bookingCrmRefreshOneUrlTemplate = @json(route('planner.book.crm-appointments.refresh-one', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingCrmUpdateUrlTemplate = @json(route('planner.book.crm-appointments.update', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
@@ -1922,36 +1929,37 @@
             const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ');
             const createdAtLabel = formatShortDateTime(appointment.created_at || appointment.external_payload?.created_at || appointment.fetched_at);
             const searchHaystack = `${customerName} ${companyName} ${serviceDisplayType} ${serviceDisplayName}`.trim().toLowerCase();
-            const hasCoordinates = Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
+            const hasCoordinates = appointment.latitude != null && appointment.longitude != null
+                && Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
             const serviceBadge = serviceLabel
-                ? `<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">${escapeHtml(serviceLabel)}</span>`
-                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service non renseigné</span>';
-            const gpsBadge = hasCoordinates
+                ? `<span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="${escapeHtml(serviceLabel)}">${escapeHtml(serviceLabel)}</span>`
+                : '<span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>';
+            const gpsBadge = hasCoordinates || !bookingConnectorsEnabled
                 ? ''
-                : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;">GPS à recalculer</span>';
+                : '<span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>';
 
             return `
                 <div
                     role="button"
                     tabindex="0"
-                    class="crm-appointment-card grid w-full grid-cols-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm md:grid-cols-[minmax(180px,1fr)_140px_130px_minmax(220px,1.35fr)_auto]"
+                    class="crm-appointment-card gc-booking-request-row grid w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm"
                     style="border-color:var(--gc-border);background:#ffffff;"
                     data-crm-id="${escapeHtml(appointment.id)}"
                     data-client="${escapeHtml(searchHaystack)}"
                     data-has-coordinates="${hasCoordinates ? '1' : '0'}"
                 >
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(customerName)}</p>
-                        <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(companyName || appointment.source || '')}</p>
+                    <div class="gc-booking-request-client min-w-0">
+                        <p class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
+                        <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="${escapeHtml(companyName || appointment.source || '')}">${escapeHtml(companyName || appointment.source || '')}</p>
                     </div>
-                    <p class="truncate text-sm" style="color:var(--gc-text-soft);">${escapeHtml(appointment.phone)}</p>
-                    <p class="truncate text-sm" style="color:var(--gc-text-soft);">Créé le ${escapeHtml(createdAtLabel)}</p>
-                    <p class="truncate text-sm" style="color:var(--gc-text);">${escapeHtml(appointment.address)}</p>
-                    <div class="flex flex-wrap items-center gap-2 md:justify-end">
-                        <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
+                    <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
+                    <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le ${escapeHtml(createdAtLabel)}">Créé le ${escapeHtml(createdAtLabel)}</p>
+                    <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="${escapeHtml(appointment.address)}">${escapeHtml(appointment.address)}</p>
+                    <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
+                        <span class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
                         ${serviceBadge}
                         ${gpsBadge}
-                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2127,6 +2135,8 @@
         };
 
         const startExternalSyncPolling = () => {
+            if (!bookingConnectorsEnabled) return;
+
             stopExternalSyncPolling();
             externalSyncPollStartedAt = Date.now();
 
@@ -2163,7 +2173,7 @@
         };
 
         const handleExternalApiSyncProgress = (payload) => {
-            if (!payload || payload.source !== 'coffrac') return;
+            if (!bookingConnectorsEnabled || !payload || payload.source !== 'coffrac') return;
 
             const state = payload.state === 'available'
                 ? 'available'
@@ -2190,6 +2200,8 @@
         };
 
         const subscribeToExternalApiSync = () => {
+            if (!bookingConnectorsEnabled) return;
+
             bookingExternalRefreshButtons.forEach((button) => renderExternalRefreshButton(button));
 
             if (!window.TechCalendarReverb?.subscribePrivate) {
@@ -2223,10 +2235,23 @@
             }
 
             bookingCrmPagination.classList.remove('hidden');
+            const first = (bookingCrmPage - 1) * bookingCrmPageSize + 1;
+            const last = Math.min(bookingCrmPage * bookingCrmPageSize, visibleCount);
+            const summary = bookingPaginationLabels.results.replace(':first', first).replace(':last', last).replace(':total', visibleCount);
+            const position = bookingPaginationLabels.page.replace(':current', bookingCrmPage).replace(':last', totalPages);
             bookingCrmPagination.innerHTML = `
-                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="prev" ${bookingCrmPage <= 1 ? 'disabled' : ''}>Précédent</button>
-                <span class="rounded-full px-3 py-2 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Page ${bookingCrmPage}/${totalPages}</span>
-                <button type="button" class="gc-btn-soft px-3 py-2 text-xs" data-crm-page-action="next" ${bookingCrmPage >= totalPages ? 'disabled' : ''}>Suivant</button>
+                <p class="gc-pagination-summary" role="status">${escapeHtml(summary)}</p>
+                <div class="gc-pagination-controls">
+                    <button type="button" class="gc-pagination-button gc-pagination-step" aria-label="${escapeHtml(bookingPaginationLabels.previous)}" title="${escapeHtml(bookingPaginationLabels.previous)}" data-crm-page-action="prev" ${bookingCrmPage <= 1 ? 'disabled' : ''}>
+                        <svg class="gc-pagination-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true" focusable="false"><path d="m12 5-5 5 5 5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                        <span>${escapeHtml(bookingPaginationLabels.previous)}</span>
+                    </button>
+                    <span class="gc-pagination-position">${escapeHtml(position)}</span>
+                    <button type="button" class="gc-pagination-button gc-pagination-step" aria-label="${escapeHtml(bookingPaginationLabels.next)}" title="${escapeHtml(bookingPaginationLabels.next)}" data-crm-page-action="next" ${bookingCrmPage >= totalPages ? 'disabled' : ''}>
+                        <span>${escapeHtml(bookingPaginationLabels.next)}</span>
+                        <svg class="gc-pagination-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true" focusable="false"><path d="m8 5 5 5-5 5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    </button>
+                </div>
             `;
 
             bookingCrmPagination.querySelectorAll('[data-crm-page-action]').forEach((button) => {
@@ -2728,7 +2753,7 @@
 
             const appointmentId = document.getElementById('booking_detail_appointment_id')?.value || '';
             const crmAppointmentId = document.getElementById('booking_detail_crm_id')?.value || '';
-            const canSaveComment = Boolean(appointmentId) || isCoffracCrmId(crmAppointmentId);
+            const canSaveComment = Boolean(appointmentId) || isPendingDossierId(crmAppointmentId);
             const hasChanged = bookingDetailComment.value.trim() !== bookingInitialDetailComment.trim();
 
             bookingSaveComment.classList.toggle('hidden', !canSaveComment || !hasChanged);
@@ -2857,7 +2882,7 @@
         };
 
         const limitTooltipText = (value, maxLength = 220) => {
-            const text = String(value || '').replace(/\s+/g, ' ').trim();
+            const text = String(window.TechCalendarComments?.text(value) ?? value ?? '').replace(/\s+/g, ' ').trim();
 
             return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
         };
@@ -2881,7 +2906,7 @@
                 : (Array.isArray(appointment.external_payload?.comments) ? appointment.external_payload.comments : []);
 
             externalComments.forEach((comment) => {
-                const text = limitTooltipText(comment?.text || comment?.comment || '');
+                const text = limitTooltipText(comment?.text || comment?.comment || comment?.body || '');
 
                 if (!text) return;
 
@@ -2981,14 +3006,14 @@
             count.textContent = `${safeComments.length} commentaire(s)`;
 
             if (safeComments.length === 0) {
-                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire existant récupéré depuis Coffrac.</p>';
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire enregistré sur ce dossier.</p>';
                 return;
             }
 
             list.innerHTML = safeComments.map((comment) => {
                 const authorName = comment.author_name || 'Coffrac';
                 const createdAt = formatExternalCommentDate(comment.created_at);
-                const text = comment.text || comment.comment || '';
+                const text = comment.text || comment.comment || comment.body || '';
                 const privateBadge = comment.is_private
                     ? '<span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" style="background:#fee2e2;color:#be123c;">Privé</span>'
                     : '';
@@ -3000,7 +3025,7 @@
                             ${createdAt ? `<span>${escapeHtml(createdAt)}</span>` : ''}
                             ${privateBadge}
                         </div>
-                        <p class="whitespace-pre-line text-sm" style="color:var(--gc-text);">${escapeHtml(text)}</p>
+                        <div class="gc-comment-body text-sm" style="color:var(--gc-text);">${window.TechCalendarComments?.html(text) ?? escapeHtml(text)}</div>
                     </article>
                 `;
             }).join('');
@@ -3130,8 +3155,8 @@
         };
 
         const renderCrmDetailMap = (appointment) => {
-            const latitude = Number(appointment?.latitude);
-            const longitude = Number(appointment?.longitude);
+            const latitude = appointment?.latitude == null ? NaN : Number(appointment.latitude);
+            const longitude = appointment?.longitude == null ? NaN : Number(appointment.longitude);
             const container = document.getElementById('booking-crm-detail-map');
 
             if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -3202,7 +3227,7 @@
                 crmDetailInfoRow('Prestation', serviceLabel),
                 crmDetailInfoRow('Département', appointment.department_code || '-'),
                 crmDetailInfoRow('Adresse actuelle', addressParts.join(' · ') || '-'),
-                crmDetailInfoRow('GPS', Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude))
+                crmDetailInfoRow('GPS', appointment.latitude != null && appointment.longitude != null && Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude))
                     ? `${Number(appointment.latitude).toFixed(6)}, ${Number(appointment.longitude).toFixed(6)}`
                     : '-'),
             ].join('');
@@ -4026,6 +4051,9 @@
         const routeNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
 
         const isCoffracCrmId = (value) => String(value || '').startsWith('coffrac-');
+        const isPendingDossierId = (value) => bookingConnectorsEnabled
+            ? isCoffracCrmId(value)
+            : /^dossier-[1-9]\d*$/.test(String(value || ''));
 
         const setBookingDetailText = (id, value) => {
             const element = document.getElementById(id);
@@ -4037,7 +4065,7 @@
             const isCoffrac = source === 'coffrac' || isCoffracCrmId(props.crm_appointment_id);
             const isLot = Boolean(props.lot_appointment_id);
 
-            if (isCoffrac) {
+            if (isCoffrac && bookingConnectorsEnabled) {
                 return {
                     badge: 'Coffrac',
                     className: 'gc-status-pill gc-status-pill-success shrink-0',
@@ -5229,7 +5257,7 @@
             const durationInput = document.getElementById('booking_detail_duration');
             const shouldSelectCrmService = requiresCrmServiceSelection(props);
             const shouldSelectLotAlias = requiresLotAliasSelection(props);
-            const canReportProblem = !isSuggestion || isCoffracCrmId(props.crm_appointment_id);
+            const canReportProblem = !isSuggestion || isPendingDossierId(props.crm_appointment_id);
 
             hideDetailStatus();
             document.getElementById('booking_modal_kind').textContent = props.is_calendar_click
@@ -5697,6 +5725,9 @@
 
                 const suggestions = data.suggestions || [];
                 currentAppointmentRequest = data.crm_appointment;
+                if (!bookingConnectorsEnabled && payload.crm_appointment_id) {
+                    renderBookingCrmAppointments(bookingCrmAppointments.map((row) => row.id === data.crm_appointment.id ? data.crm_appointment : row), null, { preserveUi: true });
+                }
                 currentTechnicians = data.technicians || [];
                 currentTechnicianColors = {};
                 selectedTechnicianIds = new Set(currentTechnicians.map((technician) => String(technician.id)));
@@ -5733,7 +5764,7 @@
             }
         };
 
-        const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, 'RDV Coffrac');
+        const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Coffrac' : 'Dossier à placer');
         const lotProcessingSelectFor = (lotAppointmentId) => document.querySelector(`.lot-processing-mode-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
 
@@ -5925,7 +5956,7 @@
 
                     hideCrmAppointmentTooltip();
 
-                    if (card.dataset.hasCoordinates !== '1') {
+                    if (bookingConnectorsEnabled && card.dataset.hasCoordinates !== '1') {
                         openCrmAppointmentDetail(card.dataset.crmId);
                         setCrmDetailStatus('Coordonnées GPS absentes: corrige l’adresse puis enregistre pour relancer Mapbox.', 'error');
                         return;
@@ -5939,7 +5970,7 @@
                     event.preventDefault();
                     hideCrmAppointmentTooltip();
 
-                    if (card.dataset.hasCoordinates !== '1') {
+                    if (bookingConnectorsEnabled && card.dataset.hasCoordinates !== '1') {
                         openCrmAppointmentDetail(card.dataset.crmId);
                         setCrmDetailStatus('Coordonnées GPS absentes: corrige l’adresse puis enregistre pour relancer Mapbox.', 'error');
                         return;
@@ -6492,7 +6523,7 @@
             }
 
             setCrmDetailProblemSaving(true);
-            setCrmDetailStatus('Signalement du problème RDV dans Coffrac...');
+            setCrmDetailStatus('Signalement du problème RDV...');
 
             try {
                 const response = await fetch(
@@ -6541,7 +6572,7 @@
 
             bookingCrmDetailRefreshDocuments.disabled = true;
             bookingCrmDetailRefreshDocuments.textContent = 'Mise à jour...';
-            setBookingCrmDetailDocumentsStatus('Vérification du dossier Coffrac en cours...');
+            setBookingCrmDetailDocumentsStatus('Actualisation du dossier en cours...');
 
             try {
                 const response = await fetch(
@@ -6621,7 +6652,7 @@
             const appointmentId = document.getElementById('booking_detail_appointment_id').value;
             const crmAppointmentId = document.getElementById('booking_detail_crm_id').value;
             const comment = document.getElementById('booking_detail_comment').value;
-            const isPendingCoffracComment = !appointmentId && isCoffracCrmId(crmAppointmentId);
+            const isPendingCoffracComment = !appointmentId && isPendingDossierId(crmAppointmentId);
 
             if (!appointmentId && !isPendingCoffracComment) return;
 
@@ -6673,7 +6704,7 @@
             const appointmentId = document.getElementById('booking_detail_appointment_id').value;
             const crmAppointmentId = document.getElementById('booking_detail_crm_id').value;
             const button = document.getElementById('booking-problem-appointment-btn');
-            const isPendingCoffracProblem = !appointmentId && isCoffracCrmId(crmAppointmentId);
+            const isPendingCoffracProblem = !appointmentId && isPendingDossierId(crmAppointmentId);
 
             if (!appointmentId && !isPendingCoffracProblem) return;
 
@@ -6806,6 +6837,9 @@
 
                 const confirmedEvent = selectedCalendarEvent;
                 closeBookingAppointmentModal();
+                if (!bookingConnectorsEnabled && payload.crm_appointment_id) {
+                    renderBookingCrmAppointments(bookingCrmAppointments.filter((row) => row.id !== payload.crm_appointment_id), null);
+                }
                 showPlacementConfirmation(data, payload, confirmedEvent);
             } catch (error) {
                 showDetailStatus(error.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.'), 'error');

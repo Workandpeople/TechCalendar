@@ -30,7 +30,7 @@ class AdminUserController extends Controller
             'status' => ['nullable', Rule::in(['active', 'trashed', 'all'])],
         ]);
 
-        $query = User::query()->with(['services:id', 'departments:code']);
+        $query = User::query()->internal()->with(['services:id', 'departments:code']);
         $status = $validated['status'] ?? 'active';
 
         if ($status === 'all' || $status === 'trashed') {
@@ -62,7 +62,7 @@ class AdminUserController extends Controller
 
         return view('admin.users.index', [
             'users' => $users,
-            'services' => Service::query()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
+            'services' => Service::query()->catalog()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
             'departments' => Department::query()->orderBy('code')->get(['code', 'name']),
             'filters' => [
                 'q' => $validated['q'] ?? '',
@@ -101,7 +101,7 @@ class AdminUserController extends Controller
         $payload = UserNameNormalizer::normalizePayload($payload);
 
         $plainPassword = Str::password(10);
-        $user = User::query()->create([
+        $user = User::query()->internal()->create([
             'first_name' => $payload['first_name'],
             'last_name' => $payload['last_name'],
             'email' => $payload['email'],
@@ -120,6 +120,7 @@ class AdminUserController extends Controller
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        abort_if($user->isExternal(), 404);
         abort_unless((bool) $request->user()?->admin, 403);
 
         $this->normalizeTechTimeInputs($request);
@@ -166,6 +167,7 @@ class AdminUserController extends Controller
 
     public function destroy(Request $request, User $user): RedirectResponse
     {
+        abort_if($user->isExternal(), 404);
         abort_unless((bool) $request->user()?->admin, 403);
 
         if ($request->user()->is($user)) {
@@ -181,7 +183,7 @@ class AdminUserController extends Controller
     {
         abort_unless((bool) $request->user()?->admin, 403);
 
-        $target = User::withTrashed()->findOrFail($user);
+        $target = User::withTrashed()->internal()->findOrFail($user);
         $target->restore();
 
         return redirect()->route('admin.users', ['status' => 'trashed'])->with('status', 'Utilisateur restaure.');
@@ -191,7 +193,7 @@ class AdminUserController extends Controller
     {
         abort_unless((bool) $request->user()?->admin, 403);
 
-        $target = User::withTrashed()->findOrFail($user);
+        $target = User::withTrashed()->internal()->findOrFail($user);
 
         if (! $target->trashed()) {
             return back()->withErrors(['user' => 'Suppression définitive autorisée uniquement après soft delete.']);
@@ -210,7 +212,7 @@ class AdminUserController extends Controller
     {
         abort_unless((bool) $request->user()?->admin, 403);
 
-        $target = User::withTrashed()->findOrFail($user);
+        $target = User::withTrashed()->internal()->findOrFail($user);
 
         if ($target->trashed()) {
             return back()->withErrors(['user' => 'Impossible d envoyér un lien de reset à un compte supprimé.']);
