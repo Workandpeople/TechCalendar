@@ -201,3 +201,13 @@ Conserver le diagnostic ; ne pas relancer ni restaurer automatiquement le dump.
 demo:check est un controle AVANT premiere ouverture et exige des sessions/jobs
 vides : il ne doit pas servir de critere pour cette mise a jour en service.
 Controler ensuite la connexion HTTPS, un dossier, un document et les menus.
+
+Correctif du 15 octobre, paquet initial 06ab34a6 : la copie du code doit utiliser
+rsync -rpt, et non -rt. Sans --perms, --chmod n'impose pas les modes demandes,
+en particulier avec umask 077 et le changement de proprietaire vers root.
+Le code peut alors devenir illisible par www-data (artisan inaccessible, 404).
+Le script teste desormais la lecture des points d'entree apres la copie.
+La regression Linux reelle est couverte par tests/check-code-permissions.sh,
+a lancer uniquement dans un conteneur jetable root avec GNU rsync et www-data.
+Ce test reproduit les anciens droits, puis valide la correction et la
+preservation du .env, des caches prives, des documents et des anciens assets.

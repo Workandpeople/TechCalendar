@@ -123,11 +123,15 @@ gzip -t "$BACKUP/database-before.sql.gz"
 (cd "$BACKUP" && sha256sum code-before.tar.gz database-before.sql.gz app.env > SHA256SUMS)
 
 # No --delete: keep local runtime data and the previous hashed frontend assets.
-rsync -rt --chown=root:root --chmod=D755,F644 \
+# --perms is required: --chmod alone does not override umask 077 or existing modes.
+rsync -rpt --chown=root:root --chmod=D755,F644 \
     --exclude='/.env*' --exclude='/.git/' --exclude='/storage/' \
     --exclude='/bootstrap/cache/' --exclude='/public/storage' --exclude='/public/hot' \
     "$STAGE/" "$APP/"
 sha256sum -c "$BACKUP/env-checksum"
+for path in artisan public/index.php vendor/autoload.php bootstrap/app.php; do
+    runuser -u www-data -- test -r "$APP/$path"
+done
 runuser -u www-data -- php8.4 artisan config:clear
 runuser -u www-data -- php8.4 artisan package:discover
 runuser -u www-data -- php8.4 artisan migrate --force

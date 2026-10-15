@@ -27,3 +27,10 @@ it('backs up before migration and never seeds, imports or deletes runtime files'
         ->not->toContain('artisan db:seed', 'artisan migrate:fresh', 'artisan key:generate', 'artisan migrate:rollback', 'mysql <');
     expect($source)->toContain('artisan clients:reconcile-legacy |')->not->toContain('clients:reconcile-legacy --apply');
 });
+
+it('enforces code permissions independently of the private deployment umask', function () {
+    $source = file_get_contents(__DIR__.'/../../tools/deploy/update-demo.sh');
+    expect($source)->toContain('rsync -rpt --chown=root:root --chmod=D755,F644', 'runuser -u www-data -- test -r "$APP/$path"');
+    $process = new Process(['bash', '-n', __DIR__.'/../../tools/deploy/tests/check-code-permissions.sh']);
+    expect($process->run())->toBe(0);
+});
