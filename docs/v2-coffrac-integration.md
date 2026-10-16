@@ -1065,3 +1065,98 @@ Références fournisseur :
 [exemple PHP](https://www.smsfactor.com/api-sms-php),
 [réponses d'envoi](https://dev.smsfactor.com/en/api/sms/send/send-single),
 [contraintes de l'expéditeur](https://www.smsfactor.com/faq-page).
+
+### Branchement natif SMS V2 (15 octobre 2026)
+
+Le constat ci-dessus décrit l'état avant intégration. La fiche dossier propose
+maintenant **SMS**, avec modèles historiques `sms_tempalte` lus depuis
+`legacy_records`, texte libre, choix explicite du RDV, aperçu et confirmation.
+Les variables manquantes bloquent l'aperçu au lieu d'envoyer un texte incomplet.
+La modification du texte n'altère jamais le modèle Coffrac.
+
+- Accès réservé aux administrateurs, gérants et planning internes ; contrôle
+  répété dans le worker pour les accès révoqués. Historique toujours interne.
+- Aperçu chiffré/authentifié, lié au dossier et à l'auteur, valable 20 minutes.
+  L'envoi utilise exactement le texte et le numéro confirmés, pas les champs
+  renvoyés par le navigateur. Numéro international, un destinataire par envoi.
+- Table `dossier_sms` avec contenu/numéro chiffrés, clé de soumission unique,
+  anti-double-clic et anti-doublon de contenu sur cinq minutes.
+- Job sur la queue configurée ; prise atomique avant l'appel. Pas de retry HTTP
+  ni de redirection. Un timeout, HTTP 5xx ou code fournisseur -8 reste incertain
+  et ne déclenche jamais un second envoi. Un worker arrêté en cours de traitement
+  nécessite une vérification du compte SMSFactor, pas `queue:retry` pour renvoyer.
+- États distincts : en attente, transmission, simulation, accepté (pas livré),
+  refusé, bloqué, inconnu. Suivi AJAX automatique et bouton d'actualisation.
+- SMS d'alerte transactionnelle (`pushtype=alert`), pas une campagne marketing.
+  Estimation GSM-7/Unicode affichée avant confirmation. Pas de webhook de
+  livraison installé : ne jamais présenter l'acceptation API comme une livraison.
+- En `local`, `demo`, ou sur une base de simulation, le mode effectif est
+  **toujours simulate**, même avec `SMSFACTOR_MODE=live`. La démo autorise
+  uniquement `POST https://api.smsfactor.com/send/simulate`. Elle conserve les
+  autres restrictions HTTP, emails, Coffrac et CAPCEE. La simulation transmet
+  le texte et le numéro au fournisseur, mais n'envoie pas de SMS et ne débite pas.
+- `sms:dispatch` ne reprend que les demandes jamais transmises ; planification
+  chaque minute hors simulation. En démo sans cron, le bouton « Reprendre la
+  mise en file » fonctionne aussi. Il ne remet jamais un résultat inconnu en file.
+
+#### Retrouver la configuration historique (lecture seule sur Coffrac)
+
+```bash
+cd /home/ubuntu/www/coffrac_preprod
+# Afficher uniquement les NOMS des éventuelles variables SMS, jamais leur clé.
+sed -nE 's/^(SMS[A-Z0-9_]*|SMSFACTOR[A-Z0-9_]*)=.*/\1=<defini>/p' .env
+# Dans la version auditée, $token et $sender se trouvent dans sendSMS.
+less -N '+/function sendSMS' app/Http/Controllers/DossierController.php
+```
+
+Ne pas copier la sortie contenant `$token` dans le chat, les logs ou Git.
+Préférer un nouveau jeton SMSFactor dédié à TechCalendar : la clé historique
+est présente dans le code Coffrac. Ne pas révoquer l'ancienne clé tant que
+Coffrac travaille avec. Aucun changement n'est nécessaire sur ce serveur.
+
+#### Configuration TechCalendar
+
+Sur le CT : `/var/www/TechCalendar-v2/.env` (pas le `.env` V1).
+En local : le `.env` de TechCalendar, déjà ignoré par Git.
+
+```dotenv
+SMSFACTOR_ENABLED=true
+SMSFACTOR_MODE=simulate
+SMSFACTOR_API_TOKEN="CLE_PRIVEE_DEDIEE"
+SMSFACTOR_SENDER=Genius
+SMSFACTOR_TIMEOUT=20
+SMSFACTOR_CONNECT_TIMEOUT=5
+SMSFACTOR_QUEUE_CONNECTION=database
+SMSFACTOR_QUEUE=default
+SIMULATION_ALLOW_EXTERNAL_APIS=true
+```
+
+`Genius` est un exemple d'identité courte à valider sur le compte SMSFactor.
+Ne pas reprendre l'expéditeur historique trop long. Une valeur vide demande
+l'expéditeur par défaut du fournisseur ; aucune troncature silencieuse.
+Ne pas utiliser de préfixe `VITE_` pour la clé.
+
+Déployer le code et sa migration avec le script de mise à jour V2, puis :
+
+```bash
+cd /var/www/TechCalendar-v2
+runuser -u www-data -- php8.4 artisan config:cache
+runuser -u www-data -- php8.4 artisan sms:check
+systemctl restart techcalendar-v2-queue.service
+systemctl reload php8.4-fpm
+```
+
+`sms:check` n'appelle pas le fournisseur et masque la clé. La clé, les crédits
+et le réseau ne sont donc pas validés par cette commande. Pour un test complet,
+ouvrir une fiche, saisir un numéro de test autorisé, prévisualiser et confirmer
+la **simulation** ; le worker doit retourner « Simulation réussie ».
+
+Les logs techniques ne contiennent ni numéro, ni texte, ni clé, ni réponse brute.
+Filtres utiles : `SMS :` dans `storage/logs/laravel.log`, puis `sms_id` pour la
+corrélation. Si le statut est « En attente du worker », vérifier le service de
+queue et sa queue `default`. Ne pas lancer une seconde demande pour débloquer
+la première. Aucun test réseau ni SMS réel n'est exécuté par les tests automatisés.
+
+Contrat fournisseur vérifié :
+[envoi JSON](https://dev.smsfactor.com/en/api/sms/send/send-campaign),
+[simulation sans création de campagne](https://dev.smsfactor.com/en/api/sms/send/send-list-simulate).

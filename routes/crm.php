@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Crm\CapceeReportController;
 use App\Http\Controllers\Crm\DossierController;
+use App\Http\Controllers\Crm\DossierSmsController;
 use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
 use App\Http\Controllers\Crm\DossierPlanningController;
 use App\Http\Controllers\Crm\DossierWorkflowController;
@@ -16,6 +17,10 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/documents/{document}/partage', [DossierController::class, 'shareDocument'])->name('documents.sharing');
     Route::patch('/dossiers/{dossier}/commentaires/{comment}/partage', [DossierController::class, 'shareComment'])->whereNumber('comment')->name('dossiers.comments.sharing');
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
+    Route::get('/dossiers/{dossier}/sms/suivi', [DossierSmsController::class, 'status'])->middleware('throttle:60,1')->name('dossiers.sms.status');
+    Route::post('/dossiers/{dossier}/sms/apercu', [DossierSmsController::class, 'preview'])->middleware('throttle:30,1')->name('dossiers.sms.preview');
+    Route::post('/dossiers/{dossier}/sms', [DossierSmsController::class, 'store'])->middleware('throttle:10,1')->name('dossiers.sms.store');
+    Route::post('/dossiers/{dossier}/sms/{sms}/file', [DossierSmsController::class, 'resume'])->middleware('throttle:10,1')->name('dossiers.sms.resume');
     Route::get('/dossiers/{dossier}/modifier', [DossierController::class, 'edit'])->name('dossiers.edit');
     Route::get('/dossiers/{dossier}/carte', [DossierController::class, 'mapPreview'])->middleware('throttle:60,1')->name('dossiers.map');
     Route::get('/dossiers/{dossier}/capcee/suivi', [CapceeReportController::class, 'status'])->middleware('throttle:60,1')->name('capcee.status');

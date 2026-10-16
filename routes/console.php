@@ -119,6 +119,10 @@ if (config('simulation.enabled')) {
     return;
 }
 
+if (config('crm.v2_enabled') && config('services.smsfactor.enabled')) {
+    Schedule::command('sms:dispatch')->everyMinute()->withoutOverlapping(5);
+}
+
 Schedule::command('health:check')
     ->everyFiveMinutes();
 

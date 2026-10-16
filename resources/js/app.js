@@ -4,6 +4,7 @@ import { initDossierComments } from './dossier-comments';
 import { initDossierMapPreview } from './dossier-map-preview';
 import { initDossierList } from './dossier-list';
 import { initDossierDetail } from './dossier-detail';
+import { initDossierSms } from './dossier-sms';
 import { commentHtml, commentText, initCommentMarkup } from './comment-markup';
 import { initCapceeReports } from './capcee-reports';
 import { initSelectMenus } from './select-menu';
@@ -17,6 +18,7 @@ initDossierComments();
 initDossierMapPreview();
 initDossierList();
 initDossierDetail();
+initDossierSms();
 initCapceeReports();
 initSelectMenus();
 

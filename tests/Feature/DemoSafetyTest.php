@@ -92,3 +92,24 @@ it('blocks destructive artisan commands in demo', function (string $command) {
     expect(fn () => Event::dispatch(new CommandStarting($command, new ArrayInput([]), new NullOutput)))
         ->toThrow(RuntimeException::class, 'commande destructive interdite');
 })->with(['migrate:fresh', 'migrate:reset', 'migrate:rollback', 'db:wipe', 'db:seed', 'simulation:reset']);
+
+it('only allows the SMSFactor simulation endpoint in demo', function (string $method, string $url, bool $allowed) {
+    config(['services.smsfactor.enabled' => true]);
+    app(SimulationSafety::class)->activate();
+    Http::fake(['*' => Http::response(['status' => 1, 'sent' => 1])]);
+    if ($allowed) {
+        expect(Http::{strtolower($method)}($url)->successful())->toBeTrue();
+    } else {
+        expect(fn () => Http::{strtolower($method)}($url))->toThrow(RuntimeException::class);
+        Http::assertNothingSent();
+    }
+})->with([
+    ['POST', 'https://api.smsfactor.com/send/simulate', true],
+    ['POST', 'https://api.smsfactor.com/send', false],
+    ['GET', 'https://api.smsfactor.com/send', false],
+    ['GET', 'https://api.smsfactor.com/send/simulate', false],
+    ['POST', 'https://api.smsfactor.com/send/simulate?token=secret', false],
+    ['POST', 'http://api.smsfactor.com/send/simulate', false],
+    ['POST', 'https://api.smsfactor.com:8443/send/simulate', false],
+    ['POST', 'https://api.smsfactor.com.attacker.test/send/simulate', false],
+]);

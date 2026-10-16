@@ -97,6 +97,11 @@ class DossierController extends Controller
 
         return view('crm.dossiers.show', [
             'dossier' => $dossier,
+            'smsUnavailable' => app(\App\Services\Sms\SmsConfiguration::class)->unavailable(),
+            'smsMode' => app(\App\Services\Sms\SmsConfiguration::class)->mode(),
+            'smsTemplates' => app(\App\Services\Sms\DossierSmsService::class)->templates(),
+            'smsMessages' => \App\Models\DossierSms::where('dossier_id', $dossier->id)->latest('id')->limit(10)->get(),
+            'smsAppointments' => $dossier->appointments()->with(['technician', 'service'])->orderByDesc('starts_at')->limit(100)->get(),
             'visitCandidates' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
                 ->where('ends_at', '<=', now())->orderByDesc('starts_at')
                 ->get(['appointments.id', 'dossier_operation_id', 'starts_at'])->groupBy('dossier_operation_id'),

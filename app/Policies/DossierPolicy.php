@@ -49,6 +49,11 @@ class DossierPolicy
         return $this->viewAny($user);
     }
 
+    public function sendSms(User $user, Dossier $dossier): bool
+    {
+        return $this->viewAny($user);
+    }
+
     public function transmitReport(User $user, Dossier $dossier): bool
     {
         return $this->view($user, $dossier) && ($user->admin || $user->role === 0);

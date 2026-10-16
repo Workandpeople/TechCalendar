@@ -53,8 +53,11 @@ class SimulationSafety
             }
             if ($demo) {
                 $uri = $request->getUri();
+                $smsSimulation = strtolower($uri->getHost()) === 'api.smsfactor.com'
+                    && $request->getMethod() === 'POST' && $uri->getPath() === '/send/simulate'
+                    && $uri->getQuery() === '' && config('services.smsfactor.enabled');
                 if ($uri->getScheme() !== 'https'
-                    || ! in_array(strtolower($uri->getHost()), self::DEMO_HTTP_HOSTS, true)
+                    || (! in_array(strtolower($uri->getHost()), self::DEMO_HTTP_HOSTS, true) && ! $smsSimulation)
                     || ! in_array($uri->getPort(), [null, 443], true)
                     || $uri->getUserInfo() !== '') {
                     // Never include the URL: query strings may contain API credentials.
