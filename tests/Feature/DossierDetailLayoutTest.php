@@ -31,7 +31,7 @@ it('keeps the familiar Coffrac columns with unique sections and protected forms'
     }
     expect($xpath->query('//*[@id="commentaires"]')->item(0)->textContent)->toContain('COMMENT-ONLY', 'CONTROL-COMMENT')->not->toContain('HISTORY-ONLY');
     expect($xpath->query('//*[@id="historique"]')->item(0)->textContent)->toContain('HISTORY-ONLY')->not->toContain('COMMENT-ONLY', 'CONTROL-COMMENT');
-    expect($xpath->query('//*[@id="documents"]//table/thead/tr/th')->length)->toBe(3);
+    expect($xpath->query('//*[@id="documents"]//table/thead/tr/th')->length)->toBe(4);
     foreach (['document', 'comment_body'] as $id) {
         expect($xpath->query('//*[@id="'.$id.'"]')->length)->toBe(1);
     }

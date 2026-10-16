@@ -97,7 +97,7 @@ class DossierTable
                 break;
             case 'company':
                 $query->orderBy(DB::table('external_delegataires')->selectRaw("COALESCE(NULLIF(company_name, ''), name)")
-                    ->whereColumn('id', 'dossiers.delegataire_id')->limit(1), $direction);
+                    ->whereRaw('id = COALESCE(dossiers.delegataire_id, dossiers.client_id)')->limit(1), $direction);
                 break;
             case 'phone': $query->orderBy('dossiers.phone', $direction);
                 break;

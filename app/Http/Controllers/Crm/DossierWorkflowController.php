@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\PostVisitRequest;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
+use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierWorkflow;
 use App\Services\Crm\PostVisitWorkflow;
 use Illuminate\Http\RedirectResponse;
@@ -16,9 +17,9 @@ class DossierWorkflowController extends Controller
 {
     public function postVisit(PostVisitRequest $request, Dossier $dossier, DossierOperation $operation, PostVisitWorkflow $workflow): RedirectResponse
     {
-        $workflow->apply($request->user(), $dossier, $operation, $request->validated());
+        $workflow->apply($request->user(), $dossier, $operation, [...$request->validated(), ...ContentAudience::fromRequest($request)]);
 
-        return redirect(route('v2.dossiers.show', $dossier).'#apres-visite')->with('status', 'Traitement enregistré. Le suivi du lot a été recalculé sans envoi externe.');
+        return redirect(route('v2.dossiers.show', $dossier).'#fiche-'.$operation->id)->with('status', 'Traitement enregistré. Le suivi du lot a été recalculé sans envoi externe.');
     }
 
     public function reopen(Request $request, Dossier $dossier, DossierOperation $operation, DossierWorkflow $workflow): RedirectResponse

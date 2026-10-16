@@ -258,12 +258,12 @@ it('preserves the selected client through preview confirmation and physical book
         'status' => 'scheduled']);
     DB::transaction(fn () => app(NativeAppointmentPlacement::class)->place($this->staff, $appointment, ['lot_appointment_id' => $row->id]));
     $dossier = Dossier::where('source', 'lot')->where('source_reference', (string) $row->id)->firstOrFail();
-    expect($dossier->delegataire_id)->toBe($this->client->id);
+    expect($dossier->client_id)->toBe($this->client->id)->and($dossier->delegataire_id)->toBeNull();
     $this->actingAs($this->external)->get(route('client.dossiers.show', $dossier))->assertOk()->assertSee('Planifié');
     app(LotClientAssignment::class)->update($this->staff, $lot, [
         'delegataire_id' => $this->other->id, 'delegataire' => $this->other->name,
     ]);
-    expect($dossier->fresh()->delegataire_id)->toBe($this->other->id);
+    expect($dossier->fresh()->delegataire_id)->toBe($this->other->id)->and($dossier->fresh()->client_id)->toBeNull();
     $this->get(route('client.dossiers.show', $dossier))->assertForbidden();
     $this->get(route('client.lots.show', $lot))->assertNotFound();
 });
@@ -284,7 +284,8 @@ it('keeps legacy reconciliation idempotent and never enables or creates login ac
     expect($report['organisations_a_creer'])->toBe(2)->and($report['dossiers_a_rattacher'])->toBe(2)
         ->and($report['double_affectation_historique'])->toBe(1)->and(ExternalDelegataire::count())->toBe(2);
     $service->run(true);
-    expect(Dossier::where('reference', 'LEGACY-201')->first()->delegataire->kind)->toBe('client')
+    expect(Dossier::where('reference', 'LEGACY-201')->first()->client->kind)->toBe('client')
+        ->and(Dossier::where('reference', 'LEGACY-202')->first()->client->kind)->toBe('client')
         ->and(Dossier::where('reference', 'LEGACY-202')->first()->delegataire->kind)->toBe('delegataire')
         ->and(Dossier::where('reference', 'LEGACY-203')->first()->delegataire_id)->toBeNull()
         ->and(User::count())->toBe($before);

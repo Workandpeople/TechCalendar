@@ -40,7 +40,7 @@ class ClientPortal
         Gate::forUser($actor)->authorize('view', $dossier);
         $dossier->load('operations.service');
         $documents = $this->access->allows($actor, 'documents')
-            ? $dossier->documents()->where('client_visible', true)->latest('id')->paginate(15, ['*'], 'documents_page') : null;
+            ? $dossier->documents()->where($this->access->audienceColumn($actor), true)->latest('id')->paginate(15, ['*'], 'documents_page') : null;
         $collected = null;
         $lotDocuments = null;
         if ($this->access->allows($actor, 'documents')) {
@@ -48,7 +48,8 @@ class ClientPortal
                 ->where('dossier_id', $dossier->id), $actor)
                 ->orderByDesc('source_id')->paginate(15, ['*'], 'archive_page')->withQueryString();
             $collected->setCollection($collected->getCollection()->filter(fn ($record) => $this->access->canReadLegacyDocument($actor,
-                json_decode($record->payload, true) ?: [], isset($record->client_visible_override) ? (bool) $record->client_visible_override : null))
+                json_decode($record->payload, true) ?: [], isset($record->client_visible_override) ? (bool) $record->client_visible_override : null,
+                isset($record->delegataire_visible_override) ? (bool) $record->delegataire_visible_override : null))
                 ->map(function ($record) use ($dossier): array {
                     $document = app(CollectedDossierDocuments::class)->describe($record);
                     $document['url'] = $document['url'] ? route('client.dossiers.archive', [$dossier, $record->source_id]) : null;

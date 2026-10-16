@@ -142,7 +142,7 @@ class DossierBooking
     private function query(): Builder
     {
         return DossierOperation::query()->awaitingBooking()->with([
-            'service', 'dossier.delegataire', 'dossier.documents',
+            'service', 'dossier.client', 'dossier.delegataire', 'dossier.documents',
             'dossier.comments' => fn ($query) => $query->with('author:id,first_name,last_name')->orderByDesc('created_at')->orderByDesc('id')->limit(10),
         ]);
     }
@@ -197,7 +197,7 @@ class DossierBooking
             'created_at' => $dossier->created_at?->toIso8601String(),
             'first_name' => $dossier->company_name ? '' : ($dossier->first_name ?? ''),
             'last_name' => $dossier->company_name ?: ($dossier->last_name ?: $dossier->beneficiaryLabel()),
-            'company_name' => $dossier->delegataire?->company_name ?: $dossier->delegataire?->name,
+            'company_name' => ($dossier->delegataire ?: $dossier->client)?->company_name ?: ($dossier->delegataire ?: $dossier->client)?->name,
             'beneficiary_name' => $dossier->beneficiaryLabel(), 'site_name' => $dossier->site_name,
             'installer_name' => $dossier->installer_name, 'phone' => $dossier->phone ?? '',
             'address' => $this->address($dossier), 'address_line' => $dossier->address,

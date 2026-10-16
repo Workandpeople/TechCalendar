@@ -61,7 +61,7 @@ it('shares and revokes imported documents without changing the archive or leakin
     $this->patch($share, ['client_visible' => true])->assertForbidden();
 
     $this->actingAs($this->staff)->patch($share, ['client_visible' => true])->assertRedirect()->assertSessionHasNoErrors();
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Rendre privé');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Modifier l’accès');
     $this->actingAs($this->external)->get($show)->assertOk()->assertSee('ARCHIVE-DOCUMENT')
         ->assertViewHas('collected', fn ($rows) => $rows->total() === 1);
     $this->get($download)->assertDownload()->assertHeader('X-Content-Type-Options', 'nosniff');

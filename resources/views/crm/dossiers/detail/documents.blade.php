@@ -1,66 +1,67 @@
 <section id="documents" class="gc-card gc-dossier-panel" aria-labelledby="dossier-documents-title">
     <header class="gc-dossier-panel-heading">
         <h2 id="dossier-documents-title"><x-nav-icon name="document" />Documents <span class="gc-dossier-count">{{ $documentCount }}</span></h2>
-        <span class="text-xs text-slate-500">Dossier, lots et archives</span>
+        <a href="#documents-dossier" class="gc-btn-primary"><x-nav-icon name="plus" />Ajouter</a>
     </header>
     <div class="gc-dossier-panel-body">
-        <details id="documents-dossier" class="gc-dossier-upload" @if ($errors->has('document') || $errors->has('name')) open @endif>
-            <summary><x-nav-icon name="upload" /> Ajouter un document</summary>
-            <form class="mt-4 space-y-4" method="POST" enctype="multipart/form-data" action="{{ route('v2.dossiers.documents.store', $dossier) }}">
-                @csrf
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div><label for="document_name" class="gc-label">Nom du document</label><input id="document_name" name="name" value="{{ old('name') }}" maxlength="190" class="gc-input" required></div>
-                    <div><label for="document" class="gc-label">Fichier (10 Mo maximum)</label><input id="document" name="document" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" class="block w-full min-w-0 text-sm" required><p class="mt-2 text-xs text-slate-500">PDF, image, Word ou Excel.</p></div>
-                </div>
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="client_visible" value="1">Public : partager avec le client affecté</label>
-                <p class="text-xs text-slate-500">Décoché : document privé, réservé à l’équipe interne.</p>
-                <div class="flex justify-end"><button type="submit" class="gc-btn-primary">Ajouter au dossier</button></div>
-            </form>
-        </details>
-        <div class="gc-dossier-documents-scroll mt-4" role="region" aria-label="Liste des documents" tabindex="0">
+        @include('crm.dossiers.detail.document-upload')
+        <div class="gc-document-legend mt-4" aria-label="Niveaux de partage">
+            <span data-audience="internal">Interne</span><span data-audience="client">Client</span><span data-audience="shared">Client + délégataire</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-500">L’auteur et les dates restent visibles. « Aperçu » ouvre les PDF et images sans quitter la fiche.</p>
+        <div class="gc-dossier-documents-scroll mt-4">
             <table class="gc-dossier-documents-table">
-                <thead><tr><th scope="col">Fichier</th><th scope="col">Visibilité</th><th scope="col">Action</th></tr></thead>
+                <thead><tr><th scope="col">Document / description</th><th scope="col">Ajouté par / date</th><th scope="col">Accès externes</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
                     @foreach ($documents as $document)
                         @include('crm.dossiers.detail.document-row', [
-                            'name' => $document->name,
-                            'detail' => 'Dossier · '.number_format($document->size / 1024, 1, ',', ' ').' Ko · '.$document->created_at->format('d/m/Y H:i'),
+                            'name' => $document->name, 'description' => $document->description,
+                            'detail' => ($document->document_type === 'report' ? 'Rapport de contrôle' : 'Document libre').' · '.number_format($document->size / 1024, 0, ',', ' ').' Ko',
+                            'author' => $document->author?->full_name ?: 'Auteur non renseigné', 'date' => $document->created_at?->format('d/m/Y H:i'),
+                            'reportReference' => $document->control_reference, 'reportDate' => $document->inspected_on?->format('d/m/Y'), 'issuedDate' => $document->issued_on?->format('d/m/Y'),
+                            'outcome' => \App\Services\Crm\PostVisitWorkflow::OUTCOMES[$document->control_outcome] ?? null,
                             'download' => route('v2.documents.download', $document),
+                            'preview' => in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? route('v2.documents.download', ['document' => $document, 'preview' => 1]) : null,
+                            'remove' => route('v2.documents.destroy', $document),
                             'sharing' => route('v2.documents.sharing', $document),
-                            'visible' => $document->client_visible, 'hint' => null,
+                            'visible' => $document->client_visible, 'delegataireVisible' => $document->delegataire_visible,
                         ])
                     @endforeach
                     @foreach ($legacyDocuments as $record)
                         @include('crm.dossiers.detail.document-row', [
-                            'name' => $record['name'], 'detail' => 'Archive Coffrac', 'download' => $record['url'],
+                            'name' => $record['name'], 'detail' => 'Archive Coffrac', 'description' => $record['description'],
+                            'author' => $record['author_name'], 'date' => $record['created_at'],
+                            'reportReference' => $record['control_reference'], 'reportDate' => $record['inspected_on'], 'issuedDate' => $record['issued_on'], 'outcome' => $record['outcome'],
+                            'download' => $record['url'], 'preview' => $record['previewable'] ? $record['url'].'?preview=1' : null,
+                            'remove' => route('v2.dossiers.collected-documents.destroy', [$dossier, $record['source_id']]),
                             'sharing' => route('v2.dossiers.collected-documents.sharing', [$dossier, $record['source_id']]),
-                            'visible' => $dossier->delegataire?->kind === 'delegataire' ? $record['delegataire_visible'] : $record['client_visible'],
-                            'hint' => $record['client_visible'] && ! $record['delegataire_visible'] ? 'Règle Coffrac conservée : non partagé avec les délégataires.' : null,
+                            'visible' => $record['client_visible'], 'delegataireVisible' => $record['delegataire_visible'],
                         ])
                     @endforeach
                     @foreach ($lotDocuments as $document)
                         @include('crm.dossiers.detail.document-row', [
-                            'name' => $document->name,
-                            'detail' => ($document->lotAppointment?->lot?->name ?: 'Lot d’origine').' · '.number_format($document->size / 1024, 1, ',', ' ').' Ko',
+                            'name' => $document->name, 'description' => null,
+                            'detail' => 'Lot '.($document->lotAppointment?->lot?->name ?: '#'.$document->lot_appointment_id).' · '.number_format($document->size / 1024, 0, ',', ' ').' Ko',
+                            'author' => $document->uploader?->full_name ?: 'Auteur non renseigné', 'date' => $document->created_at?->format('d/m/Y H:i'),
+                            'reportReference' => null, 'reportDate' => null, 'issuedDate' => null, 'outcome' => null,
                             'download' => $document->disk === 'local' ? route('v2.dossiers.lot-documents.download', [$dossier, $document->id]) : null,
+                            'preview' => $document->disk === 'local' && in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? route('v2.dossiers.lot-documents.download', ['dossier' => $dossier, 'document' => $document->id, 'preview' => 1]) : null, 'remove' => null,
                             'sharing' => route('v2.dossiers.lot-documents.sharing', [$dossier, $document->id]),
-                            'visible' => $document->client_visible && ! $document->is_private, 'hint' => null,
+                            'visible' => $document->client_visible && ! $document->is_private, 'delegataireVisible' => $document->delegataire_visible && ! $document->is_private,
                         ])
                     @endforeach
-                    @if ($documents->isEmpty() && $legacyDocuments->isEmpty() && $lotDocuments->isEmpty())
-                        <tr><td colspan="3" class="gc-dossier-empty">Aucun document sur cette page. Ajoute une pièce avec le bouton ci-dessus.</td></tr>
-                    @endif
+                    @if ($documentCount === 0)<tr><td colspan="4" class="gc-dossier-empty"><x-nav-icon name="document" />Aucun document. Ajoutez la première pièce ou un rapport de contrôle ci-dessus.</td></tr>@endif
                 </tbody>
             </table>
         </div>
-        @foreach (['Documents du dossier' => $documents, 'Documents historiques Coffrac' => $legacyDocuments, 'Documents des lots liés' => $lotDocuments] as $label => $pages)
-            @if ($pages->hasPages())<div class="mt-4"><p class="mb-2 text-xs font-semibold text-slate-500">{{ $label }}</p>{{ $pages->links() }}</div>@endif
-        @endforeach
-        <span id="documents-lots"></span>
-        <details class="mt-4 text-xs text-slate-500">
-            <summary class="cursor-pointer font-semibold">Qui peut voir les documents et commentaires ?</summary>
-            <p class="mt-2">Privé : équipe interne uniquement. Public : également visible par le client ou délégataire affecté, selon les droits de son compte. Aucun accès anonyme ni partage avec les autres clients.</p>
-            <p class="mt-2">Les droits de lecture des documents et des commentaires se règlent séparément dans la gestion du client. L’historique de traitement reste interne. Aucun partage ne déclenche d’envoi vers un CRM externe.</p>
-        </details>
+        @if ($documents->hasPages())<div class="mt-4">{{ $documents->links() }}</div>@endif
+        @if ($legacyDocuments->hasPages())<div class="mt-4">{{ $legacyDocuments->links() }}</div>@endif
+        @if ($lotDocuments->hasPages())<div id="documents-lots" class="mt-4">{{ $lotDocuments->links() }}</div>@endif
+        <p class="mt-4 text-xs text-slate-500"><x-nav-icon name="lock" />Les fichiers restent privés sur le serveur. Le partage ne crée aucun lien anonyme et n’envoie rien aux CRM externes.</p>
     </div>
+    <dialog class="gc-document-preview" data-document-preview aria-labelledby="preview-title">
+        <header><h2 id="preview-title" data-preview-title>Aperçu du document</h2><button type="button" class="gc-btn-secondary" data-preview-close><x-nav-icon name="close" />Fermer</button></header>
+        <iframe title="Aperçu sécurisé du document" data-preview-frame></iframe>
+        <footer><p>Si le format n’est pas pris en charge, utilisez le téléchargement.</p><a class="gc-btn-primary" data-preview-download><x-nav-icon name="download" />Télécharger</a></footer>
+    </dialog>
 </section>

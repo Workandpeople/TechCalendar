@@ -17,10 +17,13 @@ class DossierRequest extends FormRequest
     {
         $dossier = $this->route('dossier');
 
-        return [
+        $rules = [
             'reference' => ['required', 'string', 'max:100', Rule::unique('dossiers')->ignore($dossier)],
             'delegataire_id' => ['nullable', 'integer', Rule::exists('external_delegataires', 'id')->where(function ($query) use ($dossier): void {
-                $query->where('is_active', true)->when($dossier?->delegataire_id, fn ($query, $id) => $query->orWhere('id', $id));
+                $query->where('kind', 'delegataire')->where(fn ($query) => $query->where('is_active', true)->when($dossier?->delegataire_id, fn ($query, $id) => $query->orWhere('id', $id)));
+            })],
+            'client_id' => ['nullable', 'integer', Rule::exists('external_delegataires', 'id')->where(function ($query) use ($dossier): void {
+                $query->where('kind', 'client')->where(fn ($query) => $query->where('is_active', true)->when($dossier?->client_id, fn ($query, $id) => $query->orWhere('id', $id)));
             })],
             'company_name' => ['nullable', 'required_without:last_name', 'string', 'max:190'],
             'first_name' => ['nullable', 'string', 'max:120'],
@@ -40,6 +43,17 @@ class DossierRequest extends FormRequest
             'service_ids.*' => ['required', 'integer', 'distinct', 'exists:services,id'],
             'version' => [$dossier ? 'required' : 'prohibited', 'integer', 'min:1'],
         ];
+        foreach (['client_contact', 'delegataire_contact'] as $contact) {
+            $rules[$contact] = ['nullable', 'array:name,company_name,email,phone,address,postal_code,city'];
+            foreach (['name' => 190, 'company_name' => 190, 'email' => 190, 'phone' => 60, 'address' => 500, 'postal_code' => 10, 'city' => 190] as $field => $length) {
+                $rules[$contact.'.'.$field] = ['nullable', 'string', 'max:'.$length];
+                if ($field === 'email') {
+                    $rules[$contact.'.'.$field][] = 'email:rfc';
+                }
+            }
+        }
+
+        return $rules;
     }
 
     public function attributes(): array

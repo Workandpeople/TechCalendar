@@ -7,7 +7,14 @@
         </header>
         @include('crm.dossiers.notice')
         @if ($capceeUnavailable)<p role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">{{ $capceeUnavailable }}</p>@endif
-        @php($previous = $report?->latestDelivery?->metadata ?? [])
+        @php
+            $nativeReport = $operation->reportDocument;
+            $previous = $report?->latestDelivery?->metadata ?? [
+                'inspected_on' => $nativeReport?->inspected_on?->toDateString() ?? $operation->inspected_on?->toDateString(),
+                'issued_on' => $nativeReport?->issued_on?->toDateString(),
+                'conclusion' => ['satisfactory' => 'Satisfaisant', 'unsatisfactory' => 'NonSatisfaisant', 'unverifiable' => 'NonVerifiable'][$operation->control_outcome] ?? null,
+            ];
+        @endphp
         <form method="POST" enctype="multipart/form-data" action="{{ $report ? route('v2.capcee.versions.store', [$dossier, $operation, $report]) : route('v2.capcee.store', [$dossier, $operation]) }}" class="gc-card space-y-6 p-6">
             @csrf
             <input type="hidden" name="submission_token" value="{{ old('submission_token', (string) \Illuminate\Support\Str::uuid()) }}">
@@ -26,7 +33,7 @@
                     @endforeach
                 </select></div>
                 <div><label for="capcee-inspected" class="gc-label">Date d’inspection réalisée</label><input id="capcee-inspected" type="date" name="inspected_on" class="gc-input" value="{{ old('inspected_on', $previous['inspected_on'] ?? '') }}" required></div>
-                <div><label for="capcee-issued" class="gc-label">Date d’émission / signature du rapport</label><input id="capcee-issued" type="date" name="issued_on" class="gc-input" value="{{ old('issued_on') }}" required></div>
+                <div><label for="capcee-issued" class="gc-label">Date d’émission / signature du rapport</label><input id="capcee-issued" type="date" name="issued_on" class="gc-input" value="{{ old('issued_on', $report ? '' : ($previous['issued_on'] ?? '')) }}" required></div>
                 <div><label for="capcee-conclusion" class="gc-label">Conclusion du rapport</label><select id="capcee-conclusion" name="conclusion" class="gc-input" required><option value="">Choisir la conclusion</option>
                     @foreach (['Satisfaisant' => 'Satisfaisant', 'NonSatisfaisant' => 'Non satisfaisant', 'NonVerifiable' => 'Non vérifiable', 'Autre' => 'Autre'] as $value => $label)
                         <option value="{{ $value }}" @selected(old('conclusion', $previous['conclusion'] ?? '') === $value)>{{ $label }}</option>

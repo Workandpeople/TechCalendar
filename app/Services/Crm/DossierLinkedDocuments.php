@@ -20,26 +20,26 @@ class DossierLinkedDocuments
         $appointments = $dossier->appointments()->withTrashed()->select('appointments.id');
 
         return LotAppointmentDocument::query()->when($actor->isExternal(), fn ($query) => $query
-            ->where('client_visible', true)->where('is_private', false))
+            ->where(app(ClientAccess::class)->audienceColumn($actor), true)->where('is_private', false))
             ->where(function ($query) use ($appointments): void {
                 $query->whereIn('appointment_id', $appointments)
                     ->orWhereHas('lotAppointment', fn ($row) => $row->whereIn('appointment_id', clone $appointments));
             });
     }
 
-    public function share(User $actor, Dossier $dossier, int $documentId, bool $visible): void
+    public function share(User $actor, Dossier $dossier, int $documentId, bool $visible, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('update', $dossier);
-        DB::transaction(function () use ($actor, $dossier, $documentId, $visible): void {
+        DB::transaction(function () use ($actor, $dossier, $documentId, $visible, $delegataireVisible): void {
             $document = $this->query($actor, $dossier)->lockForUpdate()->findOrFail($documentId);
-            $document->update(['client_visible' => $visible, 'is_private' => ! $visible]);
+            $document->update(['client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible), 'is_private' => ! $visible]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
-                'body' => ($visible ? 'Partage client activé' : 'Partage client retiré').' pour le document de lot #'.$documentId,
-                'changed_fields' => ['lot_document_id' => $documentId, 'client_visible' => $visible]]);
+                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($document->client_visible, $document->delegataire_visible)].' » pour le document de lot #'.$documentId,
+                'changed_fields' => ['lot_document_id' => $documentId, 'client_visible' => $document->client_visible, 'delegataire_visible' => $document->delegataire_visible]]);
         });
     }
 
-    public function download(User $actor, Dossier $dossier, int $documentId): StreamedResponse
+    public function download(User $actor, Dossier $dossier, int $documentId, bool $preview = false): StreamedResponse
     {
         $document = $this->query($actor, $dossier)->findOrFail($documentId);
         abort_unless($document->disk === 'local', 404);
@@ -61,10 +61,14 @@ class DossierLinkedDocuments
             $name .= '.'.$extension;
         }
 
-        return $disk->download($document->path, $name, [
-            'Content-Type' => 'application/octet-stream',
+        $mime = $preview ? $disk->mimeType($document->path) : 'application/octet-stream';
+        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+
+        return $disk->response($document->path, $name, [
+            'Content-Type' => $inline ? $mime : 'application/octet-stream',
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
-        ]);
+            'Content-Security-Policy' => "default-src 'none'; sandbox",
+        ], $inline ? 'inline' : 'attachment');
     }
 }

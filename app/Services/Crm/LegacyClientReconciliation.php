@@ -28,19 +28,19 @@ class LegacyClientReconciliation
                         'company_name' => mb_substr((string) ($row['nom_societe'] ?? ''), 0, 190) ?: null,
                         'email' => filter_var($row['email'] ?? '', FILTER_VALIDATE_EMAIL) ? mb_substr($row['email'], 0, 190) : null,
                         'phone' => mb_substr((string) ($row['telephone'] ?? ''), 0, 60) ?: null,
+                        'payload' => ['address' => $row['adresse'] ?? null, 'postal_code' => $row['zip'] ?? null, 'city' => $row['ville'] ?? null],
                         'kind' => (int) $row['type'] === 7 ? 'delegataire' : 'client',
                         'is_active' => (int) ($row['actif'] ?? 0) === 1,
                     ]);
                 }
             }
-            $clients[(string) $record->source_id] = $client?->id;
+            $clients[(string) $record->source_id] = ['id' => $client?->id, 'kind' => $client?->kind ?? ((int) $row['type'] === 7 ? 'delegataire' : 'client')];
         }
         DB::table('legacy_records')->where('source_table', 'dossiers')->orderBy('id')->chunkById(300,
             function ($records) use ($clients, $apply, &$counts): void {
                 $dossiers = DB::table('dossiers')->where('source', 'coffrac')
                     ->whereIn('source_reference', $records->pluck('source_id')->map(fn ($id) => (string) $id))
-                    ->get(['id', 'source_reference', 'delegataire_id'])->keyBy('source_reference');
-                $assignments = [];
+                    ->get(['id', 'source_reference', 'delegataire_id', 'client_id'])->keyBy('source_reference');
                 foreach ($records as $record) {
                     $row = json_decode($record->payload, true) ?: [];
                     $delegataire = (string) ($row['delegataire_id'] ?? '');
@@ -52,26 +52,37 @@ class LegacyClientReconciliation
                     if (! $dossier) {
                         continue;
                     }
-                    if ($dossier->delegataire_id !== null) {
-                        $counts['affectations_existantes_conservees']++;
+                    $updates = [];
+                    foreach (['client' => $client, 'delegataire' => $delegataire] as $kind => $sourceId) {
+                        $field = $kind.'_id';
+                        if ($dossier->$field !== null) {
+                            $counts['affectations_existantes_conservees']++;
 
-                        continue;
+                            continue;
+                        }
+                        $match = $clients[$sourceId] ?? null;
+                        if ($match && $match['kind'] === $kind) {
+                            $updates[$field] = $match['id'];
+                        }
                     }
-                    // One owner only: legacy delegataire takes precedence; no owner/parent inheritance.
-                    $owner = array_key_exists($delegataire, $clients) ? $delegataire : $client;
-                    if (! array_key_exists($owner, $clients)) {
-                        $counts['sans_correspondance']++;
+                    if ($updates === []) {
+                        if (! $dossier->client_id && ! $dossier->delegataire_id) {
+                            $counts['sans_correspondance']++;
+                        }
 
                         continue;
                     }
                     $counts['dossiers_a_rattacher']++;
                     if ($apply) {
-                        $assignments[$clients[$owner]][] = $dossier->id;
+                        // Never overwrite a concurrent manual assignment, and invalidate stale forms.
+                        DB::transaction(function () use ($dossier, $updates): void {
+                            $locked = DB::table('dossiers')->where('id', $dossier->id)->lockForUpdate()->first();
+                            $missing = array_filter($updates, fn ($value, $field) => $locked->$field === null, ARRAY_FILTER_USE_BOTH);
+                            if ($missing !== []) {
+                                DB::table('dossiers')->where('id', $dossier->id)->update([...$missing, 'version' => DB::raw('version + 1')]);
+                            }
+                        });
                     }
-                }
-                foreach ($assignments as $clientId => $ids) {
-                    DB::table('dossiers')->whereIn('id', $ids)->whereNull('delegataire_id')
-                        ->update(['delegataire_id' => $clientId]);
                 }
             });
 

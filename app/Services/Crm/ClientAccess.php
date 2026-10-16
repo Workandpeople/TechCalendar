@@ -46,14 +46,21 @@ class ClientAccess
     {
         abort_unless($this->active($user) && ! $user->must_change_password, 403);
 
-        return Dossier::query()->where('delegataire_id', $user->external_client_id);
+        return Dossier::query()->where(function ($query) use ($user): void {
+            if ($user->externalClient->kind === 'client') {
+                $query->where('client_id', $user->external_client_id)
+                    ->orWhere(fn ($legacy) => $legacy->whereNull('client_id')->where('delegataire_id', $user->external_client_id));
+            } else {
+                $query->where('delegataire_id', $user->external_client_id);
+            }
+        });
     }
 
     public function viewDossier(User $user, Dossier $dossier): bool
     {
         return $this->active($user) && ! $user->must_change_password
-            && $dossier->delegataire_id !== null
-            && (int) $dossier->delegataire_id === $user->external_client_id;
+            && (int) ($user->externalClient->kind === 'client'
+                ? ($dossier->client_id ?? $dossier->delegataire_id) : $dossier->delegataire_id) === $user->external_client_id;
     }
 
     public function lots(User $user): Builder
@@ -68,7 +75,7 @@ class ClientAccess
         abort_unless($this->viewDossier($user, $dossier) && $this->allows($user, 'comments'), 403);
 
         return $dossier->comments()->getQuery()->where(function ($query) use ($user): void {
-            $query->where('client_visible', true);
+            $query->where($this->audienceColumn($user), true);
             // Coffrac clients saw public comments; delegataires had no comment section.
             if ($user->externalClient->kind === 'client') {
                 $query->orWhere(fn ($query) => $this->whereLegacyFlag($query->where('kind', 'legacy_comment')
@@ -79,42 +86,57 @@ class ClientAccess
 
     public function commentVisibleToClient(DossierActivity $comment, string $kind = 'client'): bool
     {
-        return $comment->client_visible || ($kind === 'client' && $comment->kind === 'legacy_comment'
+        return $comment->hidden_at === null && (($kind === 'delegataire' ? $comment->delegataire_visible : $comment->client_visible) || ($kind === 'client' && $comment->kind === 'legacy_comment'
             && $comment->visibility_reviewed_at === null
-            && in_array($comment->changed_fields['is_private'] ?? null, [false, 0, '0'], true));
+            && in_array($comment->changed_fields['is_private'] ?? null, [false, 0, '0'], true)));
     }
 
-    public function legacyDocumentVisibility(array $payload, ?bool $override = null): array
+    public function audienceColumn(User $user): string
+    {
+        return $user->externalClient?->kind === 'delegataire' ? 'delegataire_visible' : 'client_visible';
+    }
+
+    public function legacyDocumentVisibility(array $payload, ?bool $override = null, ?bool $delegataireOverride = null): array
     {
         $public = $override ?? in_array($payload['is_private'] ?? null, [false, 0, '0'], true);
 
         return ['client_visible' => $public, 'delegataire_visible' => $public
-            && ($override === true || in_array($payload['is_delegataire'] ?? null, [true, 1, '1'], true))];
+            && ($delegataireOverride ?? ($override === true || in_array($payload['is_delegataire'] ?? null, [true, 1, '1'], true)))];
     }
 
     public function filterLegacyDocuments(QueryBuilder $query, User $user): QueryBuilder
     {
         abort_unless($this->allows($user, 'documents'), 403);
 
-        return $query->where(function ($query) use ($user): void {
+        $query->whereNull('hidden_at');
+        if ($user->externalClient->kind === 'delegataire') {
+            $query->where(function ($query): void {
+                $query->where('delegataire_visible_override', true)
+                    ->orWhere(function ($legacy): void {
+                        $legacy->whereNull('delegataire_visible_override')->where(function ($fallback): void {
+                            $fallback->where('client_visible_override', true)
+                                ->orWhere(fn ($original) => $this->whereLegacyFlag($original->whereNull('client_visible_override'), 'payload->is_delegataire', true));
+                        });
+                    });
+            });
+        }
+
+        return $query->where(function ($query): void {
             $query->where('client_visible_override', true)
-                ->orWhere(function ($query) use ($user): void {
+                ->orWhere(function ($query): void {
                     $this->whereLegacyFlag($query->whereNull('client_visible_override'), 'payload->is_private', false);
-                    if ($user->externalClient->kind === 'delegataire') {
-                        $this->whereLegacyFlag($query, 'payload->is_delegataire', true);
-                    }
                 });
         });
     }
 
-    public function canReadLegacyDocument(User $user, array $payload, ?bool $override = null): bool
+    public function canReadLegacyDocument(User $user, array $payload, ?bool $override = null, ?bool $delegataireOverride = null): bool
     {
         if (! $this->allows($user, 'documents')) {
             return false;
         }
 
         // An explicit local decision overrides the archive; missing metadata stays private.
-        $visibility = $this->legacyDocumentVisibility($payload, $override);
+        $visibility = $this->legacyDocumentVisibility($payload, $override, $delegataireOverride);
 
         return $visibility[$user->externalClient->kind === 'client' ? 'client_visible' : 'delegataire_visible'];
     }

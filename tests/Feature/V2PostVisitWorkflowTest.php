@@ -13,6 +13,7 @@ use App\Services\Crm\DossierRegistry;
 use App\Services\LotAutoCompletionCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -381,4 +382,48 @@ it('isolates each operation of a dossier and rejects a repeated validation witho
         ->and($other->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE')
         ->and($this->lot->fresh()->status)->toBe(Lot::STATUS_IN_PROGRESS)
         ->and($this->dossier->activities()->where('kind', 'post_visit')->count())->toBe(3);
+});
+
+it('changes a technician directly from the dossier using the shared availability checks', function () {
+    $replacement = User::factory()->create(['role' => 2, 'admin' => false]);
+    $replacement->services()->attach($this->service);
+    $url = route('v2.dossiers.appointments.technician', [$this->dossier, $this->appointment->id]);
+    $payload = ['version' => $this->dossier->fresh()->version, 'technician_id' => $replacement->id,
+        'updated_at' => $this->appointment->fresh()->updated_at->toIso8601String()];
+    $this->patch($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    expect($this->appointment->fresh()->technician_id)->toBe($replacement->id);
+    $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('version');
+
+    $this->actingAs($this->client)->patch($url, $payload)->assertForbidden();
+    $this->actingAs($this->manager);
+    postVisitAction($this, 'record_visit', ['appointment_id' => $this->appointment->id])->assertRedirect();
+    $this->patchJson($url, ['version' => $this->dossier->fresh()->version, 'technician_id' => $this->tech->id,
+        'updated_at' => $this->appointment->fresh()->updated_at->toIso8601String()])->assertUnprocessable();
+    expect($this->appointment->fresh()->technician_id)->toBe($replacement->id);
+});
+
+it('refuses unavailable or unqualified technician assignments and foreign appointments', function () {
+    $replacement = User::factory()->create(['role' => 2, 'admin' => false]);
+    $url = route('v2.dossiers.appointments.technician', [$this->dossier, $this->appointment->id]);
+    $payload = ['version' => $this->dossier->fresh()->version, 'technician_id' => $replacement->id,
+        'updated_at' => $this->appointment->fresh()->updated_at->toIso8601String()];
+    $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('technician_id');
+    $replacement->services()->attach($this->service);
+    $busy = $this->appointment->replicate();
+    $busy->forceFill(['technician_id' => $replacement->id, 'dossier_operation_id' => null])->save();
+    $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('starts_at');
+    $this->patchJson(route('v2.dossiers.appointments.technician', [$this->dossier, $busy->id]), $payload)->assertNotFound();
+    expect($this->appointment->fresh()->technician_id)->toBe($this->tech->id);
+});
+
+it('supports imported appointments without a modification date but still rejects stale tokens', function () {
+    DB::table('appointments')->where('id', $this->appointment->id)->update(['updated_at' => null]);
+    $replacement = User::factory()->create(['role' => 2, 'admin' => false]);
+    $replacement->services()->attach($this->service);
+    $url = route('v2.dossiers.appointments.technician', [$this->dossier, $this->appointment->id]);
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk();
+    $this->patchJson($url, ['version' => 1, 'technician_id' => $replacement->id, 'updated_at' => null])->assertRedirect();
+    expect($this->appointment->fresh()->technician_id)->toBe($replacement->id);
+    $this->patchJson($url, ['version' => $this->dossier->fresh()->version, 'technician_id' => $this->tech->id, 'updated_at' => null])
+        ->assertUnprocessable()->assertJsonValidationErrors('appointment');
 });

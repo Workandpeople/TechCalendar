@@ -139,6 +139,9 @@ class PostVisitWorkflow
             $activity = $dossier->activities()->create([
                 'author_id' => $actor->id, 'kind' => 'post_visit',
                 'client_visible' => (bool) ($data['client_visible'] ?? false),
+                'delegataire_visible' => $data['action'] === 'client_response'
+                    ? $actor->externalClient?->kind === 'delegataire'
+                    : (bool) ($data['delegataire_visible'] ?? false),
                 'body' => $transition['label'].' · Fiche #'.$operation->id
                     .($data['action'] !== 'client_response' && $operation->control_outcome ? ' · '.self::OUTCOMES[$operation->control_outcome] : '')."\n".trim($data['comment']),
                 'changed_fields' => ['operation_id' => $operation->id, 'action' => $data['action'], 'before' => $previous,

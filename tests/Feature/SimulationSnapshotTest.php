@@ -177,7 +177,7 @@ it('shows private source metadata safely without exposing remote document links'
     $actor = User::where('email', 'local-admin@example.test')->firstOrFail();
     $this->actingAs($actor)->get(route('v2.dossiers.show', Dossier::findOrFail(101)))
         ->assertOk()->assertSee('Beneficiaire test')->assertSee('Fichier non collecté')
-        ->assertSee('Privé · Équipe interne uniquement')->assertSee('Rendre public')->assertDontSee('../unsafe.php')
+        ->assertSee('Interne uniquement')->assertSee('Modifier l’accès')->assertDontSee('../unsafe.php')
         ->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
 });
 

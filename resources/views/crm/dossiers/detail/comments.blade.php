@@ -1,7 +1,7 @@
 <section id="commentaires" class="gc-card gc-dossier-panel" aria-labelledby="dossier-comments-title">
     <header class="gc-dossier-panel-heading">
         <h2 id="dossier-comments-title"><x-nav-icon name="comment" />Commentaires <span class="gc-dossier-count">{{ $comments->total() }}</span></h2>
-        <a href="#ajouter-commentaire" class="gc-btn-soft"><x-nav-icon name="plus" /> Ajouter un commentaire</a>
+        <a href="#ajouter-commentaire" class="gc-btn-info"><x-nav-icon name="plus" /> Ajouter un commentaire</a>
     </header>
     <div class="gc-dossier-panel-body">
         <ol class="gc-dossier-comments">
@@ -14,9 +14,17 @@
                     <x-comment-body :body="$comment->body" class="mt-3 text-sm" />
                     <div class="gc-dossier-comment-sharing mt-3">
                         <x-dossier-sharing :action="route('v2.dossiers.comments.sharing', [$dossier, $comment->id])"
-                            :visible="app(\App\Services\Crm\ClientAccess::class)->commentVisibleToClient($comment, $dossier->delegataire?->kind ?? 'client')"
+                            :visible="app(\App\Services\Crm\ClientAccess::class)->commentVisibleToClient($comment, 'client')"
+                            :delegataire-visible="app(\App\Services\Crm\ClientAccess::class)->commentVisibleToClient($comment, 'delegataire')"
                             :label="'Commentaire #'.$comment->id" />
                     </div>
+                    @if (in_array($comment->kind, ['comment', 'legacy_comment'], true))
+                        <details class="gc-remove-confirm mt-3"><summary class="gc-btn-danger"><x-nav-icon name="trash" />Supprimer</summary>
+                            <form method="POST" action="{{ route('v2.dossiers.comments.destroy', [$dossier, $comment->id]) }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Ce commentaire ne sera plus visible sur la fiche ni dans l’espace externe. Sa trace est conservée.</p><button type="submit" class="gc-btn-danger">Confirmer la suppression</button></form>
+                        </details>
+                    @else
+                        <p class="mt-3 text-xs text-slate-500">Commentaire de contrôle : conservé pour la traçabilité du workflow.</p>
+                    @endif
                 </li>
             @empty
                 <li class="gc-dossier-empty">Aucun commentaire pour le moment.</li>
@@ -27,7 +35,7 @@
             @csrf
             <label for="comment_body" class="gc-label">Ajouter un commentaire (privé par défaut)</label>
             <textarea id="comment_body" name="body" rows="3" maxlength="10000" class="gc-input" required>{{ old('body') }}</textarea>
-            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="client_visible" value="1">Public : partager avec le client affecté</label>
+            <x-content-audience :value="old('body') ? old('audience', 'internal') : 'internal'" />
             <p class="text-xs text-slate-500">Visible uniquement si son compte autorise la lecture des commentaires. Les délégataires n’ont pas ce droit par défaut.</p>
             <div class="flex justify-end"><button type="submit" class="gc-btn-primary"><x-nav-icon name="comment" />Ajouter le commentaire</button></div>
         </form>

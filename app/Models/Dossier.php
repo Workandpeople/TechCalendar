@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Dossier extends Model
 {
     protected $fillable = [
-        'reference', 'source', 'source_reference', 'delegataire_id', 'created_by',
+        'reference', 'source', 'source_reference', 'delegataire_id', 'client_id', 'client_contact', 'delegataire_contact', 'created_by',
         'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',
         'address', 'postal_code', 'city', 'beneficiary_address',
         'beneficiary_postal_code', 'beneficiary_city', 'installer_name', 'installer_siren',
@@ -19,7 +19,7 @@ class Dossier extends Model
 
     protected function casts(): array
     {
-        return ['version' => 'integer', 'planning_user_id' => 'integer'];
+        return ['version' => 'integer', 'planning_user_id' => 'integer', 'client_contact' => 'array', 'delegataire_contact' => 'array'];
     }
 
     public function beneficiaryLabel(): string
@@ -30,6 +30,11 @@ class Dossier extends Model
     public function delegataire(): BelongsTo
     {
         return $this->belongsTo(ExternalDelegataire::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(ExternalDelegataire::class, 'client_id');
     }
 
     public function operations(): HasMany
@@ -59,7 +64,7 @@ class Dossier extends Model
 
     public function comments(): HasMany
     {
-        return $this->activities()->whereIn('kind', DossierActivity::COMMENT_KINDS);
+        return $this->activities()->whereIn('kind', DossierActivity::COMMENT_KINDS)->whereNull('hidden_at');
     }
 
     public function appointments(): HasManyThrough

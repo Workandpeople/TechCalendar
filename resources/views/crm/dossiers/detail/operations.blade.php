@@ -8,7 +8,7 @@
                     $state = \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'];
                     $linkedAppointment = $operation->appointments->first();
                 @endphp
-                <li class="gc-dossier-operation space-y-3 py-4">
+                <li id="fiche-{{ $operation->id }}" class="gc-dossier-operation space-y-3 py-4">
                     <div><p class="font-medium">{{ ($operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher') }}</p><p class="text-xs text-slate-500">{{ ($operation->service?->type ?: 'Coffrac') }} · Fiche {{ $operation->id }}</p></div>
                     <div class="flex flex-wrap items-center gap-2">
                         <x-dossier-status :status="$operation->legacy_status" />
@@ -44,6 +44,12 @@
                         </details>
                         @endunless
                     </div>
+                    <details class="gc-operation-workflow" @if (old('_operation') == $operation->id) open @endif>
+                        <summary class="gc-btn-success"><x-nav-icon name="edit" />Changer l’état / traiter la fiche</summary>
+                        <div class="mt-3">@include('crm.dossiers.detail.control-actions')</div>
+                        @if (in_array($state, ['pending', 'problem']))<p class="mt-3 text-sm">Le changement d’état suit la planification du rendez-vous ci-dessus.</p>@endif
+                        @if ($state === 'non_compliant')<p class="mt-3 text-sm">Réponse attendue du client pour passer en recontrôle.</p>@endif
+                    </details>
                 </li>
             @endforeach
         </ul>

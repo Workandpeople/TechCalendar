@@ -18,7 +18,9 @@ class AppointmentEditor
     {
         return DB::transaction(function () use ($id, $data, $actor) {
             $appointment = Appointment::query()->lockForUpdate()->findOrFail($id);
-            if (isset($data['updated_at']) && ! $appointment->updated_at->equalTo(Carbon::parse($data['updated_at']))) {
+            if (array_key_exists('updated_at', $data) && ($appointment->updated_at === null
+                ? $data['updated_at'] !== null
+                : ($data['updated_at'] === null || ! $appointment->updated_at->equalTo(Carbon::parse($data['updated_at']))))) {
                 throw ValidationException::withMessages(['appointment' => 'Ce RDV a changé. Ferme puis rouvre la fiche avant de modifier.']);
             }
             $technicianId = (int) ($data['technician_id'] ?? $appointment->technician_id);

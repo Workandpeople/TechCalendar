@@ -3,19 +3,26 @@
 namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Crm\DossierDocumentRequest;
 use App\Http\Requests\Crm\DossierRequest;
 use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierActivity;
 use App\Models\DossierDocument;
+use App\Models\DossierSms;
+use App\Models\User;
 use App\Services\Capcee\CapceeReports;
 use App\Services\Crm\CollectedDossierDocuments;
+use App\Services\Crm\ContentAudience;
+use App\Services\Crm\DossierDocumentIntake;
 use App\Services\Crm\DossierLinkedDocuments;
 use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\DossierPlanningAssignment;
 use App\Services\Crm\DossierRegistry;
 use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\DossierTable;
+use App\Services\Sms\DossierSmsService;
+use App\Services\Sms\SmsConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -91,26 +98,29 @@ class DossierController extends Controller
     public function show(Request $request, Dossier $dossier, DossierLinkedDocuments $linkedDocuments, CollectedDossierDocuments $collectedDocuments): View
     {
         Gate::authorize('view', $dossier);
-        $dossier->load(['delegataire', 'planningUser', 'operations' => fn ($query) => $query
+        $dossier->load(['client', 'delegataire', 'planningUser', 'operations' => fn ($query) => $query
             ->with(['service', 'reportDocument', 'controlValidator', 'capceeReports.latestDelivery', 'appointments' => fn ($appointments) => $appointments->latest('starts_at')->latest('id')->limit(1)])
             ->withCount('appointments')]);
+        $legacyDocuments = DB::table('legacy_records')->where('dossier_id', $dossier->id)
+            ->where('source_table', 'dossier_document')->whereNull('hidden_at')->orderByDesc('source_id')
+            ->paginate(20, ['*'], 'legacy_documents_page')->withQueryString()->fragment('documents');
+        $authors = $collectedDocuments->authors($legacyDocuments->getCollection());
+        $legacyDocuments->through(fn ($record) => $collectedDocuments->describe($record, $authors));
 
         return view('crm.dossiers.show', [
             'dossier' => $dossier,
-            'smsUnavailable' => app(\App\Services\Sms\SmsConfiguration::class)->unavailable(),
-            'smsMode' => app(\App\Services\Sms\SmsConfiguration::class)->mode(),
-            'smsTemplates' => app(\App\Services\Sms\DossierSmsService::class)->templates(),
-            'smsMessages' => \App\Models\DossierSms::where('dossier_id', $dossier->id)->latest('id')->limit(10)->get(),
+            'technicians' => User::query()->where('role', 2)->where('admin', false)->with('services:id')->orderBy('last_name')->get(['id', 'first_name', 'last_name']),
+            'smsUnavailable' => app(SmsConfiguration::class)->unavailable(),
+            'smsMode' => app(SmsConfiguration::class)->mode(),
+            'smsTemplates' => app(DossierSmsService::class)->templates(),
+            'smsMessages' => DossierSms::where('dossier_id', $dossier->id)->latest('id')->limit(10)->get(),
             'smsAppointments' => $dossier->appointments()->with(['technician', 'service'])->orderByDesc('starts_at')->limit(100)->get(),
             'visitCandidates' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
                 ->where('ends_at', '<=', now())->orderByDesc('starts_at')
                 ->get(['appointments.id', 'dossier_operation_id', 'starts_at'])->groupBy('dossier_operation_id'),
             'controlDocuments' => $dossier->documents()->where('mime_type', 'application/pdf')->orderBy('name')->get(['id', 'name']),
             'capceeUnavailable' => app(CapceeReports::class)->availability(),
-            'legacyDocuments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
-                ->where('source_table', 'dossier_document')->orderByDesc('source_id')
-                ->paginate(20, ['dossier_id', 'source_id', 'payload', 'client_visible_override'], 'legacy_documents_page')->withQueryString()->fragment('documents')
-                ->through(fn ($record) => $collectedDocuments->describe($record)),
+            'legacyDocuments' => $legacyDocuments,
             'legacyAppointments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
                 ->where('source_table', 'dossier_fiche_rdv')->orderByDesc('source_id')
                 ->paginate(20, ['source_id', 'payload'], 'legacy_appointments_page')->withQueryString()->fragment('rendez-vous'),
@@ -118,12 +128,12 @@ class DossierController extends Controller
                 ->paginate(25, ['*'], 'comments_page')->withQueryString()->fragment('commentaires'),
             'activities' => $dossier->activities()->whereNotIn('kind', DossierActivity::COMMENT_KINDS)
                 ->with('author')->latest('created_at')->latest('id')->paginate(25, ['*'], 'history_page')->withQueryString()->fragment('historique'),
-            'documents' => $dossier->documents()->latest('id')->paginate(25, ['*'], 'documents_page')->withQueryString()->fragment('documents'),
+            'documents' => $dossier->documents()->with('author')->latest('id')->paginate(25, ['*'], 'documents_page')->withQueryString()->fragment('documents'),
             'appointments' => $dossier->appointments()->withTrashed()
                 ->with(['technician' => fn ($query) => $query->withTrashed(), 'service', 'lotAppointments.lot'])
                 ->orderByDesc('starts_at')->orderByDesc('appointments.id')->paginate(20, ['appointments.*'], 'appointments_page')
                 ->withQueryString()->fragment('rendez-vous'),
-            'lotDocuments' => $linkedDocuments->query($request->user(), $dossier)->with('lotAppointment.lot')
+            'lotDocuments' => $linkedDocuments->query($request->user(), $dossier)->with(['lotAppointment.lot', 'uploader'])
                 ->latest('id')->paginate(25, ['*'], 'lot_documents_page')->withQueryString()->fragment('documents-lots'),
         ]);
     }
@@ -145,69 +155,89 @@ class DossierController extends Controller
     public function comment(Request $request, Dossier $dossier, DossierRegistry $registry): RedirectResponse
     {
         Gate::authorize('update', $dossier);
-        $data = $request->validate(['body' => ['required', 'string', 'max:10000'], 'client_visible' => ['sometimes', 'boolean']]);
-        $registry->addComment($request->user(), $dossier, $data['body'], $request->boolean('client_visible'));
+        $data = $request->validate(['body' => ['required', 'string', 'max:10000'], ...ContentAudience::rules()]);
+        $audience = ContentAudience::fromRequest($request);
+        $registry->addComment($request->user(), $dossier, $data['body'], $audience['client_visible'], $audience['delegataire_visible']);
 
-        return redirect()->to(route('v2.dossiers.show', $dossier).'#commentaires')->with('status', $request->boolean('client_visible') ? 'Commentaire partagé avec le client.' : 'Commentaire interne ajouté.');
+        return redirect()->to(route('v2.dossiers.show', $dossier).'#commentaires')->with('status', $audience['client_visible'] ? 'Commentaire partagé selon les destinataires choisis.' : 'Commentaire interne ajouté.');
     }
 
-    public function document(Request $request, Dossier $dossier, DossierRegistry $registry): RedirectResponse
+    public function document(DossierDocumentRequest $request, Dossier $dossier, DossierDocumentIntake $intake): RedirectResponse
     {
-        Gate::authorize('update', $dossier);
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:190'],
-            'client_visible' => ['sometimes', 'boolean'],
-            'document' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx'],
-        ]);
-        $registry->addDocument($request->user(), $dossier, $data['document'], $data['name'], $request->boolean('client_visible'));
+        $intake->store($request->user(), $dossier, $request->validated(), ContentAudience::fromRequest($request));
 
-        return redirect()->to(route('v2.dossiers.show', $dossier).'#documents')->with('status', 'Document enregistré dans le stockage privé.');
+        return redirect()->to(route('v2.dossiers.show', $dossier).'#documents')->with('status', 'Document enregistré. Aucun envoi externe automatique.');
     }
 
     public function download(DossierDocument $document, Request $request, DossierRegistry $registry): StreamedResponse
     {
-        return $registry->download($request->user(), $document);
+        return $registry->download($request->user(), $document, $request->boolean('preview'));
     }
 
     public function shareDocument(Request $request, DossierDocument $document, DossierRegistry $registry): RedirectResponse
     {
-        $data = $request->validate(['client_visible' => ['required', 'boolean']]);
-        $registry->shareDocument($request->user(), $document, (bool) $data['client_visible']);
+        $request->validate(ContentAudience::rules(true));
+        $data = ContentAudience::fromRequest($request);
+        $registry->shareDocument($request->user(), $document, $data['client_visible'], $data['delegataire_visible']);
 
         return back()->with('status', 'Visibilité du document mise à jour.');
     }
 
     public function shareComment(Request $request, Dossier $dossier, int $comment, DossierRegistry $registry): RedirectResponse
     {
-        $data = $request->validate(['client_visible' => ['required', 'boolean']]);
-        $registry->shareComment($request->user(), $dossier, $comment, (bool) $data['client_visible']);
+        $request->validate(ContentAudience::rules(true));
+        $data = ContentAudience::fromRequest($request);
+        $registry->shareComment($request->user(), $dossier, $comment, $data['client_visible'], $data['delegataire_visible']);
 
         return back()->with('status', 'Visibilité du commentaire mise à jour.');
     }
 
     public function downloadLotDocument(Request $request, Dossier $dossier, int $document, DossierLinkedDocuments $linkedDocuments): StreamedResponse
     {
-        return $linkedDocuments->download($request->user(), $dossier, $document);
+        return $linkedDocuments->download($request->user(), $dossier, $document, $request->boolean('preview'));
     }
 
     public function shareLotDocument(Request $request, Dossier $dossier, int $document, DossierLinkedDocuments $documents): RedirectResponse
     {
-        $data = $request->validate(['client_visible' => ['required', 'boolean']]);
-        $documents->share($request->user(), $dossier, $document, (bool) $data['client_visible']);
+        $request->validate(ContentAudience::rules(true));
+        $data = ContentAudience::fromRequest($request);
+        $documents->share($request->user(), $dossier, $document, $data['client_visible'], $data['delegataire_visible']);
 
         return back()->with('status', 'Visibilité du document de lot mise à jour.');
     }
 
     public function shareCollectedDocument(Request $request, Dossier $dossier, int $document, CollectedDossierDocuments $documents): RedirectResponse
     {
-        $data = $request->validate(['client_visible' => ['required', 'boolean']]);
-        $documents->share($request->user(), $dossier, $document, (bool) $data['client_visible']);
+        $request->validate(ContentAudience::rules(true));
+        $data = ContentAudience::fromRequest($request);
+        $documents->share($request->user(), $dossier, $document, $data['client_visible'], $data['delegataire_visible']);
 
         return back()->with('status', 'Visibilité du document historique mise à jour.');
     }
 
     public function downloadCollectedDocument(Request $request, Dossier $dossier, int $document, CollectedDossierDocuments $collectedDocuments): BinaryFileResponse
     {
-        return $collectedDocuments->download($request->user(), $dossier, $document);
+        return $collectedDocuments->download($request->user(), $dossier, $document, $request->boolean('preview'));
+    }
+
+    public function removeDocument(DossierDocument $document, Request $request, DossierRegistry $registry): RedirectResponse
+    {
+        $registry->removeDocument($request->user(), $document);
+
+        return back()->with('status', 'Document retiré de la fiche. Trace conservée.');
+    }
+
+    public function removeComment(Request $request, Dossier $dossier, int $comment, DossierRegistry $registry): RedirectResponse
+    {
+        $registry->removeComment($request->user(), $dossier, $comment);
+
+        return back()->with('status', 'Commentaire retiré. Historique conservé.');
+    }
+
+    public function removeCollectedDocument(Request $request, Dossier $dossier, int $document, CollectedDossierDocuments $documents): RedirectResponse
+    {
+        $documents->remove($request->user(), $dossier, $document);
+
+        return back()->with('status', 'Document historique retiré. Le fichier source est conservé.');
     }
 }

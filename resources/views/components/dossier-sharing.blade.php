@@ -1,20 +1,18 @@
-@props(['action', 'visible' => false, 'label', 'hint' => null, 'compact' => false])
-
-<div class="space-y-2">
-    <p @class(['text-xs font-medium', 'text-emerald-700' => $visible, 'text-slate-600' => ! $visible]) @if ($compact) title="{{ $visible ? 'Client affecté et équipe interne' : 'Équipe interne uniquement' }}{{ $hint ? ' · '.$hint : '' }}" @endif>
-        @if ($compact)
-            <span class="gc-dossier-visibility">{{ $visible ? 'Public' : 'Privé' }}</span><span class="sr-only"> · {{ $visible ? 'Client affecté et équipe interne' : 'Équipe interne uniquement' }}{{ $hint ? ' · '.$hint : '' }}</span>
-        @else
-            {{ $visible ? 'Public · Client affecté et équipe interne' : 'Privé · Équipe interne uniquement' }}
-        @endif
-    </p>
-    @if ($hint && ! $compact)<p class="text-xs text-slate-500">{{ $hint }}</p>@endif
-    <form method="POST" action="{{ $action }}">
-        @csrf
-        @method('PATCH')
-        <input type="hidden" name="client_visible" value="{{ $visible ? '0' : '1' }}">
-        <button type="submit" class="gc-btn-soft" aria-label="{{ $visible ? 'Rendre privé' : 'Rendre public' }} : {{ $label }}">
-            {{ $visible ? 'Rendre privé' : 'Rendre public' }}
-        </button>
-    </form>
+@props(['action', 'visible' => false, 'delegataireVisible' => false, 'label', 'hint' => null, 'compact' => false])
+@php($audience = \App\Services\Crm\ContentAudience::key($visible, $delegataireVisible))
+<div class="gc-sharing" data-audience="{{ $audience }}">
+    <span class="gc-audience-badge" data-audience="{{ $audience }}"><x-nav-icon :name="$visible ? 'users' : 'lock'" />{{ \App\Services\Crm\ContentAudience::LABELS[$audience] }}</span>
+    <details class="gc-sharing-editor">
+        <summary>Modifier l’accès<span class="sr-only"> à {{ $label }}</span></summary>
+        <form method="POST" action="{{ $action }}" class="mt-2 space-y-2">
+            @csrf @method('PATCH')
+            <label class="gc-label">Destinataires
+                <select class="gc-input" name="audience" aria-label="Destinataires de {{ $label }}">
+                    @foreach (\App\Services\Crm\ContentAudience::LABELS as $value => $title)<option value="{{ $value }}" @selected($audience === $value)>{{ $title }}</option>@endforeach
+                </select>
+            </label>
+            <button class="gc-btn-primary" type="submit">Appliquer</button>
+        </form>
+    </details>
+    @if ($hint)<span class="text-xs text-slate-500">{{ $hint }}</span>@endif
 </div>

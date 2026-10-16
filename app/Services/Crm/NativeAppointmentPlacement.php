@@ -84,9 +84,12 @@ class NativeAppointmentPlacement
         $delegataires = $row && ! $row->lot->delegataire_id && filled($row->lot->delegataire)
             ? ExternalDelegataire::query()->where('name', $row->lot->delegataire)->get(['id', 'name'])
                 ->filter(fn ($client) => $client->name === $row->lot->delegataire)->pluck('id') : collect();
+        $ownerId = $row?->lot?->delegataire_id ?? ($delegataires->count() === 1 ? $delegataires->first() : null);
+        $owner = $ownerId ? ExternalDelegataire::find($ownerId) : null;
         $dossier = Dossier::create([
             'reference' => 'DOS-'.strtoupper($source).'-'.$sourceId, 'source' => $source, 'source_reference' => $sourceId,
-            'created_by' => $actor->id, 'delegataire_id' => $row?->lot?->delegataire_id ?? ($delegataires->count() === 1 ? $delegataires->first() : null),
+            'created_by' => $actor->id, 'delegataire_id' => $owner?->kind === 'delegataire' ? $ownerId : null,
+            'client_id' => $owner?->kind === 'client' ? $ownerId : null,
             'company_name' => $row?->company_name, 'first_name' => $row ? $row->customer_first_name : $appointment->customer_first_name,
             'last_name' => $row ? ($row->customer_last_name ?: ($row->company_name ? null : $row->customer_name)) : $appointment->customer_last_name,
             'phone' => $appointment->customer_phone, 'email' => $row?->customer_email, 'site_name' => $row?->site_name,

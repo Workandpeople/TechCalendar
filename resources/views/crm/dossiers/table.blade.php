@@ -66,7 +66,8 @@
                                         </button>
                                         @break
                                     @case('company')
-                                        <span class="gc-dossier-cell-lines" title="{{ $dossier->delegataire?->company_name ?: $dossier->delegataire?->name }}">{{ $dossier->delegataire?->company_name ?: $dossier->delegataire?->name ?: '—' }}</span>
+                                        @php($company = $dossier->delegataire ?: $dossier->client)
+                                        <span class="gc-dossier-cell-lines" title="{{ $company?->company_name ?: $company?->name }}">{{ $company?->company_name ?: $company?->name ?: '—' }}</span>
                                         @break
                                     @case('phone')
                                         <span class="gc-dossier-cell-lines" title="{{ $dossier->phone }}">{{ $dossier->phone ?: '—' }}</span>

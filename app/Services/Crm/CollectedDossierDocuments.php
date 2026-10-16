@@ -32,9 +32,9 @@ class CollectedDossierDocuments
         $result = [];
         $seen = [];
         $records = DB::table('legacy_records')->where('source_table', 'dossier_document')
-            ->whereIn('dossier_id', $dossiers->pluck('id')->unique())->orderByDesc('source_id')->get();
+            ->whereNull('hidden_at')->whereIn('dossier_id', $dossiers->pluck('id')->unique())->orderByDesc('source_id')->get();
         foreach ($records as $record) {
-            if ($actor->isExternal() && ! app(ClientAccess::class)->canReadLegacyDocument($actor, $this->payload($record), $this->override($record))) {
+            if ($actor->isExternal() && ! app(ClientAccess::class)->canReadLegacyDocument($actor, $this->payload($record), $this->override($record), $this->delegataireOverride($record))) {
                 continue;
             }
             $document = $this->describe($record);
@@ -56,19 +56,28 @@ class CollectedDossierDocuments
     }
 
     /** The caller must first authorize access to the owning dossier. Never expose a disk path. */
-    public function describe(object $record): array
+    public function describe(object $record, array $authors = []): array
     {
         $source = $this->payload($record);
         $path = $this->resolve($source['path'] ?? null);
         $name = is_string($source['name'] ?? null) && trim($source['name']) !== ''
             ? trim($source['name']) : 'Document #'.$record->source_id;
-        $visibility = app(ClientAccess::class)->legacyDocumentVisibility($source, $this->override($record));
+        $visibility = app(ClientAccess::class)->legacyDocumentVisibility($source, $this->override($record), $this->delegataireOverride($record));
 
         return [
             'id' => 'collected-'.$record->source_id,
             'source_id' => $record->source_id,
             'name' => $name,
+            'description' => $source['comment'] ?? $source['description'] ?? $source['commentaire'] ?? null,
+            'created_at' => $source['created_at'] ?? null,
+            'author_id' => $source['author_id'] ?? null,
+            'author_name' => $authors[$source['author_id'] ?? ''] ?? (isset($source['author_id']) ? 'Auteur Coffrac #'.$source['author_id'] : 'Auteur non renseigné'),
+            'control_reference' => $source['reference_controle'] ?? null,
+            'outcome' => $source['status'] ?? null,
+            'inspected_on' => $source['date_rdv'] ?? null,
+            'issued_on' => $source['date_emission'] ?? null,
             'url' => $path !== null ? route('v2.dossiers.collected-documents.download', [$record->dossier_id, $record->source_id]) : null,
+            'previewable' => $path !== null && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['pdf', 'jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif'], true),
             'size' => $path !== null ? filesize($path) : null,
             'scope' => 'Archive Coffrac',
             'is_private' => ! $visibility['client_visible'],
@@ -78,16 +87,29 @@ class CollectedDossierDocuments
         ];
     }
 
-    public function download(User $actor, Dossier $dossier, int $sourceId): BinaryFileResponse
+    public function authors(Collection $records): array
+    {
+        $ids = $records->map(fn ($record) => $this->payload($record)['author_id'] ?? null)->filter()->unique();
+
+        return DB::table('legacy_records')->where('source_table', 'users')->whereIn('source_id', $ids)->get(['source_id', 'payload'])
+            ->mapWithKeys(function ($record): array {
+                $source = $this->payload($record);
+                $name = trim((string) (($source['nom_societe'] ?? '') ?: ($source['name'] ?? '')));
+
+                return [$record->source_id => $name ?: 'Auteur Coffrac #'.$record->source_id];
+            })->all();
+    }
+
+    public function download(User $actor, Dossier $dossier, int $sourceId, bool $preview = false): BinaryFileResponse
     {
         Gate::forUser($actor)->authorize('view', $dossier);
         $record = DB::table('legacy_records')->where('source_table', 'dossier_document')
-            ->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->first();
+            ->whereNull('hidden_at')->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->first();
         abort_unless($record, 404);
         $source = $this->payload($record);
         $path = $this->resolve($source['path'] ?? null);
         abort_unless($path !== null, 404, 'Fichier non collecté, vide ou indisponible.');
-        abort_if($actor->isExternal() && ! app(ClientAccess::class)->canReadLegacyDocument($actor, $source, $this->override($record)), 404);
+        abort_if($actor->isExternal() && ! app(ClientAccess::class)->canReadLegacyDocument($actor, $source, $this->override($record), $this->delegataireOverride($record)), 404);
         $name = preg_replace('/[^\pL\pN ._-]/u', '_', $this->describe($record)['name']) ?: 'Document';
         $name = mb_substr(trim($name, '. '), 0, 160) ?: 'Document';
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
@@ -95,32 +117,54 @@ class CollectedDossierDocuments
             $name .= '.'.$extension;
         }
 
-        // Historical files are untrusted: no inline HTML, execution, public URL or remote fallback.
+        $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file($path) : 'application/octet-stream';
+        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+
+        // Only sniffed PDF/raster images can be viewed. Never render archived HTML/SVG.
         return response()->download($path, $name, [
-            'Content-Type' => 'application/octet-stream',
+            'Content-Type' => $inline ? $mime : 'application/octet-stream',
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
             'Content-Security-Policy' => "default-src 'none'; sandbox",
-        ], ResponseHeaderBag::DISPOSITION_ATTACHMENT)->setPrivate();
+        ], $inline ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT)->setPrivate();
     }
 
-    public function share(User $actor, Dossier $dossier, int $sourceId, bool $visible): void
+    public function share(User $actor, Dossier $dossier, int $sourceId, bool $visible, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('update', $dossier);
-        DB::transaction(function () use ($actor, $dossier, $sourceId, $visible): void {
+        DB::transaction(function () use ($actor, $dossier, $sourceId, $visible, $delegataireVisible): void {
             $record = DB::table('legacy_records')->where('source_table', 'dossier_document')
-                ->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->lockForUpdate()->first();
+                ->whereNull('hidden_at')->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->lockForUpdate()->first();
             abort_unless($record, 404);
-            DB::table('legacy_records')->where('id', $record->id)->update(['client_visible_override' => $visible]);
+            DB::table('legacy_records')->where('id', $record->id)->update(['client_visible_override' => $visible,
+                'delegataire_visible_override' => $visible && ($delegataireVisible ?? $visible)]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
-                'body' => ($visible ? 'Partage client activé' : 'Partage client retiré').' pour le document Coffrac #'.$sourceId,
-                'changed_fields' => ['source_document_id' => $sourceId, 'client_visible' => $visible]]);
+                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($visible, $visible && ($delegataireVisible ?? $visible))].' » pour le document Coffrac #'.$sourceId,
+                'changed_fields' => ['source_document_id' => $sourceId, 'client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible)]]);
         });
     }
 
     private function override(object $record): ?bool
     {
         return isset($record->client_visible_override) ? (bool) $record->client_visible_override : null;
+    }
+
+    private function delegataireOverride(object $record): ?bool
+    {
+        return isset($record->delegataire_visible_override) ? (bool) $record->delegataire_visible_override : null;
+    }
+
+    public function remove(User $actor, Dossier $dossier, int $sourceId): void
+    {
+        Gate::forUser($actor)->authorize('update', $dossier);
+        DB::transaction(function () use ($actor, $dossier, $sourceId): void {
+            $record = DB::table('legacy_records')->where('source_table', 'dossier_document')->whereNull('hidden_at')
+                ->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->lockForUpdate()->first();
+            abort_unless($record, 404);
+            DB::table('legacy_records')->where('id', $record->id)->update(['hidden_at' => now()]);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
+                'body' => 'Document Coffrac #'.$sourceId.' retiré. Archive conservée pour traçabilité.']);
+        });
     }
 
     private function payload(object $record): array

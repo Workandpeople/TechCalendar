@@ -1,10 +1,11 @@
 <?php
 
 use App\Http\Controllers\Crm\CapceeReportController;
+use App\Http\Controllers\Crm\DossierAppointmentController;
 use App\Http\Controllers\Crm\DossierController;
-use App\Http\Controllers\Crm\DossierSmsController;
 use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
 use App\Http\Controllers\Crm\DossierPlanningController;
+use App\Http\Controllers\Crm\DossierSmsController;
 use App\Http\Controllers\Crm\DossierWorkflowController;
 use App\Http\Middleware\EnsureCrmV2Enabled;
 use App\Models\Dossier;
@@ -33,6 +34,10 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::delete('/documents/{document}', [DossierController::class, 'removeDocument'])->name('documents.destroy');
+        Route::delete('/dossiers/{dossier}/commentaires/{comment}', [DossierController::class, 'removeComment'])->whereNumber('comment')->name('dossiers.comments.destroy');
+        Route::delete('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'removeCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.destroy');
+        Route::patch('/dossiers/{dossier}/rendez-vous/{appointment}/technicien', [DossierAppointmentController::class, 'update'])->whereNumber('appointment')->name('dossiers.appointments.technician');
         Route::patch('/dossiers/{dossier}/suivi-planning', DossierPlanningAssignmentController::class)->name('dossiers.planning-assignment');
         Route::post('/dossiers/{dossier}/prestations/{operation}/apres-visite', [DossierWorkflowController::class, 'postVisit'])->name('dossiers.operations.post-visit');
         Route::post('/dossiers/{dossier}/prestations/{operation}/reprendre', [DossierWorkflowController::class, 'reopen'])->name('dossiers.operations.reopen');

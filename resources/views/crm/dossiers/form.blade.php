@@ -13,9 +13,13 @@
                 <h2 class="gc-workspace-section-title mb-4 text-lg font-semibold"><x-nav-icon name="dossiers" />Identification</h2>
                 <div class="grid gap-4 md:grid-cols-2">
                     <div><label for="reference" class="gc-label">Référence unique *</label><input id="reference" name="reference" maxlength="100" value="{{ old('reference', $dossier->reference) }}" class="gc-input" required></div>
-                    <div><label for="delegataire_id" class="gc-label">Client (classique ou délégataire)</label><select id="delegataire_id" name="delegataire_id" class="gc-input"><option value="">À définir</option>@foreach ($delegataires as $delegataire)@if ($delegataire->is_active || $delegataire->id === $dossier->delegataire_id)<option value="{{ $delegataire->id }}" @selected(old('delegataire_id', $dossier->delegataire_id) == $delegataire->id)>{{ $delegataire->company_name ?: $delegataire->name }}</option>@endif @endforeach</select></div>
+                    <p class="self-end text-sm text-slate-500">Le bénéficiaire est le lieu de l’intervention. Les accès externes sont attribués séparément au client et au délégataire ci-dessous.</p>
                 </div>
             </section>
+            <div class="grid gap-6 xl:grid-cols-2">
+                @include('crm.dossiers.contact-fields', ['role' => 'client'])
+                @include('crm.dossiers.contact-fields', ['role' => 'delegataire'])
+            </div>
             @php
                 $groups = [
                     'Bénéficiaire' => [

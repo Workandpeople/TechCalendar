@@ -41,7 +41,7 @@ class DossierRegistry
         }
 
         return app(DossierTable::class)->apply($query, $filters)->with([
-            'delegataire', 'operations.service', 'planningUser:id,first_name,last_name,deleted_at',
+            'client', 'delegataire', 'operations.service', 'planningUser:id,first_name,last_name,deleted_at',
             'latestActivity',
             'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
             'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
@@ -83,7 +83,7 @@ class DossierRegistry
                     }
                 });
             })
-            ->when($filters['delegataire_id'] ?? null, fn ($query, $id) => $query->where('delegataire_id', $id))
+            ->when($filters['delegataire_id'] ?? null, fn ($query, $id) => $query->where(fn ($party) => $party->where('delegataire_id', $id)->orWhere('client_id', $id)))
             ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->whereHas('operations', fn ($operations) => $operations->where('service_id', $id)))
             ->when(($filters['planning'] ?? null) === 'unlinked', fn ($query) => $query->whereDoesntHave('appointments'))
             ->when(($filters['planning'] ?? null) === 'upcoming', fn ($query) => $query->whereHas('appointments', fn ($rdv) => $rdv->where('status', Appointment::STATUS_SCHEDULED)->where('ends_at', '>', now())))
@@ -93,7 +93,7 @@ class DossierRegistry
     public function references(): array
     {
         return [
-            'delegataires' => ExternalDelegataire::query()->orderBy('name')->get(['id', 'name', 'company_name', 'is_active']),
+            'delegataires' => ExternalDelegataire::query()->orderBy('name')->get(),
             'services' => Service::query()->catalog()->orderBy('name')->get(['id', 'name', 'type']),
         ];
     }
@@ -101,6 +101,7 @@ class DossierRegistry
     public function create(User $actor, array $data): Dossier
     {
         Gate::forUser($actor)->authorize('create', Dossier::class);
+        $data = DossierContacts::fillMissingSnapshots($data);
 
         try {
             return DB::transaction(function () use ($actor, $data): Dossier {
@@ -126,6 +127,7 @@ class DossierRegistry
     public function update(User $actor, Dossier $dossier, array $data): Dossier
     {
         Gate::forUser($actor)->authorize('update', $dossier);
+        $data = DossierContacts::fillMissingSnapshots($data);
 
         try {
             return DB::transaction(function () use ($actor, $dossier, $data): Dossier {
@@ -151,14 +153,15 @@ class DossierRegistry
         }
     }
 
-    public function addComment(User $actor, Dossier $dossier, string $body, bool $clientVisible = false): void
+    public function addComment(User $actor, Dossier $dossier, string $body, bool $clientVisible = false, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('comment', $dossier);
         $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $body,
-            'client_visible' => $actor->isExternal() || $clientVisible]);
+            'client_visible' => $actor->isExternal() || $clientVisible,
+            'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible))]);
     }
 
-    public function addDocument(User $actor, Dossier $dossier, UploadedFile $file, string $name, bool $clientVisible = false): DossierDocument
+    public function addDocument(User $actor, Dossier $dossier, UploadedFile $file, string $name, bool $clientVisible = false, ?bool $delegataireVisible = null, array $metadata = []): DossierDocument
     {
         Gate::forUser($actor)->authorize('uploadDocument', $dossier);
         $path = $file->store('crm/dossiers/'.$dossier->id, 'local');
@@ -166,11 +169,13 @@ class DossierRegistry
             throw new RuntimeException('Le document n’a pas pu être enregistré. Réessaie après vérification du stockage.');
         }
         try {
-            return DB::transaction(function () use ($actor, $dossier, $file, $name, $path, $clientVisible): DossierDocument {
+            return DB::transaction(function () use ($actor, $dossier, $file, $name, $path, $clientVisible, $delegataireVisible, $metadata): DossierDocument {
                 $document = $dossier->documents()->create([
                     'author_id' => $actor->id, 'name' => $name, 'path' => $path,
                     'mime_type' => $file->getMimeType(), 'size' => $file->getSize(),
                     'client_visible' => $actor->isExternal() || $clientVisible,
+                    'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible)),
+                    ...Arr::only($metadata, ['description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome']),
                 ]);
                 $dossier->activities()->create([
                     'author_id' => $actor->id, 'kind' => 'document', 'body' => 'Document ajouté : '.$name,
@@ -184,41 +189,73 @@ class DossierRegistry
         }
     }
 
-    public function download(User $actor, DossierDocument $document): StreamedResponse
+    public function download(User $actor, DossierDocument $document, bool $preview = false): StreamedResponse
     {
         Gate::forUser($actor)->authorize('view', $document->dossier);
-        abort_if($actor->isExternal() && (! $document->client_visible
+        abort_if($actor->isExternal() && (! $document->{app(ClientAccess::class)->audienceColumn($actor)}
             || ! app(ClientAccess::class)->allows($actor, 'documents')), 404);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
         $name = preg_replace('/[^\pL\pN ._-]/u', '_', $document->name);
         $extension = pathinfo($document->path, PATHINFO_EXTENSION);
 
-        return Storage::disk('local')->download($document->path, $name.'.'.$extension, [
-            'Content-Type' => $document->mime_type,
+        $mime = Storage::disk('local')->mimeType($document->path);
+        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+
+        return Storage::disk('local')->response($document->path, $name.'.'.$extension, [
+            'Content-Type' => $inline ? $mime : 'application/octet-stream',
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
-        ]);
+            'Content-Security-Policy' => "default-src 'none'; sandbox",
+        ], $inline ? 'inline' : 'attachment');
     }
 
-    public function shareDocument(User $actor, DossierDocument $document, bool $visible): void
+    public function shareDocument(User $actor, DossierDocument $document, bool $visible, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('update', $document->dossier);
-        DB::transaction(function () use ($actor, $document, $visible): void {
-            $document->update(['client_visible' => $visible]);
+        DB::transaction(function () use ($actor, $document, $visible, $delegataireVisible): void {
+            $document->update(['client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible)]);
             $document->dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
-                'body' => ($visible ? 'Partage client activé : ' : 'Partage client retiré : ').$document->name]);
+                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($document->client_visible, $document->delegataire_visible)].' » : '.$document->name,
+                'changed_fields' => ['document_id' => $document->id, 'client_visible' => $document->client_visible, 'delegataire_visible' => $document->delegataire_visible]]);
         });
     }
 
-    public function shareComment(User $actor, Dossier $dossier, int $id, bool $visible): void
+    public function shareComment(User $actor, Dossier $dossier, int $id, bool $visible, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('update', $dossier);
-        DB::transaction(function () use ($actor, $dossier, $id, $visible): void {
+        DB::transaction(function () use ($actor, $dossier, $id, $visible, $delegataireVisible): void {
             $comment = $dossier->comments()->lockForUpdate()->findOrFail($id);
-            $comment->update(['client_visible' => $visible, 'visibility_reviewed_at' => now()]);
+            $comment->update(['client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible), 'visibility_reviewed_at' => now()]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment_visibility',
-                'body' => ($visible ? 'Partage client activé' : 'Partage client retiré').' pour le commentaire #'.$id,
-                'changed_fields' => ['comment_id' => $id, 'client_visible' => $visible]]);
+                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($comment->client_visible, $comment->delegataire_visible)].' » pour le commentaire #'.$id,
+                'changed_fields' => ['comment_id' => $id, 'client_visible' => $comment->client_visible, 'delegataire_visible' => $comment->delegataire_visible]]);
+        });
+    }
+
+    public function removeComment(User $actor, Dossier $dossier, int $id): void
+    {
+        Gate::forUser($actor)->authorize('update', $dossier);
+        DB::transaction(function () use ($actor, $dossier, $id): void {
+            $comment = $dossier->comments()->whereIn('kind', ['comment', 'legacy_comment'])->lockForUpdate()->findOrFail($id);
+            $comment->update(['hidden_at' => now(), 'client_visible' => false, 'delegataire_visible' => false]);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment_removed',
+                'body' => 'Commentaire #'.$id.' retiré de la fiche. Trace conservée.', 'changed_fields' => ['comment_id' => $id]]);
+        });
+    }
+
+    public function removeDocument(User $actor, DossierDocument $document): void
+    {
+        Gate::forUser($actor)->authorize('update', $document->dossier);
+        DB::transaction(function () use ($actor, $document): void {
+            // Same parent lock as the report workflow: a validated PDF cannot disappear mid-review.
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
+            $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
+            if ($dossier->operations()->where('report_document_id', $document->id)->exists()) {
+                throw ValidationException::withMessages(['document' => 'Ce document est lié à un contrôle. Retire sa validation depuis le workflow avant de le supprimer.']);
+            }
+            $document->delete();
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
+                'body' => 'Document retiré : '.$document->name, 'changed_fields' => ['document_id' => $document->id]]);
         });
     }
 

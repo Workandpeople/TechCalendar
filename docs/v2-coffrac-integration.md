@@ -1160,3 +1160,56 @@ la première. Aucun test réseau ni SMS réel n'est exécuté par les tests auto
 Contrat fournisseur vérifié :
 [envoi JSON](https://dev.smsfactor.com/en/api/sms/send/send-campaign),
 [simulation sans création de campagne](https://dev.smsfactor.com/en/api/sms/send/send-list-simulate).
+
+### Fiche dossier, destinataires et documents (16 octobre 2026)
+
+Le dossier accepte désormais deux affectations distinctes : `client_id` et
+`delegataire_id`, chacune limitée au bon type d'organisation. Les listes
+préremplissent des coordonnées qui restent modifiables sur le dossier. Le choix
+« Saisie manuelle » conserve ces informations sans créer de compte ni donner
+d'accès au portail. Les coordonnées sont des instantanés du dossier, pas une
+modification de la fiche de l'organisation.
+
+Les documents et commentaires proposent trois audiences : **interne uniquement**,
+**client uniquement**, **client et délégataire**. L'affectation au dossier et les
+permissions du compte externe restent obligatoires, y compris pour les liens de
+téléchargement directs. Un contenu partagé n'est jamais accessible anonymement.
+Les archives conservent leurs indicateurs historiques privé/délégataire jusqu'à
+une décision locale explicite. Les commentaires retirés et documents supprimés
+logiquement ne sont plus servis ; leurs traces et fichiers sources sont conservés.
+Un document utilisé par un contrôle ne peut pas être supprimé depuis cette liste.
+
+La section Documents réunit les fichiers natifs, ceux des lots et les archives :
+auteur, date, description, audience, métadonnées de contrôle, aperçu PDF/image et
+téléchargement. Les actions de lot existantes restent la référence pour retirer
+un fichier de lot. L'aperçu exclut HTML et SVG et ne publie aucun répertoire privé.
+
+Le formulaire **Libre / Rapport de contrôle** enregistre la référence du contrôle,
+la prestation, les dates de visite et d'émission, la conclusion et le PDF. Il peut
+simplement enregistrer le rapport ou déclencher une action autorisée du workflow
+existant. Il n'existe pas de deuxième circuit de validation : les règles après
+visite, les versions concurrentes et la satisfaction des lots restent pilotées
+par `PostVisitWorkflow`. Les informations du rapport validé préremplissent le
+formulaire CAPCEE ; le dépôt seul ne déclenche aucune transmission externe.
+
+Les actions d'état sont accessibles depuis chaque fiche prestation. Le changement
+de technicien avant visite réutilise `AppointmentEditor` : qualification,
+disponibilités, verrouillage et traçabilité ne sont pas contournés.
+
+#### Déploiement et reprise des affectations
+
+- Sauvegarder la base avant la migration
+  `2026_10_16_100000_separate_dossier_clients_and_content_audiences`.
+- La migration déplace les affectations communes de type client vers `client_id`.
+  Elle préserve les partages explicites existants et ne réactive aucun compte.
+- La reprise des deux affectations historiques est une étape distincte, fondée
+  exclusivement sur les identifiants de l'archive locale, jamais sur une similarité
+  de nom ou d'email. Les affectations déjà renseignées ne sont pas écrasées.
+- Contrôler `php artisan clients:reconcile-legacy` sans option avant de décider
+  d'appliquer `php artisan clients:reconcile-legacy --apply`. Cette dernière
+  commande modifie les affectations et donc le périmètre des comptes externes
+  déjà actifs ; elle ne crée ni utilisateur ni mot de passe.
+- Pas de retour automatique à l'ancien modèle : il ferait perdre les deux
+  destinataires et les restrictions de partage. Utiliser la sauvegarde avec le
+  code correspondant si un retour arrière est nécessaire.
+- Les paramètres SMS et les protections du mode simulation restent inchangés.

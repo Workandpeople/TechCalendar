@@ -27,6 +27,24 @@
                     </div>
                     <div class="space-y-3">
                         @unless ($appointment->trashed())
+                            @if (! $dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)
+                                <details class="gc-technician-editor">
+                                    <summary class="gc-btn-warning"><x-nav-icon name="users" />Changer le technicien</summary>
+                                    <form method="POST" action="{{ route('v2.dossiers.appointments.technician', [$dossier, $appointment->id]) }}" class="mt-3 space-y-3">
+                                        @csrf @method('PATCH')
+                                        <input type="hidden" name="version" value="{{ $dossier->version }}">
+                                        <input type="hidden" name="updated_at" value="{{ $appointment->updated_at?->toIso8601String() }}">
+                                        <label class="gc-label" for="appointment-tech-{{ $appointment->id }}">Technicien habilité pour cette prestation</label>
+                                        <select class="gc-input" id="appointment-tech-{{ $appointment->id }}" name="technician_id" required>
+                                            @foreach ($technicians as $technician)
+                                                @if ($technician->id === $appointment->technician_id || $technician->services->contains('id', $appointment->service_id))<option value="{{ $technician->id }}" @selected($technician->id === $appointment->technician_id)>{{ $technician->full_name }}</option>@endif
+                                            @endforeach
+                                        </select>
+                                        <p class="text-xs text-slate-500">Le créneau reste identique. Les absences, chevauchements et habilitations sont vérifiés à l’enregistrement.</p>
+                                        <button type="submit" class="gc-btn-warning">Enregistrer le technicien</button>
+                                    </form>
+                                </details>
+                            @endif
                             <a class="gc-btn-secondary" href="{{ route($planningRoute, ['appointment_id' => $appointment->id, 'technician_id' => $appointment->technician_id, 'date' => $appointment->starts_at?->toDateString()]) }}">Voir / modifier dans le planning</a>
                         @endunless
                         @unless ($dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)

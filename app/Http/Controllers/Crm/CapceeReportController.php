@@ -25,7 +25,7 @@ class CapceeReportController extends Controller
     {
         Gate::authorize('transmitReport', $dossier);
         $reports->assertScope($dossier, $operation, $report);
-        $operation->load('service');
+        $operation->load('service', 'reportDocument');
         $report?->load('latestDelivery');
 
         return view('crm.capcee.form', compact('dossier', 'operation', 'report') + ['capceeUnavailable' => $reports->availability()]);
