@@ -119,12 +119,9 @@ class DossierController extends Controller
             'visitCandidates' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
                 ->where('ends_at', '<=', now())->orderByDesc('starts_at')
                 ->get(['appointments.id', 'dossier_operation_id', 'starts_at'])->groupBy('dossier_operation_id'),
-            'controlDocuments' => $dossier->documents()->where('mime_type', 'application/pdf')->orderBy('name')->get(['id', 'name']),
+            'controlDocuments' => $dossier->documents()->where('mime_type', 'application/pdf')->orderBy('name')->get(['id', 'name', 'document_type', 'dossier_operation_id']),
             'capceeUnavailable' => app(CapceeReports::class)->availability(),
             'legacyDocuments' => $legacyDocuments,
-            'legacyAppointments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
-                ->where('source_table', 'dossier_fiche_rdv')->orderByDesc('source_id')
-                ->paginate(20, ['source_id', 'payload'], 'legacy_appointments_page')->withQueryString()->fragment('rendez-vous'),
             'comments' => $dossier->comments()->with('author')->latest('created_at')->latest('id')
                 ->paginate(25, ['*'], 'comments_page')->withQueryString()->fragment('commentaires'),
             'activities' => $dossier->activities()->whereNotIn('kind', DossierActivity::COMMENT_KINDS)
@@ -157,7 +154,7 @@ class DossierController extends Controller
     {
         Gate::authorize('update', $dossier);
         $data = $request->validate(['body' => ['required', 'string', 'max:10000'], ...ContentAudience::rules()]);
-        $audience = ContentAudience::fromRequest($request);
+        $audience = ContentAudience::fromRequest($request, 'client');
         $registry->addComment($request->user(), $dossier, $data['body'], $audience['client_visible'], $audience['delegataire_visible']);
 
         return redirect()->to(route('v2.dossiers.show', $dossier).'#commentaires')->with('status', $audience['client_visible'] ? 'Commentaire partagé selon les destinataires choisis.' : 'Commentaire interne ajouté.');
@@ -165,7 +162,7 @@ class DossierController extends Controller
 
     public function document(DossierDocumentRequest $request, Dossier $dossier, DossierDocumentIntake $intake): RedirectResponse
     {
-        $intake->store($request->user(), $dossier, $request->validated(), ContentAudience::fromRequest($request));
+        $intake->store($request->user(), $dossier, $request->validated(), ContentAudience::fromRequest($request, 'client'));
 
         return redirect()->to(route('v2.dossiers.show', $dossier).'#documents')->with('status', 'Document enregistré. Aucun envoi externe automatique.');
     }

@@ -16,32 +16,30 @@ class DossierBillingService
 
     public static function summary(Dossier $dossier): array
     {
-        $count = $dossier->operations->filter(fn ($operation) => $operation->billing !== null)->count();
-        $total = $dossier->operations->count();
+        $count = $dossier->operations->filter(fn ($operation) => $operation->billing !== null
+            || in_array($operation->legacy_status, DossierStatusCatalog::STATUSES['invoiced']['values'], true))->count();
 
         return match (true) {
             $dossier->billing_review_required => ['label' => 'Facturation à vérifier', 'tone' => 'amber'],
             $count === 0 => ['label' => 'Non facturé', 'tone' => 'slate'],
-            $count < $total => ['label' => 'Partiellement facturé ('.$count.'/'.$total.')', 'tone' => 'amber'],
-            default => ['label' => 'Entièrement facturé', 'tone' => 'green'],
+            default => ['label' => 'Facturé', 'tone' => 'green'],
         };
     }
 
-    public function mark(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void
+    public function mark(User $actor, Dossier $dossier, ?DossierOperation $operation, array $data): void
     {
-        abort_unless($operation->dossier_id === $dossier->id, 404);
+        abort_if($operation && $operation->dossier_id !== $dossier->id, 404);
         Gate::forUser($actor)->authorize('manageBilling', $dossier);
 
         DB::transaction(function () use ($actor, $dossier, $operation, $data): void {
-            // Same lock order as the post-visit workflow; the unique operation key is a second guard.
+            // Serialize all marks on the parent, including requests for different operations.
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
-            $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
             $currentActor = User::query()->find($actor->id);
             abort_unless($currentActor, 403);
             Gate::forUser($currentActor)->authorize('manageBilling', $dossier);
 
-            if ($operation->billing()->exists() || DossierStatusCatalog::describe($operation->legacy_status)['key'] === 'invoiced') {
-                throw ValidationException::withMessages(['billing' => 'Cette prestation est déjà facturée. Aucune seconde facturation n’a été enregistrée.']);
+            if ($dossier->billings()->exists() || $dossier->operations()->whereIn('legacy_status', DossierStatusCatalog::STATUSES['invoiced']['values'])->exists()) {
+                throw ValidationException::withMessages(['billing' => 'Ce dossier est déjà facturé. Aucune seconde facturation n’a été enregistrée.']);
             }
             if ($dossier->billing_review_required) {
                 throw ValidationException::withMessages(['billing' => 'Un historique de facturation Coffrac doit être vérifié sur ce dossier. Nouvelle facturation bloquée.']);
@@ -49,8 +47,12 @@ class DossierBillingService
             if ($dossier->version !== (int) $data['version']) {
                 throw ValidationException::withMessages(['version' => 'Le dossier a changé. Recharge la fiche avant de confirmer la facturation.']);
             }
-            if (! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], self::BILLABLE_STATES, true)) {
-                throw ValidationException::withMessages(['billing' => 'La prestation doit être en contrôle, non-conformité, recontrôle ou rapport avant ce marquage.']);
+            $operations = $dossier->operations()->orderBy('id')->lockForUpdate()->get();
+            $operation = $operation ? $operations->firstWhere('id', $operation->id) : $operations->first(
+                fn ($candidate) => in_array(DossierStatusCatalog::describe($candidate->legacy_status)['key'], self::BILLABLE_STATES, true)
+            );
+            if (! $operation || ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], self::BILLABLE_STATES, true)) {
+                throw ValidationException::withMessages(['billing' => 'Le dossier doit avoir une prestation en contrôle, non-conformité, recontrôle ou rapport avant ce marquage.']);
             }
 
             $billing = DossierBilling::query()->forceCreate([
@@ -58,14 +60,15 @@ class DossierBillingService
                 'marked_at' => now(), 'marked_by' => $actor->id,
                 'invoice_reference' => trim($data['invoice_reference'] ?? '') ?: null,
                 'source' => 'native',
+                'evidence' => ['scope' => 'dossier'],
             ]);
             $dossier->activities()->create([
                 'author_id' => $actor->id, 'kind' => 'billing',
-                'body' => 'Prestation #'.$operation->id.' marquée facturée.'
+                'body' => 'Dossier marqué facturé.'
                     .($billing->invoice_reference ? ' Référence : '.$billing->invoice_reference.'.' : '')
                     .' Le statut métier est conservé.',
                 'changed_fields' => ['billing_id' => $billing->id, 'operation_id' => $operation->id,
-                    'invoice_reference' => $billing->invoice_reference, 'action' => 'marked_invoiced'],
+                    'invoice_reference' => $billing->invoice_reference, 'action' => 'marked_invoiced', 'scope' => 'dossier'],
             ]);
             $dossier->increment('version');
         }, 3);

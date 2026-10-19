@@ -31,7 +31,7 @@ it('exposes and filters each historical Coffrac category', function (string $key
         ->assertViewHas('dossiers', fn ($rows) => $rows->total() === 1 && $rows->first()->id === $dossier->id)
         ->assertViewHas('categories', fn ($categories) => $categories[$key]['count'] === 1 && $categories['all']['count'] === 2)
         ->assertSee('data-category="'.$key.'"', false)->assertSee('aria-current="page"', false);
-})->with(collect(DossierStatusCatalog::STATUSES)->except('unknown')->map(fn ($status, $key) => [$key, $status])->all());
+})->with(collect(DossierStatusCatalog::STATUSES)->except(['unknown', 'invoiced'])->map(fn ($status, $key) => [$key, $status])->all());
 
 it('counts each dossier once per category and matches service and state on the same operation', function () {
     $dossier = ($this->dossierWithStatus)('Problème rendez- vous');
@@ -148,4 +148,16 @@ it('keeps the number of list queries bounded as the page fills up', function () 
     $rows = $registry->search($this->manager, []);
     expect($rows->count())->toBe(25)->and(count(DB::getQueryLog()))->toBe($firstCount);
     DB::disableQueryLog();
+});
+
+it('presents the old invoiced state as final report without losing its billing protection', function () {
+    $dossier = ($this->dossierWithStatus)('DOSSIERS FACTURER');
+    expect(DossierStatusCatalog::describe('DOSSIERS FACTURER')['key'])->toBe('report');
+    $this->actingAs($this->manager)->get(route('v2.dossiers.index', ['status' => 'report']))->assertOk()
+        ->assertSee('Facturé')->assertDontSee('data-category="invoiced"', false)
+        ->assertViewHas('dossiers', fn ($rows) => $rows->total() === 1)
+        ->assertViewHas('categories', fn ($categories) => ! isset($categories['invoiced']) && $categories['report']['count'] === 1);
+    $this->getJson(route('v2.dossiers.index', ['billing' => 'unbilled']))->assertJsonPath('total', 0);
+    $this->getJson(route('v2.dossiers.index', ['billing' => 'invoiced']))->assertJsonPath('total', 1);
+    expect($dossier->operations()->sole()->legacy_status)->toBe('DOSSIERS FACTURER');
 });

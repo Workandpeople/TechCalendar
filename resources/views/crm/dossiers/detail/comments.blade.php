@@ -33,9 +33,9 @@
         {{ $comments->links() }}
         <form id="ajouter-commentaire" method="POST" action="{{ route('v2.dossiers.comments.store', $dossier) }}" class="gc-dossier-compose mt-5 space-y-3">
             @csrf
-            <label for="comment_body" class="gc-label">Ajouter un commentaire (privé par défaut)</label>
+            <label for="comment_body" class="gc-label">Ajouter un commentaire (client uniquement par défaut)</label>
             <textarea id="comment_body" name="body" rows="3" maxlength="10000" class="gc-input" required>{{ old('body') }}</textarea>
-            <x-content-audience :value="old('body') ? old('audience', 'internal') : 'internal'" />
+            <x-content-audience :value="old('body') ? old('audience', 'client') : 'client'" />
             <p class="text-xs text-slate-500">Visible uniquement si son compte autorise la lecture des commentaires. Les délégataires n’ont pas ce droit par défaut.</p>
             <div class="flex justify-end"><button type="submit" class="gc-btn-primary"><x-nav-icon name="comment" />Ajouter le commentaire</button></div>
         </form>

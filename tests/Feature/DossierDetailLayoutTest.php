@@ -19,11 +19,12 @@ it('keeps the familiar Coffrac columns with unique sections and protected forms'
     $this->dossier->activities()->create(['kind' => 'post_visit', 'body' => 'CONTROL-COMMENT']);
     $this->dossier->activities()->create(['kind' => 'updated', 'body' => 'HISTORY-ONLY']);
     $response = $this->actingAs($this->manager)->get(route('v2.dossiers.show', $this->dossier))->assertOk();
+    $response->assertDontSee('Liaison existante')->assertDontSee('Corriger le rattachement')->assertDontSee('Toutes les dates source Coffrac');
     $dom = new DOMDocument;
     @$dom->loadHTML('<?xml encoding="utf-8" ?>'.$response->getContent(), LIBXML_NONET);
     $xpath = new DOMXPath($dom);
 
-    foreach (['documents', 'commentaires', 'synthese', 'apres-visite', 'capcee'] as $id) {
+    foreach (['documents', 'commentaires', 'synthese', 'capcee'] as $id) {
         expect($xpath->query('//div[@class="gc-dossier-main"]//*[@id="'.$id.'"]')->length)->toBe(1);
     }
     foreach (['prestations', 'rendez-vous', 'intervenants', 'historique'] as $id) {
@@ -43,10 +44,11 @@ it('keeps the familiar Coffrac columns with unique sections and protected forms'
     Http::assertNothingSent();
 });
 
-it('returns to comments after posting a private note', function () {
+it('returns to comments after posting a client only note', function () {
     $this->actingAs($this->manager)->post(route('v2.dossiers.comments.store', $this->dossier), ['body' => 'Note de suivi'])
         ->assertRedirect(route('v2.dossiers.show', $this->dossier).'#commentaires');
-    expect($this->dossier->comments()->sole()->client_visible)->toBeFalse();
+    expect($this->dossier->comments()->sole()->client_visible)->toBeTrue()
+        ->and($this->dossier->comments()->sole()->delegataire_visible)->toBeFalse();
 });
 
 it('reopens an invalid document form with its name', function () {

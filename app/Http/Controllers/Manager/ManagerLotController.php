@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\PushLotAppointmentDocumentToCoffracJob;
 use App\Jobs\SyncLotAppointmentDocumentsToGlobalPlusJob;
 use App\Models\Appointment;
+use App\Models\Dossier;
 use App\Models\ExternalDelegataire;
 use App\Models\ExternalServiceAlias;
 use App\Models\Lot;
@@ -14,6 +15,9 @@ use App\Models\LotAppointmentDocument;
 use App\Models\LotImportPreview;
 use App\Models\Service;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\DossierStatusCatalog;
+use App\Services\Crm\LotClientAssignment;
+use App\Services\Crm\PostVisitWorkflow;
 use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAppointmentUpdateService;
@@ -229,7 +233,7 @@ class ManagerLotController extends Controller
         $coffracServiceAliasId = $this->coffracAliasIdForService((int) $payload['service_id'], $payload['coffrac_service_alias_id'] ?? null);
         $currentStatus = Lot::normalizedStatus($lot->status);
 
-        app(\App\Services\Crm\LotClientAssignment::class)->update($request->user(), $lot, [
+        app(LotClientAssignment::class)->update($request->user(), $lot, [
             'name' => trim((string) $payload['name']),
             'type' => $payload['type'],
             'sampling_percentage' => $samplingPayload['sampling_percentage'],
@@ -918,9 +922,9 @@ class ManagerLotController extends Controller
 
         $lotAppointment = DB::transaction(function () use ($lotAppointment): LotAppointment {
             if (config('crm.v2_enabled') && ($operation = $lotAppointment->appointment?->dossierOperation)) {
-                $dossier = \App\Models\Dossier::query()->lockForUpdate()->findOrFail($operation->dossier_id);
+                $dossier = Dossier::query()->lockForUpdate()->findOrFail($operation->dossier_id);
                 $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
-                \App\Services\Crm\PostVisitWorkflow::assertPlanningMutable($operation);
+                PostVisitWorkflow::assertPlanningMutable($operation);
             }
             $lotAppointment->loadMissing('appointment');
 
@@ -1700,10 +1704,10 @@ class ManagerLotController extends Controller
             'global_plus_store_url' => route('manager.lots.appointments.global-plus.store', $appointment),
             'global_plus_documents_sync_url' => route('manager.lots.appointments.global-plus.documents.sync', $appointment),
             'reset_processing_url' => route('manager.lots.appointments.reset-processing', $appointment),
-            'post_visit_url' => $operation ? route('v2.dossiers.show', $operation->dossier_id).'#apres-visite' : null,
-            'post_visit_status' => $operation ? \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['label'] : null,
-            'post_visit_outcome' => isset(\App\Services\Crm\PostVisitWorkflow::OUTCOMES[$operation?->control_outcome])
-                ? \App\Services\Crm\PostVisitWorkflow::OUTCOMES[$operation->control_outcome].($operation->control_validated_at ? ' (validé)' : ' (à valider)') : null,
+            'post_visit_url' => $operation ? route('v2.dossiers.show', $operation->dossier_id).'#documents' : null,
+            'post_visit_status' => $operation ? DossierStatusCatalog::describe($operation->legacy_status)['label'] : null,
+            'post_visit_outcome' => isset(PostVisitWorkflow::OUTCOMES[$operation?->control_outcome])
+                ? PostVisitWorkflow::OUTCOMES[$operation->control_outcome].($operation->control_validated_at ? ' (validé)' : ' (à valider)') : null,
             'documents_upload_url' => route('manager.lots.appointments.documents.store', $appointment),
             'external_reference' => $appointment->external_reference,
             'row_number' => $appointment->row_number,

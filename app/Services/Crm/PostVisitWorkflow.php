@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierActivity;
+use App\Models\DossierDocument;
 use App\Models\DossierOperation;
 use App\Models\Lot;
 use App\Models\LotAppointment;
@@ -30,13 +31,23 @@ class PostVisitWorkflow
     public const TRANSITIONS = [
         'record_visit' => ['from' => ['awaiting_visit'], 'to' => 'visited', 'label' => 'Visite effectuée', 'review' => false],
         'submit_control' => ['from' => ['visited'], 'to' => 'rt_control', 'label' => 'Contrôle soumis au RT', 'review' => false],
-        'revise_control' => ['from' => ['rt_control'], 'to' => 'rt_control', 'label' => 'Conclusion du contrôle mise à jour', 'review' => true],
-        'request_correction' => ['from' => ['rt_control', 'recontrol'], 'to' => 'non_compliant', 'label' => 'Correction demandée au client', 'review' => true],
+        'request_correction' => ['from' => ['visited', 'rt_control', 'recontrol'], 'to' => 'non_compliant', 'label' => 'Correction demandée au client', 'review' => true],
         'validate_report' => ['from' => ['rt_control', 'recontrol'], 'to' => 'report', 'label' => 'Rapport validé', 'review' => true],
         'reopen_control' => ['from' => ['report', 'invoiced'], 'to' => 'rt_control', 'label' => 'Validation retirée pour réexamen', 'review' => true],
     ];
 
     public function __construct(private readonly LotStatusService $lotStatuses) {}
+
+    public function recordReport(User $actor, Dossier $dossier, DossierOperation $operation, DossierDocument $document, array $data): void
+    {
+        $state = DossierStatusCatalog::describe($operation->legacy_status)['key'];
+        $review = in_array($state, ['rt_control', 'recontrol'], true);
+        Gate::forUser($actor)->authorize($review ? 'reviewControl' : 'update', $dossier);
+        $this->transition($actor, $dossier, $operation, [
+            ...$data, 'action' => 'record_report', 'report_document_id' => $document->id,
+        ], ['from' => [$review ? $state : 'visited'], 'to' => $review ? 'report' : 'rt_control',
+            'review' => $review, 'label' => $review ? 'Rapport Genius enregistré' : 'Rapport transmis au contrôle RT']);
+    }
 
     public function apply(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void
     {
@@ -61,8 +72,6 @@ class PostVisitWorkflow
         }
         if ($file instanceof UploadedFile) {
             Gate::forUser($actor)->authorize('uploadDocument', $dossier);
-        } elseif ($comment === '') {
-            throw ValidationException::withMessages(['comment' => 'Ajoutez un commentaire ou un document pour transmettre votre réponse.']);
         }
 
         $document = null;
@@ -71,8 +80,8 @@ class PostVisitWorkflow
             DB::transaction(function () use ($actor, $dossier, $operation, $data, $file, $comment, &$document): void {
                 $activity = $this->transition($actor, $dossier, $operation, [
                     'version' => $data['version'], 'action' => 'client_response', 'client_visible' => true,
-                    'comment' => $comment ?: 'Pièce justificative transmise par le client.',
-                ], ['from' => ['non_compliant'], 'to' => 'recontrol', 'label' => 'Réponse du client transmise pour recontrôle']);
+                    'comment' => $comment ?: 'Demande explicite de recontrôle par '.($actor->externalClient?->kind === 'delegataire' ? 'le délégataire.' : 'le client.'),
+                ], ['from' => ['non_compliant'], 'to' => 'recontrol', 'label' => 'Recontrôle demandé']);
                 if ($file instanceof UploadedFile) {
                     $document = app(DossierRegistry::class)->addDocument($actor, $dossier, $file,
                         filled($data['document_name'] ?? null) ? $data['document_name'] : Str::limit($file->getClientOriginalName(), 190, ''));
@@ -95,6 +104,8 @@ class PostVisitWorkflow
             if ($data['action'] === 'client_response') {
                 // Recheck ownership under the lock in case staff reassigned the dossier.
                 Gate::forUser($actor)->authorize('respondToNonConformity', $dossier);
+            } else {
+                Gate::forUser($actor)->authorize(($transition['review'] ?? false) ? 'reviewControl' : 'update', $dossier);
             }
             if ($dossier->version !== (int) $data['version']) {
                 throw ValidationException::withMessages(['version' => 'Le dossier a changé. Recharge la fiche avant de poursuivre le contrôle.']);
@@ -106,7 +117,7 @@ class PostVisitWorkflow
             if (blank($data['comment'] ?? null)) {
                 throw ValidationException::withMessages(['comment' => 'Un commentaire est obligatoire pour tracer le traitement.']);
             }
-            if ($state === 'invoiced' && ! $operation->billing()->exists()) {
+            if (in_array($operation->legacy_status, DossierStatusCatalog::STATUSES['invoiced']['values'], true) && ! $dossier->billings()->exists()) {
                 throw ValidationException::withMessages(['action' => 'La reprise de l’historique de facturation doit être terminée avant de rouvrir cette prestation.']);
             }
             if ($data['action'] === 'reopen_control' && $operation->capceeReports()->exists()) {
@@ -120,24 +131,25 @@ class PostVisitWorkflow
 
             $previous = $operation->only(['legacy_status', 'visit_appointment_id', 'inspected_on', 'control_outcome', 'control_comment', 'control_submitted_at', 'control_validated_at', 'control_validated_by', 'report_document_id']);
             match ($data['action']) {
-                'record_visit' => $this->recordVisit($operation, (int) $data['appointment_id']),
-                'submit_control', 'revise_control' => $this->submitControl($operation, $data),
-                'validate_report' => $this->validateReport($actor, $dossier, $operation, $data, $state),
+                'record_visit' => $this->recordVisit($dossier, $operation, (int) $data['appointment_id'], (int) ($data['visit_document_id'] ?? 0)),
+                'record_report', 'validate_report' => $this->applyReport($actor, $dossier, $operation, (int) $data['report_document_id'], $transition['to'] === 'report'),
                 'reopen_control', 'request_correction', 'client_response' => $operation->forceFill(['control_validated_at' => null, 'control_validated_by' => null]),
                 default => null,
             };
             $operation->forceFill(['legacy_status' => DossierStatusCatalog::STATUSES[$transition['to']]['values'][0]])->save();
 
-            // Only a validated opinion is projected; a draft or an unverifiable visit is not a failure.
-            $satisfaction = $operation->control_validated_at ? match ($operation->control_outcome) {
+            // Opinion belongs to the uploaded report, not to the business state or its validation.
+            $satisfaction = match ($operation->control_outcome) {
                 'satisfactory' => true, 'unsatisfactory' => false, default => null,
-            } : null;
-            $this->physicalRows($operation)->update([
-                'physical_satisfaction' => $satisfaction,
-                'physical_satisfaction_synced_at' => now(),
-            ]);
-            foreach ($lots as $lot) {
-                $this->lotStatuses->refresh($lot);
+            };
+            if (in_array($data['action'], ['record_report', 'validate_report'], true)) {
+                $this->physicalRows($operation)->update([
+                    'physical_satisfaction' => $satisfaction,
+                    'physical_satisfaction_synced_at' => now(),
+                ]);
+                foreach ($lots as $lot) {
+                    $this->lotStatuses->refresh($lot);
+                }
             }
             $activity = $dossier->activities()->create([
                 'author_id' => $actor->id, 'kind' => 'post_visit',
@@ -149,7 +161,7 @@ class PostVisitWorkflow
                     .($data['action'] !== 'client_response' && $operation->control_outcome ? ' · '.self::OUTCOMES[$operation->control_outcome] : '')."\n".trim($data['comment']),
                 'changed_fields' => ['operation_id' => $operation->id, 'action' => $data['action'], 'before' => $previous,
                     'after' => $operation->only(array_keys($previous)), 'physical_satisfaction' => $satisfaction,
-                    'lot_ids' => $lots->modelKeys()],
+                    'lot_ids' => $lots->modelKeys(), 'visit_document_id' => $data['visit_document_id'] ?? null],
             ]);
             $dossier->increment('version');
 
@@ -157,8 +169,13 @@ class PostVisitWorkflow
         }, 3);
     }
 
-    private function recordVisit(DossierOperation $operation, int $appointmentId): void
+    private function recordVisit(Dossier $dossier, DossierOperation $operation, int $appointmentId, int $documentId): void
     {
+        $document = $dossier->documents()->find($documentId);
+        if (! $document || $document->document_type !== 'visit' || $document->dossier_operation_id !== $operation->id
+            || ! Storage::disk('local')->exists($document->path)) {
+            throw ValidationException::withMessages(['visit_document_id' => 'Ajoute un document de visite technique lié à cette prestation pour confirmer la visite.']);
+        }
         $appointment = $operation->appointments()->lockForUpdate()->find($appointmentId);
         if (! $appointment || $appointment->status !== Appointment::STATUS_SCHEDULED
             || ! $appointment->ends_at || $appointment->ends_at->isFuture()) {
@@ -167,35 +184,20 @@ class PostVisitWorkflow
         $operation->forceFill(['visit_appointment_id' => $appointment->id, 'inspected_on' => $appointment->starts_at->toDateString()]);
     }
 
-    private function submitControl(DossierOperation $operation, array $data): void
+    private function applyReport(User $actor, Dossier $dossier, DossierOperation $operation, int $documentId, bool $validated): void
     {
-        if (! array_key_exists($data['outcome'] ?? '', self::OUTCOMES)) {
-            throw ValidationException::withMessages(['outcome' => 'Renseigne une conclusion valide.']);
+        $document = $dossier->documents()->find($documentId);
+        if (! $document || $document->document_type !== 'report' || $document->dossier_operation_id !== $operation->id
+            || $document->mime_type !== 'application/pdf' || ! $document->inspected_on
+            || ! isset(self::OUTCOMES[$document->control_outcome]) || ! Storage::disk('local')->exists($document->path)) {
+            throw ValidationException::withMessages(['report_document_id' => 'Ajoute un rapport PDF avec son avis et sa date de visite pour cette prestation.']);
         }
         $operation->forceFill([
-            'inspected_on' => $data['inspected_on'], 'control_outcome' => $data['outcome'],
-            'control_comment' => trim($data['comment']), 'control_submitted_at' => now(),
-            'control_validated_at' => null, 'control_validated_by' => null, 'report_document_id' => null,
+            'inspected_on' => $document->inspected_on, 'control_outcome' => $document->control_outcome,
+            'control_comment' => $document->description, 'control_submitted_at' => now(),
+            'report_document_id' => $document->id, 'control_validated_by' => $validated ? $actor->id : null,
+            'control_validated_at' => $validated ? now() : null,
         ]);
-    }
-
-    private function validateReport(User $actor, Dossier $dossier, DossierOperation $operation, array $data, string $state): void
-    {
-        if ($state === 'recontrol') {
-            // The client's response never carries the reviewer's conclusion.
-            if (blank($data['inspected_on'] ?? null)) {
-                throw ValidationException::withMessages(['inspected_on' => 'Renseigne la date réelle de visite avant de valider le recontrôle.']);
-            }
-            $this->submitControl($operation, $data);
-        }
-        if (! $operation->control_submitted_at || ! $operation->inspected_on || ! isset(self::OUTCOMES[$operation->control_outcome])) {
-            throw ValidationException::withMessages(['outcome' => 'La conclusion native est manquante. Renseigne la conclusion du contrôle avant validation.']);
-        }
-        $document = $dossier->documents()->find((int) $data['report_document_id']);
-        if (! $document || $document->mime_type !== 'application/pdf' || ! Storage::disk('local')->exists($document->path)) {
-            throw ValidationException::withMessages(['report_document_id' => 'Choisis un PDF disponible dans les documents de ce dossier. Aucun rapport externe n’est téléchargé automatiquement.']);
-        }
-        $operation->forceFill(['report_document_id' => $document->id, 'control_validated_by' => $actor->id, 'control_validated_at' => now()]);
     }
 
     private function physicalRows(DossierOperation $operation): Builder

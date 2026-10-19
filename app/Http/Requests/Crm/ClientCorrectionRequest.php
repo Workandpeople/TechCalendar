@@ -15,17 +15,11 @@ class ClientCorrectionRequest extends FormRequest
     {
         return [
             'version' => ['required', 'integer', 'min:1'],
-            'comment' => ['required_without:document', 'nullable', 'string', 'max:10000'],
-            'document' => ['required_without:comment', 'nullable', 'file', 'max:10240',
+            'comment' => ['nullable', 'string', 'max:10000'],
+            'document' => ['nullable', 'file', 'max:10240',
                 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx'],
             'document_name' => ['nullable', 'string', 'max:190'],
         ];
-    }
-
-    public function messages(): array
-    {
-        return ['comment.required_without' => 'Ajoutez un commentaire ou un document pour transmettre votre réponse.',
-            'document.required_without' => 'Ajoutez un commentaire ou un document pour transmettre votre réponse.'];
     }
 
     public function attributes(): array

@@ -1,7 +1,6 @@
 export function reportActions(state, canReview = true) {
-    return ['store', ...(state === 'visited' ? ['submit_control'] : []),
-        ...(canReview && state === 'rt_control' ? ['revise_control', 'validate_report'] : []),
-        ...(canReview && state === 'recontrol' ? ['validate_report'] : [])];
+    if (state === 'visited') return ['submit_control'];
+    return canReview && ['rt_control', 'recontrol'].includes(state) ? ['validate_report'] : [];
 }
 
 export function initDossierDocuments(root = document, browser = window) {
@@ -19,19 +18,30 @@ export function initDossierDocuments(root = document, browser = window) {
     });
 
     root.querySelectorAll('[data-document-upload]').forEach((form) => {
-        const fields = form.querySelector('[data-report-fields]');
         const operation = form.querySelector('[data-report-operation]');
-        const action = form.querySelector('[data-report-action]');
         const update = () => {
-            const report = form.querySelector('[name="document_type"]:checked')?.value === 'report';
-            fields.hidden = !report;
-            fields.disabled = !report;
+            const type = form.querySelector('[name="document_type"]:checked')?.value || 'free';
+            const report = type === 'report';
+            const canReview = form.dataset.canReview === '1';
+            for (const [selector, enabled] of [['[data-operation-fields]', type !== 'free'], ['[data-report-fields]', report], ['[data-visit-fields]', type === 'visit']]) {
+                const fields = form.querySelector(selector);
+                fields.hidden = !enabled;
+                fields.disabled = !enabled;
+                fields.querySelectorAll('select, input').forEach((input) => { input.disabled = !enabled; });
+            }
+            Array.from(operation.options).forEach((option) => {
+                option.disabled = !!option.value && (report ? reportActions(option.dataset.state, canReview).length === 0 : type === 'visit' && option.dataset.state !== 'awaiting_visit');
+            });
+            if (operation.selectedOptions[0]?.disabled) operation.value = '';
             const state = operation.selectedOptions[0]?.dataset.state;
-            const allowed = reportActions(state);
-            Array.from(action.options).forEach((option) => { option.disabled = !allowed.includes(option.value); });
-            if (action.selectedOptions[0]?.disabled) action.value = 'store';
-            // Custom select widgets must also reflect a disabled parent fieldset.
-            fields.querySelectorAll('select, input').forEach((input) => { input.disabled = !report; });
+            const appointment = form.querySelector('[data-visit-appointment]');
+            Array.from(appointment.options).forEach((option) => { option.disabled = !!option.value && option.dataset.operation !== operation.value; });
+            if (appointment.selectedOptions[0]?.disabled) appointment.value = '';
+            form.querySelector('[data-document-effect]').textContent = type === 'free' ? 'Pièce libre : aucun changement d’état.'
+                : type === 'visit' ? 'Ce document confirmera la visite et passera la fiche en RDV visité.'
+                : state === 'visited' ? 'Ce rapport passera la fiche en Contrôle RT, quel que soit l’avis.'
+                : ['rt_control', 'recontrol'].includes(state) ? 'Ce rapport passera la fiche en Rapport Genius, quel que soit l’avis.'
+                : 'Choisissez une fiche en RDV visité, contrôle RT ou recontrôle.';
             form.querySelector('[type="file"]').accept = report ? '.pdf,application/pdf' : '.pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx';
         };
         form.addEventListener('change', (event) => {

@@ -43,6 +43,9 @@ $user = User::factory()->create(['role' => 0, 'admin' => false]);
 $dossier = Dossier::create(['reference' => 'CONCURRENCY', 'address' => 'Synthetic', 'city' => 'Test']);
 $operation = $dossier->operations()->create([]);
 $operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+$otherOperation = $dossier->operations()->create([]);
+$otherOperation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
+$operations = [$operation, $otherOperation];
 DB::purge('billing_test');
 $children = [];
 $gates = [];
@@ -56,7 +59,7 @@ for ($i = 0; $i < 2; $i++) {
         fclose($parent);
         fread($child, 1);
         try {
-            app(DossierBillingService::class)->mark($user, $dossier, $operation, ['version' => 1, 'invoice_reference' => 'F-TEST']);
+            app(DossierBillingService::class)->mark($user, $dossier, $operations[$i], ['version' => 1, 'invoice_reference' => 'F-TEST']);
             exit(0);
         } catch (ValidationException $exception) {
             exit(isset($exception->errors()['billing']) ? 20 : 21);
@@ -83,4 +86,4 @@ if ($results !== [0, 20] || DossierBilling::count() !== 1 || $dossier->activitie
     || $dossier->fresh()->version !== 2) {
     throw new RuntimeException('Concurrency invariant failed: '.json_encode($results));
 }
-echo "MySQL concurrency OK: one successful mark, one rejected duplicate, one audit entry.\n";
+echo "MySQL concurrency OK across different operations: one dossier mark, one rejected duplicate, one audit entry.\n";

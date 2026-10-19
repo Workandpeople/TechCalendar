@@ -35,8 +35,7 @@ class DossierPolicy
 
     public function respondToNonConformity(User $user, Dossier $dossier): bool
     {
-        return $user->isExternal() && $this->view($user, $dossier)
-            && ($this->comment($user, $dossier) || $this->uploadDocument($user, $dossier));
+        return $user->isExternal() && $this->view($user, $dossier);
     }
 
     public function create(User $user): bool

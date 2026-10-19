@@ -757,7 +757,7 @@
                     <p class="text-sm" style="color:var(--gc-text-soft);">Détail physique</p>
                     <h2 id="lot-physical-detail-title" class="text-xl font-semibold" style="color:var(--gc-text);"></h2>
                     <p id="lot-physical-detail-subtitle" class="mt-1 text-sm" style="color:var(--gc-text-soft);"></p>
-                    @if (config('crm.v2_enabled'))<a id="lot-physical-post-visit" class="mt-2 hidden text-sm font-semibold underline">Traiter la visite et valider la satisfaction</a>@endif
+                    @if (config('crm.v2_enabled'))<a id="lot-physical-post-visit" class="mt-2 hidden text-sm font-semibold underline">Documents de visite et rapports</a>@endif
                 </div>
                 <button id="lot-physical-detail-close" type="button" class="gc-link">Fermer</button>
             </div>

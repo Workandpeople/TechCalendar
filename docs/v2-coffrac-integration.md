@@ -1,5 +1,42 @@
 # Fusion de Coffrac dans TechCalendar V2
 
+## Règles métier confirmées, 19 octobre 2026
+
+Cette section remplace les règles après-visite des incréments historiques ci-dessous.
+
+- **Facturation unique par dossier**, indépendante du statut métier. Toute preuve
+  historique conserve son effet bloquant, même issue d'une autre prestation.
+  L'ancien état facturé est présenté comme **Rapport Genius**, sans réécrire la
+  valeur source nécessaire à la reprise comptable. Voir `tools/deploy/billing-history.txt`.
+- **Client uniquement par défaut** pour les nouveaux documents et commentaires
+  du dossier. Les trois audiences et les permissions externes restent distinctes.
+  Les partages déjà enregistrés ne sont pas modifiés.
+- Le dépôt d'une **visite technique**, rattachée à un RDV terminé et à sa prestation,
+  fait passer d'attente de visite à **RDV visité**. Cette preuve ne peut plus être
+  supprimée depuis la liste des documents.
+- Le dépôt d'un **rapport de contrôle** fait passer **RDV visité → Contrôle RT**,
+  puis **Contrôle RT / Recontrôle → Rapport Genius**. Les droits de validation RT
+  restent nécessaires pour cette dernière étape. Un rapport ne peut pas être
+  déposé avant la visite ou directement en non-conformité.
+- L'avis est renseigné dans le rapport uniquement et ne choisit jamais l'état.
+  Il alimente immédiatement `physical_satisfaction` du lot lié, via les calculs
+  existants : satisfaisant = `true`, non satisfaisant = `false`, non vérifiable =
+  `null`. Un changement d'état ne réinitialise pas cet avis.
+- Les états manuels autorisés sont proposés sur la fiche prestation, sans seconde
+  saisie d'avis. La section séparée après-visite et les encarts de liaison Coffrac
+  ont été retirés. Les raccourcis planning/lot ouvrent les documents du dossier.
+- En non-conformité, le **client ou le délégataire affecté** peut demander
+  explicitement le recontrôle. Un simple dépôt de pièce ou commentaire ne le fait
+  pas. L'ajout éventuel de contenu reste soumis aux droits propres du compte ;
+  la demande seule ne donne aucun accès supplémentaire aux pièces privées.
+
+Contrôles : tests de transitions, propriété des documents, audiences, refus des
+requêtes rejouées, annulation des fichiers en cas d'échec transactionnel et course
+MySQL entre deux marquages sur des prestations différentes d'un même dossier.
+Ni appel Coffrac, ni envoi SMS réel, ni bascule sur le CT dans cet incrément.
+Les modales CRUD, l'export Excel filtré et les autres ajustements de formulaires
+issus du rendez-vous restent des travaux distincts de ces règles métier.
+
 ## Documents collectés, 15 octobre 2026
 
 Les fichiers de la sélection hors dossiers entièrement facturés sont raccordés

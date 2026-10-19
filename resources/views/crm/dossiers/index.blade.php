@@ -50,7 +50,7 @@
                 <label for="billing" class="gc-label">Facturation (indépendante du statut)</label>
                 <select id="billing" name="billing" class="gc-input bg-white">
                     <option value="">Tous les dossiers</option>
-                    @foreach (['unbilled' => 'Non facturés', 'partial' => 'Partiellement facturés', 'invoiced' => 'Entièrement facturés', 'review' => 'Historique à vérifier'] as $value => $label)
+                    @foreach (['unbilled' => 'Non facturés', 'invoiced' => 'Facturés', 'review' => 'Historique à vérifier'] as $value => $label)
                         <option value="{{ $value }}" @selected(($filters['billing'] ?? '') === $value)>{{ $label }}</option>
                     @endforeach
                 </select>

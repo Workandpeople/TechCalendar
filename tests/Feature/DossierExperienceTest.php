@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Dossier;
+use App\Models\DossierActivity;
 use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
@@ -182,6 +183,7 @@ it('uploads reports with required metadata and reuses the existing RT workflow',
 });
 
 it('rolls back both file and records for forbidden report transitions', function () {
+    $this->operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
     $this->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this, ['workflow_action' => 'validate_report']))->assertUnprocessable();
     expect($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
     $planner = User::factory()->create(['role' => 1, 'admin' => false]);
@@ -196,4 +198,67 @@ it('rejects a report for another dossier or invalid dates without storing a file
     $this->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this, ['operation_id' => $operation->id]))->assertNotFound();
     $this->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this, ['issued_on' => now()->subDays(10)->toDateString()]))->assertUnprocessable();
     expect(Storage::disk('local')->allFiles())->toBe([]);
+});
+
+it('defaults new contents to client only without exposing older internal records', function () {
+    $old = $this->dossier->activities()->create(['kind' => 'comment', 'body' => 'OLD-PRIVATE', 'client_visible' => false, 'delegataire_visible' => false]);
+    $this->post(route('v2.dossiers.comments.store', $this->dossier), ['body' => 'NEW-CLIENT-NOTE'])->assertSessionHasNoErrors();
+    $this->post(route('v2.dossiers.documents.store', $this->dossier), ['name' => 'NEW-CLIENT-DOC', 'document' => UploadedFile::fake()->image('new.png')])->assertSessionHasNoErrors();
+    $note = $this->dossier->comments()->where('body', 'NEW-CLIENT-NOTE')->sole();
+    $doc = $this->dossier->documents()->sole();
+    expect($note->client_visible)->toBeTrue()->and($note->delegataire_visible)->toBeFalse()
+        ->and($doc->client_visible)->toBeTrue()->and($doc->delegataire_visible)->toBeFalse()
+        ->and($old->fresh()->client_visible)->toBeFalse();
+    $this->actingAs($this->clientUser)->get(route('client.dossiers.show', $this->dossier))
+        ->assertSee('NEW-CLIENT-NOTE')->assertSee('NEW-CLIENT-DOC')->assertDontSee('OLD-PRIVATE');
+    $this->actingAs($this->delegataireUser)->get(route('client.dossiers.show', $this->dossier))
+        ->assertDontSee('NEW-CLIENT-NOTE')->assertDontSee('NEW-CLIENT-DOC')->assertDontSee('OLD-PRIVATE');
+});
+
+it('uses the same automatic report transitions for every opinion and ignores obsolete form actions', function (string $outcome) {
+    $url = route('v2.dossiers.documents.store', $this->dossier);
+    $this->post($url, experienceReport($this, ['outcome' => $outcome, 'workflow_action' => 'store']))->assertSessionHasNoErrors();
+    expect($this->operation->fresh()->legacy_status)->toBe('CONTROLE RT')
+        ->and($this->operation->fresh()->control_outcome)->toBe($outcome)
+        ->and($this->operation->fresh()->report_document_id)->not->toBeNull();
+    $this->post($url, experienceReport($this, ['outcome' => $outcome]))->assertSessionHasNoErrors();
+    expect($this->operation->fresh()->legacy_status)->toBe('RAPPORT GENIUS')
+        ->and($this->operation->fresh()->control_outcome)->toBe($outcome);
+})->with(['satisfactory', 'unsatisfactory', 'unverifiable']);
+
+it('allows each assigned external party to explicitly request recontrol without acquiring other write rights', function (string $kind) {
+    $this->operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
+    $user = $this->{$kind.'User'};
+    $user->forceFill(['portal_permissions' => []])->save();
+    $url = route('client.dossiers.recontrol', [$this->dossier, $this->operation]);
+    $this->actingAs($user)->get(route('client.dossiers.show', $this->dossier))->assertSee('Transmettre pour recontrôle');
+    $this->postJson($url, ['version' => 1, 'comment' => 'Not allowed'])->assertForbidden();
+    $this->postJson($url, ['version' => 1, 'document' => UploadedFile::fake()->image('forbidden.png')])->assertForbidden();
+    $this->postJson($url, ['version' => 1])->assertRedirect();
+    expect($this->operation->fresh()->legacy_status)->toBe('RECONTROLE')
+        ->and($this->operation->fresh()->control_outcome)->toBeNull()
+        ->and($this->dossier->documents()->count())->toBe(0);
+    $this->postJson($url, ['version' => 1])->assertUnprocessable();
+    $this->postJson($url, ['version' => 2])->assertUnprocessable();
+    expect($this->dossier->activities()->count())->toBe(1);
+})->with(['client', 'delegataire']);
+
+it('refuses reports before the visit or outside a review stage without orphan files', function (string $state) {
+    $this->operation->forceFill(['legacy_status' => $state])->save();
+    $this->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this))
+        ->assertUnprocessable()->assertJsonValidationErrors('operation_id');
+    expect($this->dossier->fresh()->version)->toBe(1)->and($this->dossier->documents()->count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBe([]);
+})->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'NON CONFORMITES', 'RAPPORT GENIUS', 'DOSSIER ANNULE']);
+
+it('rolls back an uploaded report and opinion together if the workflow audit fails', function () {
+    DossierActivity::creating(function ($activity) {
+        if ($activity->kind === 'post_visit') {
+            throw new RuntimeException('Audit unavailable');
+        }
+    });
+    $this->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this))->assertServerError();
+    expect($this->dossier->fresh()->version)->toBe(1)->and($this->operation->fresh()->legacy_status)->toBe('RDV VISITE')
+        ->and($this->operation->fresh()->control_outcome)->toBeNull()->and($this->dossier->documents()->count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBe([]);
 });

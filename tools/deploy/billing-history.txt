@@ -1,8 +1,11 @@
 FACTURATION PERSISTANTE V2
 
-Un marquage est conserve par prestation, independamment du statut metier.
+Un seul marquage est conserve pour le dossier entier, independamment du statut.
 Une reprise de controle ne supprime jamais ce marquage. Le dossier affiche
-un resume non facture / partiellement facture / entierement facture / a verifier.
+non facture / facture / a verifier, sans notion de facturation partielle.
+Les anciennes lignes par prestation restent des preuves historiques inchangees.
+Une seule de ces preuves suffit a bloquer toute nouvelle marque sur le dossier,
+y compris depuis une autre prestation ou un ancien formulaire encore ouvert.
 Le suivi n'emet pas de facture et ne certifie pas un paiement.
 
 Acces : administrateurs et gerants ; Planning seulement avec l'habilitation
@@ -10,9 +13,11 @@ Acces : administrateurs et gerants ; Planning seulement avec l'habilitation
 pas ce droit. Aucun droit Planning n'est ajoute automatiquement.
 
 Securite : confirmation explicite, controle de version, verrouillage du dossier
-puis de la prestation et cle unique en base. Deux validations concurrentes ne
-peuvent pas produire deux marques. L'historique est prive. Aucun bouton ne
-permet d'effacer une marque ou de remettre une prestation a facturer.
+puis des prestations. Deux validations concurrentes, meme sur des prestations
+distinctes, ne peuvent pas produire deux marques natives. L'historique est prive.
+Aucun bouton ne permet d'effacer une marque ou de remettre le dossier a facturer.
+L'ancien etat DOSSIERS FACTURER est affiche dans Rapport Genius ; sa valeur
+source reste conservee pour la reprise et le controle de facturation.
 
 Reprise Coffrac : archives locales uniquement, aucun appel au serveur Coffrac.
   php artisan crm:reconcile-billing          # bilan sans ecriture

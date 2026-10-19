@@ -47,37 +47,13 @@
                             @endif
                             <a class="gc-btn-secondary" href="{{ route($planningRoute, ['appointment_id' => $appointment->id, 'technician_id' => $appointment->technician_id, 'date' => $appointment->starts_at?->toDateString()]) }}">Voir / modifier dans le planning</a>
                         @endunless
-                        @unless ($dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)
-                        <details class="text-sm">
-                            <summary class="cursor-pointer text-slate-500">Corriger le rattachement</summary>
-                            <p class="mt-2 text-xs text-slate-500">Retire uniquement le lien avec ce dossier. Le RDV, les documents et le lot ne sont pas supprimés.</p>
-                            <form class="mt-3" method="POST" action="{{ route('v2.dossiers.appointments.destroy', [$dossier, $appointment->dossier_operation_id, $appointment->id]) }}">
-                                @csrf @method('DELETE')
-                                <input type="hidden" name="version" value="{{ $dossier->version }}">
-                                <button class="text-sm font-semibold text-rose-700 underline" type="submit">Retirer la liaison</button>
-                            </form>
-                        </details>
-                        @endunless
                     </div>
                 </li>
             @empty
-                <li class="py-6 text-sm text-slate-500">Aucun rendez-vous lié. Utilise « Planifier le RDV » sur la prestation à traiter, ou « Liaison existante » si le rendez-vous a déjà été créé.</li>
+                <li class="py-6 text-sm text-slate-500">Aucun rendez-vous lié. Utilise « Planifier le RDV » sur la prestation à traiter.</li>
             @endforelse
         </ul>
         {{ $appointments->links() }}
         <a href="{{ route($planningRoute) }}" class="gc-btn-secondary mt-3"><x-nav-icon name="planning" />Ouvrir le planning</a>
-        @if ($legacyAppointments->total())
-            <details class="mt-5 rounded-lg border border-slate-200 p-4">
-                <summary class="cursor-pointer text-sm font-semibold">Toutes les dates source Coffrac ({{ $legacyAppointments->total() }})</summary>
-                <p class="mt-2 text-xs text-slate-500">Inclut les lignes incomplètes conservées hors planning. Le technicien historique par visite n’est pas enregistré dans la source : les RDV importés reprennent celui du dossier.</p>
-                <ul class="mt-3 divide-y divide-slate-100">
-                    @foreach ($legacyAppointments as $record)
-                        @php($sourceRdv = json_decode($record->payload, true))
-                        <li class="py-2 text-sm">#{{ $record->source_id }} · {{ $sourceRdv['date_rdv'] ?: 'Date manquante' }} {{ $sourceRdv['heure'] ?: 'Heure manquante' }} · {{ $sourceRdv['rdv_duree'] }} h · Fiche {{ $sourceRdv['dossier_fiche'] }}</li>
-                    @endforeach
-                </ul>
-                {{ $legacyAppointments->links() }}
-            </details>
-        @endif
     </div>
 </section>

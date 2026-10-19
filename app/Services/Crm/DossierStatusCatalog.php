@@ -14,7 +14,8 @@ final class DossierStatusCatalog
         'rt_control' => ['label' => 'Contrôle RT', 'tone' => 'blue', 'values' => ['CONTROLE RT']],
         'non_compliant' => ['label' => 'Non-conformités', 'tone' => 'red', 'values' => ['NON CONFORMITES']],
         'recontrol' => ['label' => 'Recontrôle', 'tone' => 'amber', 'values' => ['RECONTROLE']],
-        'report' => ['label' => 'Rapport Genius', 'tone' => 'teal', 'values' => ['RAPPORT GENIUS']],
+        // Keep the raw invoiced value for reconciliation, but display it as the final business state.
+        'report' => ['label' => 'Rapport Genius', 'tone' => 'teal', 'values' => ['RAPPORT GENIUS', 'DOSSIERS FACTURER']],
         'invoiced' => ['label' => 'Dossiers facturés', 'tone' => 'green', 'values' => ['DOSSIERS FACTURER']],
         'cancelled' => ['label' => 'Dossier annulé', 'tone' => 'slate', 'values' => ['DOSSIER ANNULE']],
         'unknown' => ['label' => 'État non renseigné / autre', 'tone' => 'slate', 'values' => []],

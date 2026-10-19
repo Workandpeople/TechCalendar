@@ -52,7 +52,7 @@ it('records billing once without changing the business status or dispatching any
         ->and($this->dossier->fresh()->version)->toBe(2);
     $this->assertDatabaseCount('dossier_billings', 1);
     expect($this->dossier->activities()->where('kind', 'billing')->count())->toBe(1);
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Entièrement facturé')->assertSee('Déjà facturé')->assertSee('F-2026-123');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Facturé')->assertSee('Déjà facturé')->assertSee('F-2026-123');
 
     markDossierBilled($this, ['version' => 1])->assertUnprocessable()->assertJsonValidationErrors('billing');
     markDossierBilled($this, ['invoice_reference' => 'DIFFERENT'])->assertUnprocessable();
@@ -70,7 +70,7 @@ it('keeps the mark through a real reopening and return to non conformity', funct
     }
     expect($this->operation->fresh()->legacy_status)->toBe('NON CONFORMITES');
     markDossierBilled($this)->assertUnprocessable()->assertJsonValidationErrors('billing');
-    $this->get(route('v2.dossiers.index', ['status' => 'non_compliant']))->assertOk()->assertSee('Déjà facturé');
+    $this->get(route('v2.dossiers.index', ['status' => 'non_compliant']))->assertOk()->assertSee('Facturé');
     $this->getJson(route('v2.dossiers.index', ['status' => 'invoiced']))->assertOk()->assertJsonPath('total', 1);
 });
 
@@ -128,19 +128,25 @@ it('blocks early stages and an unreconciled invoiced status', function (string $
     $this->assertDatabaseCount('dossier_billings', 0);
 })->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'DOSSIERS FACTURER', 'DOSSIER ANNULE']);
 
-it('shows partial billing and filters independently of status through ajax', function () {
+it('marks the entire dossier and rejects a second mark on a different operation', function () {
     $other = $this->dossier->operations()->create(['service_id' => $this->service->id]);
     $other->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     markDossierBilled($this)->assertRedirect();
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertSee('Partiellement facturé (1/2)');
-    $this->getJson(route('v2.dossiers.index', ['billing' => 'partial', 'status' => 'non_compliant']))->assertJsonPath('total', 1);
-    $this->getJson(route('v2.dossiers.index', ['billing' => 'invoiced']))->assertJsonPath('total', 0);
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertSee('Facturé')->assertDontSee('Partiellement');
+    $this->getJson(route('v2.dossiers.index', ['billing' => 'invoiced', 'status' => 'non_compliant']))->assertJsonPath('total', 1);
     $this->getJson(route('v2.dossiers.index', ['billing' => 'unbilled']))->assertJsonPath('total', 0);
     $this->url = route('v2.dossiers.billing.store', [$this->dossier, $other]);
-    markDossierBilled($this)->assertRedirect();
-    $this->getJson(route('v2.dossiers.index', ['billing' => 'invoiced']))->assertJsonPath('total', 1);
-    $this->getJson(route('v2.dossiers.index', ['billing' => 'partial']))->assertJsonPath('total', 0);
+    markDossierBilled($this)->assertUnprocessable()->assertJsonValidationErrors('billing');
+    $this->url = route('v2.dossiers.billing.mark', $this->dossier);
+    markDossierBilled($this)->assertUnprocessable()->assertJsonValidationErrors('billing');
+    $this->assertDatabaseCount('dossier_billings', 1);
     $this->getJson(route('v2.dossiers.index', ['billing' => 'anything']))->assertUnprocessable();
+});
+
+it('supports the dossier level endpoint without an operation parameter', function () {
+    $this->url = route('v2.dossiers.billing.mark', $this->dossier);
+    markDossierBilled($this)->assertRedirect();
+    expect($this->dossier->billings()->sole()->evidence)->toBe(['scope' => 'dossier']);
 });
 
 it('enforces the one mark per operation invariant at database level', function () {

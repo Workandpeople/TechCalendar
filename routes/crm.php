@@ -36,6 +36,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
         Route::post('/dossiers/{dossier}/prestations/{operation}/facturation', DossierBillingController::class)->name('dossiers.billing.store');
+        Route::post('/dossiers/{dossier}/facturation', [DossierBillingController::class, 'store'])->name('dossiers.billing.mark');
         Route::delete('/documents/{document}', [DossierController::class, 'removeDocument'])->name('documents.destroy');
         Route::delete('/dossiers/{dossier}/commentaires/{comment}', [DossierController::class, 'removeComment'])->whereNumber('comment')->name('dossiers.comments.destroy');
         Route::delete('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'removeCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.destroy');

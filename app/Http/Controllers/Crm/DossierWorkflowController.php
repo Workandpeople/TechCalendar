@@ -19,7 +19,7 @@ class DossierWorkflowController extends Controller
     {
         $workflow->apply($request->user(), $dossier, $operation, [...$request->validated(), ...ContentAudience::fromRequest($request)]);
 
-        return redirect(route('v2.dossiers.show', $dossier).'#fiche-'.$operation->id)->with('status', 'Traitement enregistré. Le suivi du lot a été recalculé sans envoi externe.');
+        return redirect(route('v2.dossiers.show', $dossier).'#fiche-'.$operation->id)->with('status', 'Traitement enregistré. Aucun envoi externe automatique.');
     }
 
     public function reopen(Request $request, Dossier $dossier, DossierOperation $operation, DossierWorkflow $workflow): RedirectResponse

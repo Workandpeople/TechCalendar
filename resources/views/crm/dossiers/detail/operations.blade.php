@@ -12,7 +12,6 @@
                     <div><p class="font-medium">{{ ($operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher') }}</p><p class="text-xs text-slate-500">{{ ($operation->service?->type ?: 'Coffrac') }} · Fiche {{ $operation->id }}</p></div>
                     <div class="flex flex-wrap items-center gap-2">
                         <x-dossier-status :status="$operation->legacy_status" />
-                        @if ($operation->billing)<a href="#facturation-{{ $operation->id }}"><x-billing-badge /></a>@endif
                         <span class="text-sm text-slate-500">{{ $operation->appointments_count }} RDV lié(s)</span>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -35,21 +34,12 @@
                                 </form>
                             </details>
                         @endif
-                        @if (! in_array($state, ['pending', 'problem']))
-                            <a href="#apres-visite" class="gc-btn-soft"><x-nav-icon name="check" />Avis et contrôle après visite</a>
-                        @endif
-                        @unless ($operation->inspected_on)
-                        <details class="text-sm">
-                            <summary class="cursor-pointer text-slate-500">Liaison existante</summary>
-                            <a href="{{ route('v2.dossiers.appointments.index', [$dossier, $operation]) }}" class="mt-2 inline-block underline">Rattacher un RDV déjà créé</a>
-                        </details>
-                        @endunless
                     </div>
                     <details class="gc-operation-workflow" @if (old('_operation') == $operation->id) open @endif>
                         <summary class="gc-btn-success"><x-nav-icon name="edit" />Changer l’état / traiter la fiche</summary>
                         <div class="mt-3">@include('crm.dossiers.detail.control-actions')</div>
                         @if (in_array($state, ['pending', 'problem']))<p class="mt-3 text-sm">Le changement d’état suit la planification du rendez-vous ci-dessus.</p>@endif
-                        @if ($state === 'non_compliant')<p class="mt-3 text-sm">Réponse attendue du client pour passer en recontrôle.</p>@endif
+                        @if ($state === 'non_compliant')<p class="mt-3 text-sm">Demande de recontrôle attendue du client ou du délégataire affecté.</p>@endif
                     </details>
                 </li>
             @endforeach

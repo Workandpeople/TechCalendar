@@ -25,16 +25,16 @@
                     <input type="hidden" name="_operation" value="{{ $operation->id }}">
                     <div class="grid items-start gap-4 lg:grid-cols-2">
                         @can('comment', $dossier)
-                            <div><label class="gc-label" for="{{ $prefix }}-comment">Votre réponse</label><textarea class="gc-input" id="{{ $prefix }}-comment" name="comment" rows="4" maxlength="10000" @required(! auth()->user()->can('uploadDocument', $dossier))>{{ $failedResponse ? old('comment') : '' }}</textarea></div>
+                            <div><label class="gc-label" for="{{ $prefix }}-comment">Votre réponse</label><textarea class="gc-input" id="{{ $prefix }}-comment" name="comment" rows="4" maxlength="10000">{{ $failedResponse ? old('comment') : '' }}</textarea></div>
                         @endcan
                         @can('uploadDocument', $dossier)
                             <div class="space-y-3">
-                                <div><label class="gc-label" for="{{ $prefix }}-document">Justificatif (10 Mo maximum)</label><input class="block w-full min-w-0 text-sm" type="file" id="{{ $prefix }}-document" name="document" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" @required(! auth()->user()->can('comment', $dossier))></div>
+                                <div><label class="gc-label" for="{{ $prefix }}-document">Justificatif (10 Mo maximum)</label><input class="block w-full min-w-0 text-sm" type="file" id="{{ $prefix }}-document" name="document" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"></div>
                                 <div><label class="gc-label" for="{{ $prefix }}-name">Nom du document (facultatif)</label><input class="gc-input" id="{{ $prefix }}-name" name="document_name" maxlength="190" value="{{ $failedResponse ? old('document_name') : '' }}"></div>
                             </div>
                         @endcan
                     </div>
-                    <p class="text-sm text-slate-500">Un commentaire ou un justificatif est obligatoire. Votre réponse est partagée avec notre équipe et les comptes autorisés de votre organisation. La transmission ne valide pas le contrôle.</p>
+                    <p class="text-sm text-slate-500">Les pièces et commentaires sont facultatifs si les corrections ont déjà été transmises. Cliquer sur ce bouton demande explicitement le recontrôle. Votre réponse est partagée avec notre équipe et les comptes autorisés de votre organisation. La transmission ne valide pas le contrôle.</p>
                     <button class="gc-btn-primary" type="submit">Transmettre pour recontrôle</button>
                 </form>
             @else

@@ -160,7 +160,7 @@
                     <h2 id="tracking_detail_service" class="text-lg font-semibold" style="color:var(--gc-text);"></h2>
                     @can('viewAny', \App\Models\Dossier::class)
                         <a id="tracking-detail-dossier" class="mt-2 hidden text-sm font-semibold underline">Ouvrir le dossier complet</a>
-                        <a id="tracking-detail-post-visit" class="mt-2 ml-3 hidden text-sm font-semibold underline">Après la visite / satisfaction</a>
+                        <a id="tracking-detail-post-visit" class="mt-2 ml-3 hidden text-sm font-semibold underline">Documents de visite et rapports</a>
                     @endcan
                 </div>
                 @if(config('crm.v2_enabled'))
@@ -1940,7 +1940,7 @@
             const postVisitLink = document.getElementById('tracking-detail-post-visit');
             if (postVisitLink) {
                 postVisitLink.classList.toggle('hidden', !props.dossier_url);
-                if (props.dossier_url) postVisitLink.href = `${props.dossier_url}#apres-visite`;
+                if (props.dossier_url) postVisitLink.href = `${props.dossier_url}#documents`;
                 else postVisitLink.removeAttribute('href');
             }
             if (editButton) {

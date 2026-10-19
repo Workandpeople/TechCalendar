@@ -13,7 +13,7 @@
         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
         <a href="#facturation" class="inline-block"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>
         <nav class="gc-dossier-tabs" aria-label="Sections du dossier">
-            @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'facturation' => ['Facturation', 'check'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'apres-visite' => ['Avis et contrôle', 'check'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
+            @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'facturation' => ['Facturation', 'check'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
                 <a href="#{{ $id }}"><x-nav-icon :name="$icon" />{{ $label }}</a>
             @endforeach
         </nav>
@@ -23,7 +23,6 @@
                 @include('crm.dossiers.detail.comments')
                 @include('crm.dossiers.detail.sms')
                 @include('crm.dossiers.detail.information')
-                @include('crm.dossiers.post-visit')
                 @include('crm.dossiers.detail.capcee')
             </div>
             <aside class="gc-dossier-side" aria-label="Suivi du dossier">

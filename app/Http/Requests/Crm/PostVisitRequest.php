@@ -22,8 +22,9 @@ class PostVisitRequest extends FormRequest
             'comment' => ['required', 'string', 'max:10000'],
             ...ContentAudience::rules(),
             'appointment_id' => ['required_if:action,record_visit', 'nullable', 'integer'],
-            'outcome' => ['required_if:action,submit_control,revise_control', 'nullable', Rule::in(array_keys(PostVisitWorkflow::OUTCOMES))],
-            'inspected_on' => ['required_if:action,submit_control,revise_control', 'nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'visit_document_id' => ['required_if:action,record_visit', 'nullable', 'integer'],
+            'outcome' => ['prohibited'],
+            'inspected_on' => ['prohibited'],
             'report_document_id' => ['required_if:action,validate_report', 'nullable', 'integer'],
         ];
     }

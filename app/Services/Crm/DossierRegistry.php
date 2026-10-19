@@ -69,12 +69,11 @@ class DossierRegistry
 
         $categories = ['all' => ['label' => 'Tous les dossiers', 'tone' => 'slate', 'count' => $query->count()]];
         foreach (DossierStatusCatalog::STATUSES as $key => $status) {
+            if ($key === 'invoiced') {
+                continue;
+            }
             $categories[$key] = [...$status, 'count' => (int) ($counts[$key] ?? 0)];
         }
-        $categories['invoiced']['count'] = (clone $query)->whereHas('operations', function ($operations) use ($filters): void {
-            $operations->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id))
-                ->where(fn ($query) => $query->whereHas('billing')->orWhereIn('legacy_status', DossierStatusCatalog::STATUSES['invoiced']['values']));
-        })->count();
 
         return $categories;
     }
@@ -90,9 +89,9 @@ class DossierRegistry
                 }
                 $query->where('billing_review_required', false);
                 match ($billing) {
-                    'unbilled' => $query->whereDoesntHave('billings'),
-                    'partial' => $query->whereHas('billings')->whereHas('operations', fn ($operations) => $operations->whereDoesntHave('billing')),
-                    'invoiced' => $query->whereHas('operations')->whereDoesntHave('operations', fn ($operations) => $operations->whereDoesntHave('billing')),
+                    'unbilled' => $query->whereDoesntHave('billings')->whereDoesntHave('operations', fn ($operations) => $operations->whereIn('legacy_status', DossierStatusCatalog::STATUSES['invoiced']['values'])),
+                    // Old bookmarked partial filters now mean billed at dossier level.
+                    'partial', 'invoiced' => $query->where(fn ($billed) => $billed->whereHas('billings')->orWhereHas('operations', fn ($operations) => $operations->whereIn('legacy_status', DossierStatusCatalog::STATUSES['invoiced']['values']))),
                     default => null,
                 };
             })
@@ -271,8 +270,9 @@ class DossierRegistry
             // Same parent lock as the report workflow: a validated PDF cannot disappear mid-review.
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
             $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
-            if ($dossier->operations()->where('report_document_id', $document->id)->exists()) {
-                throw ValidationException::withMessages(['document' => 'Ce document est lié à un contrôle. Retire sa validation depuis le workflow avant de le supprimer.']);
+            if ($dossier->operations()->where('report_document_id', $document->id)->exists()
+                || ($document->document_type === 'visit' && $dossier->activities()->where('changed_fields->visit_document_id', $document->id)->exists())) {
+                throw ValidationException::withMessages(['document' => 'Ce document justifie une visite ou le dernier avis du contrôle. Il est conservé dans l’historique et ne peut pas être supprimé.']);
             }
             $document->delete();
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',

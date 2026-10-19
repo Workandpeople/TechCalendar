@@ -17,8 +17,11 @@ final class ContentAudience
         ];
     }
 
-    public static function fromRequest(Request $request): array
+    public static function fromRequest(Request $request, string $default = 'internal'): array
     {
+        if (! $request->hasAny(['audience', 'client_visible'])) {
+            return self::flags($default);
+        }
         // Compatibility for old open forms. New forms always send an explicit audience.
         if (! $request->has('audience')) {
             return array_fill_keys(['client_visible', 'delegataire_visible'], $request->boolean('client_visible'));
