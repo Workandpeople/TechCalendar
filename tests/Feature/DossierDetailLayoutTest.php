@@ -59,5 +59,5 @@ it('reopens an invalid document form with its name', function () {
         ->assertSee('value="Justificatif"', false);
     $dom = new DOMDocument;
     @$dom->loadHTML($response->getContent(), LIBXML_NONET);
-    expect((new DOMXPath($dom))->query('//details[@id="documents-dossier"][@open]')->length)->toBe(1);
+    expect((new DOMXPath($dom))->query('//dialog[@id="documents-dossier"][@data-dialog-reopen]')->length)->toBe(1);
 });

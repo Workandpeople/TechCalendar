@@ -116,8 +116,9 @@ it('renders assignment in visited rows and ajax fragments but not unrelated cate
     $this->get(route('v2.dossiers.index', ['status' => 'pending']))->assertOk()->assertDontSee('data-planning-assignee', false);
     $this->patchJson($this->url, ['planning_user_id' => $this->planner->id, 'version' => 1])->assertOk();
     $response = $this->getJson(route('v2.dossiers.index', ['status' => 'visited']))->assertOk();
-    expect($response->json('results'))->toContain('data-version="2"', 'data-assigned-id="'.$this->planner->id.'"', 'Suivi planning attribué à');
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Suivi planning')->assertSee($this->planner->full_name);
+    expect($response->json('results'))->toContain('data-version="2"', 'data-assigned-id="'.$this->planner->id.'"')
+        ->not->toContain('Suivi planning attribué à');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Suivi planning attribué à')->assertSee($this->planner->full_name);
 });
 
 it('preserves the name of a removed assignee and lets staff clear the assignment with no eligible users left', function () {

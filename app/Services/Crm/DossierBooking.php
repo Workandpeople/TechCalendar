@@ -130,9 +130,12 @@ class DossierBooking
             throw ValidationException::withMessages(['crm_appointment_id' => 'Le dossier a changé. Relance la recherche avant de le placer.']);
         }
         $appointment->forceFill(['dossier_operation_id' => $operation->id])->save();
+        $previousStatus = $operation->legacy_status;
         $operation->forceFill(['service_id' => $appointment->service_id, 'legacy_status' => 'RDV ATTENTE VISITE'])->save();
         $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'appointment_linked',
-            'body' => 'RDV #'.$appointment->id.' placé le '.$appointment->starts_at->format('d/m/Y H:i').' : RDV en attente de visite.']);
+            'body' => 'RDV #'.$appointment->id.' placé le '.$appointment->starts_at->format('d/m/Y H:i').' : RDV en attente de visite.',
+            'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id,
+                'previous_status' => $previousStatus, 'status' => $operation->legacy_status]]);
         if (filled($appointment->comment)) {
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $appointment->comment]);
         }

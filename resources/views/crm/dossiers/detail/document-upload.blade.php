@@ -1,7 +1,7 @@
-<details id="documents-dossier" class="gc-dossier-upload" @if ($errors->any()) open @endif>
-    <summary class="cursor-pointer"><x-nav-icon name="upload" />Ajouter un document ou un rapport</summary>
+<x-dossier-dialog id="documents-dossier" title="Ajouter un document ou un rapport" :reopen="$errors->any() && (old('_form') === 'document' || $errors->has('document'))">
     <form method="POST" enctype="multipart/form-data" action="{{ route('v2.dossiers.documents.store', $dossier) }}" class="mt-4 space-y-4" data-document-upload data-can-review="{{ auth()->user()->can('reviewControl', $dossier) ? '1' : '0' }}">
         @csrf
+        <input type="hidden" name="_form" value="document">
         <input type="hidden" name="version" value="{{ $dossier->version }}">
         <fieldset class="gc-document-tabs">
             <legend class="sr-only">Type de document</legend>
@@ -43,6 +43,6 @@
             <input id="document" name="document" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" class="block w-full min-w-0 text-sm">
         </label>
         <x-content-audience :value="old('audience', 'client')" />
-        <div class="flex justify-end"><button type="submit" class="gc-btn-primary"><x-nav-icon name="upload" />Enregistrer le document</button></div>
+        <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-primary"><x-nav-icon name="upload" />Enregistrer le document</button></footer>
     </form>
-</details>
+</x-dossier-dialog>

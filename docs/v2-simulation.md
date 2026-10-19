@@ -51,6 +51,59 @@ Ne pas restaurer tout le fichier de sauvegarde si d'autres parametres ont evolue
 
 ## Protections des donnees reelles
 
+### Deux espaces externes fictifs pour la recette
+
+`demo:seed-portals` est **additif** : pas de reset, pas de nouvel import Coffrac,
+aucun changement des utilisateurs, mots de passe, droits ou dossiers existants.
+La commande est autorisee en local/testing et dans la demo isolee, jamais en
+production. Elle exige la V2, une base locale `*_simulation`, un stockage prive
+et `SMSFACTOR_MODE=simulate`. En testing uniquement, SQLite en memoire est accepte.
+
+Apres deploiement du code sur le CT, en root :
+
+```bash
+cd /var/www/TechCalendar-v2
+runuser -u www-data -- php8.4 artisan demo:seed-portals
+runuser -u www-data -- php8.4 artisan demo:seed-portals --apply
+```
+
+La premiere commande affiche le plan sans ecriture. La seconde demande en saisie
+masquee un mot de passe distinct pour chaque compte (8 caracteres minimum,
+72 octets maximum). Aucun mot de passe par defaut, argument de commande ou fichier
+d'identifiants. Ils ne sont pas affiches. Ne pas utiliser `db:seed` sur le CT.
+
+- Client : `client@portail-test.example.test`.
+- Delegataire : `delegataire@portail-test.example.test`.
+- Deux organisations fictives, six dossiers, deux lots de contact avec trois
+  lignes chacun, dix-huit petits PDF et dix-huit commentaires, marques `[TEST]`.
+- Quatre dossiers communs (prise de RDV, probleme RDV, deux non-conformites pour
+  tester une demande de recontrole par chaque compte) et un dossier reserve a chacun.
+- Chaque dossier contient un document et un commentaire de chacun des trois niveaux
+  d'acces : interne, client uniquement, client et delegataire.
+- Droits habituels conserves : le delegataire consulte ses documents et lots, mais
+  n'a pas de droit de lecture/ajout de commentaire ni de depot par defaut. Ajuster
+  explicitement ses droits depuis la gestion des comptes pour tester ces options.
+- Aucun vrai numero ni email beneficiaire, aucun appel HTTP, mail, SMS ou job.
+  Aucun faux technicien ni creneau susceptible de bloquer le planning existant.
+  L'installateur est une coordonnee fictive, pas un nouveau type de compte.
+- Les lots sont des scenarios de contact independants des dossiers, sans fausse
+  liaison de rendez-vous. Ils permettent de tester l'acces et les satisfactions.
+
+La prestation utilisee est la premiere prestation COFFRAC active, annoncee avant
+creation. Ajouter `--service=ID` aux deux commandes pour en choisir une autre.
+Une relance ne duplique rien et ne restaure pas les elements modifies ou supprimes
+par les testeurs, ni leurs mots de passe. Un conflit avec un compte existant ou
+un jeu partiellement supprime interrompt la creation sans recuperer cet ancien compte.
+
+Le marqueur de source est `demo_portal_v1` sur les organisations, dossiers,
+operations, lots et lignes de lot. Les comptes sont relies uniquement aux deux
+organisations fictives. La mise en production repartira d'un nouvel import des
+dossiers/documents Coffrac a jour, **pas de cette base de recette** : ne pas y
+recopier les comptes ou donnees de test. La reprise des reglages et comptes reels
+est a traiter separement, sans effacement global improvise.
+
+### Transports
+
 - Appels HTTP Laravel sortants bloques par defaut. `SIMULATION_ALLOW_EXTERNAL_APIS=true`
   autorise explicitement toutes les API en local (Mapbox, Global+, etc.). Verifier les
   destinations et utiliser les cles de test : ce drapeau ne transforme pas une API

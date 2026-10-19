@@ -19,9 +19,10 @@
                             :label="'Commentaire #'.$comment->id" />
                     </div>
                     @if (in_array($comment->kind, ['comment', 'legacy_comment'], true))
-                        <details class="gc-remove-confirm mt-3"><summary class="gc-btn-danger"><x-nav-icon name="trash" />Supprimer</summary>
+                        <a href="#supprimer-commentaire-{{ $comment->id }}" class="gc-btn-danger mt-3"><x-nav-icon name="trash" />Supprimer</a>
+                        <x-dossier-dialog :id="'supprimer-commentaire-'.$comment->id" title="Supprimer le commentaire">
                             <form method="POST" action="{{ route('v2.dossiers.comments.destroy', [$dossier, $comment->id]) }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Ce commentaire ne sera plus visible sur la fiche ni dans l’espace externe. Sa trace est conservée.</p><button type="submit" class="gc-btn-danger">Confirmer la suppression</button></form>
-                        </details>
+                        </x-dossier-dialog>
                     @else
                         <p class="mt-3 text-xs text-slate-500">Commentaire de contrôle : conservé pour la traçabilité du workflow.</p>
                     @endif
@@ -31,13 +32,16 @@
             @endforelse
         </ol>
         {{ $comments->links() }}
-        <form id="ajouter-commentaire" method="POST" action="{{ route('v2.dossiers.comments.store', $dossier) }}" class="gc-dossier-compose mt-5 space-y-3">
+        <x-dossier-dialog id="ajouter-commentaire" title="Ajouter un commentaire" :reopen="$errors->any() && old('_form') === 'comment'">
+        <form method="POST" action="{{ route('v2.dossiers.comments.store', $dossier) }}" class="space-y-3">
             @csrf
+            <input type="hidden" name="_form" value="comment">
             <label for="comment_body" class="gc-label">Ajouter un commentaire (client uniquement par défaut)</label>
             <textarea id="comment_body" name="body" rows="3" maxlength="10000" class="gc-input" required>{{ old('body') }}</textarea>
             <x-content-audience :value="old('body') ? old('audience', 'client') : 'client'" />
             <p class="text-xs text-slate-500">Visible uniquement si son compte autorise la lecture des commentaires. Les délégataires n’ont pas ce droit par défaut.</p>
-            <div class="flex justify-end"><button type="submit" class="gc-btn-primary"><x-nav-icon name="comment" />Ajouter le commentaire</button></div>
+            <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-primary"><x-nav-icon name="comment" />Ajouter le commentaire</button></footer>
         </form>
+        </x-dossier-dialog>
     </div>
 </section>

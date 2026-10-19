@@ -116,4 +116,29 @@ class SimulationSafety
             throw new RuntimeException('Cible refusee : utiliser une base MySQL locale dediee, suffixee _simulation.');
         }
     }
+
+    public function assertPortalFixtureTarget(): void
+    {
+        // Additive fixtures are allowed on the demo; destructive seeds remain forbidden.
+        if (app()->environment('demo')) {
+            $this->assertDemoConfiguration();
+        } else {
+            $this->assertSeedTarget();
+        }
+        if (! config('crm.v2_enabled') || config('services.smsfactor.mode') !== 'simulate'
+            || config('filesystems.disks.local.driver') !== 'local') {
+            throw new RuntimeException('Tests portail : V2, SMS en simulation et stockage local prive obligatoires.');
+        }
+        $root = realpath((string) config('filesystems.disks.local.root'));
+        $public = realpath(public_path());
+        $publicStorage = realpath(storage_path('app/public'));
+        foreach (array_filter([$public, $publicStorage]) as $forbidden) {
+            if ($root !== false && ($root === $forbidden || str_starts_with($root, $forbidden.DIRECTORY_SEPARATOR))) {
+                throw new RuntimeException('Tests portail : le stockage des documents ne doit pas etre public.');
+            }
+        }
+        if ($root === false) {
+            throw new RuntimeException('Tests portail : repertoire de stockage prive introuvable.');
+        }
+    }
 }

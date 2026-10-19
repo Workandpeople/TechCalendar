@@ -1,12 +1,11 @@
 <section id="synthese" class="gc-card gc-dossier-panel" aria-labelledby="dossier-information-title">
     <header class="gc-dossier-panel-heading">
         <h2 id="dossier-information-title"><x-nav-icon name="dossiers" />Dossier</h2>
-        <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}"><x-nav-icon name="edit" /> Modifier</a>
+        <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier</a>
     </header>
     <div class="gc-dossier-panel-body">
         <dl class="gc-dossier-information">
             <div><dt>Numéro de lot</dt><dd>{{ $dossier->legacy_lot_name ?: 'Non renseigné' }}</dd></div>
-            <div><dt>Référence</dt><dd>{{ $dossier->reference }}@if ($dossier->source === 'coffrac')<span class="mt-1 block text-xs text-slate-500">Référence Coffrac : {{ $dossier->legacy_reference ?: 'Non renseignée' }}</span>@endif</dd></div>
         </dl>
         <h3 class="gc-dossier-subtitle"><x-nav-icon name="users" />Bénéficiaire</h3>
         <dl class="gc-dossier-information">

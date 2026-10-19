@@ -56,8 +56,10 @@ it('limits dossier and lot lists, detail links and counts to the assigned client
     $this->lot->appointments()->create(['customer_name' => 'Test beneficiaire',
         'comment' => 'INTERNAL LOT NOTE', 'contact_satisfaction' => true, 'processing_mode' => 'contact']);
     $this->actingAs($this->external)->get(route('client.dossiers'))->assertOk()
-        ->assertSee('ALPHA-DOSSIER')->assertDontSee('BRAVO-SECRET')->assertDontSee('Gestion des données');
-    $this->get(route('client.dossiers', ['q' => 'BRAVO']))->assertOk()->assertDontSee('BRAVO-SECRET');
+        ->assertSee('Beneficiaire Alpha')->assertSee(route('client.dossiers.show', $this->dossier), false)
+        ->assertDontSee('Beneficiaire Bravo')->assertDontSee(route('client.dossiers.show', $this->privateDossier), false)
+        ->assertDontSee('ALPHA-DOSSIER')->assertDontSee('Gestion des données');
+    $this->get(route('client.dossiers', ['q' => 'BRAVO']))->assertOk()->assertDontSee('Beneficiaire Bravo');
     $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertSee('Beneficiaire Alpha');
     $this->get(route('client.dossiers.show', $this->privateDossier))->assertForbidden();
     $this->get(route('client.lots'))->assertOk()->assertSee('Lot Alpha')->assertDontSee('Lot Bravo');
@@ -188,9 +190,9 @@ it('refuses mobile tokens and inconsistent read write permissions for an externa
 it('scopes unknown states and escapes literal search wildcards', function () {
     $this->dossier->update(['reference' => 'ALPHA-100%']);
     $this->actingAs($this->external)->get(route('client.dossiers', ['status' => 'unknown']))
-        ->assertOk()->assertSee('ALPHA-100%')->assertDontSee('BRAVO-SECRET');
-    $this->get(route('client.dossiers', ['q' => '100%']))->assertOk()->assertSee('ALPHA-100%');
-    $this->get(route('client.dossiers', ['q' => '_']))->assertOk()->assertDontSee('ALPHA-100%');
+        ->assertOk()->assertSee('Beneficiaire Alpha')->assertDontSee('Beneficiaire Bravo');
+    $this->get(route('client.dossiers', ['q' => '100%']))->assertOk()->assertSee('Beneficiaire Alpha');
+    $this->get(route('client.dossiers', ['q' => '_']))->assertOk()->assertDontSee('Beneficiaire Alpha');
 });
 
 it('keeps an existing inactive client on a lot without allowing assignment to another inactive client', function () {

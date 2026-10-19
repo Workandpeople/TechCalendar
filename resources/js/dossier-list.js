@@ -88,6 +88,11 @@ export function initDossierList(root = document, browser = window) {
     let composing = false;
     let renderedUrl = new URL(browser.location.href);
     const formUrl = (changes = {}) => dossierListUrl(form.action, new browser.FormData(form), changes);
+    const exportLink = listing.querySelector('[data-dossier-export]');
+    exportLink?.addEventListener('click', () => {
+        // Export the current inputs, including a search whose debounced request is still pending.
+        exportLink.href = dossierListUrl(exportLink.dataset.exportUrl, new browser.FormData(form)).href;
+    });
     const syncForm = (url) => {
         for (const name of filterNames) {
             const input = form.elements.namedItem(name);
@@ -117,6 +122,7 @@ export function initDossierList(root = document, browser = window) {
             results.innerHTML = payload.results;
             root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-updated'));
             renderedUrl = url;
+            if (exportLink) exportLink.href = dossierListUrl(exportLink.dataset.exportUrl, url.searchParams).href;
             if (options.history !== false && url.href !== browser.location.href) browser.history.pushState(null, '', url.href);
             busy(false);
             status.textContent = `${payload.total.toLocaleString('fr-FR')} dossier(s) trouvé(s).`;

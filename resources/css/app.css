@@ -83,6 +83,9 @@ html.sidebar-hidden .app-sidebar {
     .gc-dossier-table tr:hover { background: #f8fafc; }
     .gc-dossier-table time { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .gc-dossier-col-action { width: var(--gc-dossier-action-width); }
+    .gc-dossier-table .gc-dossier-action { position: sticky; left: 0; z-index: 2; background: white; }
+    .gc-dossier-table th.gc-dossier-action { background: var(--gc-panel-muted); }
+    .gc-dossier-table tr:hover td.gc-dossier-action { background: #f8fafc; }
     .gc-dossier-cell-lines { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
     .gc-dossier-cell-muted { display: block; color: var(--gc-text-soft); font-size: .68rem; margin-top: .15rem; }
     .gc-dossier-client { font-weight: 650; }

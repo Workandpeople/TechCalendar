@@ -18,7 +18,7 @@ class DossierRequest extends FormRequest
         $dossier = $this->route('dossier');
 
         $rules = [
-            'reference' => ['required', 'string', 'max:100', Rule::unique('dossiers')->ignore($dossier)],
+            'reference' => ['sometimes', 'required', 'string', 'max:100', Rule::unique('dossiers')->ignore($dossier)],
             'delegataire_id' => ['nullable', 'integer', Rule::exists('external_delegataires', 'id')->where(function ($query) use ($dossier): void {
                 $query->where('kind', 'delegataire')->where(fn ($query) => $query->where('is_active', true)->when($dossier?->delegataire_id, fn ($query, $id) => $query->orWhere('id', $id)));
             })],

@@ -5,9 +5,9 @@
     @endphp
     <div class="gc-dossier-detail space-y-5">
         <a href="{{ route('v2.dossiers.index') }}" class="gc-link text-sm">← Tous les dossiers</a>
-        <x-workspace-heading :title="$dossier->beneficiaryLabel()" :eyebrow="$dossier->reference" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
+        <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Détail du dossier" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
             <a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>
-            <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}"><x-nav-icon name="edit" /> Modifier les informations</a>
+            <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier les informations</a>
         </x-workspace-heading>
         @include('crm.dossiers.notice')
         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
@@ -33,5 +33,8 @@
                 @include('crm.dossiers.detail.history')
             </aside>
         </div>
+        <x-dossier-dialog id="modifier-dossier" title="Modifier les informations du dossier" :reopen="$errors->any() && old('_form') === 'information'">
+            @include('crm.dossiers.form-fields')
+        </x-dossier-dialog>
     </div>
 </x-layouts.app>

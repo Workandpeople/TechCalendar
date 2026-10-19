@@ -1,6 +1,7 @@
 <x-layouts.app :crm-navigation="true">
     <div class="space-y-6" data-dossier-list>
         <x-workspace-heading title="Les dossiers" eyebrow="Suivi des inspections" description="Retrouvez une inspection, consultez ses pièces et faites avancer ses prestations, de la prise de RDV au rapport.">
+            <a href="{{ route('v2.dossiers.export', $filters) }}" data-dossier-export data-export-url="{{ route('v2.dossiers.export') }}" class="gc-btn-success"><x-nav-icon name="download" />Exporter les résultats filtrés</a>
             <a href="{{ route('v2.dossiers.create') }}" class="gc-btn-primary"><x-nav-icon name="plus" /> Nouveau dossier</a>
         </x-workspace-heading>
         @include('crm.dossiers.notice')
@@ -56,7 +57,7 @@
                 </select>
             </div>
             <div class="flex items-center gap-3">
-                <button type="submit" class="gc-btn-secondary"><x-nav-icon name="search" /> Filtrer</button>
+                <noscript><button type="submit" class="gc-btn-secondary">Appliquer les filtres</button></noscript>
                 <a href="{{ route('v2.dossiers.index') }}" data-dossier-clear class="text-sm underline">Effacer</a>
             </div>
             <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="all_columns" value="1" @checked($filters['all_columns'] ?? false)> Afficher toutes les colonnes</label>

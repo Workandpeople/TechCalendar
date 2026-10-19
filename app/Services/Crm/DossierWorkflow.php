@@ -2,15 +2,44 @@
 
 namespace App\Services\Crm;
 
+use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class DossierWorkflow
 {
+    public function reportProblem(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void
+    {
+        Gate::forUser($actor)->authorize('update', $dossier);
+        abort_unless($operation->dossier_id === $dossier->id, 404);
+        DB::transaction(function () use ($actor, $dossier, $operation, $data): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
+            if ($dossier->version !== (int) $data['version']) {
+                throw ValidationException::withMessages(['version' => 'Le dossier a changé. Recharge la fiche avant de signaler le problème.']);
+            }
+            if (filled($data['appointment_id'] ?? null)) {
+                $appointment = $operation->appointments()->lockForUpdate()->find($data['appointment_id']);
+                if (! $appointment || ! in_array($appointment->status, [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM], true)) {
+                    throw ValidationException::withMessages(['appointment_id' => 'Ce rendez-vous n’est plus disponible sur cette fiche.']);
+                }
+                $appointment->update([
+                    'comment' => $data['comment'], 'status' => Appointment::STATUS_PROBLEM, 'problem_reported_at' => now(),
+                    'external_payload' => [...($appointment->external_payload ?? []),
+                        'techcalendar_problem' => Arr::only($data, ['comment', 'problem_type', 'recall_date', 'recall_time'])],
+                ]);
+            } elseif ($operation->appointments()->exists()) {
+                throw ValidationException::withMessages(['appointment_id' => 'Sélectionne le rendez-vous concerné.']);
+            }
+            $this->recordProblem($actor, $operation, $data);
+        }, 3);
+    }
+
     /** The caller also updates the appointment inside this transaction, when there is one. */
     public function recordProblem(User $actor, DossierOperation $operation, array $data): void
     {
@@ -26,7 +55,9 @@ class DossierWorkflow
             }
             $previousStatus = $operation->legacy_status;
             $operation->forceFill(['legacy_status' => 'PROBLÈME RENDEZ-VOUS'])->save();
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => trim($data['comment'])]);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => trim($data['comment']),
+                'client_visible' => (bool) ($data['client_visible'] ?? false),
+                'delegataire_visible' => (bool) (($data['client_visible'] ?? false) && ($data['delegataire_visible'] ?? false))]);
             $details = $data['problem_type'] ?? 'Problème rendez-vous';
             if (filled($data['recall_date'] ?? null) && filled($data['recall_time'] ?? null)) {
                 $details .= ' · Rappel le '.$data['recall_date'].' à '.$data['recall_time'];

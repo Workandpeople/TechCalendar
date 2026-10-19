@@ -10,14 +10,14 @@
     <div class="gc-dossier-table-scroll" tabindex="0" role="region" aria-label="Tableau des dossiers">
         <table class="gc-dossier-table {{ count($columns) < 10 ? 'gc-dossier-table-compact' : '' }} {{ isset($columns['planning_user']) ? 'gc-dossier-table-assignment' : '' }}">
             <colgroup>
+                <col class="gc-dossier-col-action">
                 @foreach ($columns as $key => $label)
                     <col class="gc-dossier-col-{{ $key }}" style="width: {{ number_format($columnShares[$key] * 100, 6, '.', '') }}%">
                 @endforeach
-                <col class="gc-dossier-col-action">
             </colgroup>
             <thead><tr>
+                <th scope="col" class="gc-dossier-action"><span class="sr-only">Voir le dossier</span></th>
                 @foreach ($columns as $key => $label)@include('crm.dossiers.table-heading')@endforeach
-                <th scope="col"><span class="sr-only">Action</span></th>
             </tr></thead>
             <tbody>
                 @forelse ($dossiers as $dossier)
@@ -27,6 +27,9 @@
                         $fullAddress = trim($dossier->address.' '.$dossier->postal_code.' '.$dossier->city);
                     @endphp
                     <tr data-dossier-comments>
+                        <td class="gc-dossier-action"><a class="gc-dossier-open" aria-label="Ouvrir le dossier {{ $dossier->beneficiaryLabel() }}" title="Ouvrir le dossier" href="{{ route('v2.dossiers.show', $dossier) }}">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </a></td>
                         @foreach ($columns as $key => $label)
                             <td data-column="{{ $key }}">
                                 @switch($key)
@@ -50,10 +53,9 @@
                                         @break
                                     @case('client')
                                         <a class="gc-dossier-client gc-dossier-cell-lines" data-dossier-comments-trigger href="{{ route('v2.dossiers.show', $dossier) }}">{{ $dossier->beneficiaryLabel() }}</a>
-                                        <span class="gc-dossier-cell-muted">{{ $dossier->reference }}</span>
                                         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
                                         @if ($billingSummary['tone'] !== 'slate')<a href="{{ route('v2.dossiers.show', $dossier) }}#facturation"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>@endif
-                                        <a href="{{ route('v2.dossiers.show', $dossier) }}#historique" class="gc-dossier-comments-link"
+                                        <a href="{{ route('v2.dossiers.show', $dossier) }}#commentaires" class="gc-dossier-comments-link"
                                             aria-label="Voir les {{ $dossier->comments_count }} commentaires du dossier {{ $dossier->reference }}">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/></svg>
                                             {{ $dossier->comments_count }}
@@ -88,9 +90,6 @@
                                 @endswitch
                             </td>
                         @endforeach
-                        <td><a class="gc-dossier-open" aria-label="Ouvrir le dossier {{ $dossier->reference }}" title="Ouvrir le dossier" href="{{ route('v2.dossiers.show', $dossier) }}">
-                            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </a></td>
                     </tr>
                 @empty
                     <tr><td colspan="{{ count($columns) + 1 }}" class="text-center">Aucun dossier ne correspond à ces filtres.</td></tr>

@@ -1,5 +1,5 @@
 @php
-    $contact = old($role.'_contact', $dossier->{$role.'_contact'} ?? \App\Services\Crm\DossierContacts::details($dossier->$role));
+    $contact = old($role.'_contact', array_replace(\App\Services\Crm\DossierContacts::details($dossier->$role), $dossier->{$role.'_contact'} ?? []));
     $selected = old($role.'_id', $dossier->{$role.'_id'});
 @endphp
 <section class="gc-card p-5 gc-party-card" data-contact-form data-party="{{ $role }}">

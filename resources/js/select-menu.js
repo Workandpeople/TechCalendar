@@ -141,7 +141,8 @@ export function initSelectMenus(root = document, browser = window) {
         menu.style.setProperty('--select-soft', style.getPropertyValue('--workspace-soft').trim() || '#edf4ff');
         select.setAttribute('aria-expanded', 'true');
         select.setAttribute('aria-controls', menu.id);
-        root.body.append(menu);
+        // A modal dialog makes the rest of the document inert, including a popup appended to body.
+        (select.closest('dialog[open]') || root.body).append(menu);
         highlighted = select.selectedIndex;
         render();
         if (!active) return;
@@ -152,7 +153,7 @@ export function initSelectMenus(root = document, browser = window) {
             if (!active.isConnected || !eligible(active) || !active.getClientRects().length) return close();
             if (records.some(record => active.contains(record.target))) render();
         });
-        observer.observe(root.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'class', 'label', 'selected'], characterData: true });
+        observer.observe(root.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'class', 'label', 'selected', 'open'], characterData: true });
     };
     const choose = index => {
         if (!active || !eligible(active)) return close();
@@ -233,6 +234,7 @@ export function initSelectMenus(root = document, browser = window) {
     root.addEventListener('focusin', event => { if (active && event.target !== active && !menu.contains(event.target)) close(); });
     root.addEventListener('change', event => { if (event.target === active) close(); });
     root.addEventListener('reset', close, true);
+    root.addEventListener('close', close, true);
     root.addEventListener('scroll', event => { if (active && !menu.contains(event.target)) close(); }, true);
     browser.addEventListener('resize', close);
     browser.visualViewport?.addEventListener('resize', close);

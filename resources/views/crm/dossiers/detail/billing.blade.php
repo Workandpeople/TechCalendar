@@ -38,7 +38,7 @@
                         </form>
                     </details>
                 @elseif (! $dossier->billing_review_required)
-                    <p class="text-xs text-slate-500">Le marquage est disponible à partir du contrôle RT.</p>
+                    <p class="text-xs text-slate-500">Le marquage est disponible en problème rendez-vous, contrôle RT, non-conformité, recontrôle ou rapport Genius.</p>
                 @endif
             @else
                 <p class="text-xs text-slate-500">Marquage réservé aux personnes habilitées à la comptabilité.</p>

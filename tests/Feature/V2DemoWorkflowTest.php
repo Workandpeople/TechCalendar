@@ -59,6 +59,7 @@ it('places a physical lot in the native registry with its identities and no Coff
         ->and($row->fresh()->appointment_id)->toBe($appointment->id)->and($row->fresh()->processing_mode)->toBe('physical');
     $this->postJson(route('planner.book.appointments.store'), [...$this->slot, 'lot_appointment_id' => $row->id])->assertNotFound();
     expect(Appointment::count())->toBe(1)->and(Dossier::count())->toBe(1);
+    expect($dossier->fresh()->latestStatusChange->changed_fields['status'])->toBe('RDV ATTENTE VISITE');
     Http::assertNothingSent();
 });
 
@@ -91,6 +92,9 @@ it('creates a native dossier for a manual appointment and reuses it when resched
         ->and($appointment->fresh()->status)->toBe('scheduled')
         ->and($appointment->fresh()->dossierOperation->legacy_status)->toBe('RDV ATTENTE VISITE');
     expect(Dossier::sole()->activities()->where('kind', 'status_changed')->first()->body)->toContain('2026-11-01', '14:00');
+    expect(Dossier::sole()->latestStatusChange->changed_fields)->toMatchArray([
+        'previous_status' => 'PROBLÈME RENDEZ-VOUS', 'status' => 'RDV ATTENTE VISITE',
+    ]);
     Http::assertNothingSent();
 });
 

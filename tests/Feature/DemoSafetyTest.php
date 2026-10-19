@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 
@@ -38,6 +39,16 @@ it('allows a dedicated demo without relaxing production or reset protections', f
     expect(fn () => app(SimulationSafety::class)->assertSeedTarget())->toThrow(RuntimeException::class);
     app()->detectEnvironment(fn () => 'production');
     expect(fn () => app(SimulationSafety::class)->activate())->toThrow(RuntimeException::class, 'hors local/testing');
+});
+
+it('allows only additive portal fixtures on a safely configured demo', function () {
+    config(['services.smsfactor.mode' => 'simulate']);
+    Storage::fake('local');
+    app(SimulationSafety::class)->assertPortalFixtureTarget();
+    expect(fn () => app(SimulationSafety::class)->assertSeedTarget())->toThrow(RuntimeException::class);
+    config(['database.connections.mysql.database' => 'techcalendar']);
+    DB::purge('mysql');
+    expect(fn () => app(SimulationSafety::class)->assertPortalFixtureTarget())->toThrow(RuntimeException::class);
 });
 
 it('rejects unsafe demo configuration before opening a connection', function (string $key, mixed $value) {

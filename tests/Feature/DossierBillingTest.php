@@ -149,6 +149,17 @@ it('supports the dossier level endpoint without an operation parameter', functio
     expect($this->dossier->billings()->sole()->evidence)->toBe(['scope' => 'dossier']);
 });
 
+it('allows accounting in appointment problem status and blocks rebilling after a state change', function (string $status) {
+    $this->operation->forceFill(['legacy_status' => $status])->save();
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Confirmer la facturation');
+    $this->url = route('v2.dossiers.billing.mark', $this->dossier);
+    markDossierBilled($this)->assertRedirect();
+    expect($this->operation->fresh()->legacy_status)->toBe($status);
+    $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+    markDossierBilled($this)->assertUnprocessable()->assertJsonValidationErrors('billing');
+    $this->assertDatabaseCount('dossier_billings', 1);
+})->with(['Problème rendez- vous', 'PROBLÈME RENDEZ-VOUS']);
+
 it('enforces the one mark per operation invariant at database level', function () {
     markDossierBilled($this)->assertRedirect();
     expect(fn () => DossierBilling::forceCreate(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $this->operation->id,

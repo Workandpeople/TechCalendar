@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\DossierDocumentRequest;
+use App\Http\Requests\Crm\DossierListRequest;
 use App\Http\Requests\Crm\DossierRequest;
 use App\Models\Appointment;
 use App\Models\Dossier;
@@ -19,7 +20,6 @@ use App\Services\Crm\DossierLinkedDocuments;
 use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\DossierPlanningAssignment;
 use App\Services\Crm\DossierRegistry;
-use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\DossierTable;
 use App\Services\Sms\DossierSmsService;
 use App\Services\Sms\SmsConfiguration;
@@ -29,27 +29,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DossierController extends Controller
 {
-    public function index(Request $request, DossierRegistry $registry): View|JsonResponse
+    public function index(DossierListRequest $request, DossierRegistry $registry): View|JsonResponse
     {
-        $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:120'],
-            'delegataire_id' => ['nullable', 'integer', 'exists:external_delegataires,id'],
-            'service_id' => ['nullable', 'integer', 'exists:services,id'],
-            'per_page' => ['nullable', Rule::in([25, 50, 100])],
-            'planning' => ['nullable', Rule::in(['unlinked', 'upcoming', 'problem'])],
-            'billing' => ['nullable', Rule::in(['unbilled', 'partial', 'invoiced', 'review'])],
-            'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))],
-            'sort' => ['nullable', Rule::in(array_keys(DossierTable::COLUMNS))],
-            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
-            'all_columns' => ['nullable', 'boolean'],
-        ]);
+        $filters = $request->validated();
 
         $data = [
             'filters' => $filters,
@@ -109,6 +97,7 @@ class DossierController extends Controller
         $legacyDocuments->through(fn ($record) => $collectedDocuments->describe($record, $authors));
 
         return view('crm.dossiers.show', [
+            ...app(DossierRegistry::class)->references(),
             'dossier' => $dossier,
             'technicians' => User::query()->where('role', 2)->where('admin', false)->with('services:id')->orderBy('last_name')->get(['id', 'first_name', 'last_name']),
             'smsUnavailable' => app(SmsConfiguration::class)->unavailable(),

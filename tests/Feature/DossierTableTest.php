@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Crm\DossierRegistry;
 use App\Services\Crm\DossierTable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
@@ -28,7 +29,8 @@ beforeEach(function () {
         $dossier->forceFill(['legacy_lot_name' => $letter.' lot', 'created_at' => now()->subDays(10)->addDays($day), 'updated_at' => now()->subDays(10)->addDays($day)])->save();
         $operation = $dossier->operations()->create(['service_id' => $service->id]);
         $operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
-        $dossier->activities()->create(['kind' => 'updated', 'body' => 'Modification test', 'changed_fields' => ['address', 'city']])
+        $dossier->activities()->create(['kind' => 'status_changed', 'body' => 'Etat modifié',
+            'changed_fields' => ['previous_status' => 'PRISE DE RDV', 'status' => 'RDV ATTENTE VISITE']])
             ->forceFill(['created_at' => now()->subDays(5)->addDays($day)])->save();
         $appointment = Appointment::forceCreate(['dossier_operation_id' => $operation->id, 'service_id' => $service->id,
             'technician_id' => $tech->id, 'created_by' => $this->actor->id, 'customer_first_name' => 'Client', 'customer_last_name' => $letter,
@@ -114,11 +116,81 @@ it('selects the next active booking rather than an obsolete historical or delete
     expect(app(DossierRegistry::class)->search($this->actor, [])->first()->listingAppointment->id)->toBe($archive->id);
 });
 
-it('shows the modification date and changed fields safely', function () {
+it('shows only the latest status date and label despite more recent non-status changes', function () {
     [$dossier] = ($this->makeRow)('A', 1);
-    $this->get(route('v2.dossiers.index'))->assertOk()->assertSee('Modification : adresse, ville')->assertSee('A lot');
-    $dossier->activities()->create(['kind' => 'legacy_history', 'body' => '&lt;script&gt;alert(1)&lt;/script&gt;']);
-    $this->get(route('v2.dossiers.index'))->assertOk()->assertDontSee('<script>alert(1)</script>', false);
+    foreach (['updated', 'document', 'billing', 'planning_assigned', 'legacy_history', 'comment'] as $kind) {
+        $dossier->activities()->create(['kind' => $kind, 'body' => 'Action hors statut', 'changed_fields' => ['address', 'city']]);
+    }
+    $dossier->update(['address' => 'Adresse récente']);
+    $row = app(DossierRegistry::class)->search($this->actor, [])->first();
+    $modification = app(DossierTable::class)->modification($row);
+    expect($modification['date']->toDateString())->toBe('2026-10-10')
+        ->and($modification['label'])->toBe('RDV en attente de visite');
+    $this->get(route('v2.dossiers.index'))->assertOk()->assertSee('10/10/2026')->assertSee('A lot')
+        ->assertDontSee('Commentaire ajouté')->assertDontSee('Modification : adresse, ville');
+    expect($dossier->activities()->count())->toBe(7);
+});
+
+it('selects the latest actual transition including post-visit and ignores unchanged states', function () {
+    [$dossier] = ($this->makeRow)('A', 1);
+    $transition = $dossier->activities()->create(['kind' => 'post_visit', 'body' => 'Texte interne non affiché',
+        'changed_fields' => ['before' => ['legacy_status' => 'RDV ATTENTE VISITE'], 'after' => ['legacy_status' => 'RDV VISITE']]]);
+    foreach (['status_changed', 'appointment_linked', 'post_visit'] as $kind) {
+        $dossier->activities()->create(['kind' => $kind, 'body' => 'Etat inchangé', 'changed_fields' => [
+            'previous_status' => 'RDV VISITE', 'status' => 'RDV VISITE',
+            'before' => ['legacy_status' => 'RDV VISITE'], 'after' => ['legacy_status' => 'RDV VISITE'],
+        ]]);
+    }
+    $row = app(DossierRegistry::class)->search($this->actor, [])->first();
+    expect($row->latestStatusChange->id)->toBe($transition->id)
+        ->and(app(DossierTable::class)->modification($row)['label'])->toBe('RDV visité');
+});
+
+it('uses the Coffrac status reference without exposing history commentary', function () {
+    [$dossier] = ($this->makeRow)('A', 1);
+    DB::table('legacy_records')->insert(['source_table' => 'status', 'source_id' => 8,
+        'payload' => json_encode(['name' => 'NON CONFORMITES'])]);
+    $activity = $dossier->activities()->create(['kind' => 'legacy_history', 'body' => '<script>SECRET</script>',
+        'changed_fields' => ['source_status_id' => 8]]);
+    $dossier->activities()->create(['kind' => 'legacy_history', 'body' => 'Envoi mail', 'changed_fields' => ['source_status_id' => null]]);
+    $row = app(DossierRegistry::class)->search($this->actor, [])->first();
+    expect($row->latestStatusChange->id)->toBe($activity->id)
+        ->and(app(DossierTable::class)->modification($row)['label'])->toBe('Non-conformités');
+    $this->get(route('v2.dossiers.index'))->assertOk()->assertDontSee('SECRET');
+});
+
+it('leaves the status date empty when no status transition is recorded', function () {
+    [$dossier] = ($this->makeRow)('A', 1);
+    $dossier->activities()->delete();
+    $dossier->activities()->create(['kind' => 'comment', 'body' => 'Sans transition']);
+    expect(app(DossierTable::class)->modification($dossier->fresh()))->toBe([
+        'date' => null, 'label' => 'Aucun changement d’état enregistré',
+    ]);
+});
+
+it('recognizes older initial bookings but excludes technical links and ambiguous replacements', function () {
+    [$dossier] = ($this->makeRow)('A', 1);
+    $booking = $dossier->activities()->create(['kind' => 'appointment_linked',
+        'body' => 'RDV #42 placé le 18/10/2026 12:00 : RDV en attente de visite.']);
+    $dossier->activities()->create(['kind' => 'appointment_linked', 'body' => 'RDV #43 rattaché à la prestation #1.']);
+    $dossier->activities()->create(['kind' => 'appointment_linked', 'body' => 'RDV #42 replacé le 19/10/2026 12:00 : RDV en attente de visite.']);
+    expect($dossier->fresh()->latestStatusChange->id)->toBe($booking->id);
+});
+
+it('sorts by status dates only and eager loads their details without per-row queries', function () {
+    [$a] = ($this->makeRow)('A', 1);
+    [$z] = ($this->makeRow)('Z', 2);
+    $a->activities()->create(['kind' => 'comment', 'body' => 'Plus récent que les deux changements']);
+    $a->update(['city' => 'Nouvelle ville']);
+    $rows = app(DossierRegistry::class)->search($this->actor, ['sort' => 'modified_at', 'direction' => 'desc']);
+    expect($rows->pluck('id')->all())->toBe([$z->id, $a->id]);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    foreach ($rows as $row) {
+        app(DossierTable::class)->modification($row);
+    }
+    expect(DB::getQueryLog())->toBeEmpty();
+    DB::disableQueryLog();
 });
 
 it('rejects untrusted sorting fields and directions', function (array $filters) {

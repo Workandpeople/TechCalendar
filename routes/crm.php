@@ -4,6 +4,7 @@ use App\Http\Controllers\Crm\CapceeReportController;
 use App\Http\Controllers\Crm\DossierAppointmentController;
 use App\Http\Controllers\Crm\DossierBillingController;
 use App\Http\Controllers\Crm\DossierController;
+use App\Http\Controllers\Crm\DossierExportController;
 use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
 use App\Http\Controllers\Crm\DossierPlanningController;
 use App\Http\Controllers\Crm\DossierSmsController;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class, 'can:viewAny,'.Dossier::class])->group(function (): void {
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
+    Route::get('/dossiers/export', DossierExportController::class)->middleware('throttle:5,1')->name('dossiers.export');
     Route::get('/dossiers/nouveau', [DossierController::class, 'create'])->name('dossiers.create');
     Route::get('/documents/{document}', [DossierController::class, 'download'])->name('documents.download');
     Route::patch('/documents/{document}/partage', [DossierController::class, 'shareDocument'])->name('documents.sharing');
@@ -44,6 +46,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
         Route::patch('/dossiers/{dossier}/suivi-planning', DossierPlanningAssignmentController::class)->name('dossiers.planning-assignment');
         Route::post('/dossiers/{dossier}/prestations/{operation}/apres-visite', [DossierWorkflowController::class, 'postVisit'])->name('dossiers.operations.post-visit');
         Route::post('/dossiers/{dossier}/prestations/{operation}/reprendre', [DossierWorkflowController::class, 'reopen'])->name('dossiers.operations.reopen');
+        Route::post('/dossiers/{dossier}/prestations/{operation}/probleme', [DossierWorkflowController::class, 'problem'])->name('dossiers.operations.problem');
         Route::post('/dossiers/{dossier}/prestations/{operation}/capcee', [CapceeReportController::class, 'store'])->name('capcee.store');
         Route::post('/dossiers/{dossier}/prestations/{operation}/capcee/{report}/versions', [CapceeReportController::class, 'store'])->name('capcee.versions.store');
         Route::post('/dossiers/{dossier}/capcee/envois/{delivery}/reprendre', [CapceeReportController::class, 'retry'])->name('capcee.retry');

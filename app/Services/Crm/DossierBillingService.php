@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 class DossierBillingService
 {
-    public const BILLABLE_STATES = ['report', 'non_compliant', 'recontrol', 'rt_control'];
+    public const BILLABLE_STATES = ['problem', 'report', 'non_compliant', 'recontrol', 'rt_control'];
 
     public static function summary(Dossier $dossier): array
     {
@@ -52,7 +52,7 @@ class DossierBillingService
                 fn ($candidate) => in_array(DossierStatusCatalog::describe($candidate->legacy_status)['key'], self::BILLABLE_STATES, true)
             );
             if (! $operation || ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], self::BILLABLE_STATES, true)) {
-                throw ValidationException::withMessages(['billing' => 'Le dossier doit avoir une prestation en contrôle, non-conformité, recontrôle ou rapport avant ce marquage.']);
+                throw ValidationException::withMessages(['billing' => 'Le dossier doit avoir une prestation en problème rendez-vous, contrôle, non-conformité, recontrôle ou rapport avant ce marquage.']);
             }
 
             $billing = DossierBilling::query()->forceCreate([

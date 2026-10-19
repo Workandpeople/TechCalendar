@@ -6,10 +6,11 @@ use App\Models\Appointment;
 use App\Models\Dossier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class DossierTable
 {
+    private ?array $legacyStatuses = null;
+
     public const COLUMNS = [
         'lot' => 'Numéro de lot', 'created_at' => 'Création', 'modified_at' => 'Modifié le',
         'appointment_at' => 'Date RDV', 'client' => 'Client', 'planning_user' => 'Suivi planning', 'address' => 'Adresse',
@@ -79,8 +80,7 @@ class DossierTable
             ->orderByDesc('lot_appointments.id')->select('lots.name')->limit(1);
         $query->select('dossiers.*')
             ->selectSub((clone $appointment)->select('appointments.id'), 'listing_appointment_id')
-            ->selectRaw("COALESCE(NULLIF(dossiers.legacy_lot_name, ''), (".$lot->toSql().')) AS listing_lot', $lot->getBindings())
-            ->withMax('activities', 'created_at');
+            ->selectRaw("COALESCE(NULLIF(dossiers.legacy_lot_name, ''), (".$lot->toSql().')) AS listing_lot', $lot->getBindings());
 
         $sort = $filters['sort'] ?? null;
         $direction = ($filters['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
@@ -90,7 +90,7 @@ class DossierTable
             case 'created_at': $query->orderBy('dossiers.created_at', $direction);
                 break;
             case 'modified_at':
-                $query->orderByRaw('CASE WHEN activities_max_created_at > dossiers.updated_at OR dossiers.updated_at IS NULL THEN activities_max_created_at ELSE dossiers.updated_at END '.$direction);
+                $query->withMax('statusChanges', 'created_at')->orderBy('status_changes_max_created_at', $direction);
                 break;
             case 'appointment_at': $query->orderBy((clone $appointment)->select('appointments.starts_at'), $direction);
                 break;
@@ -127,27 +127,24 @@ class DossierTable
 
     public function modification(Dossier $dossier): array
     {
-        $activity = $dossier->latestActivity;
-        $date = $dossier->updated_at ?? $dossier->created_at;
-        if ($activity && (! $date || $activity->created_at?->gte($date))) {
-            $date = $activity->created_at;
-            $label = trim(html_entity_decode(strip_tags($activity->body), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-            if (in_array($activity->kind, ['comment', 'legacy_comment'], true)) {
-                $label = 'Commentaire ajouté';
-            } elseif ($activity->kind === 'updated' && array_is_list($activity->changed_fields ?? [])) {
-                $labels = ['address' => 'adresse', 'postal_code' => 'code postal', 'city' => 'ville', 'phone' => 'téléphone',
-                    'company_name' => 'client', 'first_name' => 'prénom', 'last_name' => 'nom', 'email' => 'email',
-                    'delegataire_id' => 'société', 'installer_name' => 'installateur', 'reference' => 'référence', 'site_name' => 'site'];
-                $changed = collect($activity->changed_fields)->map(fn ($field) => $labels[$field] ?? 'informations du dossier')->unique()->implode(', ');
-                if ($changed !== '') {
-                    $label = 'Modification : '.$changed;
-                }
-            }
-
-            return ['date' => $date, 'label' => Str::limit($label, 180) ?: 'Dossier modifié'];
+        $activity = $dossier->latestStatusChange;
+        if (! $activity) {
+            return ['date' => null, 'label' => 'Aucun changement d’état enregistré'];
         }
 
-        return ['date' => $date, 'label' => $dossier->created_at?->equalTo($date) ? 'Création du dossier' : 'Informations du dossier mises à jour'];
+        $fields = $activity->changed_fields ?? [];
+        $status = $fields['status'] ?? $fields['after']['legacy_status'] ?? null;
+        if ($activity->kind === 'legacy_history') {
+            // One small reference lookup per table/export, never one query per dossier.
+            $this->legacyStatuses ??= DB::table('legacy_records')->where('source_table', 'status')->pluck('payload', 'source_id')
+                ->map(fn ($payload) => json_decode($payload, true)['name'] ?? null)->all();
+            $status = $this->legacyStatuses[$fields['source_status_id'] ?? ''] ?? null;
+        } elseif ($activity->kind === 'appointment_linked' && $status === null) {
+            $status = 'RDV ATTENTE VISITE';
+        }
+
+        return ['date' => $activity->created_at, 'label' => $status
+            ? DossierStatusCatalog::describe($status)['label'] : 'Changement d’état Coffrac'];
     }
 
     private function concat(string ...$parts): string

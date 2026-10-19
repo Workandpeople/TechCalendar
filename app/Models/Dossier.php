@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -61,6 +62,19 @@ class Dossier extends Model
     public function latestActivity(): HasOne
     {
         return $this->hasOne(DossierActivity::class)->ofMany(['created_at' => 'max', 'id' => 'max']);
+    }
+
+    public function statusChanges(): HasMany
+    {
+        return $this->activities()->statusChanges();
+    }
+
+    public function latestStatusChange(): HasOne
+    {
+        return $this->hasOne(DossierActivity::class)->ofMany(
+            ['created_at' => 'max', 'id' => 'max'],
+            fn (Builder $query) => $query->statusChanges(),
+        );
     }
 
     public function listingAppointment(): BelongsTo

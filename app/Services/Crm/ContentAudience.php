@@ -7,7 +7,7 @@ use Illuminate\Validation\Rule;
 
 final class ContentAudience
 {
-    public const LABELS = ['internal' => 'Interne uniquement', 'client' => 'Client uniquement', 'shared' => 'Client et délégataire'];
+    public const LABELS = ['internal' => 'Privé · Interne uniquement', 'client' => 'Client uniquement', 'shared' => 'Client et délégataire'];
 
     public static function rules(bool $required = false): array
     {

@@ -34,8 +34,46 @@ Contrôles : tests de transitions, propriété des documents, audiences, refus d
 requêtes rejouées, annulation des fichiers en cas d'échec transactionnel et course
 MySQL entre deux marquages sur des prestations différentes d'un même dossier.
 Ni appel Coffrac, ni envoi SMS réel, ni bascule sur le CT dans cet incrément.
-Les modales CRUD, l'export Excel filtré et les autres ajustements de formulaires
-issus du rendez-vous restent des travaux distincts de ces règles métier.
+### Relecture du compte rendu et finitions UX, 19 octobre
+
+- L'oeil est la **première colonne à gauche**, fixe lors du défilement horizontal.
+- « Modifié le » affiche uniquement la date et l'état du dernier changement de
+  statut connu, également pour le tri et l'export Excel. Commentaires, pièces,
+  affectations, facturation et modifications sans changement d'état restent dans
+  l'historique, sans modifier cette colonne. Sans transition connue, aucune date
+  n'est inventée. Les changements Coffrac utilisent leur référentiel de statuts.
+- Ajout de documents/commentaires, modification des informations, partage et
+  confirmations de suppression dans des fenêtres, sans dupliquer les formulaires.
+  Client uniquement reste le partage par défaut ; validation serveur, retour du
+  focus et réouverture après erreur sont conservés.
+- Référence technique masquée dans les fiches, listes et formulaires ; conservée
+  en base et recherchable. Génération automatique à la création. Les noms source
+  et coordonnées des comptes sont préremplis sans écraser les saisies manuelles.
+  Installateur et contacts restent facultatifs ; bénéficiaire, adresse, ville et
+  au moins une prestation restent obligatoires à la création.
+- Problème RDV accessible directement sur la fiche prestation : motif, rappel et
+  commentaire. Mise à jour atomique de la fiche et du RDV lié, avec contrôle de
+  version et des droits, sans appel à Coffrac ni notification automatique.
+- Filtres et recherche AJAX sans bouton Filtrer (repli sans JavaScript conservé).
+  Export XLSX des **résultats filtrés sur toutes les pages**, dans l'ordre choisi,
+  réservé aux équipes internes, plafonné à 50 000 dossiers. Les champs texte ne
+  peuvent pas être exécutés comme formules Excel. Pas d'export des commentaires
+  ni des documents.
+- Facturation possible dès Problème RDV, toujours avec un marquage unique par
+  dossier et sans statut métier Facturé ni notion de paiement partiel.
+- Relecture des transitions : visite technique obligatoire pour RDV visité,
+  choix manuel de Contrôle RT/non-conformité ensuite, rapport et avis dans le
+  formulaire de document uniquement, satisfaction du lot indépendante de l'état,
+  demande explicite de recontrôle par client ou délégataire, puis rapport Genius
+  ou nouvelle non-conformité. Les encarts de liaison/source restent retirés.
+
+**États inconnus : diagnostic du snapshot local du 14 octobre.** Les 16 717 fiches
+possèdent toutes un état reconnu par le catalogue. En revanche **639 dossiers
+n'ont aucune fiche/prestation source** : ils n'ont donc pas d'état à reprendre.
+Ils restent « État non renseigné / autre », avec une explication dans leur détail.
+Ne pas les convertir arbitrairement en prise de RDV ou en rapport : la prestation
+et l'état doivent être confirmés depuis les données métier lors de la reprise
+finale. Cette analyse n'a modifié ni la source, ni la copie de démonstration.
 
 ## Documents collectés, 15 octobre 2026
 

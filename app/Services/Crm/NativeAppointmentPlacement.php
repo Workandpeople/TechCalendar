@@ -62,6 +62,7 @@ class NativeAppointmentPlacement
             throw ValidationException::withMessages(['lot_appointment_id' => 'Cette prestation possède déjà un rendez-vous planifié. Replace le rendez-vous existant.']);
         }
         $appointment->forceFill(['dossier_operation_id' => $operation->id])->save();
+        $previousStatus = $operation->legacy_status;
         $operation->forceFill(['service_id' => $appointment->service_id, 'legacy_status' => 'RDV ATTENTE VISITE'])->save();
         if ($row) {
             $row->update(['appointment_id' => $appointment->id, 'service_id' => $appointment->service_id,
@@ -69,7 +70,8 @@ class NativeAppointmentPlacement
         }
         $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'appointment_linked',
             'body' => 'RDV #'.$appointment->id.' '.(! empty($request['is_replacement']) ? 'replacé' : 'placé').' le '.$appointment->starts_at->format('d/m/Y H:i').' : RDV en attente de visite.',
-            'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id]]);
+            'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id,
+                'previous_status' => $previousStatus, 'status' => $operation->legacy_status]]);
         if (filled($appointment->comment)) {
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $appointment->comment]);
         }

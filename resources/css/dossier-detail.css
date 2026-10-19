@@ -1,4 +1,11 @@
 @layer components {
+    .gc-dossier-dialog { position: fixed; inset: 0; margin: auto; width: min(920px, calc(100vw - 24px)); max-height: 92dvh; padding: 0; border: 1px solid #b9c8d9; border-radius: 1rem; background: white; color: var(--gc-text); }
+    .gc-dossier-dialog[open] { display: flex; flex-direction: column; }
+    .gc-dossier-dialog::backdrop { background: #10233bb3; backdrop-filter: blur(4px); }
+    .gc-dossier-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; background: #edf5ff; flex-shrink: 0; }
+    .gc-dossier-dialog h2 { font-size: 1.1rem; font-weight: 700; }
+    .gc-dossier-dialog-body { min-height: 0; overflow-y: auto; padding: 1rem; }
+    .gc-dialog-actions { position: sticky; bottom: -1rem; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; background: white; padding: 1rem 0; border-top: 1px solid #dce3e9; z-index: 1; }
     .gc-dossier-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; align-items: start; }
     .gc-dossier-main, .gc-dossier-side { display: grid; gap: 1.25rem; min-width: 0; }
     .gc-dossier-detail [id] { scroll-margin-top: 6.5rem; }

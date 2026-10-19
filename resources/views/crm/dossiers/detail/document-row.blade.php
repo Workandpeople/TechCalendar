@@ -21,9 +21,11 @@
                 <span class="text-xs text-slate-500">Fichier non collecté ou indisponible</span>
             @endif
             @if ($remove)
-                <details class="gc-remove-confirm"><summary class="gc-btn-danger gc-document-action" title="Supprimer {{ $name }}" aria-label="Supprimer {{ $name }}"><x-nav-icon name="trash" /></summary>
+                @php($removeDialog = 'supprimer-'.sha1($remove))
+                <a href="#{{ $removeDialog }}" class="gc-btn-danger gc-document-action" title="Supprimer {{ $name }}" aria-label="Supprimer {{ $name }}"><x-nav-icon name="trash" /></a>
+                <x-dossier-dialog :id="$removeDialog" :title="'Supprimer : '.$name">
                     <form method="POST" action="{{ $remove }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Retirer ce document ? La trace est conservée.</p><button class="gc-btn-danger" type="submit">Confirmer la suppression</button></form>
-                </details>
+                </x-dossier-dialog>
             @endif
         </div>
     </td>

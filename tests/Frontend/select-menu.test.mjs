@@ -73,6 +73,7 @@ function fixture() {
         remove() { this.parentElement.children = this.parentElement.children.filter(node => node !== this); this.parentElement = null; }
         contains(node) { return node === this || this.children.some(child => child.contains(node)); }
         matches(selector) {
+            if (selector === 'dialog[open]') return this.tagName === 'DIALOG' && this.open;
             if (selector === ':disabled') return Boolean(this.disabled || this.parentElement?.disabled);
             if (selector === '[role="option"]') return this.getAttribute('role') === 'option';
             return this.tagName === 'SELECT' && !this.multiple && !this.native;
@@ -116,6 +117,25 @@ function fixture() {
         mutate: target => observers.filter(observer => observer.connected).forEach(observer => observer.callback([{ target }])),
     };
 }
+
+test('renders a select popup inside the active native dialog and removes it on modal close', () => {
+    const ui = fixture();
+    const dialog = new ui.Node('DIALOG');
+    dialog.open = true;
+    ui.select.remove();
+    ui.root.body.append(dialog);
+    dialog.append(ui.select);
+    ui.fire('pointerdown');
+    const menu = dialog.children.find(node => node.getAttribute('role') === 'listbox');
+    assert.ok(menu);
+    assert.equal(ui.menu(), undefined);
+    ui.fire('click', menu.querySelectorAll('[role="option"]')[2]);
+    assert.equal(ui.select.selectedIndex, 2);
+    assert.deepEqual(ui.emitted, ['input', 'change']);
+    ui.fire('pointerdown');
+    ui.fire('close', dialog);
+    assert.equal(dialog.children.some(node => node.getAttribute('role') === 'listbox'), false);
+});
 
 test('selection uses the original field and emits native input/change exactly once', () => {
     const ui = fixture();

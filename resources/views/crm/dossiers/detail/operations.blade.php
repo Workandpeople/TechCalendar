@@ -2,6 +2,9 @@
     <header class="gc-dossier-panel-heading"><h2 id="dossier-status-title"><x-nav-icon name="services" />Statut et fiches <span class="gc-dossier-count">{{ $dossier->operations->count() }}</span></h2></header>
     <div class="gc-dossier-panel-body">
         <p class="text-xs text-slate-500">Une fiche par prestation. Les actions proposées suivent l’état du dossier.</p>
+        @if ($dossier->operations->isEmpty())
+            <p class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Aucune fiche/prestation associée à ce dossier. Aucun état métier ne peut être déduit automatiquement : le dossier reste à vérifier, sans créer de visite ni de facturation.</p>
+        @endif
         <ul class="mt-3 divide-y divide-slate-100">
             @foreach ($dossier->operations as $operation)
                 @php
@@ -35,6 +38,9 @@
                             </details>
                         @endif
                     </div>
+                    @if (in_array($state, ['pending', 'problem', 'awaiting_visit']))
+                        @include('crm.dossiers.detail.problem')
+                    @endif
                     <details class="gc-operation-workflow" @if (old('_operation') == $operation->id) open @endif>
                         <summary class="gc-btn-success"><x-nav-icon name="edit" />Changer l’état / traiter la fiche</summary>
                         <div class="mt-3">@include('crm.dossiers.detail.control-actions')</div>

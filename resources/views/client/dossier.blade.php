@@ -1,7 +1,7 @@
 <x-layouts.app>
     <div class="space-y-6">
         <a class="gc-link" href="{{ route('client.dossiers') }}">← Mes dossiers</a>
-        <x-workspace-heading :title="$dossier->beneficiaryLabel()" :eyebrow="$dossier->reference" :description="$dossier->legacy_lot_name ? 'Lot : '.$dossier->legacy_lot_name : 'Suivi de votre inspection et échanges avec notre équipe.'" />
+        <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Votre dossier" :description="$dossier->legacy_lot_name ? 'Lot : '.$dossier->legacy_lot_name : 'Suivi de votre inspection et échanges avec notre équipe.'" />
         @include('client.notice')
         @include('client.non-conformity')
         <div class="grid items-start gap-6 lg:grid-cols-2">

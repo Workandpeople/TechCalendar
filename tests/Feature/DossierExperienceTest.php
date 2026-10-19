@@ -84,7 +84,8 @@ it('assigns two distinct accounts with manual snapshots without changing benefic
         ->and($this->dossier->company_name)->toBe('Beneficiary');
     foreach ([$this->clientUser, $this->delegataireUser] as $user) {
         $this->actingAs($user)->get(route('client.dossiers.show', $this->dossier))->assertOk();
-        $this->get(route('client.dossiers'))->assertSee('EXPERIENCE');
+        $this->get(route('client.dossiers'))->assertSee('Beneficiary')
+            ->assertSee(route('client.dossiers.show', $this->dossier), false)->assertDontSee('EXPERIENCE');
     }
     $this->actingAs($this->staff)->put(route('v2.dossiers.update', $this->dossier), [
         'reference' => 'EXPERIENCE', 'version' => 2, 'company_name' => 'Beneficiary', 'address' => 'Rue', 'city' => 'Paris',

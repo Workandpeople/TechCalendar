@@ -16,6 +16,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -24,6 +25,20 @@ use Throwable;
 class DossierRegistry
 {
     public function search(User $actor, array $filters): LengthAwarePaginator
+    {
+        $query = $this->matchingQuery($actor, $filters);
+
+        return app(DossierTable::class)->apply($query, $filters)->with([
+            'client', 'delegataire', 'operations.service', 'operations.billing', 'planningUser:id,first_name,last_name,deleted_at',
+            'latestStatusChange',
+            'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
+            'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
+                ->orderByDesc('created_at')->orderByDesc('id')->limit(3),
+        ])->withCount(['appointments', 'comments'])
+            ->paginate($filters['per_page'] ?? 25)->withQueryString();
+    }
+
+    public function matchingQuery(User $actor, array $filters): Builder
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
@@ -44,14 +59,7 @@ class DossierRegistry
             });
         }
 
-        return app(DossierTable::class)->apply($query, $filters)->with([
-            'client', 'delegataire', 'operations.service', 'operations.billing', 'planningUser:id,first_name,last_name,deleted_at',
-            'latestActivity',
-            'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
-            'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
-                ->orderByDesc('created_at')->orderByDesc('id')->limit(3),
-        ])->withCount(['appointments', 'comments'])
-            ->paginate($filters['per_page'] ?? 25)->withQueryString();
+        return $query;
     }
 
     public function categories(User $actor, array $filters): array
@@ -123,6 +131,7 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('create', Dossier::class);
         $data = DossierContacts::fillMissingSnapshots($data);
+        $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
 
         try {
             return DB::transaction(function () use ($actor, $data): Dossier {
@@ -170,7 +179,7 @@ class DossierRegistry
                 return $locked;
             });
         } catch (UniqueConstraintViolationException $exception) {
-            $this->reportDuplicateReference($data['reference'], $exception);
+            $this->reportDuplicateReference($data['reference'] ?? $dossier->reference, $exception);
         }
     }
 
