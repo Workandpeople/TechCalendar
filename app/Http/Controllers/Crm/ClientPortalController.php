@@ -61,7 +61,7 @@ class ClientPortalController extends Controller
 
     public function download(Request $request, DossierDocument $document, DossierRegistry $registry)
     {
-        return $registry->download($request->user(), $document);
+        return $registry->download($request->user(), $document, $request->boolean('preview'));
     }
 
     public function respondToNonConformity(ClientCorrectionRequest $request, Dossier $dossier, DossierOperation $operation, PostVisitWorkflow $workflow)
@@ -74,11 +74,11 @@ class ClientPortalController extends Controller
 
     public function archive(Request $request, Dossier $dossier, int $document, CollectedDossierDocuments $documents)
     {
-        return $documents->download($request->user(), $dossier, $document);
+        return $documents->download($request->user(), $dossier, $document, $request->boolean('preview'));
     }
 
     public function lotDocument(Request $request, Dossier $dossier, int $document, DossierLinkedDocuments $documents)
     {
-        return $documents->download($request->user(), $dossier, $document);
+        return $documents->download($request->user(), $dossier, $document, $request->boolean('preview'));
     }
 }

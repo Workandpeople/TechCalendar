@@ -2,10 +2,12 @@
 
 use App\Models\Appointment;
 use App\Models\Dossier;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointmentDocument;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Crm\ClientAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -138,3 +140,40 @@ it('renders compact labelled actions including lot MIME previews and safe fallba
         ->assertSee('Confirmer la suppression')->assertSee('data-preview-status', false)
         ->assertSee('data-preview-content', false)->assertSee('data-preview-external', false);
 });
+
+it('keeps client and delegataire previews scoped to shared documents on every source', function (string $source, string $kind) {
+    [, $path] = dossierPreviewFixture($this, $source, file_get_contents(__DIR__.'/../Fixtures/documents/preview.pdf'));
+    $organisation = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'PREVIEW-'.$kind,
+        'kind' => $kind, 'name' => 'Organisation test', 'is_active' => true]);
+    $external = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false,
+        'external_client_id' => $organisation->id, 'portal_enabled' => true, 'must_change_password' => false,
+        'portal_permissions' => ClientAccess::defaults($kind)]);
+    $this->dossier->update([$kind === 'client' ? 'client_id' : 'delegataire_id' => $organisation->id]);
+    $column = $kind === 'client' ? 'client_visible' : 'delegataire_visible';
+    if ($source === 'native') {
+        $document = $this->dossier->documents()->sole();
+        $url = route('client.documents.download', $document);
+        $share = fn (bool $allowed) => $document->update([$column => $allowed]);
+    } elseif ($source === 'lot') {
+        $document = LotAppointmentDocument::where('lot_appointment_id', $this->lotRow->id)->sole();
+        $url = route('client.dossiers.lot-documents.download', [$this->dossier, $document]);
+        $share = fn (bool $allowed) => $document->update(['is_private' => false, $column => $allowed]);
+    } else {
+        $url = route('client.dossiers.archive', [$this->dossier, 123]);
+        $share = fn (bool $allowed) => DB::table('legacy_records')->where('source_table', 'dossier_document')->where('source_id', 123)
+            ->update(['client_visible_override' => $allowed,
+                'delegataire_visible_override' => $kind === 'delegataire' && $allowed]);
+    }
+    $share(true);
+    foreach (['GET', 'HEAD'] as $method) {
+        $this->actingAs($external)->call($method, $url.'?preview=1')->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $share(false);
+        $this->call($method, $url.'?preview=1')->assertNotFound();
+        $share(true);
+    }
+    $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertSee($url.'?preview=1', false);
+    Storage::disk('local')->put($path, '<script>alert(1)</script>');
+    $this->get($url.'?preview=1')->assertDownload()->assertHeader('Content-Type', 'application/octet-stream');
+    $external->forceFill(['portal_permissions' => [...$external->portal_permissions, 'documents' => false]])->save();
+    $this->actingAs($external->fresh())->get($url.'?preview=1')->assertStatus($source === 'lot' ? 403 : 404);
+})->with(['native', 'lot', 'archive'])->with(['client', 'delegataire']);

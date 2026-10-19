@@ -2,9 +2,11 @@
 
 namespace App\Services\Crm;
 
+use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\User;
 use App\Services\LotAutoCompletionCalculator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -40,31 +42,38 @@ class ClientPortal
         Gate::forUser($actor)->authorize('view', $dossier);
         $dossier->load('operations.service');
         $documents = $this->access->allows($actor, 'documents')
-            ? $dossier->documents()->where($this->access->audienceColumn($actor), true)->latest('id')->paginate(15, ['*'], 'documents_page') : null;
+            ? $dossier->documents()->where($this->access->audienceColumn($actor), true)->latest('id')->paginate(15, ['*'], 'documents_page')->fragment('client-documents') : null;
         $collected = null;
         $lotDocuments = null;
         if ($this->access->allows($actor, 'documents')) {
             $collected = $this->access->filterLegacyDocuments(DB::table('legacy_records')->where('source_table', 'dossier_document')
                 ->where('dossier_id', $dossier->id), $actor)
-                ->orderByDesc('source_id')->paginate(15, ['*'], 'archive_page')->withQueryString();
+                ->orderByDesc('source_id')->paginate(15, ['*'], 'archive_page')->withQueryString()->fragment('client-documents');
             $collected->setCollection($collected->getCollection()->filter(fn ($record) => $this->access->canReadLegacyDocument($actor,
                 json_decode($record->payload, true) ?: [], isset($record->client_visible_override) ? (bool) $record->client_visible_override : null,
                 isset($record->delegataire_visible_override) ? (bool) $record->delegataire_visible_override : null))
                 ->map(function ($record) use ($dossier): array {
                     $document = app(CollectedDossierDocuments::class)->describe($record);
                     $document['url'] = $document['url'] ? route('client.dossiers.archive', [$dossier, $record->source_id]) : null;
+                    try {
+                        $document['display_date'] = filled($document['created_at']) ? Carbon::parse($document['created_at'])->format('d/m/Y') : null;
+                    } catch (\Throwable) {
+                        $document['display_date'] = null;
+                    }
 
                     return $document;
                 }));
             $lotDocuments = app(DossierLinkedDocuments::class)->query($actor, $dossier)
-                ->latest('id')->paginate(15, ['*'], 'lot_documents_page')->withQueryString();
+                ->latest('id')->paginate(15, ['*'], 'lot_documents_page')->withQueryString()->fragment('client-documents');
         }
 
         return [
             'dossier' => $dossier, 'documents' => $documents, 'collected' => $collected, 'lotDocuments' => $lotDocuments,
-            'appointments' => $dossier->appointments()->orderByDesc('starts_at')->paginate(10, ['appointments.*'], 'rdv_page'),
+            'nextAppointment' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
+                ->where('ends_at', '>=', now())->orderBy('starts_at')->first(),
+            'appointments' => $dossier->appointments()->orderByDesc('starts_at')->paginate(10, ['appointments.*'], 'rdv_page')->fragment('client-appointments'),
             'comments' => $this->access->allows($actor, 'comments')
-                ? $this->access->comments($actor, $dossier)->latest('created_at')->latest('id')->paginate(15, ['*'], 'comments_page') : null,
+                ? $this->access->comments($actor, $dossier)->latest('created_at')->latest('id')->paginate(15, ['*'], 'comments_page')->fragment('client-comments') : null,
         ];
     }
 

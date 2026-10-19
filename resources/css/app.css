@@ -3,6 +3,7 @@
 @import './dossier-detail.css';
 @import './select-menu.css';
 @import './acrylic.css';
+@import './client-portal.css';
 
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
