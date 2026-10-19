@@ -143,7 +143,7 @@ it('provides safe inline preview and blocks removal of a report used by a contro
     $this->post(route('v2.dossiers.documents.store', $this->dossier), ['name' => 'Preview', 'document' => UploadedFile::fake()->image('preview.png')])->assertSessionHasNoErrors();
     $doc = $this->dossier->documents()->sole();
     $this->get(route('v2.documents.download', ['document' => $doc, 'preview' => 1]))->assertOk()->assertHeader('Content-Type', 'image/png')
-        ->assertHeader('X-Content-Type-Options', 'nosniff')->assertHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        ->assertHeader('X-Content-Type-Options', 'nosniff')->assertHeader('X-Frame-Options', 'SAMEORIGIN');
     $this->operation->forceFill(['report_document_id' => $doc->id])->save();
     $this->deleteJson(route('v2.documents.destroy', $doc))->assertUnprocessable();
     $this->operation->forceFill(['report_document_id' => null])->save();

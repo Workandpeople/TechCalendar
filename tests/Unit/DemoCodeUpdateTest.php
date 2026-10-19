@@ -34,3 +34,21 @@ it('enforces code permissions independently of the private deployment umask', fu
     $process = new Process(['bash', '-n', __DIR__.'/../../tools/deploy/tests/check-code-permissions.sh']);
     expect($process->run())->toBe(0);
 });
+
+it('reconciles local billing history after migration and before reopening', function () {
+    $source = file_get_contents(__DIR__.'/../../tools/deploy/update-demo.sh');
+    $reconciliation = strpos($source, 'artisan crm:reconcile-billing --apply');
+    expect($reconciliation)->toBeGreaterThan(strpos($source, 'artisan migrate --force'))
+        ->toBeLessThan(strpos($source, 'artisan up'));
+    expect($source)->toContain("SmsConfiguration::class)->mode() !== 'simulate'", 'billing-reconciliation.txt');
+});
+
+it('prepares preview configuration before maintenance and preserves rollback copies', function () {
+    $source = file_get_contents(__DIR__.'/../../tools/deploy/update-demo.sh');
+    expect(strpos($source, '$STAGE/tools/deploy/document-preview-nginx.php'))
+        ->toBeLessThan(strpos($source, 'MAINTENANCE=1'));
+    expect($source)->toContain('nginx-vhost.conf', 'nginx-preview-map.conf', 'sha256sum -c "$BACKUP/nginx-checksums"',
+        'NGINX_MAP_EXISTED=0', 'NGINX_CHANGED=1', 'rm -f -- "$NGINX_PREVIEW_MAP"', 'systemctl reload nginx');
+    expect(strpos($source, 'install -o root -g root -m 0644 "$WORK/nginx-vhost.next"'))
+        ->toBeLessThan(strrpos($source, 'nginx -t'));
+});

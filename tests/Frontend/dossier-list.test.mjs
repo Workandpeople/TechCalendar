@@ -7,6 +7,14 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 const payload = { categories: '<nav></nav>', results: '<table></table>', total: 12 };
 const response = (data = payload) => ({ ok: true, json: async () => data });
 
+test('keeps the independent billing filter across categories sorting and pagination', () => {
+    const entries = new URLSearchParams('billing=partial&status=non_compliant');
+    const url = dossierListUrl(base, entries, { page: '2', sort: 'client' });
+    assert.equal(url.searchParams.get('billing'), 'partial');
+    assert.equal(url.searchParams.get('status'), 'non_compliant');
+    assert.equal(dossierListUrl(base, entries, { billing: '' }).searchParams.has('billing'), false);
+});
+
 test('builds a canonical filtered URL and resets pagination without carrying unrelated parameters', () => {
     const url = dossierListUrl(`${base}?page=8#table`, new URLSearchParams({
         q: ' Lyon ', per_page: '25', service_id: '3', status: '', all_columns: '0', page: '8', ignored: 'yes', direction: 'asc',

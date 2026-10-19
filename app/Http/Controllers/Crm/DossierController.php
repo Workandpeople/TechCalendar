@@ -44,6 +44,7 @@ class DossierController extends Controller
             'service_id' => ['nullable', 'integer', 'exists:services,id'],
             'per_page' => ['nullable', Rule::in([25, 50, 100])],
             'planning' => ['nullable', Rule::in(['unlinked', 'upcoming', 'problem'])],
+            'billing' => ['nullable', Rule::in(['unbilled', 'partial', 'invoiced', 'review'])],
             'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))],
             'sort' => ['nullable', Rule::in(array_keys(DossierTable::COLUMNS))],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
@@ -99,7 +100,7 @@ class DossierController extends Controller
     {
         Gate::authorize('view', $dossier);
         $dossier->load(['client', 'delegataire', 'planningUser', 'operations' => fn ($query) => $query
-            ->with(['service', 'reportDocument', 'controlValidator', 'capceeReports.latestDelivery', 'appointments' => fn ($appointments) => $appointments->latest('starts_at')->latest('id')->limit(1)])
+            ->with(['service', 'billing.marker', 'reportDocument', 'controlValidator', 'capceeReports.latestDelivery', 'appointments' => fn ($appointments) => $appointments->latest('starts_at')->latest('id')->limit(1)])
             ->withCount('appointments')]);
         $legacyDocuments = DB::table('legacy_records')->where('dossier_id', $dossier->id)
             ->where('source_table', 'dossier_document')->whereNull('hidden_at')->orderByDesc('source_id')

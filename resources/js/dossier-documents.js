@@ -4,7 +4,7 @@ export function reportActions(state, canReview = true) {
         ...(canReview && state === 'recontrol' ? ['validate_report'] : [])];
 }
 
-export function initDossierDocuments(root = document) {
+export function initDossierDocuments(root = document, browser = window) {
     root.querySelectorAll('[data-contact-form]').forEach((section) => {
         section.querySelector('[data-contact-select]')?.addEventListener('change', (event) => {
             const option = event.target.selectedOptions[0];
@@ -40,24 +40,108 @@ export function initDossierDocuments(root = document) {
         update();
     });
 
+    initDocumentPreview(root, browser);
+}
+
+export function documentPreviewKind(response) {
+    if (!response.ok || response.redirected || !/^inline(?:;|$)/i.test(response.headers.get('Content-Disposition')?.trim() || '')) return null;
+    const mime = response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+    if (mime === 'application/pdf') return 'iframe';
+    return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime) ? 'img' : null;
+}
+
+export function initDocumentPreview(root = document, browser = window) {
     const dialog = root.querySelector('[data-document-preview]');
-    if (!dialog || typeof dialog.showModal !== 'function') return;
+    if (!dialog || typeof dialog.showModal !== 'function' || typeof browser.fetch !== 'function') return;
+    const owner = dialog.ownerDocument;
+    const content = dialog.querySelector('[data-preview-content]');
+    const status = dialog.querySelector('[data-preview-status]');
+    const fallback = 'Aperçu indisponible. Ouvrez le document dans un nouvel onglet ou téléchargez-le.';
+    let current;
     let opener;
-    root.querySelectorAll('[data-document-open]').forEach((link) => link.addEventListener('click', (event) => {
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const url = new URL(link.href, root.location?.href || window.location.href);
-        if (url.origin !== window.location.origin) return;
+    const reset = () => {
+        const previous = current;
+        current = null;
+        previous?.controller.abort();
+        browser.clearTimeout(previous?.timer);
+        previous?.media?.removeAttribute('src');
+        content.replaceChildren();
+        dialog.setAttribute('aria-busy', 'false');
+    };
+    const fail = (request, message = fallback) => {
+        if (current !== request) return;
+        reset();
+        status.textContent = message;
+        status.hidden = false;
+    };
+    const armTimeout = (request) => {
+        browser.clearTimeout(request.timer);
+        request.timer = browser.setTimeout(() => fail(request, `Le chargement prend trop de temps. ${fallback}`), 20000);
+    };
+    const localUrl = (value) => {
+        try {
+            const url = new URL(value, browser.location.href);
+            return ['https:', 'http:'].includes(url.protocol) && url.origin === browser.location.origin && !url.username && !url.password ? url : null;
+        } catch { return null; }
+    };
+    root.querySelectorAll('[data-document-open]').forEach((link) => link.addEventListener('click', async (event) => {
+        if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const url = localUrl(link.href);
+        const download = link.dataset.documentDownload && localUrl(link.dataset.documentDownload);
+        if (!url || !download) return;
         event.preventDefault();
+        reset();
         opener = link;
-        dialog.querySelector('[data-preview-title]').textContent = link.dataset.documentTitle;
-        dialog.querySelector('[data-preview-frame]').src = url.href;
-        dialog.querySelector('[data-preview-download]').href = link.dataset.documentDownload;
-        dialog.showModal();
+        const title = link.dataset.documentTitle || 'Aperçu du document';
+        dialog.querySelector('[data-preview-title]').textContent = title;
+        dialog.querySelector('[data-preview-download]').href = download.href;
+        dialog.querySelector('[data-preview-external]').href = url.href;
+        status.textContent = 'Chargement de l’aperçu…';
+        status.hidden = false;
+        dialog.setAttribute('aria-busy', 'true');
+        if (!dialog.open) dialog.showModal();
+        const request = { controller: new AbortController(), url: url.href };
+        current = request;
+        armTimeout(request);
+        try {
+            // Validate access and sniffed MIME without buffering the file or automatically downloading attachments.
+            const response = await browser.fetch(url.href, {
+                method: 'HEAD', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: request.controller.signal,
+            });
+            if (current !== request) return;
+            const kind = documentPreviewKind(response);
+            if (!kind || (kind === 'iframe' && browser.navigator?.pdfViewerEnabled === false)) {
+                fail(request);
+                return;
+            }
+            const media = owner.createElement(kind);
+            request.media = media;
+            media.referrerPolicy = 'no-referrer';
+            if (kind === 'img') media.alt = title;
+            else media.title = title;
+            media.addEventListener('load', () => {
+                if (current !== request) return;
+                browser.clearTimeout(request.timer);
+                status.hidden = true;
+                dialog.setAttribute('aria-busy', 'false');
+            });
+            media.addEventListener('error', () => fail(request));
+            armTimeout(request);
+            media.src = url.href;
+            content.replaceChildren(media);
+        } catch {
+            fail(request);
+        }
     }));
     dialog.querySelector('[data-preview-close]').addEventListener('click', () => dialog.close());
     dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
     dialog.addEventListener('close', () => {
-        dialog.querySelector('[data-preview-frame]').removeAttribute('src');
+        reset();
         opener?.focus();
     });
+    owner.addEventListener('securitypolicyviolation', (event) => {
+        if (current && event.disposition === 'enforce' && ['frame-src', 'img-src', 'object-src'].includes(event.effectiveDirective)
+            && [current.url, browser.location.origin].includes(event.blockedURI)) fail(current);
+    });
+    browser.addEventListener('pagehide', reset);
 }

@@ -46,6 +46,15 @@
                 <label for="per_page" class="gc-label">Lignes par page</label>
                 <select id="per_page" name="per_page" class="gc-input bg-white">@foreach ([25, 50, 100] as $size)<option @selected(($filters['per_page'] ?? 25) == $size)>{{ $size }}</option>@endforeach</select>
             </div>
+            <div>
+                <label for="billing" class="gc-label">Facturation (indépendante du statut)</label>
+                <select id="billing" name="billing" class="gc-input bg-white">
+                    <option value="">Tous les dossiers</option>
+                    @foreach (['unbilled' => 'Non facturés', 'partial' => 'Partiellement facturés', 'invoiced' => 'Entièrement facturés', 'review' => 'Historique à vérifier'] as $value => $label)
+                        <option value="{{ $value }}" @selected(($filters['billing'] ?? '') === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div class="flex items-center gap-3">
                 <button type="submit" class="gc-btn-secondary"><x-nav-icon name="search" /> Filtrer</button>
                 <a href="{{ route('v2.dossiers.index') }}" data-dossier-clear class="text-sm underline">Effacer</a>

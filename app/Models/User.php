@@ -6,10 +6,12 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -24,6 +26,7 @@ use Illuminate\Notifications\Notifiable;
     'notification_push_enabled',
     'role',
     'admin',
+    'can_manage_billing',
     'phone',
     'address',
     'department_code',
@@ -43,12 +46,12 @@ class User extends Authenticatable
         return $this->role === self::ROLE_EXTERNAL || $this->external_client_id !== null;
     }
 
-    public function externalClient(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function externalClient(): BelongsTo
     {
         return $this->belongsTo(ExternalDelegataire::class, 'external_client_id');
     }
 
-    public function scopeInternal(\Illuminate\Database\Eloquent\Builder $query): void
+    public function scopeInternal(Builder $query): void
     {
         $query->whereNull('external_client_id')->where('role', '!=', self::ROLE_EXTERNAL);
     }
@@ -69,6 +72,7 @@ class User extends Authenticatable
             'portal_enabled' => 'boolean',
             'role' => 'integer',
             'admin' => 'boolean',
+            'can_manage_billing' => 'boolean',
             'must_change_password' => 'boolean',
             'notification_mail_enabled' => 'boolean',
             'notification_push_enabled' => 'boolean',

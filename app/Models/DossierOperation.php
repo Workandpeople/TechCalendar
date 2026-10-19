@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DossierOperation extends Model
 {
@@ -41,6 +42,11 @@ class DossierOperation extends Model
     public function dossier(): BelongsTo
     {
         return $this->belongsTo(Dossier::class);
+    }
+
+    public function billing(): HasOne
+    {
+        return $this->hasOne(DossierBilling::class);
     }
 
     public function service(): BelongsTo

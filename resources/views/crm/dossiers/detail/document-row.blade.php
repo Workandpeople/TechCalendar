@@ -15,13 +15,13 @@
     <td>
         <div class="gc-document-actions">
             @if ($download)
-                @if ($preview)<a class="gc-btn-info" href="{{ $preview }}" target="_blank" rel="noopener" data-document-open data-document-title="{{ $name }}" data-document-download="{{ $download }}" aria-label="Voir {{ $name }}"><x-nav-icon name="eye" />Aperçu</a>@endif
-                <a href="{{ $download }}" class="gc-btn-primary" aria-label="Télécharger {{ $name }}"><x-nav-icon name="download" />Télécharger</a>
+                @if ($preview)<a class="gc-btn-info gc-document-action" href="{{ $preview }}" target="_blank" rel="noopener noreferrer" data-document-open data-document-title="{{ $name }}" data-document-download="{{ $download }}" title="Aperçu de {{ $name }}" aria-label="Voir {{ $name }}"><x-nav-icon name="eye" /></a>@endif
+                <a href="{{ $download }}" class="gc-btn-primary gc-document-action" title="Télécharger {{ $name }}" aria-label="Télécharger {{ $name }}"><x-nav-icon name="download" /></a>
             @else
                 <span class="text-xs text-slate-500">Fichier non collecté ou indisponible</span>
             @endif
             @if ($remove)
-                <details class="gc-remove-confirm"><summary class="gc-btn-danger"><x-nav-icon name="trash" />Supprimer<span class="sr-only"> {{ $name }}</span></summary>
+                <details class="gc-remove-confirm"><summary class="gc-btn-danger gc-document-action" title="Supprimer {{ $name }}" aria-label="Supprimer {{ $name }}"><x-nav-icon name="trash" /></summary>
                     <form method="POST" action="{{ $remove }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Retirer ce document ? La trace est conservée.</p><button class="gc-btn-danger" type="submit">Confirmer la suppression</button></form>
                 </details>
             @endif

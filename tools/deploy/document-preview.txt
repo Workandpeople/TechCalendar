@@ -1,0 +1,90 @@
+APERCU DES DOCUMENTS V2 - CONTROLES DE DEPLOIEMENT
+
+Diagnostic local (aucun acces au CT ni a la production)
+- Les trois reponses documentaires imposaient "default-src 'none'; sandbox",
+  y compris aux PDF inline. Le sandbox CSP bloque certains lecteurs PDF natifs.
+- La vue des documents de lot consultait mime_type au lieu de mime et masquait
+  donc leur lien d'apercu.
+- La detection MIME du stockage pouvait se rabattre sur l'extension d'un fichier
+  texte. Elle est remplacee par finfo sans repli sur le nom du fichier.
+- CSP CT communiquee par le parent : object-src 'none', child-src blob: et aucun
+  frame-src. Les iframes heritent donc de child-src blob: et sont bloquees avant
+  meme l'ouverture du lecteur. Il faut traiter ces DEUX restrictions Nginx.
+- L'ancienne iframe ne distinguait pas les images, les erreurs et les formats
+  non affichables. Une erreur de session pouvait afficher la page de connexion.
+
+Correctif applicatif
+- GET et HEAD restent authentifies et soumis aux memes controles de dossier,
+  d'audience, de fichier et de chemin. Aucun lien public de stockage n'est cree.
+- Seuls les PDF/JPEG/PNG/WebP/GIF identifies par le contenu sont servis inline.
+  HTML, SVG, Office et autres formats restent en piece jointe octet-stream avec
+  nosniff et sandbox, meme si leur nom ou MIME stocke indique un PDF.
+- Les reponses inline restent private/no-store, nosniff, SAMEORIGIN et limitees
+  par frame-ancestors 'self'. Elles n'autorisent ni script ni formulaire.
+- Seules les reponses PDF inline recoivent X-TC-Document-Preview: pdf. Ce
+  marqueur n'est jamais recopie d'un en-tete de requete client.
+- Le navigateur verifie les en-tetes par HEAD, puis charge le fichier directement
+  (img pour les images, iframe pour le lecteur PDF natif), sans blob ni copie
+  integrale en memoire JS. Erreurs, timeout et annulation sont geres.
+- Le lien "Nouvel onglet" et le telechargement restent disponibles. Un evenement
+  load d'iframe ne prouve pas que le lecteur PDF a rendu son contenu : certains
+  blocages internes au navigateur ne sont pas detectables par la page parente.
+
+Avant integration du paquet (a effectuer par le responsable du deploiement)
+1. Recompiler les assets avec npm run build et inclure public/build avec le code.
+   Actualiser les vues compilees suivant la procedure de deploiement existante.
+   Aucun changement de schema, route, stockage ou configuration SMS requis.
+2. Inspecter les en-tetes effectifs de la page dossier ET d'un GET/HEAD
+   authentifie ...?preview=1 sur la cible autorisee, pas seulement ceux de PHP.
+   Ne pas diffuser cookies, jetons, chemins prives ou configuration complete.
+3. La page dossier doit autoriser connect-src 'self' pour HEAD, frame-src 'self'
+   pour les PDF et img-src 'self' pour les images. Ces sources peuvent aussi
+   provenir d'un default-src 'self' si aucune directive specifique ne les limite.
+4. Les reponses PDF ne doivent recevoir aucun sandbox CSP ni object-src 'none'
+   (le lecteur natif peut utiliser un embed interne). X-Frame-Options DENY et
+   frame-ancestors 'none' bloquent egalement l'integration ; SAMEORIGIN et
+   frame-ancestors 'self' sont adaptes a ces routes authentifiees.
+5. Plusieurs en-tetes CSP sont cumulatifs : une CSP permissive dans Laravel
+   N'ANNULE PAS une CSP restrictive ajoutee par Nginx/proxy. Adapter la politique
+   effective uniquement pour les reponses documentaires concernees, en gardant
+   les protections des autres pages et toutes les directives non concernees.
+   Ne pas supprimer globalement la CSP, ajouter * ou autoriser des scripts.
+   Attention a l'heritage add_header par location lors d'une adaptation Nginx.
+6. Le generateur local prepare l'exception PDF sans installer de configuration :
+
+   php tools/deploy/document-preview-nginx.php INPUT_VHOST OUTPUT_VHOST OUTPUT_MAP [EXISTING_MAP]
+
+   Les deux sorties doivent etre des chemins distincts inexistants. Pour un
+   vhost deja modifie, fournir la map existante en quatrieme argument ; son
+   contenu exact est controle, sinon le generateur refuse de poursuivre.
+   Installer OUTPUT_MAP dans le contexte http, typiquement sous
+   /etc/nginx/conf.d/techcalendar-v2-document-preview.conf, puis OUTPUT_VHOST
+   dans le vhost existant. Ne pas inclure une map dans un bloc server/location.
+   Si frame-src est absent, le generateur ajoute frame-src 'self' aux deux
+   branches de la map, sans modifier child-src blob: ni worker-src 'self' blob:.
+   Un frame-src existant doit deja contenir 'self' et reste inchange.
+   La map conserve les autres directives par defaut ; uniquement la combinaison
+   de REPONSES upstream pdf:application/pdf remplace object-src 'none' par
+   object-src 'self'. La CSP applicative reste une seconde restriction.
+   Le generateur refuse les CSP multiples, variables, sandbox global, DENY,
+   les sources page incompatibles et les configurations inattendues.
+   Le parent integre cet appel dans update-demo.sh avec sauvegarde des DEUX
+   fichiers, installation, nginx -t, reload et restauration des deux fichiers
+   en cas d'echec (ou suppression de la map si elle n'existait pas auparavant).
+   Le fragment nginx-demo.fragment.example et demo-cutover.php restent intacts.
+7. Verifier PDF et image des trois sources (natif, lot, archive), fichier absent,
+   session expiree, role interdit, telechargement, fermeture/Echap et navigation
+   clavier. Essayer un PDF sur un navigateur sans lecteur integre : le repli doit
+   rester explicite. Aucun rendu natif PDF universel n'est garanti sur mobile.
+
+Validation locale : fixture PDF valide avec une page et aucun JavaScript,
+controle des octets PDF/images et en-tetes GET/HEAD sur les trois sources,
+tests de MIME falsifie, HTML/SVG/texte, roles, requetes anonymes, fichiers
+absents et usurpation du marqueur via une requete client. Tests purs du
+generateur de configuration (sans Nginx installe localement).
+Le navigateur integre de cette session ne rend pas le lecteur natif PDF,
+meme avec les deux CSP compatibles : validation visuelle finale sur navigateur
+avec lecteur PDF et nginx -t restent a effectuer sur la cible autorisee.
+
+Aucun deploiement, push, paquet ni modification de production n'a ete realise
+par l'agent preview. SMS conserve son fonctionnement existant.

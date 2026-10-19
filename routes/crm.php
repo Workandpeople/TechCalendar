@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Crm\CapceeReportController;
 use App\Http\Controllers\Crm\DossierAppointmentController;
+use App\Http\Controllers\Crm\DossierBillingController;
 use App\Http\Controllers\Crm\DossierController;
 use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
 use App\Http\Controllers\Crm\DossierPlanningController;
@@ -34,6 +35,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::post('/dossiers/{dossier}/prestations/{operation}/facturation', DossierBillingController::class)->name('dossiers.billing.store');
         Route::delete('/documents/{document}', [DossierController::class, 'removeDocument'])->name('documents.destroy');
         Route::delete('/dossiers/{dossier}/commentaires/{comment}', [DossierController::class, 'removeComment'])->whereNumber('comment')->name('dossiers.comments.destroy');
         Route::delete('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'removeCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.destroy');

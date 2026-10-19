@@ -93,6 +93,7 @@
                                                 data-user-last-name="{{ $user->last_name }}"
                                                 data-user-email="{{ $user->email }}"
                                                 data-user-role="{{ $user->role }}"
+                                                data-user-can-manage-billing="{{ $user->can_manage_billing ? 1 : 0 }}"
                                                 data-user-admin="{{ $user->admin ? 1 : 0 }}"
                                                 data-user-phone="{{ $user->phone }}"
                                                 data-user-address="{{ $user->address }}"
@@ -222,7 +223,17 @@
                 : String(postcode).slice(0, 2).toUpperCase();
         };
 
+        const toggleBillingPermission = (prefix) => {
+            const roleInput = document.getElementById(`${prefix}_role`);
+            const billingInput = document.getElementById(`${prefix}_can_manage_billing`);
+            if (!roleInput || !billingInput) return;
+
+            billingInput.disabled = roleInput.value !== '1';
+            if (billingInput.disabled) billingInput.checked = false;
+        };
+
         const toggleTechFields = (prefix) => {
+            toggleBillingPermission(prefix);
             const roleInput = document.getElementById(`${prefix}_role`);
             const techFields = document.getElementById(`${prefix}_tech_fields`);
             if (!roleInput || !techFields) return;
@@ -569,6 +580,7 @@
                     document.getElementById('edit_last_name').value = button.dataset.userLastName || '';
                     document.getElementById('edit_email').value = button.dataset.userEmail || '';
                     document.getElementById('edit_role').value = String(button.dataset.userRole ?? 0);
+                    document.getElementById('edit_can_manage_billing').checked = button.dataset.userCanManageBilling === '1';
                     document.getElementById('edit_admin').value = String(button.dataset.userAdmin ?? 0);
                     document.getElementById('edit_phone').value = button.dataset.userPhone || '';
                     document.getElementById('edit_address').value = button.dataset.userAddress || '';
@@ -589,6 +601,8 @@
                 }
 
                 if (modalId === 'create-user-modal') {
+                    document.getElementById('create_can_manage_billing').checked = false;
+                    toggleBillingPermission('create');
                     setCheckboxValues('[data-service-checkbox="create"]', []);
                     syncServiceSelectAll('create');
                     setCheckboxValues('[data-department-checkbox="create"]', []);

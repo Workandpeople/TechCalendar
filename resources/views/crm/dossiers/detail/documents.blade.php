@@ -21,7 +21,7 @@
                             'reportReference' => $document->control_reference, 'reportDate' => $document->inspected_on?->format('d/m/Y'), 'issuedDate' => $document->issued_on?->format('d/m/Y'),
                             'outcome' => \App\Services\Crm\PostVisitWorkflow::OUTCOMES[$document->control_outcome] ?? null,
                             'download' => route('v2.documents.download', $document),
-                            'preview' => in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? route('v2.documents.download', ['document' => $document, 'preview' => 1]) : null,
+                            'preview' => \App\Services\Crm\DocumentResponseHeaders::previewable($document->mime_type) ? route('v2.documents.download', ['document' => $document, 'preview' => 1]) : null,
                             'remove' => route('v2.documents.destroy', $document),
                             'sharing' => route('v2.documents.sharing', $document),
                             'visible' => $document->client_visible, 'delegataireVisible' => $document->delegataire_visible,
@@ -45,7 +45,7 @@
                             'author' => $document->uploader?->full_name ?: 'Auteur non renseigné', 'date' => $document->created_at?->format('d/m/Y H:i'),
                             'reportReference' => null, 'reportDate' => null, 'issuedDate' => null, 'outcome' => null,
                             'download' => $document->disk === 'local' ? route('v2.dossiers.lot-documents.download', [$dossier, $document->id]) : null,
-                            'preview' => $document->disk === 'local' && in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? route('v2.dossiers.lot-documents.download', ['dossier' => $dossier, 'document' => $document->id, 'preview' => 1]) : null, 'remove' => null,
+                            'preview' => $document->disk === 'local' && \App\Services\Crm\DocumentResponseHeaders::previewable($document->mime) ? route('v2.dossiers.lot-documents.download', ['dossier' => $dossier, 'document' => $document->id, 'preview' => 1]) : null, 'remove' => null,
                             'sharing' => route('v2.dossiers.lot-documents.sharing', [$dossier, $document->id]),
                             'visible' => $document->client_visible && ! $document->is_private, 'delegataireVisible' => $document->delegataire_visible && ! $document->is_private,
                         ])
@@ -61,7 +61,11 @@
     </div>
     <dialog class="gc-document-preview" data-document-preview aria-labelledby="preview-title">
         <header><h2 id="preview-title" data-preview-title>Aperçu du document</h2><button type="button" class="gc-btn-secondary" data-preview-close><x-nav-icon name="close" />Fermer</button></header>
-        <iframe title="Aperçu sécurisé du document" data-preview-frame></iframe>
-        <footer><p>Si le format n’est pas pris en charge, utilisez le téléchargement.</p><a class="gc-btn-primary" data-preview-download><x-nav-icon name="download" />Télécharger</a></footer>
+        <p class="gc-document-preview-status" data-preview-status role="status" aria-live="polite"></p>
+        <div class="gc-document-preview-content" data-preview-content></div>
+        <footer>
+            <p>Si l’aperçu reste vide, ouvrez le document dans un nouvel onglet ou téléchargez-le.</p>
+            <div class="gc-document-preview-links"><a class="gc-btn-secondary" data-preview-external target="_blank" rel="noopener noreferrer">Nouvel onglet<span class="sr-only"> : aperçu du document</span></a><a class="gc-btn-primary" data-preview-download><x-nav-icon name="download" />Télécharger</a></div>
+        </footer>
     </dialog>
 </section>

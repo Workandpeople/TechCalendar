@@ -29,6 +29,15 @@
     </select>
 </div>
 
+<div class="space-y-2 rounded-xl border p-4" style="border-color:var(--gc-border);">
+    <input type="hidden" name="can_manage_billing" value="0" />
+    <label class="flex items-center gap-2 text-sm" for="{{ $prefix }}_can_manage_billing">
+        <input id="{{ $prefix }}_can_manage_billing" name="can_manage_billing" type="checkbox" class="gc-check" value="1" aria-describedby="{{ $prefix }}_billing_help" @checked(old('can_manage_billing', $target?->can_manage_billing ?? false)) />
+        <span>Autoriser le suivi de facturation (comptabilité)</span>
+    </label>
+    <p id="{{ $prefix }}_billing_help" class="text-xs" style="color:var(--gc-text-soft);">Les administrateurs et les gérants disposent déjà de ce droit. Cette autorisation explicite est réservée au rôle Planning, sans créer de nouveau rôle. Elle n'est pas disponible pour les techniciens.</p>
+</div>
+
 <div id="{{ $prefix }}_tech_fields" class="tech-only-fields hidden space-y-4 rounded-xl border p-4" style="border-color:var(--gc-border);">
     <h3 class="text-sm font-semibold" style="color:var(--gc-text);">Informations technicien</h3>
 

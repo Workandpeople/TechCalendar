@@ -64,8 +64,13 @@
     .gc-document-report div { margin-top: .25rem; }
     .gc-document-report dt { color: #526679; }
     .gc-document-report dd { font-weight: 650; }
-    .gc-document-actions { display: grid; gap: .5rem; justify-items: start; }
+    .gc-document-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem; }
     .gc-workspace .gc-document-actions :is(a, summary, button), .gc-workspace .gc-sharing .gc-btn-primary { min-height: 32px; font-size: .65rem; padding: .4rem .5rem; max-width: 100%; }
+    .gc-workspace .gc-document-actions .gc-document-action { display: inline-flex; width: 32px; height: 32px; padding: 0; align-items: center; justify-content: center; flex-shrink: 0; }
+    .gc-workspace .gc-document-action:focus-visible { outline: 2px solid #1742ad; outline-offset: 3px; }
+    .gc-document-action svg { width: 16px; height: 16px; }
+    .gc-remove-confirm[open] { flex-basis: 100%; }
+    .gc-remove-confirm > form { padding: .5rem; border: 1px solid #e6a6b2; border-radius: .4rem; background: #fff5f7; }
     .gc-remove-confirm > summary { list-style: none; }
     .gc-remove-confirm > summary::-webkit-details-marker { display: none; }
     .gc-document-preview { position: fixed; inset: 0; margin: auto; width: min(1200px, 96vw); height: 90dvh; border: 1px solid #a6bdd8; border-radius: 1rem; padding: 0; background: white; color: #233848; }
@@ -73,7 +78,11 @@
     .gc-document-preview::backdrop { background: #10233bb3; backdrop-filter: blur(4px); }
     .gc-document-preview > header, .gc-document-preview > footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; background: #edf5ff; }
     .gc-document-preview h2 { font-weight: 700; overflow-wrap: anywhere; }
-    .gc-document-preview iframe { flex: 1; width: 100%; min-height: 0; border: none; background: #e4ebf2; }
+    .gc-document-preview-status { padding: .75rem 1rem; font-size: .8rem; }
+    .gc-document-preview-content { flex: 1; display: flex; min-height: 0; overflow: auto; background: #e4ebf2; }
+    .gc-document-preview-content iframe { width: 100%; height: 100%; min-height: 0; border: none; }
+    .gc-document-preview-content img { width: 100%; height: 100%; object-fit: contain; }
+    .gc-document-preview-links { display: flex; flex-wrap: wrap; gap: .5rem; flex-shrink: 0; }
     .gc-document-preview footer { font-size: .75rem; }
     .gc-party-card[data-party='client'], .gc-party-summary[data-party='client'] { border-top: 3px solid #009bc4; }
     .gc-party-card[data-party='delegataire'], .gc-party-summary[data-party='delegataire'] { border-top: 3px solid #007f76; }

@@ -34,6 +34,10 @@ class DossierRegistry
                     $operations->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id));
                     DossierStatusCatalog::filter($operations, $filters['status']);
                 });
+                if ($filters['status'] === 'invoiced') {
+                    $query->orWhereHas('operations', fn ($operations) => $operations
+                        ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id))->whereHas('billing'));
+                }
                 if ($filters['status'] === 'unknown' && empty($filters['service_id'])) {
                     $query->orWhereDoesntHave('operations');
                 }
@@ -41,7 +45,7 @@ class DossierRegistry
         }
 
         return app(DossierTable::class)->apply($query, $filters)->with([
-            'client', 'delegataire', 'operations.service', 'planningUser:id,first_name,last_name,deleted_at',
+            'client', 'delegataire', 'operations.service', 'operations.billing', 'planningUser:id,first_name,last_name,deleted_at',
             'latestActivity',
             'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
             'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
@@ -67,6 +71,10 @@ class DossierRegistry
         foreach (DossierStatusCatalog::STATUSES as $key => $status) {
             $categories[$key] = [...$status, 'count' => (int) ($counts[$key] ?? 0)];
         }
+        $categories['invoiced']['count'] = (clone $query)->whereHas('operations', function ($operations) use ($filters): void {
+            $operations->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id))
+                ->where(fn ($query) => $query->whereHas('billing')->orWhereIn('legacy_status', DossierStatusCatalog::STATUSES['invoiced']['values']));
+        })->count();
 
         return $categories;
     }
@@ -74,6 +82,20 @@ class DossierRegistry
     private function filteredQuery(array $filters): Builder
     {
         return Dossier::query()
+            ->when($filters['billing'] ?? null, function ($query, $billing): void {
+                if ($billing === 'review') {
+                    $query->where('billing_review_required', true);
+
+                    return;
+                }
+                $query->where('billing_review_required', false);
+                match ($billing) {
+                    'unbilled' => $query->whereDoesntHave('billings'),
+                    'partial' => $query->whereHas('billings')->whereHas('operations', fn ($operations) => $operations->whereDoesntHave('billing')),
+                    'invoiced' => $query->whereHas('operations')->whereDoesntHave('operations', fn ($operations) => $operations->whereDoesntHave('billing')),
+                    default => null,
+                };
+            })
             ->when(filled($filters['q'] ?? null), function ($query) use ($filters): void {
                 // Escape LIKE wildcards so a reference is searched literally.
                 $search = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $filters['q']).'%';
@@ -195,18 +217,17 @@ class DossierRegistry
         abort_if($actor->isExternal() && (! $document->{app(ClientAccess::class)->audienceColumn($actor)}
             || ! app(ClientAccess::class)->allows($actor, 'documents')), 404);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
-        $name = preg_replace('/[^\pL\pN ._-]/u', '_', $document->name);
+        $name = preg_replace('/[^\pL\pN ._-]/u', '_', $document->name) ?: 'Document';
         $extension = pathinfo($document->path, PATHINFO_EXTENSION);
+        if ($extension !== '' && ! str_ends_with(strtolower($name), '.'.strtolower($extension))) {
+            $name .= '.'.$extension;
+        }
 
-        $mime = Storage::disk('local')->mimeType($document->path);
-        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+        $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file(Storage::disk('local')->path($document->path)) : 'application/octet-stream';
+        $inline = $preview && DocumentResponseHeaders::previewable($mime);
 
-        return Storage::disk('local')->response($document->path, $name.'.'.$extension, [
-            'Content-Type' => $inline ? $mime : 'application/octet-stream',
-            'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'private, no-store',
-            'Content-Security-Policy' => "default-src 'none'; sandbox",
-        ], $inline ? 'inline' : 'attachment');
+        return Storage::disk('local')->response($document->path, $name,
+            DocumentResponseHeaders::forFile($mime, $inline), $inline ? 'inline' : 'attachment');
     }
 
     public function shareDocument(User $actor, DossierDocument $document, bool $visible, ?bool $delegataireVisible = null): void

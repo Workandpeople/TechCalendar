@@ -1,6 +1,6 @@
 import { initDossierAssignment } from './dossier-assignment.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'planning', 'per_page', 'sort', 'direction', 'all_columns'];
+const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns'];
 
 export function dossierListUrl(base, entries, changes = {}) {
     const url = new URL(base);

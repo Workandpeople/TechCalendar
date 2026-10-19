@@ -63,4 +63,10 @@ class DossierPolicy
     {
         return $this->view($user, $dossier) && ($user->admin || $user->role === 0);
     }
+
+    public function manageBilling(User $user, Dossier $dossier): bool
+    {
+        return $this->viewAny($user) && ($user->admin || $user->role === 0
+            || ($user->role === 1 && $user->can_manage_billing));
+    }
 }

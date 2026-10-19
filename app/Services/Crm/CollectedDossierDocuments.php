@@ -118,15 +118,11 @@ class CollectedDossierDocuments
         }
 
         $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file($path) : 'application/octet-stream';
-        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+        $inline = $preview && DocumentResponseHeaders::previewable($mime);
 
         // Only sniffed PDF/raster images can be viewed. Never render archived HTML/SVG.
-        return response()->download($path, $name, [
-            'Content-Type' => $inline ? $mime : 'application/octet-stream',
-            'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'private, no-store',
-            'Content-Security-Policy' => "default-src 'none'; sandbox",
-        ], $inline ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT)->setPrivate();
+        return response()->download($path, $name, DocumentResponseHeaders::forFile($mime, $inline),
+            $inline ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT)->setPrivate();
     }
 
     public function share(User $actor, Dossier $dossier, int $sourceId, bool $visible, ?bool $delegataireVisible = null): void

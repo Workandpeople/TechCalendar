@@ -56,7 +56,13 @@ class DossierTable
             $appointment->where('dossier_operations.service_id', $filters['service_id']);
         }
         if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
-            $appointment->whereIn('dossier_operations.legacy_status', DossierStatusCatalog::STATUSES[$filters['status']]['values']);
+            $appointment->where(function ($query) use ($filters): void {
+                $query->whereIn('dossier_operations.legacy_status', DossierStatusCatalog::STATUSES[$filters['status']]['values']);
+                if ($filters['status'] === 'invoiced') {
+                    $query->orWhereExists(fn ($billing) => $billing->selectRaw('1')->from('dossier_billings')
+                        ->whereColumn('dossier_billings.dossier_operation_id', 'dossier_operations.id'));
+                }
+            });
         }
         // Prefer a current booking over historical copies, then the next booking or the most recent past visit.
         $future = 'appointments.starts_at >= ? AND appointments.status = ?';

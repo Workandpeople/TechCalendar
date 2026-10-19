@@ -61,14 +61,10 @@ class DossierLinkedDocuments
             $name .= '.'.$extension;
         }
 
-        $mime = $preview ? $disk->mimeType($document->path) : 'application/octet-stream';
-        $inline = $preview && in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+        $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file($path) : 'application/octet-stream';
+        $inline = $preview && DocumentResponseHeaders::previewable($mime);
 
-        return $disk->response($document->path, $name, [
-            'Content-Type' => $inline ? $mime : 'application/octet-stream',
-            'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'private, no-store',
-            'Content-Security-Policy' => "default-src 'none'; sandbox",
-        ], $inline ? 'inline' : 'attachment');
+        return $disk->response($document->path, $name,
+            DocumentResponseHeaders::forFile($mime, $inline), $inline ? 'inline' : 'attachment');
     }
 }

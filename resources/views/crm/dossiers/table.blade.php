@@ -51,6 +51,8 @@
                                     @case('client')
                                         <a class="gc-dossier-client gc-dossier-cell-lines" data-dossier-comments-trigger href="{{ route('v2.dossiers.show', $dossier) }}">{{ $dossier->beneficiaryLabel() }}</a>
                                         <span class="gc-dossier-cell-muted">{{ $dossier->reference }}</span>
+                                        @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
+                                        @if ($billingSummary['tone'] !== 'slate')<a href="{{ route('v2.dossiers.show', $dossier) }}#facturation"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>@endif
                                         <a href="{{ route('v2.dossiers.show', $dossier) }}#historique" class="gc-dossier-comments-link"
                                             aria-label="Voir les {{ $dossier->comments_count }} commentaires du dossier {{ $dossier->reference }}">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/></svg>
@@ -74,7 +76,7 @@
                                         @break
                                     @case('service')
                                         <ul class="space-y-2">@forelse ($dossier->operations as $operation)
-                                            <li><span class="gc-dossier-cell-lines" title="{{ $operation->service?->name ?: $operation->legacy_service_name }}">{{ $operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher' }}</span><x-dossier-status :status="$operation->legacy_status" /></li>
+                                            <li><span class="gc-dossier-cell-lines" title="{{ $operation->service?->name ?: $operation->legacy_service_name }}">{{ $operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher' }}</span><x-dossier-status :status="$operation->legacy_status" /> @if ($operation->billing)<x-billing-badge />@endif</li>
                                         @empty<li><x-dossier-status /></li>@endforelse</ul>
                                         @break
                                     @case('technician')

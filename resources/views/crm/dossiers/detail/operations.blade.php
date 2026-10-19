@@ -12,6 +12,7 @@
                     <div><p class="font-medium">{{ ($operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher') }}</p><p class="text-xs text-slate-500">{{ ($operation->service?->type ?: 'Coffrac') }} · Fiche {{ $operation->id }}</p></div>
                     <div class="flex flex-wrap items-center gap-2">
                         <x-dossier-status :status="$operation->legacy_status" />
+                        @if ($operation->billing)<a href="#facturation-{{ $operation->id }}"><x-billing-badge /></a>@endif
                         <span class="text-sm text-slate-500">{{ $operation->appointments_count }} RDV lié(s)</span>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">

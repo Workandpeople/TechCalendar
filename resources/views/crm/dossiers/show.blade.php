@@ -10,8 +10,10 @@
             <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}"><x-nav-icon name="edit" /> Modifier les informations</a>
         </x-workspace-heading>
         @include('crm.dossiers.notice')
+        @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
+        <a href="#facturation" class="inline-block"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>
         <nav class="gc-dossier-tabs" aria-label="Sections du dossier">
-            @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'apres-visite' => ['Avis et contrôle', 'check'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
+            @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'facturation' => ['Facturation', 'check'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'apres-visite' => ['Avis et contrôle', 'check'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
                 <a href="#{{ $id }}"><x-nav-icon :name="$icon" />{{ $label }}</a>
             @endforeach
         </nav>
@@ -26,6 +28,7 @@
             </div>
             <aside class="gc-dossier-side" aria-label="Suivi du dossier">
                 @include('crm.dossiers.detail.operations')
+                @include('crm.dossiers.detail.billing')
                 @include('crm.dossiers.detail.appointments')
                 @include('crm.dossiers.detail.contacts')
                 @include('crm.dossiers.detail.history')

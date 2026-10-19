@@ -1,0 +1,39 @@
+FACTURATION PERSISTANTE V2
+
+Un marquage est conserve par prestation, independamment du statut metier.
+Une reprise de controle ne supprime jamais ce marquage. Le dossier affiche
+un resume non facture / partiellement facture / entierement facture / a verifier.
+Le suivi n'emet pas de facture et ne certifie pas un paiement.
+
+Acces : administrateurs et gerants ; Planning seulement avec l'habilitation
+"Suivi de facturation" dans sa fiche utilisateur. Les comptes externes n'ont
+pas ce droit. Aucun droit Planning n'est ajoute automatiquement.
+
+Securite : confirmation explicite, controle de version, verrouillage du dossier
+puis de la prestation et cle unique en base. Deux validations concurrentes ne
+peuvent pas produire deux marques. L'historique est prive. Aucun bouton ne
+permet d'effacer une marque ou de remettre une prestation a facturer.
+
+Reprise Coffrac : archives locales uniquement, aucun appel au serveur Coffrac.
+  php artisan crm:reconcile-billing          # bilan sans ecriture
+  php artisan crm:reconcile-billing --apply  # reprise idempotente
+
+Le script update-demo.sh applique cette reprise apres les migrations et avant
+la remise en service. Le seed de simulation utilise la meme logique.
+Sources : historique/status 11, fiches/status 11, facturation/passer_facture=1.
+La seule existence d'une facture ou un numero facture du beneficiaire ne suffit
+pas. Les identifiants source sont rapproches avec leurs parents, jamais supposes
+identiques aux identifiants V2. Les preuves sont conservees dans le registre.
+
+Une preuve de facturation ambigue bloque les nouveaux marquages du dossier
+(billing_review_required) plutot que de risquer une seconde facturation.
+Le bilan affiche created/existing/review/invalid ; une seconde execution ne
+cree aucune marque supplementaire et n'ecrase pas un marquage natif.
+Un administrateur doit examiner les preuves archivees avant toute correction
+d'un dossier a verifier. Ne jamais supprimer ces blocages ou marques en masse.
+La migration refuse de supprimer un registre de facturation non vide.
+
+Deploiement : sauvegarde code, environnement et base avant migration. Pas de
+seed, pas de remise a zero ni reimport complet. SMS forces en simulation sur
+la demo. Les factures emises hors de TechCalendar ne peuvent pas etre bloquees
+par ce suivi : la comptabilite doit consulter le marquage avant facturation.

@@ -14,18 +14,21 @@ QUEUE=techcalendar-v2-queue.service
 REVERB=techcalendar-v2-reverb.service
 DOMAIN=techcalendar.lucas-dinnichert.fr
 DATABASE=techcalendar_v2_demo_simulation
+NGINX_VHOST=/etc/nginx/sites-available/techcalendar.lucas-dinnichert.fr
+NGINX_PREVIEW_MAP=/etc/nginx/conf.d/techcalendar-v2-document-preview.conf
 COMPOSER=$(command -v composer)
 
 # Share the cutover lock: an update and a V1/V2 switch must never overlap.
 exec 9>/run/lock/techcalendar-v2-cutover.lock
 flock -n 9 || { echo 'Une operation de deploiement est deja en cours.' >&2; exit 1; }
-for tool in php8.4 rsync mysql mysqldump gzip curl; do command -v "$tool" >/dev/null; done
+for tool in php8.4 rsync mysql mysqldump gzip curl nginx; do command -v "$tool" >/dev/null; done
 test -f "$APP/.env"
 test ! -e "$APP/storage/framework/down"
 test -S /run/php/techcalendar-v2-demo.sock
 test ! -e "$APP/public/hot"
 systemctl is-active --quiet "$QUEUE" "$REVERB" php8.4-fpm nginx
-grep -Fq 'root /var/www/TechCalendar-v2/public;' /etc/nginx/sites-available/techcalendar.lucas-dinnichert.fr
+grep -Fq 'root /var/www/TechCalendar-v2/public;' "$NGINX_VHOST"
+nginx -t
 (cd "$PACKAGE" && sha256sum -c SHA256SUMS)
 grep -Eq '^[0-9a-f]{40}$' "$PACKAGE/revision.txt"
 gzip -t "$PACKAGE/code-v2.tar.gz"
@@ -48,6 +51,10 @@ if (! $app->environment('demo') || ! config('crm.v2_enabled')
     exit(1);
 }
 $app->make(App\Services\Simulation\SimulationSafety::class)->assertDemoConfiguration();
+if ($app->make(App\Services\Sms\SmsConfiguration::class)->mode() !== 'simulate') {
+    fwrite(STDERR, "STOP : les SMS doivent rester en simulation.\n");
+    exit(1);
+}
 echo "Isolation V2 verifiee.\n";
 PHP
     )
@@ -84,13 +91,42 @@ COMPOSER_ALLOW_SUPERUSER=1 php8.4 "$COMPOSER" install --working-dir="$STAGE" \
     --no-dev --prefer-dist --no-interaction --optimize-autoloader --no-scripts
 php8.4 "$COMPOSER" check-platform-reqs --working-dir="$STAGE" --no-dev
 
+# Validate the exact installed policy before any downtime; never overwrite an unrelated map.
+test ! -L "$NGINX_PREVIEW_MAP"
+cp -p "$NGINX_VHOST" "$BACKUP/nginx-vhost.conf"
+sha256sum "$NGINX_VHOST" > "$BACKUP/nginx-checksums"
+NGINX_MAP_EXISTED=0
+if [[ -e "$NGINX_PREVIEW_MAP" ]]; then
+    test -f "$NGINX_PREVIEW_MAP"
+    grep -Fq '$tc_document_preview_csp' "$NGINX_VHOST"
+    cp -p "$NGINX_PREVIEW_MAP" "$BACKUP/nginx-preview-map.conf"
+    sha256sum "$NGINX_PREVIEW_MAP" >> "$BACKUP/nginx-checksums"
+    NGINX_MAP_EXISTED=1
+fi
+php8.4 "$STAGE/tools/deploy/document-preview-nginx.php" \
+    "$NGINX_VHOST" "$WORK/nginx-vhost.next" "$WORK/nginx-preview-map.next" "$NGINX_PREVIEW_MAP"
+
 cd "$APP"
 MAINTENANCE=0
 SUCCESS=0
+NGINX_CHANGED=0
 finish() {
     local status=$?
     trap - EXIT INT TERM HUP
     if [[ $SUCCESS -ne 1 && $MAINTENANCE -eq 1 ]]; then
+        if [[ $NGINX_CHANGED -eq 1 ]]; then
+            install -o root -g root -m 0644 "$BACKUP/nginx-vhost.conf" "$NGINX_VHOST" || true
+            if [[ $NGINX_MAP_EXISTED -eq 1 ]]; then
+                install -o root -g root -m 0644 "$BACKUP/nginx-preview-map.conf" "$NGINX_PREVIEW_MAP" || true
+            else
+                rm -f -- "$NGINX_PREVIEW_MAP"
+            fi
+            if nginx -t; then
+                systemctl reload nginx || echo 'ATTENTION : rechargement Nginx a verifier.' >&2
+            else
+                echo 'ATTENTION : configuration Nginx a verifier avant tout rechargement.' >&2
+            fi
+        fi
         # Never roll migrations back or restore a dump automatically.
         runuser -u www-data -- php8.4 artisan down --retry=60 || true
         systemctl stop "$QUEUE" "$REVERB" || true
@@ -135,6 +171,8 @@ done
 runuser -u www-data -- php8.4 artisan config:clear
 runuser -u www-data -- php8.4 artisan package:discover
 runuser -u www-data -- php8.4 artisan migrate --force
+# Rebuild persistent billing marks before reopening; never resets a native mark.
+runuser -u www-data -- php8.4 artisan crm:reconcile-billing --apply | tee "$WORK/billing-reconciliation.txt"
 runuser -u www-data -- php8.4 artisan config:cache
 runuser -u www-data -- php8.4 artisan route:cache
 runuser -u www-data -- php8.4 artisan view:cache
@@ -143,6 +181,14 @@ runuser -u www-data -- php8.4 artisan migrate:status
 runuser -u www-data -- php8.4 artisan schedule:list
 # Informative dry run only: review assignments before applying reconciliation.
 runuser -u www-data -- php8.4 artisan clients:reconcile-legacy | tee "$WORK/client-reconciliation-preview.txt"
+# Keep the original page policy, with only same-origin frames and a PDF-response exception.
+sha256sum -c "$BACKUP/nginx-checksums"
+if [[ $NGINX_MAP_EXISTED -eq 0 ]]; then test ! -e "$NGINX_PREVIEW_MAP"; fi
+NGINX_CHANGED=1
+install -o root -g root -m 0644 "$WORK/nginx-preview-map.next" "$NGINX_PREVIEW_MAP"
+install -o root -g root -m 0644 "$WORK/nginx-vhost.next" "$NGINX_VHOST"
+nginx -t
+systemctl reload nginx
 systemctl reload php8.4-fpm
 systemctl start "$QUEUE" "$REVERB"
 systemctl is-active --quiet "$QUEUE" "$REVERB"
@@ -162,3 +208,4 @@ SUCCESS=1
 echo "V2 mise a jour. Sauvegarde et bilan : $WORK"
 echo 'Verifier la connexion HTTPS, un dossier et un document dans le navigateur.'
 echo 'Base preservee, migrations appliquees. Ni seed, ni reimport, ni changement de mot de passe.'
+echo 'Historique de facturation repris, apercu documentaire configure. SMS en simulation.'

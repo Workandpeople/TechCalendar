@@ -3,6 +3,9 @@
 namespace App\Services\Simulation;
 
 use App\Models\ExternalServiceAlias;
+use App\Services\Crm\LegacyBillingReconciliation;
+use App\Services\Crm\LegacyClientReconciliation;
+use App\Services\Crm\NativeServiceCatalog;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -57,10 +60,11 @@ class SnapshotImporter
             $this->projectExternalAppointments($snapshot);
             $this->archive($snapshot);
             if (config('crm.v2_enabled')) {
-                $this->report['matching']['services'] = app(\App\Services\Crm\NativeServiceCatalog::class)->reconcile();
-                $this->report['matching']['clients'] = app(\App\Services\Crm\LegacyClientReconciliation::class)->run(true);
+                $this->report['matching']['services'] = app(NativeServiceCatalog::class)->reconcile();
+                $this->report['matching']['clients'] = app(LegacyClientReconciliation::class)->run(true);
             }
             $this->projectActivities($snapshot);
+            $this->report['matching']['billing'] = app(LegacyBillingReconciliation::class)->run(true);
             $this->report['source_dump_sha256'] = $snapshot->manifest['dump_sha256'];
             $this->report['counts']['dossiers'] = DB::table('dossiers')->count();
             $this->report['counts']['operations'] = DB::table('dossier_operations')->count();

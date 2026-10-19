@@ -33,7 +33,7 @@ class PostVisitWorkflow
         'revise_control' => ['from' => ['rt_control'], 'to' => 'rt_control', 'label' => 'Conclusion du contrôle mise à jour', 'review' => true],
         'request_correction' => ['from' => ['rt_control', 'recontrol'], 'to' => 'non_compliant', 'label' => 'Correction demandée au client', 'review' => true],
         'validate_report' => ['from' => ['rt_control', 'recontrol'], 'to' => 'report', 'label' => 'Rapport validé', 'review' => true],
-        'reopen_control' => ['from' => ['report'], 'to' => 'rt_control', 'label' => 'Validation retirée pour réexamen', 'review' => true],
+        'reopen_control' => ['from' => ['report', 'invoiced'], 'to' => 'rt_control', 'label' => 'Validation retirée pour réexamen', 'review' => true],
     ];
 
     public function __construct(private readonly LotStatusService $lotStatuses) {}
@@ -105,6 +105,9 @@ class PostVisitWorkflow
             }
             if (blank($data['comment'] ?? null)) {
                 throw ValidationException::withMessages(['comment' => 'Un commentaire est obligatoire pour tracer le traitement.']);
+            }
+            if ($state === 'invoiced' && ! $operation->billing()->exists()) {
+                throw ValidationException::withMessages(['action' => 'La reprise de l’historique de facturation doit être terminée avant de rouvrir cette prestation.']);
             }
             if ($data['action'] === 'reopen_control' && $operation->capceeReports()->exists()) {
                 throw ValidationException::withMessages(['action' => 'Un envoi CAPCEE existe pour ce contrôle. Sa correction nécessite une nouvelle version du rapport ; la validation locale ne peut pas être retirée seule.']);

@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Services\UserBillingPermission;
 use App\Services\UserNameNormalizer;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -89,6 +90,7 @@ class ManagerUserController extends Controller
             'last_name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', 'unique:users,email'],
             'role' => ['required', Rule::in([0, 1, 2])],
+            'can_manage_billing' => ['sometimes', 'boolean'],
             'phone' => ['nullable', 'string', 'max:255', 'required_if:role,2'],
             'address' => ['nullable', 'string', 'max:255', 'required_if:role,2'],
             'department_code' => ['nullable', 'string', 'max:3', 'regex:/^(\\d{2,3}|2A|2B)$/i', 'required_if:role,2'],
@@ -111,6 +113,7 @@ class ManagerUserController extends Controller
             'email' => $payload['email'],
             'role' => (int) $payload['role'],
             'admin' => false,
+            'can_manage_billing' => UserBillingPermission::resolve($payload),
             'password' => Hash::make($plainPassword),
             'must_change_password' => true,
             ...$this->resolveTechFields($payload),
@@ -135,6 +138,7 @@ class ManagerUserController extends Controller
             'last_name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', Rule::unique('users', 'email')->ignore($target->id)],
             'role' => ['required', Rule::in([0, 1, 2])],
+            'can_manage_billing' => ['sometimes', 'boolean'],
             'phone' => ['nullable', 'string', 'max:255', 'required_if:role,2'],
             'address' => ['nullable', 'string', 'max:255', 'required_if:role,2'],
             'department_code' => ['nullable', 'string', 'max:3', 'regex:/^(\\d{2,3}|2A|2B)$/i', 'required_if:role,2'],
@@ -156,6 +160,7 @@ class ManagerUserController extends Controller
             'email' => $payload['email'],
             'role' => (int) $payload['role'],
             'admin' => false,
+            'can_manage_billing' => UserBillingPermission::resolve($payload, $target),
             ...$this->resolveTechFields($payload),
         ]);
 

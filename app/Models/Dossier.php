@@ -19,7 +19,8 @@ class Dossier extends Model
 
     protected function casts(): array
     {
-        return ['version' => 'integer', 'planning_user_id' => 'integer', 'client_contact' => 'array', 'delegataire_contact' => 'array'];
+        return ['version' => 'integer', 'planning_user_id' => 'integer', 'client_contact' => 'array', 'delegataire_contact' => 'array',
+            'billing_review_required' => 'boolean', 'billing_review_evidence' => 'array'];
     }
 
     public function beneficiaryLabel(): string
@@ -40,6 +41,11 @@ class Dossier extends Model
     public function operations(): HasMany
     {
         return $this->hasMany(DossierOperation::class);
+    }
+
+    public function billings(): HasMany
+    {
+        return $this->hasMany(DossierBilling::class);
     }
 
     public function planningUser(): BelongsTo
