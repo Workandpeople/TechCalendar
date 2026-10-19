@@ -200,6 +200,9 @@ class DossierRegistry
         }
         try {
             return DB::transaction(function () use ($actor, $dossier, $file, $name, $path, $clientVisible, $delegataireVisible, $metadata): DossierDocument {
+                $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+                // Recheck assignment and correction state after any concurrent dossier update.
+                Gate::forUser($actor)->authorize('uploadDocument', $dossier);
                 $document = $dossier->documents()->create([
                     'author_id' => $actor->id, 'name' => $name, 'path' => $path,
                     'mime_type' => $file->getMimeType(), 'size' => $file->getSize(),

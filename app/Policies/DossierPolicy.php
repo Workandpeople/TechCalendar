@@ -29,8 +29,9 @@ class DossierPolicy
 
     public function uploadDocument(User $user, Dossier $dossier): bool
     {
-        return $this->view($user, $dossier) && (! $user->isExternal()
-            || app(ClientAccess::class)->allows($user, 'upload_documents'));
+        return $user->isExternal()
+            ? app(ClientAccess::class)->uploadDocument($user, $dossier)
+            : $this->view($user, $dossier);
     }
 
     public function respondToNonConformity(User $user, Dossier $dossier): bool

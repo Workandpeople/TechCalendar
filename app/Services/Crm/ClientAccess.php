@@ -15,14 +15,22 @@ class ClientAccess
         'documents' => 'Consulter les documents partagés',
         'comments' => 'Lire les commentaires partagés',
         'add_comments' => 'Ajouter des commentaires',
-        'upload_documents' => 'Ajouter des documents',
+        'upload_documents' => 'Ajouter des documents dans tous les états',
+        'upload_corrections' => 'Ajouter des justificatifs en non-conformité',
         'lots' => 'Consulter les lots attribués',
     ];
 
     public static function defaults(string $kind): array
     {
         return ['documents' => true, 'comments' => $kind === 'client',
-            'add_comments' => $kind === 'client', 'upload_documents' => $kind === 'client', 'lots' => true];
+            'add_comments' => $kind === 'client', 'upload_documents' => $kind === 'client',
+            'upload_corrections' => true, 'lots' => true];
+    }
+
+    public function permissions(User $user): array
+    {
+        // Existing accounts gain the correction-only right, never general upload or read access.
+        return ['upload_corrections' => true, ...($user->portal_permissions ?? [])];
     }
 
     public function active(User $user): bool
@@ -34,12 +42,32 @@ class ClientAccess
 
     public function allows(User $user, string $permission): bool
     {
-        $readPermission = ['add_comments' => 'comments', 'upload_documents' => 'documents'][$permission] ?? null;
+        $permissions = $this->permissions($user);
+        $readPermission = ['add_comments' => 'comments', 'upload_documents' => 'documents', 'upload_corrections' => 'documents'][$permission] ?? null;
 
         return $this->active($user) && ! $user->must_change_password
             && in_array($permission, array_keys(self::PERMISSIONS), true)
-            && ($readPermission === null || ($user->portal_permissions[$readPermission] ?? false) === true)
-            && ($user->portal_permissions[$permission] ?? false) === true;
+            && ($readPermission === null || ($permissions[$readPermission] ?? false) === true)
+            && ($permissions[$permission] ?? false) === true;
+    }
+
+    public function uploadDocument(User $user, Dossier $dossier): bool
+    {
+        if (! $this->viewDossier($user, $dossier)) {
+            return false;
+        }
+        if ($this->allows($user, 'upload_documents')) {
+            return true;
+        }
+        if (! $this->allows($user, 'upload_corrections')) {
+            return false;
+        }
+
+        $statuses = DossierStatusCatalog::STATUSES['non_compliant']['values'];
+
+        return $dossier->relationLoaded('operations')
+            ? $dossier->operations->contains(fn ($operation) => in_array($operation->legacy_status, $statuses, true))
+            : $dossier->operations()->whereIn('legacy_status', $statuses)->exists();
     }
 
     public function dossiers(User $user): Builder

@@ -1,6 +1,6 @@
 @php
     $prefix = 'account-'.($account?->id ?? 'new');
-    $permissions = $account?->portal_permissions ?? $defaults;
+    $permissions = $account ? app(\App\Services\Crm\ClientAccess::class)->permissions($account) : $defaults;
     $retry = old('account_id') == ($account?->id ?? 'new');
     $enabled = $retry ? old('portal_enabled', $account?->portal_enabled ?? true) : ($account?->portal_enabled ?? true);
 @endphp
@@ -20,6 +20,7 @@
             <label class="flex items-center gap-2 text-sm"><input type="hidden" name="permissions[{{ $key }}]" value="0"><input type="checkbox" name="permissions[{{ $key }}]" value="1" @checked($retry ? old('permissions.'.$key, $permissions[$key] ?? false) : ($permissions[$key] ?? false))>{{ $label }}</label>
         @endforeach
     </fieldset>
+    <p class="text-xs text-slate-500">Le dépôt de justificatifs en non-conformité est autorisé par défaut aux clients et délégataires affectés. Pour interdire tout dépôt, décochez les deux droits d’ajout de documents.</p>
     <p class="text-xs text-slate-500">Ces droits n’ouvrent que les éléments publics des dossiers attribués à ce client. Les documents privés et l’historique interne restent invisibles. Désactiver la lecture des commentaires masque aussi leur section, même si certains commentaires sont publics.</p>
     <p class="text-xs text-slate-500">Les droits d’ajout nécessitent le droit de lecture correspondant. Un nouveau mot de passe impose son changement à la prochaine connexion.</p>
     <button class="gc-btn-primary">{{ $account ? 'Enregistrer les droits' : 'Créer le compte' }}</button>

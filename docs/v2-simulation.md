@@ -80,9 +80,15 @@ d'identifiants. Ils ne sont pas affiches. Ne pas utiliser `db:seed` sur le CT.
   tester une demande de recontrole par chaque compte) et un dossier reserve a chacun.
 - Chaque dossier contient un document et un commentaire de chacun des trois niveaux
   d'acces : interne, client uniquement, client et delegataire.
-- Droits habituels conserves : le delegataire consulte ses documents et lots, mais
-  n'a pas de droit de lecture/ajout de commentaire ni de depot par defaut. Ajuster
-  explicitement ses droits depuis la gestion des comptes pour tester ces options.
+- Le client et le delegataire peuvent deposer des justificatifs dans leurs dossiers
+  en non-conformite, sans changement automatique de statut. La demande explicite de
+  recontrole reste distincte ; elle peut aussi contenir un justificatif.
+- Le droit `upload_corrections` est actif par defaut, y compris pour les comptes
+  existants qui ne possedent pas encore cette cle. Il exige la lecture des documents
+  et reste desactivable dans la gestion des comptes. Pour bloquer tout depot,
+  desactiver aussi le droit general `upload_documents`.
+- Le delegataire n'a toujours pas de droit de lecture/ajout de commentaire ni de
+  depot hors non-conformite par defaut. Les trois niveaux de partage restent inchanges.
 - Aucun vrai numero ni email beneficiaire, aucun appel HTTP, mail, SMS ou job.
   Aucun faux technicien ni creneau susceptible de bloquer le planning existant.
   L'installateur est une coordonnee fictive, pas un nouveau type de compte.

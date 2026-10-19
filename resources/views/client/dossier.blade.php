@@ -25,7 +25,17 @@
                     @endif
                     @if ($collected?->total())<h3 class="font-semibold">Documents historiques</h3><ul class="divide-y divide-slate-100">@foreach ($collected as $document)<li class="flex items-center justify-between gap-4 py-3"><span class="break-words">{{ $document['name'] }}</span>@if ($document['url'])<a class="shrink-0 text-sm underline" href="{{ $document['url'] }}">Télécharger</a>@else<span class="text-xs text-slate-500">Non disponible dans cette collecte</span>@endif</li>@endforeach</ul>{{ $collected->links() }}@endif
                     @can('uploadDocument', $dossier)
-                        <details class="rounded-lg border border-slate-200 p-4"><summary class="cursor-pointer font-semibold">Ajouter un document</summary><form class="mt-4 space-y-3" method="POST" enctype="multipart/form-data" action="{{ route('client.dossiers.upload', $dossier) }}">@csrf<label class="gc-label" for="document-name">Nom du document</label><input id="document-name" name="name" maxlength="190" required class="gc-input"><label class="gc-label" for="document-file">Fichier, 10 Mo maximum</label><input id="document-file" name="document" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" required class="block w-full min-w-0 text-sm"><button class="gc-btn-primary">Transmettre le document</button></form></details>
+                        <details id="client-document-upload" class="scroll-mt-24 rounded-lg border border-slate-200 p-4" @if ($dossier->operations->contains(fn ($operation) => \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'] === 'non_compliant') || old('_form') === 'client-document') open @endif>
+                            <summary class="cursor-pointer font-semibold">Ajouter un document</summary>
+                            <form class="mt-4 space-y-3" method="POST" enctype="multipart/form-data" action="{{ route('client.dossiers.upload', $dossier) }}">
+                                @csrf
+                                <input type="hidden" name="_form" value="client-document">
+                                <p class="text-sm text-slate-500">Le dépôt transmet votre document à notre équipe sans demander automatiquement le recontrôle.</p>
+                                <label class="gc-label" for="document-name">Nom du document</label><input id="document-name" name="name" maxlength="190" required class="gc-input" value="{{ old('_form') === 'client-document' ? old('name') : '' }}">
+                                <label class="gc-label" for="document-file">Fichier, 10 Mo maximum</label><input id="document-file" name="document" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" required class="block w-full min-w-0 text-sm">
+                                <button class="gc-btn-primary">Transmettre le document</button>
+                            </form>
+                        </details>
                     @endcan
                 </section>
             @endif

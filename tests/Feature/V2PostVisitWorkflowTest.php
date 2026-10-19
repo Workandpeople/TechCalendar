@@ -279,7 +279,7 @@ it('protects response ownership roles permissions and stale forms without writin
     $this->postJson($this->responseUrl, ['version' => 999, 'document' => UploadedFile::fake()->image('stale.jpg')])->assertUnprocessable();
     $this->client->forceFill(['portal_permissions' => array_replace(ClientAccess::defaults('client'), ['add_comments' => false])])->save();
     $this->postJson($this->responseUrl, $data)->assertForbidden();
-    $this->client->forceFill(['portal_permissions' => array_replace(ClientAccess::defaults('client'), ['upload_documents' => false])])->save();
+    $this->client->forceFill(['portal_permissions' => array_replace(ClientAccess::defaults('client'), ['upload_documents' => false, 'upload_corrections' => false])])->save();
     $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('forbidden.jpg')])->assertForbidden();
     $this->client->forceFill(['portal_permissions' => ['documents' => true, 'comments' => true]])->save();
     $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertSee('Transmettre pour recontrôle');
@@ -349,7 +349,6 @@ it('lets an authorized delegataire respond to an imported non conformity without
     $this->client->externalClient->update(['kind' => 'delegataire']);
     $this->client->forceFill(['portal_permissions' => ClientAccess::defaults('delegataire')])->save();
     $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Interdit'])->assertForbidden();
-    $this->client->forceFill(['portal_permissions' => array_replace(ClientAccess::defaults('delegataire'), ['upload_documents' => true])])->save();
     $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('delegataire.jpg')])->assertRedirect();
     expect($this->operation->fresh()->control_outcome)->toBeNull()->and($this->row->fresh()->physical_satisfaction)->toBeNull();
     $this->actingAs($this->planner);

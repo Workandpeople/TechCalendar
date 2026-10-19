@@ -78,13 +78,18 @@ class PostVisitWorkflow
         try {
             // One attempt: a file write cannot be replayed safely by a transaction retry.
             DB::transaction(function () use ($actor, $dossier, $operation, $data, $file, $comment, &$document): void {
+                $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+                Gate::forUser($actor)->authorize('respondToNonConformity', $dossier);
+                // Store the correction while still non-compliant; the transition rolls back with it.
+                if ($file instanceof UploadedFile) {
+                    $document = app(DossierRegistry::class)->addDocument($actor, $dossier, $file,
+                        filled($data['document_name'] ?? null) ? $data['document_name'] : Str::limit($file->getClientOriginalName(), 190, ''));
+                }
                 $activity = $this->transition($actor, $dossier, $operation, [
                     'version' => $data['version'], 'action' => 'client_response', 'client_visible' => true,
                     'comment' => $comment ?: 'Demande explicite de recontrôle par '.($actor->externalClient?->kind === 'delegataire' ? 'le délégataire.' : 'le client.'),
                 ], ['from' => ['non_compliant'], 'to' => 'recontrol', 'label' => 'Recontrôle demandé']);
-                if ($file instanceof UploadedFile) {
-                    $document = app(DossierRegistry::class)->addDocument($actor, $dossier, $file,
-                        filled($data['document_name'] ?? null) ? $data['document_name'] : Str::limit($file->getClientOriginalName(), 190, ''));
+                if ($document !== null) {
                     $activity->update(['changed_fields' => [...$activity->changed_fields, 'response_document_id' => $document->id]]);
                 }
             });

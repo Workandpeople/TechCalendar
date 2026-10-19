@@ -41,6 +41,7 @@ class ClientManagement
             // Writing requires the corresponding read permission; no invisible submissions.
             $permissions['add_comments'] = $permissions['add_comments'] && $permissions['comments'];
             $permissions['upload_documents'] = $permissions['upload_documents'] && $permissions['documents'];
+            $permissions['upload_corrections'] = $permissions['upload_corrections'] && $permissions['documents'];
             $account->forceFill([
                 'first_name' => $data['first_name'], 'last_name' => $data['last_name'], 'email' => $data['email'],
                 'external_client_id' => $client->id, 'role' => User::ROLE_EXTERNAL, 'admin' => false,

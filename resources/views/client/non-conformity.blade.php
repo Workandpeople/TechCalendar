@@ -17,7 +17,9 @@
             <div class="flex flex-wrap gap-3 text-sm">
                 @if ($comments !== null)<a href="#client-comments" class="underline">Lire les commentaires partagés</a>@endif
                 @if ($documents !== null)<a href="#client-documents" class="underline">Voir les documents partagés</a>@endif
+                @can('uploadDocument', $dossier)<a href="#client-document-upload" class="gc-btn-primary"><x-nav-icon name="document" />Ajouter un document</a>@endcan
             </div>
+            @can('uploadDocument', $dossier)<p class="text-sm text-slate-500">Vous pouvez déposer plusieurs justificatifs, un à un, sans changer l’état du dossier. Demandez le recontrôle lorsque vos éléments sont prêts.</p>@endcan
             @can('respondToNonConformity', $dossier)
                 <form method="POST" enctype="multipart/form-data" action="{{ route('client.dossiers.recontrol', [$dossier, $operation]) }}" class="space-y-4">
                     @csrf
