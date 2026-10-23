@@ -195,7 +195,60 @@ compris apres Composer. Les tests simulent la remise a zero observee, refusent
 les vrais changements et verifient la reprise sans APT ainsi que le refus
 d'une version de paquet differente.
 
-### Correctifs de dependances avant la production
+La reprise `--composer-only` a termine sur le serveur : 91 dependances installees,
+extensions et plateforme PHP 8.4.27 conformes, aucune alerte connue a l'audit
+Composer. Les controles finaux de services et de configurations Apache ont passe.
+
+## Nouvelle base et configuration initiale
+
+Le compte root MySQL sans mot de passe est refuse, mais l'acces existant de
+maintenance via `/etc/mysql/debian.cnf` fonctionne. `debian-sys-maint@localhost`
+possede les droits de creation et d'attribution necessaires. Aucun changement
+d'authentification, second moteur SQL ou redemarrage MySQL n'est necessaire.
+
+`tools/deploy/prepare-production-database.php --create-new-v2-database` s'execute
+en root, avec PHP 8.4 sur `ns365601`, sans bootstrap Laravel :
+
+- Exige le bon repertoire, le proprietaire de deploiement, une branche V2
+  propre et l'absence de `.env`, de config cachee et d'etat de preparation.
+- Utilise le client MySQL et sa configuration de maintenance existante sans
+  extraire ni afficher son mot de passe. Verifie le compte, le port et MySQL 8.0.
+- Refuse une base `cofrac2production` ou un utilisateur `cofrac2_app` deja present,
+  y compris sur un autre host. Le nom de base sans joker ni underscore evite les
+  ambiguites de portee des GRANT de base.
+- Genere les secrets sur le serveur et les conserve avant tout DDL dans
+  `/var/lib/cofrac2-production/initial-production.env`, prive root 0700/0600.
+- Cree uniquement cette nouvelle base utf8mb4 et les deux comptes locaux
+  `cofrac2_app@localhost` / `cofrac2_app@127.0.0.1`, avec droits sur cette base
+  seule, aucun privilege global ni GRANT OPTION.
+- Verifie une connexion applicative TCP, la base vide et ses droits, puis
+  installe le nouveau `.env` en 0600 pour `cofrac2-deploy`. Le futur runtime
+  recevra uniquement les droits necessaires lors de sa preparation distincte.
+- Ne lance aucune migration, import, seed, API, notification ou commande de
+  service. Le compte de maintenance ne figure jamais dans le `.env` applicatif.
+
+Le modele `tools/deploy/production.env.example` active la V2 native en production,
+desactive le debug et configure une session HTTPS propre au nouveau domaine.
+Les identifiants API restent vides, les emails sont en log, SMSFactor desactive
+et en mode simulation, CAPCEE desactive. Le connecteur Coffrac reste sans URL
+ni jeton. Reverb est prepare sur loopback, avec ses nouveaux secrets et une
+origine HTTPS dediee ; aucun port n'est ouvert et aucun processus n'est demarre.
+
+Les operations DDL MySQL ne sont pas transactionnelles. En cas d'echec partiel,
+les secrets restent dans le dossier prive ; aucune base ni aucun compte n'est
+supprime ou reinitialise automatiquement. Examiner l'etape signalee avant
+toute reprise, sans publier les fichiers prives. Le fichier `DATABASE-READY.json`
+atteste seulement la base vide et le `.env` initial, pas une recette applicative.
+
+Le test `tools/deploy/tests/check-production-database.sh` exige un environnement
+Docker jetable explicitement marque. Test reel sur MySQL 8.0.46, sans port publie
+ni base utilisateur montee : refus des cibles existantes, droits limites,
+interdiction de lecture d'une autre base et de creation d'utilisateurs, secrets
+non affiches, refus de regeneration et conservation des fichiers/configurations
+Coffrac factices. Un echec DDL force conserve les secrets sans publier de `.env`
+invalide ni effacer la base partiellement preparee.
+
+## Correctifs de dependances avant la production
 
 L'audit du verrouillage V2 initial revelait 27 alertes sur sept bibliotheques.
 Une mise a jour ciblee compatible avec PHP 8.4.1 corrige ces alertes, sans
