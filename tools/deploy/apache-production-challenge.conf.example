@@ -1,0 +1,24 @@
+<VirtualHost *:80>
+    ServerName cofrac2.geniuscontrole.com
+    DocumentRoot /var/lib/cofrac2-acme
+    ErrorLog ${APACHE_LOG_DIR}/cofrac2-error.log
+    CustomLog ${APACHE_LOG_DIR}/cofrac2-access.log combined
+    TraceEnable Off
+
+    <Directory /var/lib/cofrac2-acme>
+        AllowOverride None
+        Options None
+        Require all denied
+    </Directory>
+    <Directory /var/lib/cofrac2-acme/.well-known/acme-challenge>
+        AllowOverride None
+        Options None
+        SetHandler none
+        Require all granted
+    </Directory>
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/[A-Za-z0-9_-]+$
+    RewriteRule ^ - [R=503,L]
+    ErrorDocument 503 "Cofrac 2 est en preparation. Aucun dossier n'est accessible pour le moment."
+</VirtualHost>

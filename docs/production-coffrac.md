@@ -8,8 +8,10 @@
 - Coffrac actuel : `/home/ubuntu/www/coffrac_preprod`, toujours en service.
 - Consigne confirmee : ne modifier ni les fichiers, ni la base, ni les vhosts,
   ni les regles d'acces de Coffrac original. Aucun confinement de l'ancien site.
-- Pendant la preparation, ne recharger ni redemarrer Apache ou les services
-  existants. L'ajout du nouveau vhost sera une etape distincte, apres recette.
+- Ne redemarrer aucun service existant. L'ajout du seul vhost `cofrac2` et du
+  certificat a ete demande separement le 23 octobre : il autorise le rechargement
+  gracieux d'Apache partage, apres controle de configuration, sans modifier les
+  vhosts existants. L'application V2 reste fermee pendant la reprise des donnees.
 - Preparer une installation V2 distincte : repertoire, identite de service,
   pool PHP-FPM, base, compte SQL, worker et Reverb propres.
 - La reprise finale utilisera des donnees Coffrac actualisees. Le snapshot et
@@ -459,6 +461,98 @@ ajoutent un administrateur de simulation et n'activent pas tous les comptes
 historiques. La reprise de production doit reutiliser les projections metier
 sans ces comportements, avec rapprochements et droits explicites, controles
 de facturation et de visibilite, puis un rapport avant toute ouverture externe.
+
+## Nouveau vhost et certificat HTTPS independants
+
+Le DNS controle depuis le poste de preparation le 23 octobre retourne
+`46.105.110.76` pour `cofrac2.geniuscontrole.com`, sans AAAA ni CAA observes.
+L'obtention effective du certificat reste a executer sur le serveur ; les tests
+locaux n'utilisent ni le serveur reel ni l'autorite publique.
+
+`configure-production-web.sh` ajoute le seul fichier
+`/etc/apache2/sites-available/cofrac2.geniuscontrole.com.conf` et son lien actif.
+Il exige `--reload-shared-apache`, refuse un domaine deja configure ailleurs,
+verifie les modules deja charges sans en activer de nouveaux, puis effectue
+`configtest` et un rechargement gracieux du service partage. Il compare les
+autres configurations actives et le PID du processus maitre Apache. Sur echec
+de validation, il restaure uniquement son propre vhost et son activation.
+
+Les deux phases servent une page d'attente HTTP 503, sans aucun PHP ni acces
+Laravel. L'absence de dossiers dans l'interface n'est pas un motif pour ouvrir
+la base vide : importer, rapprocher et valider les donnees avant d'activer le
+pool FPM V2, le worker, Reverb et le vhost applicatif. Le nouveau webroot ne
+contient que les challenges ACME ; aucune piece metier n'y est copiee.
+
+### 1. Challenge HTTP du nouveau domaine
+
+```bash
+sudo -H -u cofrac2-deploy \
+    git -C /var/www/cofrac2 pull --ff-only origin v2 &&
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-web.sh \
+    --enable-http-challenge --reload-shared-apache
+```
+
+Un HTTP 503 sur la racine est volontaire. Seuls les fichiers de challenge
+`/.well-known/acme-challenge/<token>` sont servis en HTTP ; les alias globaux
+comme phpMyAdmin ne doivent pas traverser cette fermeture.
+
+### 2. Certificat dedie, sans installateur Apache
+
+Certbot est deja present dans l'inventaire serveur. Utiliser `certonly --webroot`,
+jamais `--apache` ni `--standalone` : aucun arret de serveur ni reecriture
+automatique des anciens vhosts. Les repertoires, comptes ACME et renouvellements
+V2 restent distincts de `/etc/letsencrypt` et des certificats existants.
+`--config /dev/null` et `--no-directory-hooks` evitent la configuration et les
+hooks globaux existants. Renseigner l'email et accepter les conditions dans le
+terminal interactif, sans utiliser de faux email dans le depot.
+
+```bash
+sudo certbot certonly --webroot \
+    --config /dev/null --no-directory-hooks \
+    --config-dir /var/lib/cofrac2-letsencrypt \
+    --work-dir /var/lib/cofrac2-certbot-work \
+    --logs-dir /var/log/cofrac2-certbot \
+    --webroot-path /var/lib/cofrac2-acme \
+    --cert-name cofrac2.geniuscontrole.com \
+    --domain cofrac2.geniuscontrole.com
+```
+
+En cas d'echec, conserver le vhost HTTP et lire le diagnostic : ne pas multiplier
+les demandes de certificat ni desactiver un ancien site pour liberer le port 80.
+
+### 3. HTTPS ferme pendant la reprise
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-web.sh \
+    --enable-https-maintenance --reload-shared-apache
+```
+
+Le script controle nom, duree de validite et confiance TLS par une requete locale
+avec SNI, sans `--insecure`. HTTP redirige temporairement vers HTTPS, sauf le
+challenge de renouvellement. Le certificat et la cle restent uniquement dans
+le stockage Certbot dedie ; aucune copie dans le depot ni le webroot.
+Verifier ensuite `https://cofrac2.geniuscontrole.com` depuis un navigateur
+exterieur : une page d'attente 503 est normale, pas un echec TLS.
+
+### 4. Renouvellement automatique propre a la V2
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/enable-production-certificate-renewal.sh \
+    --enable-dedicated-renewal
+```
+
+Ce script installe uniquement `cofrac2-certificate-renewal.service/.timer` et
+`/usr/local/sbin/cofrac2-renew-certificate`. Le timer controle le certificat
+deux fois par jour avec delai aleatoire. Le hook recharge gracieusement Apache
+uniquement apres renouvellement effectif, et seulement si `configtest` reussit.
+Ne modifier aucun timer ni renouvellement Certbot global. Le rechargement du
+gestionnaire systemd ne redemarre pas les services applicatifs existants.
+
+Test reel HTTP/HTTPS sur Apache 2.4 jetable, sans reseau externe ni port publie :
+challenge lisible, fermeture des routes/applications/alias globaux, validation
+TLS avec autorite de test locale, vhost initial inchange, refus sans consentement
+au reload et retour arriere sur configuration invalide ou echec du controle TLS.
+L'emission et le renouvellement Let’s Encrypt reels restent des controles serveur.
 
 ## Correctifs de dependances avant la production
 

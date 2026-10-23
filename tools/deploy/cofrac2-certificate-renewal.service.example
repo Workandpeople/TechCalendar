@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew the dedicated Cofrac 2 HTTPS certificate
+After=network-online.target apache2.service
+Wants=network-online.target
+AssertPathExists=/var/lib/cofrac2-letsencrypt/renewal/cofrac2.geniuscontrole.com.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cofrac2-renew-certificate
+UMask=0077
