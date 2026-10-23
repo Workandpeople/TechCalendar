@@ -121,8 +121,9 @@ Il ne lit pas le `.env` de Coffrac et n'accorde pas de droits sur ses documents.
    partielle en cas d'echec, sans lancer l'application.
 
 Le 23 octobre, l'utilisateur confirme l'execution de `--prepare-ssh` sur
-`ns365601` et l'ajout de la cle publique comme Deploy key du depot. Le clone
-reste a executer par l'utilisateur ; aucun service V2 n'est encore demarre.
+`ns365601`, l'ajout de la cle publique comme Deploy key du depot et le clone
+de `v2` dans `/var/www/cofrac2`, initialement au commit `18a91efc`.
+Aucun service V2 n'est encore demarre.
 
 L'utilisateur PHP de la V2 sera distinct du compte de deploiement et des
 processus `www-data` de l'ancien site. Cette separation ne constitue pas une
@@ -135,6 +136,53 @@ fichiers/configurations Coffrac factices. Un second controle clone un depot
 factice via un transport SSH simule, verifie la branche V2, les permissions,
 l'absence de `.env` et le refus d'ecraser une destination existante. Aucun appel
 GitHub et aucun compte ou fichier cree sur le vrai serveur pendant ces tests.
+
+## Installation des dependances de la nouvelle V2
+
+La simulation fournie par l'utilisateur confirme uniquement trois nouveaux
+paquets : `php8.4-fpm`, `php8.4-intl`, `php8.4-bcmath`, en version
+`8.4.27-1+ubuntu22.04.1+deb.sury.org+1`, sans mise a niveau ni suppression.
+Le paquet FPM exact du PPA a ete telecharge et examine localement, sans execution :
+SHA-256 `6593e784c734ad73940d0d69a1d61f26f0736fe672a6b8be5c1d027f7f20c98f`.
+Son `postinst` n'active pas la configuration Apache par defaut et passe par
+`invoke-rc.d` pour le demarrage du nouveau FPM.
+
+`tools/deploy/install-production-dependencies.sh --install-v2-dependencies` :
+
+- Exige le bon serveur et un checkout V2 propre, appartenant au compte de
+  deploiement, sans `.env` et sans PHP 8.4 FPM actif.
+- Refuse tout plan APT qui ajoute un autre paquet, supprime un paquet ou met
+  a niveau un paquet deja installe ; les trois versions sont epinglees.
+- Telecharge avant de bloquer temporairement les actions de service via
+  `policy-rc.d`. La politique precedente (y compris un lien symbolique) est
+  preservee puis restauree, egalement en cas d'echec ordinaire ou d'interruption
+  captee. `needrestart` est suspendu pour cette seule commande APT.
+- Compare les configurations Apache actives et les proprietes systemd des
+  services existants avant/apres. Aucun demarrage, arret ou rechargement explicite.
+- Verifie PHP et ses extensions, puis execute Composer avec PHP 8.4 comme
+  `cofrac2-deploy`, sans plugin ni script, avec les versions verrouillees,
+  optimisation de l'autoload et audit des dependances installees.
+- N'execute ni Artisan, ni generation de cle, ni migration, ni connexion SQL.
+  PHP 8.4 FPM reste arrete ; le pool dedie, le `.env` et la base viennent ensuite.
+
+Le diagnostic est prive dans `/var/tmp/cofrac2-dependencies-*`. Le test
+`tools/deploy/tests/check-production-dependencies.sh` ne peut fonctionner que
+dans un conteneur Docker jetable explicitement marque. Il simule APT/systemd/
+Composer sans reseau : restauration de politique absente, reguliere ou symbolique,
+echec d'installation, refus d'une mise a niveau inattendue, execution Composer
+non-root et conservation des fichiers Coffrac factices.
+
+### Correctifs de dependances avant la production
+
+L'audit du verrouillage V2 initial revelait 27 alertes sur sept bibliotheques.
+Une mise a jour ciblee compatible avec PHP 8.4.1 corrige ces alertes, sans
+changement de version majeure : Guzzle 7.16.0, PSR-7 2.13.2, Laravel 13.38.0,
+CommonMark 2.10.4, Flysystem 3.36.0, HTTP Foundation/Yaml 8.1.9 et deux
+dependances necessaires (Promises 2.6.0, Prompts 0.3.26).
+Le minimum PHP declare et la plateforme de resolution sont maintenant 8.4.1.
+Ces modifications sont realisees localement, jamais par un `composer update`
+sur le serveur. L'audit Composer ne signale plus de vulnerabilite connue,
+et les 1 098 tests PHP passent (8 957 assertions).
 
 ## Stockage documentaire et suites
 
