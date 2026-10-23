@@ -292,6 +292,54 @@ de maintenance et aux fichiers prives par Apache, ainsi que la conservation des
 fichiers/configurations et de la table Coffrac factices. Aucun port MySQL n'est
 publie et aucun service du serveur reel n'est sollicite.
 
+L'utilisateur confirme maintenant la fin de l'initialisation du schema sur le
+serveur. L'etape Laravel a ete longue et silencieuse car sa sortie etait
+redirigee dans le journal prive ; elle a termine sans import ni changement de
+service. Ne pas relancer ce script initial sur la base maintenant structuree.
+
+## Collecte actualisee de Coffrac
+
+`tools/deploy/collect-production-coffrac.sh --export-current-coffrac` collecte
+la base source `fiche_crm`, sans bootstrap de l'ancien Laravel :
+
+- Utilise la connexion locale de maintenance existante et verifie les tables
+  metier attendues. Refuse les tables de base non InnoDB, plutot que d'ajouter
+  des verrous sur l'application en service.
+- Produit un dump transactionnel avec `--single-transaction --quick`, sans
+  verrouillage explicite de tables, sans purge GTID, sans flush global et a
+  priorite reduite. Inclut donnees, structures, vues, triggers, routines et
+  evenements dans la sauvegarde privee. Ne pas faire de modification de schema
+  source pendant la collecte.
+- Ecrit seulement dans un nouveau dossier root 0700 sous
+  `/var/lib/cofrac2-production/coffrac-source-*`. Le dump, les erreurs et les
+  inventaires restent en 0600 ; aucune information de dossier n'est affichee.
+- Conserve un inventaire des tables et colonnes, sans valeurs de lignes ni
+  valeurs par defaut. Les volumes et nombres de lignes d'`information_schema`
+  sont des estimations, distinctes des comptages exacts du futur import.
+- Controle gzip et SHA-256. Un export incomplet reste nomme `.partial`, sans
+  manifeste de validation. Un verrou local refuse deux exports simultanes.
+- Ne restaure aucun SQL, ne modifie aucune ligne source ou V2, ne lance aucun
+  service et ne copie aucun document.
+
+Test reel en conteneurs jetables MySQL 8.0.46 : dump prive contenant les objets
+attendus, integrite gzip/SHA-256, conservation des donnees source et V2 ainsi
+que des fichiers/configurations factices. Verification du refus d'une table
+non transactionnelle, d'un export concurrent et d'un echec force de mysqldump.
+
+Cette collecte est un cliche de preparation/recette. Les employes continuant a
+travailler sur Coffrac, une nouvelle collecte coherente sera necessaire lors de
+la bascule finale ; ce premier dump ne constitue pas une synchronisation live.
+Le dump contient des donnees personnelles et des hashes d'authentification : ne
+pas le publier ni le recopier dans le repertoire Web ou le home du runtime PHP.
+
+Ne jamais restaurer ce dump brut dans `cofrac2production`, dont le schema est
+natif TechCalendar. L'importeur `Simulation\SnapshotImporter` et les seeds de
+demo ne conviennent pas a la production : ils remplacent les mots de passe,
+ajoutent un administrateur de simulation et n'activent pas tous les comptes
+historiques. La reprise de production doit reutiliser les projections metier
+sans ces comportements, avec rapprochements et droits explicites, controles
+de facturation et de visibilite, puis un rapport avant toute ouverture externe.
+
 ## Correctifs de dependances avant la production
 
 L'audit du verrouillage V2 initial revelait 27 alertes sur sept bibliotheques.
