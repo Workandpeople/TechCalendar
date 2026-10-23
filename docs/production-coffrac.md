@@ -248,6 +248,50 @@ non affiches, refus de regeneration et conservation des fichiers/configurations
 Coffrac factices. Un echec DDL force conserve les secrets sans publier de `.env`
 invalide ni effacer la base partiellement preparee.
 
+La creation a ete confirmee par l'utilisateur sur le serveur : base
+`cofrac2production` vide, connexion TCP du compte limite validee et `.env`
+installe en 0600. Aucun import, migration ou service lance a cette etape.
+
+## Runtime et initialisation du schema
+
+`tools/deploy/initialize-production-schema.sh --initialize-empty-v2-schema`
+prepare seulement la nouvelle installation :
+
+- Verifie le bon serveur, un checkout V2 propre, les empreintes du `.env` et
+  de la preparation privee, et l'absence de configuration cachee. La connexion
+  applicative doit encore viser une base V2 completement vide.
+- Cree `cofrac2-app`, compte systeme a mot de passe verrouille et shell nologin,
+  sans groupe supplementaire. Le marqueur root dans le dossier de preparation
+  permet de reconnaitre cette seule identite ; aucun compte inconnu n'est adopte.
+- Laisse le code a `cofrac2-deploy`, lisible mais non modifiable par le runtime.
+  `.git` reste prive au deploiement. Le `.env` devient root:cofrac2-app 0640,
+  lisible par PHP seulement, sans modification de son contenu.
+- Rend `storage` et `bootstrap/cache` inscriptibles par le runtime et le
+  deploiement. Le seul lien Web pointe vers `storage/app/public` ; les parents
+  autorisent uniquement la traversee et les documents prives restent inaccessibles
+  a Apache. Aucun lien ni permission n'est ajoute au stockage historique Coffrac.
+- Execute `package:discover`, puis `migrate --force` comme `cofrac2-app`, dans un
+  environnement CLI nettoye pour que les variables du terminal ne remplacent pas
+  le `.env`. Ni `migrate:fresh`, ni seed, ni scheduler, ni worker n'est lance.
+- Verifie les migrations appliquees et l'absence d'utilisateurs, dossiers, lots,
+  RDV et jobs. Les donnees de reference creees par les migrations (departements,
+  expediteur mail sans identifiant SMTP) sont conservees. Aucun compte de demo
+  ou admin artificiel n'est cree.
+
+Le journal est prive dans `/var/lib/cofrac2-production/schema-initialization.log`.
+`SCHEMA-READY.json` n'est publie qu'apres les controles reussis. En cas de migration
+partielle, ne pas relancer automatiquement : la cible non vide sera refusee,
+sans suppression ni remise a zero. Un script deja reussi est egalement refuse.
+Le compte de maintenance MySQL n'est pas utilise pour ces migrations.
+
+Verification en conteneurs jetables sur MySQL 8.0.46 avec les migrations reelles :
+73 migrations, 46 tables, donnees metier vides, refus d'un `.env` modifie et d'une
+base non vide. Le test verifie l'ecriture dans le stockage par le runtime,
+la lecture seule du code et du `.env`, le refus d'acces au depot Git, aux secrets
+de maintenance et aux fichiers prives par Apache, ainsi que la conservation des
+fichiers/configurations et de la table Coffrac factices. Aucun port MySQL n'est
+publie et aucun service du serveur reel n'est sollicite.
+
 ## Correctifs de dependances avant la production
 
 L'audit du verrouillage V2 initial revelait 27 alertes sur sept bibliotheques.
