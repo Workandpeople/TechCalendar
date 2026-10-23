@@ -20,16 +20,16 @@
             <div class="gc-portal-correction-actions">
                 <div>
                     @if ($canUpload)<a href="#client-document-upload" class="gc-btn-secondary"><x-nav-icon name="upload" />Ajouter un document</a>@endif
-                    @can('respondToNonConformity', $dossier)<a href="#{{ $prefix }}" class="gc-btn-warning"><x-nav-icon name="check" />Demander le recontrôle</a>@endcan
+                    @if ($canRespond)<a href="#{{ $prefix }}" class="gc-btn-warning"><x-nav-icon name="check" />Demander le recontrôle</a>@endif
                 </div>
                 @if ($documents !== null)<a href="#client-documents" class="gc-portal-text-link">Voir les documents partagés <span aria-hidden="true">↓</span></a>@endif
             </div>
             @if ($canUpload)<p class="gc-portal-muted">Vous pouvez ajouter plusieurs pièces, une à une. L’ajout seul ne déclenche pas le recontrôle.</p>@endif
-            @cannot('respondToNonConformity', $dossier)<p class="gc-portal-muted">Votre compte ne permet pas de transmettre une réponse. Contactez notre équipe pour faire vérifier vos droits.</p>@endcannot
+            @if (! $canRespond)<p class="gc-portal-muted">Votre compte ne permet pas de transmettre une réponse. Contactez notre équipe pour faire vérifier vos droits.</p>@endif
         @endif
     </article>
     @if ($state === 'non_compliant')
-        @can('respondToNonConformity', $dossier)
+        @if ($canRespond)
             <x-dossier-dialog :id="$prefix" title="Demander le recontrôle" :reopen="$failedResponse">
                 <form method="POST" enctype="multipart/form-data" action="{{ route('client.dossiers.recontrol', [$dossier, $operation]) }}" class="gc-portal-form">
                     @csrf
@@ -45,6 +45,6 @@
                     <footer class="gc-dialog-actions"><button class="gc-btn-secondary" type="button" data-dialog-close>Pas encore</button><button class="gc-btn-warning" type="submit"><x-nav-icon name="check" />Transmettre pour recontrôle</button></footer>
                 </form>
             </x-dossier-dialog>
-        @endcan
+        @endif
     @endif
 @endforeach

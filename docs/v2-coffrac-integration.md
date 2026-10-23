@@ -1,5 +1,28 @@
 # Fusion de Coffrac dans TechCalendar V2
 
+## Catégories du portail et affichage compact, 22 octobre 2026
+
+- Gestion dans **Clients et délégataires → Catégories et accès par type** : valeurs
+  par défaut séparées pour partenaires clients et délégataires. Une organisation
+  peut hériter de son type ou remplacer entièrement sa sélection dans sa fiche.
+- La migration `2026_10_22_180000_add_portal_category_access` ajoute les réglages,
+  sans modifier les comptes ou les dossiers. Sans réglage, toutes les catégories
+  restent autorisées ; une sélection vide les interdit toutes. `NULL` sur
+  l'organisation signifie héritage, `[]` signifie aucun accès.
+- Les restrictions s'ajoutent aux affectations et permissions existantes. Elles
+  s'appliquent aux listes, compteurs, liens directs, aperçus, téléchargements et
+  actions. Une prestation dans une catégorie interdite bloque le dossier entier,
+  car les documents et commentaires sont communs aux prestations.
+- Les lots n'affichent pas les lignes liées aux dossiers interdits. Sans droit à
+  la catégorie « État non renseigné / autre », leurs lignes non rattachées sont
+  aussi masquées. Les résultats globaux sont masqués en présence de restrictions,
+  plutôt que de révéler des données exclues ou présenter des taux partiels.
+- Après une demande de recontrôle, le portail revient à la liste si le nouvel
+  état n'est pas accessible. Le changement d'état reste enregistré normalement.
+- Documents et commentaires utilisent des lignes compactes ; le contenu complet
+  est dépliable. Les badges d'audience ouvrent le réglage de partage et les
+  suppressions conservent leur confirmation et leur traçabilité.
+
 ## Règles métier confirmées, 19 octobre 2026
 
 Cette section remplace les règles après-visite des incréments historiques ci-dessous.

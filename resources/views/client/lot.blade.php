@@ -19,6 +19,7 @@
                 </div>
             @endforeach
         </section>
+        @if ($restricted)<p class="text-sm text-slate-500">Seuls les dossiers autorisés sont affichés. Les résultats globaux du lot sont masqués lorsque des catégories sont restreintes.</p>@endif
         <div class="overflow-x-auto rounded-xl border border-slate-200">
             <table class="w-full text-left text-sm">
                 <thead class="bg-slate-50">

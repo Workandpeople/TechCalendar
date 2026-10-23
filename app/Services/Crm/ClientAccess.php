@@ -4,13 +4,17 @@ namespace App\Services\Crm;
 
 use App\Models\Dossier;
 use App\Models\DossierActivity;
+use App\Models\DossierOperation;
 use App\Models\Lot;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 
 class ClientAccess
 {
+    public function __construct(private readonly PortalCategoryAccess $categories) {}
+
     public const PERMISSIONS = [
         'documents' => 'Consulter les documents partagés',
         'comments' => 'Lire les commentaires partagés',
@@ -74,7 +78,7 @@ class ClientAccess
     {
         abort_unless($this->active($user) && ! $user->must_change_password, 403);
 
-        return Dossier::query()->where(function ($query) use ($user): void {
+        return $this->categories->restrict(Dossier::query(), $this->categoryKeys($user))->where(function ($query) use ($user): void {
             if ($user->externalClient->kind === 'client') {
                 $query->where('client_id', $user->external_client_id)
                     ->orWhere(fn ($legacy) => $legacy->whereNull('client_id')->where('delegataire_id', $user->external_client_id));
@@ -88,7 +92,36 @@ class ClientAccess
     {
         return $this->active($user) && ! $user->must_change_password
             && (int) ($user->externalClient->kind === 'client'
-                ? ($dossier->client_id ?? $dossier->delegataire_id) : $dossier->delegataire_id) === $user->external_client_id;
+                ? ($dossier->client_id ?? $dossier->delegataire_id) : $dossier->delegataire_id) === $user->external_client_id
+            && $this->categories->restrict(Dossier::query()->whereKey($dossier->id), $this->categoryKeys($user))->exists();
+    }
+
+    public function categoryKeys(User $user): array
+    {
+        return $this->categories->effective($user->externalClient);
+    }
+
+    public function lotRows(Builder $rows, User $user): Builder
+    {
+        $allowed = $this->categoryKeys($user);
+        if (count($allowed) === count(PortalCategoryAccess::catalogue())) {
+            return $rows;
+        }
+        if ($allowed === []) {
+            return $rows->whereRaw('1 = 0');
+        }
+        $visible = $this->categories->restrict(Dossier::query(), $allowed)->select('dossiers.id');
+        $forbiddenOperations = DossierOperation::query()->whereNotIn('dossier_id', $visible)->select('id');
+        // Query the appointment table directly to include cancelled/soft-deleted appointments.
+        $forbiddenAppointments = DB::table('appointments')
+            ->whereIn('dossier_operation_id', $forbiddenOperations)->select('id');
+        $rows->where(fn ($query) => $query->whereNull('appointment_id')->orWhereNotIn('appointment_id', $forbiddenAppointments));
+        if (! in_array('unknown', $allowed, true)) {
+            $rows->whereIn('appointment_id', DB::table('appointments')
+                ->whereIn('dossier_operation_id', DossierOperation::query()->whereIn('dossier_id', $visible)->select('id'))->select('id'));
+        }
+
+        return $rows;
     }
 
     public function lots(User $user): Builder

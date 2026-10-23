@@ -4,6 +4,7 @@ namespace App\Http\Requests\Crm;
 
 use App\Models\ExternalDelegataire;
 use App\Services\Crm\ClientAccess;
+use App\Services\Crm\PortalCategoryAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,6 +29,9 @@ class ClientRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:190'],
             'phone' => ['nullable', 'string', 'max:60'],
             'is_active' => ['required', 'boolean'],
+            'category_mode' => ['sometimes', 'required', Rule::in(['inherit', 'custom'])],
+            'categories' => ['sometimes', 'array', 'max:'.count(PortalCategoryAccess::catalogue())],
+            'categories.*' => ['required', 'string', 'distinct', Rule::in(array_keys(PortalCategoryAccess::catalogue()))],
         ];
     }
 }

@@ -5,11 +5,10 @@
     </header>
     <div class="gc-dossier-panel-body">
         @include('crm.dossiers.detail.document-upload')
-        <div class="gc-document-legend mt-4" aria-label="Niveaux de partage">
+        <div class="gc-document-legend" aria-label="Niveaux de partage">
             <span data-audience="internal">Interne</span><span data-audience="client">Client</span><span data-audience="shared">Client + délégataire</span>
         </div>
-        <p class="mt-2 text-xs text-slate-500">L’auteur et les dates restent visibles. « Aperçu » ouvre les PDF et images sans quitter la fiche.</p>
-        <div class="gc-dossier-documents-scroll mt-4">
+        <div class="gc-dossier-documents-scroll mt-2">
             <table class="gc-dossier-documents-table">
                 <thead><tr><th scope="col">Document / description</th><th scope="col">Ajouté par / date</th><th scope="col">Accès externes</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
@@ -57,7 +56,7 @@
         @if ($documents->hasPages())<div class="mt-4">{{ $documents->links() }}</div>@endif
         @if ($legacyDocuments->hasPages())<div class="mt-4">{{ $legacyDocuments->links() }}</div>@endif
         @if ($lotDocuments->hasPages())<div id="documents-lots" class="mt-4">{{ $lotDocuments->links() }}</div>@endif
-        <p class="mt-4 text-xs text-slate-500"><x-nav-icon name="lock" />Les fichiers restent privés sur le serveur. Le partage ne crée aucun lien anonyme et n’envoie rien aux CRM externes.</p>
+        <details class="gc-document-more mt-2"><summary>Confidentialité et utilisation</summary><p class="text-xs text-slate-500">Les fichiers restent privés sur le serveur. Le partage ne crée aucun lien anonyme et n’envoie rien aux CRM externes. Cliquez sur le badge d’accès pour modifier les destinataires ; l’œil ouvre l’aperçu.</p></details>
     </div>
     <x-document-preview />
 </section>

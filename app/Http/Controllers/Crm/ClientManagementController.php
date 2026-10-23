@@ -5,14 +5,31 @@ namespace App\Http\Controllers\Crm;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\ClientAccountRequest;
 use App\Http\Requests\Crm\ClientRequest;
+use App\Http\Requests\Crm\PortalCategoryDefaultRequest;
 use App\Models\ExternalDelegataire;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
 use App\Services\Crm\ClientManagement;
+use App\Services\Crm\PortalCategoryAccess;
 use Illuminate\Http\Request;
 
 class ClientManagementController extends Controller
 {
+    public function categories(Request $request, ClientAccess $access, PortalCategoryAccess $categories)
+    {
+        $access->manage($request->user());
+
+        return view('manager.clients.categories', ['defaults' => collect(ExternalDelegataire::KINDS)
+            ->map(fn ($label, $kind) => $categories->defaults($kind))->all()]);
+    }
+
+    public function updateCategories(PortalCategoryDefaultRequest $request, string $kind, PortalCategoryAccess $categories)
+    {
+        $categories->saveDefaults($request->user(), $kind, $request->validated('categories', []));
+
+        return redirect()->route('manager.clients.categories')->with('status', 'Catégories mises à jour. Les accès sont appliqués dès la prochaine requête.');
+    }
+
     public function create(Request $request, ClientAccess $access)
     {
         $access->manage($request->user());

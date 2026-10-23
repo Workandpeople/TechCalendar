@@ -4,6 +4,7 @@
 @import './select-menu.css';
 @import './acrylic.css';
 @import './client-portal.css';
+@import './dossier-compact.css';
 
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';

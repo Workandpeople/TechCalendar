@@ -51,6 +51,23 @@ it('returns to comments after posting a client only note', function () {
         ->and($this->dossier->comments()->sole()->delegataire_visible)->toBeFalse();
 });
 
+it('keeps dense comments and documents accessible with protected sharing and deletion dialogs', function () {
+    $comment = $this->dossier->activities()->create(['kind' => 'comment', 'body' => '<p>FIRST-LINE</p><p>FULL-COMMENT</p>']);
+    $document = $this->dossier->documents()->create(['name' => 'COMPACT-FILE', 'description' => 'FULL-DESCRIPTION',
+        'path' => 'test.pdf', 'mime_type' => 'application/pdf', 'size' => 2048]);
+    $response = $this->actingAs($this->manager)->get(route('v2.dossiers.show', $this->dossier))->assertOk()
+        ->assertSee('FULL-COMMENT')->assertSee('FULL-DESCRIPTION')->assertDontSee('<p>FULL-COMMENT</p>', false);
+    $dom = new DOMDocument;
+    @$dom->loadHTML($response->getContent(), LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+    expect($xpath->query('//li[contains(@class,"gc-comment-row")]/details/summary')->length)->toBe(1)
+        ->and($xpath->query('//li[contains(@class,"gc-comment-row")]/a[contains(@class,"gc-compact-action")][@aria-label]')->length)->toBe(1)
+        ->and($xpath->query('//dialog[@id="supprimer-commentaire-'.$comment->id.'"]//input[@name="_method"][@value="DELETE"]')->length)->toBe(1)
+        ->and($xpath->query('//table[contains(@class,"gc-dossier-documents-table")]//details/summary')->length)->toBe(1)
+        ->and($xpath->query('//a[contains(@class,"gc-sharing-compact")][@aria-label]')->length)->toBe(2)
+        ->and($xpath->query('//a[@data-document-open][@href="'.route('v2.documents.download', ['document' => $document, 'preview' => 1]).'"]')->length)->toBe(1);
+});
+
 it('reopens an invalid document form with its name', function () {
     // Match the error bag stored by the application's JSON session serializer.
     $errors = ['default' => ['format' => ':message', 'messages' => ['document' => ['Le fichier est obligatoire.']]]];

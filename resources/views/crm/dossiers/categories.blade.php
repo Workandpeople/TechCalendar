@@ -7,7 +7,7 @@
             [$categoryIcon, $categoryHint] = \App\Support\WorkspaceUi::status($key);
         @endphp
         <a class="gc-dossier-category" data-tone="{{ $category['tone'] }}" data-category="{{ $key }}"
-            href="{{ route('v2.dossiers.index', $categoryFilters) }}" @if ($selected) aria-current="page" @endif>
+            href="{{ route($categoryRoute ?? 'v2.dossiers.index', $categoryFilters) }}" @if ($selected) aria-current="page" @endif>
             <span class="gc-dossier-category-icon" aria-hidden="true"><x-nav-icon :name="$categoryIcon" /></span>
             <span class="gc-dossier-category-label">{{ $category['label'] }}</span>
             <span class="gc-dossier-category-count">{{ number_format($category['count'], 0, ',', ' ') }}</span>

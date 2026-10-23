@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'source',
@@ -17,12 +18,13 @@ use Illuminate\Database\Eloquent\Model;
     'is_active',
     'payload',
     'last_synced_at',
+    'portal_categories',
 ])]
 class ExternalDelegataire extends Model
 {
     public const KINDS = ['delegataire' => 'Délégataire', 'client' => 'Client'];
 
-    public function accounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function accounts(): HasMany
     {
         return $this->hasMany(User::class, 'external_client_id');
     }
@@ -37,6 +39,7 @@ class ExternalDelegataire extends Model
         return [
             'is_active' => 'boolean',
             'payload' => 'array',
+            'portal_categories' => 'array',
             'last_synced_at' => 'datetime',
         ];
     }

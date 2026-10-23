@@ -34,7 +34,8 @@ class ClientPortalController extends Controller
 
     public function lots(Request $request, ClientAccess $access)
     {
-        return view('client.lots', ['lots' => $access->lots($request->user())->withCount('appointments')->latest('id')->paginate(12)]);
+        return view('client.lots', ['lots' => $access->lots($request->user())
+            ->withCount(['appointments' => fn ($rows) => $access->lotRows($rows, $request->user())])->latest('id')->paginate(12)]);
     }
 
     public function lot(Request $request, int $lot, ClientPortal $portal)
@@ -68,7 +69,9 @@ class ClientPortalController extends Controller
     {
         $workflow->respond($request->user(), $dossier, $operation, $request->validated());
 
-        return redirect()->route('client.dossiers.show', $dossier)
+        $visible = app(ClientAccess::class)->viewDossier($request->user(), $dossier);
+
+        return redirect()->route($visible ? 'client.dossiers.show' : 'client.dossiers', $visible ? [$dossier] : [])
             ->with('status', 'Votre réponse a été transmise. La prestation est maintenant en recontrôle auprès de notre équipe.');
     }
 

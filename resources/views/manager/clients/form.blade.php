@@ -14,6 +14,18 @@
                 <div><label for="phone" class="gc-label">Téléphone</label><input id="phone" name="phone" value="{{ old('phone', $client->phone) }}" class="gc-input" maxlength="60"></div>
                 <div><label for="is_active" class="gc-label">Accès de l’organisation</label><select id="is_active" name="is_active" class="gc-input"><option value="1" @selected(old('is_active', $client->is_active))>Actif</option><option value="0" @selected(! old('is_active', $client->is_active))>Désactivé</option></select><p class="mt-2 text-xs text-slate-500">Désactiver bloque immédiatement tous ses comptes, sans supprimer ses dossiers.</p></div>
             </div>
+            <fieldset class="gc-category-policy space-y-4 rounded-xl border border-slate-200 p-4">
+                <legend class="px-2 font-semibold">Catégories de dossiers accessibles</legend>
+                @php
+                    $categoryMode = old('category_mode', $client->portal_categories === null ? 'inherit' : 'custom');
+                    $categorySelection = old('category_mode') ? old('categories', []) : app(\App\Services\Crm\PortalCategoryAccess::class)->effective($client);
+                @endphp
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="category_mode" value="inherit" @checked($categoryMode === 'inherit')>Hériter des catégories du type de cette organisation</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="category_mode" value="custom" @checked($categoryMode === 'custom')>Personnaliser pour cette organisation</label>
+                <p class="text-xs text-slate-500">La sélection ci-dessous s’applique uniquement en mode personnalisé et remplace les réglages du type. <a class="gc-link" href="{{ route('manager.clients.categories') }}">Gérer les réglages par type</a></p>
+                <div class="gc-category-selection">@include('manager.clients.category-checkboxes', ['selectedCategories' => $categorySelection, 'categoryPrefix' => 'organisation'])</div>
+                @include('manager.clients.category-warning')
+            </fieldset>
             <button class="gc-btn-primary">Enregistrer le client</button>
         </form>
         @if ($client->exists)

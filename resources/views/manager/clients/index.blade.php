@@ -4,6 +4,7 @@
             <a href="{{ route('manager.clients.create') }}" class="gc-btn-primary"><x-nav-icon name="plus" /> Ajouter un client</a>
         </x-workspace-heading>
         @include('client.notice')
+        <a href="{{ route('manager.clients.categories') }}" class="gc-btn-secondary"><x-nav-icon name="settings" />Catégories et accès par type</a>
         <form method="GET" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <div><label for="q" class="gc-label">Recherche</label><input id="q" name="q" class="gc-input" value="{{ $filters['q'] }}" placeholder="Nom, société, email"></div>
             <div><label for="kind" class="gc-label">Type</label><select id="kind" name="kind" class="gc-input"><option value="">Tous les clients</option>@foreach (\App\Models\ExternalDelegataire::KINDS as $value => $label)<option value="{{ $value }}" @selected($filters['kind'] === $value)>{{ $label }}</option>@endforeach</select></div>

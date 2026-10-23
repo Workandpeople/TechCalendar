@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', EnsureCrmV2Enabled::class])->group(function (): void {
     Route::prefix('manager/clients')->name('manager.clients.')->controller(ClientManagementController::class)->group(function (): void {
+        Route::get('/categories', 'categories')->name('categories');
+        Route::put('/categories/{kind}', 'updateCategories')->whereIn('kind', ['client', 'delegataire'])->name('categories.update');
         Route::get('/create', 'create')->name('create');
         Route::post('/', 'store')->name('store');
         Route::get('/{client}/edit', 'edit')->name('edit');

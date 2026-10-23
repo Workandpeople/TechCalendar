@@ -14,6 +14,10 @@ class ClientManagement
     {
         app(ClientAccess::class)->manage($actor);
         $client ??= new ExternalDelegataire(['source' => 'native', 'external_id' => (string) Str::uuid()]);
+        if (isset($data['category_mode'])) {
+            $data['portal_categories'] = $data['category_mode'] === 'custom' ? array_values($data['categories'] ?? []) : null;
+        }
+        unset($data['category_mode'], $data['categories']);
         DB::transaction(function () use ($client, $data): void {
             $client->fill($data)->save();
             if ($client->wasChanged('name')) {

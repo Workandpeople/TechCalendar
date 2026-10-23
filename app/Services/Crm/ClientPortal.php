@@ -16,7 +16,9 @@ class ClientPortal
 
     public function dossiers(User $actor, array $filters): array
     {
-        $query = $this->access->dossiers($actor)->with('operations.service');
+        $allowed = $this->access->categoryKeys($actor);
+        abort_if(filled($filters['status'] ?? null) && ! in_array($filters['status'], $allowed, true), 403);
+        $query = $this->access->dossiers($actor);
         if (filled($filters['q'] ?? null)) {
             $search = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim($filters['q'])).'%';
             $query->where(function ($query) use ($search): void {
@@ -24,6 +26,15 @@ class ClientPortal
                     $query->orWhereRaw("{$field} LIKE ? ESCAPE '!'", [$search]);
                 }
             });
+        }
+        [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
+        $counts = DB::query()->fromSub((clone $query)->select('dossiers.id'), 'visible_dossiers')
+            ->leftJoin('dossier_operations', 'dossier_operations.dossier_id', '=', 'visible_dossiers.id')
+            ->selectRaw($categorySql.' AS category, COUNT(DISTINCT visible_dossiers.id) AS aggregate', $bindings)
+            ->groupBy('category')->pluck('aggregate', 'category');
+        $categories = ['all' => ['label' => 'Tous mes dossiers', 'tone' => 'slate', 'count' => (clone $query)->count()]];
+        foreach ($allowed as $key) {
+            $categories[$key] = [...PortalCategoryAccess::catalogue()[$key], 'count' => (int) ($counts[$key] ?? 0)];
         }
         if (filled($filters['status'] ?? null)) {
             $query->where(function ($query) use ($filters): void {
@@ -34,7 +45,8 @@ class ClientPortal
             });
         }
 
-        return ['dossiers' => $query->latest('id')->paginate(25)->withQueryString(), 'filters' => $filters];
+        return ['dossiers' => $query->with('operations.service')->latest('id')->paginate(25)->withQueryString(),
+            'filters' => $filters, 'categories' => $categories];
     }
 
     public function dossier(User $actor, Dossier $dossier): array
@@ -80,13 +92,16 @@ class ClientPortal
     public function lot(User $actor, int $id): array
     {
         $lot = $this->access->lots($actor)->findOrFail($id);
+        $rows = $this->access->lotRows($lot->appointments()->getQuery(), $actor);
+        $restricted = count($this->access->categoryKeys($actor)) < count(PortalCategoryAccess::catalogue());
         // Reuse the existing sampling/satisfaction rules; no parallel calculation.
-        $stats = app(LotAutoCompletionCalculator::class)->calculate($lot, $lot->appointments()->get([
+        // Global results would reveal excluded dossiers; do not display misleading partial rates.
+        $stats = $restricted ? ['physical' => null, 'contact' => null] : app(LotAutoCompletionCalculator::class)->calculate($lot, (clone $rows)->get([
             'id', 'lot_id', 'appointment_id', 'status', 'processing_mode', 'excluded_from_lot_stats',
             'physical_satisfaction', 'contact_satisfaction',
         ]));
 
-        return ['lot' => $lot, 'stats' => $stats, 'rows' => $lot->appointments()
+        return ['lot' => $lot, 'stats' => $stats, 'restricted' => $restricted, 'rows' => $rows
             ->orderBy('row_number')->orderBy('id')->paginate(25, [
                 'id', 'customer_name', 'company_name', 'site_name', 'address', 'postal_code', 'city',
                 'status', 'processing_mode', 'physical_satisfaction', 'contact_satisfaction',

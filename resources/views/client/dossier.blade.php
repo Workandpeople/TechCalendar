@@ -6,6 +6,7 @@
         $documentCount = ($documents?->total() ?? 0) + ($collected?->total() ?? 0) + ($lotDocuments?->total() ?? 0);
         $canUpload = auth()->user()->can('uploadDocument', $dossier);
         $canComment = auth()->user()->can('comment', $dossier);
+        $canRespond = auth()->user()->can('respondToNonConformity', $dossier);
     @endphp
     <div class="gc-dossier-detail gc-portal-dossier">
         <nav class="gc-portal-breadcrumb" aria-label="Fil d’Ariane"><a href="{{ route('client.dossiers') }}"><span aria-hidden="true">←</span> Mes dossiers</a><span aria-hidden="true">/</span><span>Suivi du dossier</span></nav>

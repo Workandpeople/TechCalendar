@@ -2,9 +2,10 @@
     <div class="space-y-6">
         <x-workspace-heading title="Mes dossiers" :eyebrow="auth()->user()->externalClient->name" description="Suivez vos inspections, retrouvez les documents partagés et répondez aux demandes de correction." />
         @include('client.notice')
+        @include('crm.dossiers.categories', ['categoryRoute' => 'client.dossiers'])
         <form method="GET" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
             <div><label class="gc-label" for="q">Recherche</label><input class="gc-input" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Référence, bénéficiaire, lot"></div>
-            <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états</option>@foreach (collect(\App\Services\Crm\DossierStatusCatalog::STATUSES)->except('invoiced') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
+            <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états autorisés</option>@foreach (collect($categories)->except('all') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
             <div class="flex items-end gap-3"><button class="gc-btn-primary">Rechercher</button><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
         </form>
         <p class="text-sm text-slate-500">{{ $dossiers->total() }} dossier(s)</p>
