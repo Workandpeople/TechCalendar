@@ -29,15 +29,33 @@ install -o cofrac2-deploy -g cofrac2-deploy -m 0600 /dev/null /tmp/cofrac2-compo
 
 cat > /usr/local/bin/systemctl <<'SYSTEMCTL'
 #!/usr/bin/env bash
+set -Eeuo pipefail
 case "$1" in
     is-active) exit 3 ;;
-    show) printf 'Id=apache2.service\nActiveState=active\nMainPID=123\nExecReloadStartTimestampMonotonic=456\n' ;;
+    show)
+        pid=123; started=456; command='/usr/sbin/apachectl graceful'
+        history='start_time=[Fri 2026-10-23 00:00:06 UTC] ; stop_time=[Fri 2026-10-23 00:00:07 UTC] ; pid=999 ; code=exited ; status=0'
+        if [ -f /tmp/cofrac2-services-after ]; then
+            history='start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0'
+            case "$(cat /tmp/cofrac2-apt-scenario)" in
+                changed-pid) pid=124 ;;
+                changed-start) started=457 ;;
+                changed-command) command='/usr/sbin/apachectl restart' ;;
+                actual-reload) history='start_time=[Fri 2026-10-23 16:18:40 UTC] ; stop_time=[Fri 2026-10-23 16:18:41 UTC] ; pid=1000 ; code=exited ; status=0' ;;
+            esac
+        fi
+        printf 'MainPID=%s\nExecMainStartTimestampMonotonic=%s\n' "$pid" "$started"
+        printf 'ExecReload={ path=/usr/sbin/apachectl ; argv[]=%s ; ignore_errors=no ; %s }\n' "$command" "$history"
+        printf 'Id=apache2.service\nActiveState=active\n\n'
+        printf 'MainPID=321\nExecMainStartTimestampMonotonic=654\nId=mysql.service\nActiveState=active\n'
+        ;;
     *) touch /tmp/cofrac2-unexpected-service-action; exit 90 ;;
 esac
 SYSTEMCTL
 cat > /usr/local/bin/apt-get <<'APT'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+printf '%s\n' "$*" >> /tmp/cofrac2-apt-calls
 scenario=$(cat /tmp/cofrac2-apt-scenario)
 case " $* " in
     *' --simulate '*)
@@ -61,10 +79,19 @@ case " $* " in
         /usr/sbin/policy-rc.d php8.4-fpm start || policy_status=$?
         test "$policy_status" = 101
         if [ "$scenario" = apt-failure ]; then exit 42; fi
+        touch /tmp/cofrac2-services-after
         ;;
     *) exit 91 ;;
 esac
 APT
+cat > /usr/local/bin/dpkg-query <<'DPKG'
+#!/usr/bin/env bash
+if [ "$(cat /tmp/cofrac2-apt-scenario)" = wrong-package-version ]; then
+    printf 'installed 8.4.26-1+ubuntu22.04.1+deb.sury.org+1'
+else
+    printf 'installed 8.4.27-1+ubuntu22.04.1+deb.sury.org+1'
+fi
+DPKG
 cat > /usr/local/bin/php8.4 <<'PHP'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -87,7 +114,7 @@ cat > /usr/local/bin/php-fpm8.4 <<'FPM'
 test "$#" = 1 && test "$1" = -t
 FPM
 touch /usr/local/bin/composer
-chmod 0755 /usr/local/bin/{systemctl,apt-get,php8.4,php-fpm8.4}
+chmod 0755 /usr/local/bin/{systemctl,apt-get,dpkg-query,php8.4,php-fpm8.4}
 
 # The only policy altered here belongs to the disposable fixture filesystem.
 if [ -e /usr/sbin/policy-rc.d ] || [ -L /usr/sbin/policy-rc.d ]; then
@@ -128,4 +155,31 @@ test -L /usr/sbin/policy-rc.d
 sha256sum -c /tmp/cofrac2-external-policy.sha256
 sha256sum -c /tmp/cofrac2-original.sha256
 test ! -e /tmp/cofrac2-unexpected-service-action
-printf 'OK : politique restauree (absence, fichier, symlink), echec APT, plan refuse, Composer non-root, aucun service ni ancien fichier modifie.\n'
+
+for scenario in changed-pid changed-start changed-command actual-reload; do
+    rm -f /tmp/cofrac2-services-after
+    printf '%s\n' "$scenario" > /tmp/cofrac2-apt-scenario
+    calls=$(wc -l < /tmp/cofrac2-composer-calls)
+    if bash "$SCRIPT" --install-v2-dependencies > "/tmp/cofrac2-$scenario.log" 2>&1; then exit 1; fi
+    grep -q 'etat des services existants modifie' "/tmp/cofrac2-$scenario.log"
+    test "$calls" = "$(wc -l < /tmp/cofrac2-composer-calls)"
+    test -L /usr/sbin/policy-rc.d
+done
+
+printf 'success\n' > /tmp/cofrac2-apt-scenario
+apt_calls=$(wc -l < /tmp/cofrac2-apt-calls)
+bash "$SCRIPT" --composer-only > /tmp/cofrac2-composer-only.log
+test "$apt_calls" = "$(wc -l < /tmp/cofrac2-apt-calls)"
+grep -q 'Reprise Composer uniquement, sans APT' /tmp/cofrac2-composer-only.log
+sha256sum -c /tmp/cofrac2-external-policy.sha256
+test -L /usr/sbin/policy-rc.d
+
+printf 'wrong-package-version\n' > /tmp/cofrac2-apt-scenario
+calls=$(wc -l < /tmp/cofrac2-composer-calls)
+if bash "$SCRIPT" --composer-only > /tmp/cofrac2-wrong-package.log 2>&1; then exit 1; fi
+grep -q 'paquet absent ou version inattendue' /tmp/cofrac2-wrong-package.log
+test "$calls" = "$(wc -l < /tmp/cofrac2-composer-calls)"
+test "$apt_calls" = "$(wc -l < /tmp/cofrac2-apt-calls)"
+sha256sum -c /tmp/cofrac2-original.sha256
+test ! -e /tmp/cofrac2-unexpected-service-action
+printf 'OK : politique restauree, remise a zero ExecReload acceptee, changement reel refuse, reprise Composer sans APT, ancien Coffrac inchange.\n'

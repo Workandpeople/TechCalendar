@@ -172,6 +172,29 @@ Composer sans reseau : restauration de politique absente, reguliere ou symboliqu
 echec d'installation, refus d'une mise a niveau inattendue, execution Composer
 non-root et conservation des fichiers Coffrac factices.
 
+### Reprise apres installation des paquets
+
+Les trois paquets ont ete installes sur le serveur. Le premier controle a
+interrompu la suite avant Composer : seul l'ancien resultat d'execution
+`ExecReload` d'Apache est passe d'un rechargement historique a un resultat vide
+(`start_time=[n/a]`, `pid=0`). Les PID, demarrages et etats actifs des anciens
+services ainsi que les configurations Apache sont restes identiques. Le nouveau
+FPM est inactif, et la politique temporaire a ete restauree.
+
+La comparaison accepte desormais uniquement cette remise a zero d'historique,
+avec definition de commande et identite de service inchangees. Un nouveau
+resultat de rechargement, un changement de PID, de demarrage, de commande ou
+d'etat reste bloquant. Les snapshots bruts restent dans le diagnostic prive.
+
+Apres un fast-forward du clone V2, utiliser `--composer-only` pour verifier les
+versions exactes des trois paquets deja installes et installer les dependances
+verrouillees. Ce mode n'execute aucune commande APT et ne touche pas a
+`policy-rc.d`. Il conserve les controles de checkout propre, absence de `.env`,
+FPM 8.4 inactif, extensions PHP et isolation des services/configurations, y
+compris apres Composer. Les tests simulent la remise a zero observee, refusent
+les vrais changements et verifient la reprise sans APT ainsi que le refus
+d'une version de paquet differente.
+
 ### Correctifs de dependances avant la production
 
 L'audit du verrouillage V2 initial revelait 27 alertes sur sept bibliotheques.
