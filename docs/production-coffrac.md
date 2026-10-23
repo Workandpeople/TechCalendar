@@ -15,6 +15,104 @@
 - La reprise finale utilisera des donnees Coffrac actualisees. Le snapshot et
   les comptes de test de la demonstration ne constituent pas la base de production.
 
+## Perimetre de reprise confirme, 23 octobre 2026
+
+Cette section remplace le projet initial de lecture des documents en place.
+Ne pas lancer d'import ni de copie partielle avant adaptation et validation du
+pipeline de production sur ce perimetre.
+
+- La source metier est la base Coffrac complete et actualisee : tous les
+  dossiers, toutes leurs fiches/prestations et tous les statuts, y compris
+  factures, annules, archives ou incomplets. Reprendre les RDV passes/presents/
+  futurs, commentaires, documents, rapports, controles, marquages de facturation,
+  affectations, liens clients/delegataires/installateurs et historiques.
+- Tous les types d'utilisateurs Coffrac entrent dans la reprise : internes,
+  techniciens, clients, delegataires et autres profils existants. Conserver les
+  comptes inactifs/archives comme tels. Traduire les droits dans la V2 sans
+  elevation automatique et sans fusionner les homonymes ou emails ambigus.
+- Le seul compte issu d'un seeder sera le super-administrateur V2. Ne charger
+  aucun seeder de demo/simulation, utilisateurs fictifs, rendez-vous exemples ou
+  snapshot de references TechCalendar a la place des referentiels Coffrac.
+  Les referentiels techniques initialises par les migrations ne sont pas des
+  donnees metier de demonstration ; les rapprocher du referentiel source.
+- Les hashes de mots de passe compatibles pourront etre conserves apres
+  verification du format. Les comptes incompatibles ou incomplets doivent
+  ressortir dans le rapport et suivre un parcours de reinitialisation explicite,
+  sans remplacement silencieux par des mots de passe aleatoires.
+- Toute table ou colonne non projetee nativement doit etre identifiee dans le
+  rapport de couverture et conservee dans la sauvegarde source. Le dump complet
+  ne prouve pas a lui seul que l'import natif est complet. Verifier effectifs,
+  correspondances stables par identifiants source, liens, droits, audiences,
+  etats et blocages historiques de double facturation avant ouverture.
+- Les anciennes sessions, jetons actifs, caches et files de jobs/SMS/emails
+  restent dans la sauvegarde mais ne sont pas reactives : pas de session heritee
+  ni d'envoi rejoue. Les identifiants d'integration sont traites separement des
+  donnees metier, sans publication ni reutilisation automatique.
+
+### Controle prealable du snapshot SQL
+
+Le controle serveur fourni le 23 octobre confirme la table `clients` en MyISAM
+et les 25 autres tables en InnoDB. La preparation conserve ces moteurs tels quels.
+Le collecteur refuse ce cas par defaut ; l'option explicite
+`--allow-live-myisam-clients` permet uniquement la collecte de preparation de
+ce schema mixte connu. Tout autre cas non InnoDB reste refuse.
+
+`--single-transaction` ne garantit pas la coherence des tables MyISAM modifiees
+pendant la collecte. Tant que les employes travaillent, un export de preparation
+ne doit donc pas etre presente comme une photographie transactionnelle de toute
+la base si ce moteur est encore present. La strategie de collecte et le gel des
+ecritures a la bascule finale devront etre valides separement ; aucun verrouillage
+ou arret de Coffrac n'est autorise par la preparation actuelle.
+
+Controle deja execute sur le serveur, sans lecture des donnees personnelles ni
+modification :
+
+```bash
+sudo mysql --defaults-file=/etc/mysql/debian.cnf \
+    --protocol=socket --connect-timeout=5 --batch \
+    --execute="SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA='fiche_crm' AND TABLE_TYPE='BASE TABLE'
+               ORDER BY TABLE_NAME;"
+
+df -h /var/www/cofrac2 /home/ubuntu/www/coffrac_preprod/public/documents
+```
+
+Le disque a toujours 335 Go disponibles au moment de ce controle. Ne pas
+convertir `clients`, changer de serveur SQL ou ajouter un verrou global pour
+effectuer la collecte de preparation.
+
+### Copie documentaire complete et independante
+
+- Dupliquer physiquement toutes les pieces Coffrac dans un stockage prive V2,
+  tous statuts compris. Pas de filtre « hors factures », pas de lien symbolique,
+  hardlink ou bind mount vers les originaux comme stockage definitif.
+- Inventorier `public/documents`, `public/pdf`, `public/media`,
+  `public/signature`, `public/lot_dossier` et `storage/app`, en distinguant les
+  pieces metier du code/configuration. Les fichiers non references, manquants,
+  vides, liens symboliques et formats non reconnus restent signales ; ne rien
+  ignorer silencieusement. Le code PHP, les `.htaccess` et `.user.ini` de
+  l'ancien site ne sont pas des pieces a reutiliser par la nouvelle application.
+- Ne pas utiliser la selection de simulation du 14 octobre ni son manifeste :
+  `tools/coffrac/collect-document-manifest.php` exclut les dossiers entierement
+  factures et ne correspond donc pas au besoin de production confirme.
+- Conserver les metadonnees, proprietaires metier, dates, commentaires, liens
+  aux dossiers/fiches et audiences de chaque piece. Une copie sur disque ne
+  suffit pas a valider les droits ni le rattachement dans la V2.
+- Prevoir une copie directe et reprenable, sans ZIP/tar intermediaire de 217 Go,
+  puis verification des contenus par empreintes et rapprochement DB/fichiers.
+  Les nouvelles pieces natives restent distinctes de cette archive historique.
+- Recontroler l'espace juste avant copie. Dernier releve : 335 Go libres,
+  environ 217 Go dans `public/documents`, soit environ 118 Go restants avant les
+  autres repertoires, la croissance et les fichiers temporaires. Ce n'est pas
+  une garantie de marge suffisante au moment effectif de la copie.
+- Les employes continuant a travailler sur Coffrac, refaire un passage
+  differentiel et une collecte SQL coherente a la bascule. La copie initiale
+  n'est pas une synchronisation definitive entre les deux applications.
+- Ne supprimer aucune piece originale pendant les essais. Toute suppression
+  future demandera une validation distincte apres recette, verification de
+  l'independance de la V2 et d'une sauvegarde restaurable hors de l'ancien site.
+  La duplication sur le meme serveur ne remplace pas une sauvegarde externe.
+
 ## Inventaire fourni le 23 octobre 2026
 
 Le rapport a ete produit par `tools/deploy/audit-production-host.sh`, sans
@@ -303,13 +401,16 @@ service. Ne pas relancer ce script initial sur la base maintenant structuree.
 la base source `fiche_crm`, sans bootstrap de l'ancien Laravel :
 
 - Utilise la connexion locale de maintenance existante et verifie les tables
-  metier attendues. Refuse les tables de base non InnoDB, plutot que d'ajouter
-  des verrous sur l'application en service.
-- Produit un dump transactionnel avec `--single-transaction --quick`, sans
-  verrouillage explicite de tables, sans purge GTID, sans flush global et a
-  priorite reduite. Inclut donnees, structures, vues, triggers, routines et
-  evenements dans la sauvegarde privee. Ne pas faire de modification de schema
-  source pendant la collecte.
+  metier attendues. Refuse les tables de base non InnoDB, sauf la seule table
+  `clients` en MyISAM apres acceptation explicite par l'option ci-dessus. Ne
+  transforme aucun moteur et n'ajoute aucun verrou explicite.
+- Produit un dump complet avec `--single-transaction --quick`, sans purge GTID,
+  sans flush global et a priorite reduite. Les lignes InnoDB sont lues dans une
+  transaction ; `clients` MyISAM reste une lecture en direct. Inclut donnees,
+  structures, vues, triggers, routines et evenements dans la sauvegarde privee.
+  Ne pas faire de modification de schema source pendant la collecte. Une lecture
+  MyISAM peut retarder des ecritures pendant sa duree ; ne pas promettre une
+  absence totale d'impact simplement parce que les verrous explicites sont exclus.
 - Ecrit seulement dans un nouveau dossier root 0700 sous
   `/var/lib/cofrac2-production/coffrac-source-*`. Le dump, les erreurs et les
   inventaires restent en 0600 ; aucune information de dossier n'est affichee.
@@ -318,13 +419,32 @@ la base source `fiche_crm`, sans bootstrap de l'ancien Laravel :
   sont des estimations, distinctes des comptages exacts du futur import.
 - Controle gzip et SHA-256. Un export incomplet reste nomme `.partial`, sans
   manifeste de validation. Un verrou local refuse deux exports simultanes.
+  Compare aussi la liste des tables/moteurs avant et apres collecte : un
+  changement detecte invalide l'export, sans pretendre detecter tout DDL transitoire.
+- Indique les horaires et la limite de coherence dans `collection.txt` :
+  `collection_type=online_preparation_snapshot`,
+  `data_consistency=mixed_engines_not_atomic`, `non_transactional_tables=clients`
+  et `final_cutover_ready=no` pour le schema mixte actuel. Les checksums prouvent
+  l'integrite des fichiers produits, pas la coherence globale de la source active.
 - Ne restaure aucun SQL, ne modifie aucune ligne source ou V2, ne lance aucun
   service et ne copie aucun document.
 
-Test reel en conteneurs jetables MySQL 8.0.46 : dump prive contenant les objets
-attendus, integrite gzip/SHA-256, conservation des donnees source et V2 ainsi
-que des fichiers/configurations factices. Verification du refus d'une table
-non transactionnelle, d'un export concurrent et d'un echec force de mysqldump.
+Test reel en conteneurs jetables MySQL 8.0.46 : dumps InnoDB et mixte contenant
+les objets attendus, integrite gzip/SHA-256, conservation des donnees source et
+V2 ainsi que des fichiers/configurations factices. Le journal SQL verifie
+l'absence d'ecritures, de `FLUSH` et de `LOCK TABLES` pendant les collectes.
+Verification du refus des moteurs inattendus, de MyISAM sans option explicite,
+d'un export concurrent, d'un echec force du client et d'un moteur change pendant
+la collecte. Ces ALTER de test restent confines aux conteneurs jetables.
+
+Commande de preparation pour le schema confirme :
+
+```bash
+sudo -H -u cofrac2-deploy \
+    git -C /var/www/cofrac2 pull --ff-only origin v2 &&
+sudo bash /var/www/cofrac2/tools/deploy/collect-production-coffrac.sh \
+    --export-current-coffrac --allow-live-myisam-clients
+```
 
 Cette collecte est un cliche de preparation/recette. Les employes continuant a
 travailler sur Coffrac, une nouvelle collecte coherente sera necessaire lors de
@@ -354,12 +474,12 @@ et les 1 098 tests PHP passent (8 957 assertions).
 
 ## Stockage documentaire et suites
 
-Le lecteur `CollectedDossierDocuments` permet de lire les pieces existantes a
-partir d'une racine et d'un manifeste. Etudier un raccordement en lecture seule
-du repertoire historique, avec un manifeste regenere a partir de la reprise
-finale, pour eviter une seconde copie des 217 Go.
-Le nouveau stockage d'uploads doit rester prive et distinct. Aucun lien vers
-`public/storage` ni import des `.htaccess` et executables historiques.
+Le lecteur `CollectedDossierDocuments` pourra lire la copie privee V2 a partir
+d'une racine et d'un manifeste complets regeneres pour cette copie. La solution
+initiale de lecture des originaux en place est abandonnee selon le perimetre
+confirme ci-dessus. Le stockage natif des nouveaux uploads reste prive et
+distinct ; aucune archive historique ne doit etre exposee par `public/storage`
+ni aucun `.htaccess` ou executable historique active dans la V2.
 
 Apres les controles : preparer la cle de deploiement GitHub limitee au depot,
 cloner la revision V2 publiee, installer le runtime dedie et preparer la reprise

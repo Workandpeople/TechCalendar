@@ -6,9 +6,11 @@ umask 077
 export LC_ALL=C
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-if [ "${EUID:-$(id -u)}" -ne 0 ] || [ "$#" -ne 1 ] \
-    || [ "${1:-}" != '--export-current-coffrac' ] || [ "$(hostname -s)" != ns365601 ]; then
-    printf 'Usage sur ns365601 : sudo bash collect-production-coffrac.sh --export-current-coffrac\n' >&2
+if [ "${EUID:-$(id -u)}" -ne 0 ] || [ "$#" -lt 1 ] || [ "$#" -gt 2 ] \
+    || [ "${1:-}" != '--export-current-coffrac' ] \
+    || { [ "$#" -eq 2 ] && [ "$2" != '--allow-live-myisam-clients' ]; } \
+    || [ "$(hostname -s)" != ns365601 ]; then
+    printf 'Usage sur ns365601 : sudo bash collect-production-coffrac.sh --export-current-coffrac [--allow-live-myisam-clients]\n' >&2
     exit 1
 fi
 
@@ -32,8 +34,19 @@ scalar() { "${MYSQL[@]}" --execute="$1"; }
     || stop 'compte ou serveur SQL inattendu.'
 required=$(scalar "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$SOURCE' AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('users','clients','dossiers','dossier_fiches','dossier_document','dossier_fiche_rdv','status','fiche_type');")
 [ "$required" = 8 ] || stop 'base source ou tables Coffrac attendues absentes.'
-non_transactional=$(scalar "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$SOURCE' AND TABLE_TYPE='BASE TABLE' AND (ENGINE IS NULL OR ENGINE <> 'InnoDB');")
-[ "$non_transactional" = 0 ] || stop 'tables non InnoDB : export sans verrouillage non valide, examiner avant de continuer.'
+engines_sql="SELECT TABLE_NAME, COALESCE(ENGINE,'UNKNOWN') FROM information_schema.TABLES WHERE TABLE_SCHEMA='$SOURCE' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME;"
+engines_before=$(scalar "$engines_sql")
+non_transactional=$(printf '%s\n' "$engines_before" | awk -F '\t' '$2 != "InnoDB"')
+consistency=innodb_transaction_snapshot
+non_transactional_tables=none
+if [ -n "$non_transactional" ]; then
+    [ "$non_transactional" = $'clients\tMyISAM' ] \
+        || stop 'tables non InnoDB inattendues : seul clients en MyISAM peut etre accepte pour la preparation.'
+    [ "${2:-}" = '--allow-live-myisam-clients' ] \
+        || stop 'clients en MyISAM : --allow-live-myisam-clients requis pour une collecte de preparation non atomique.'
+    consistency=mixed_engines_not_atomic
+    non_transactional_tables=clients
+fi
 [ "$(df -Pk "$STATE" | awk 'END {print $4}')" -ge 2097152 ] || stop 'moins de 2 Gio libres, examiner avant export.'
 
 DIRECTORY=$(mktemp -d "$STATE/coffrac-source-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")
@@ -48,7 +61,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 printf 'Collecte privee : %s\n' "$DIRECTORY"
-printf 'Source : %s, tables InnoDB verifiees. Aucun verrouillage explicite de tables.\n' "$SOURCE"
+started_at=$(date -u +%FT%TZ)
+printf 'Source : %s. Aucun verrouillage explicite de tables.\n' "$SOURCE"
+if [ "$consistency" = mixed_engines_not_atomic ]; then
+    printf 'ATTENTION : clients en MyISAM, contenu lu en direct, coherence globale non garantie.\n'
+    printf 'Collecte de preparation uniquement ; elle ne valide pas la bascule finale.\n'
+fi
 printf 'Ne pas modifier la structure SQL de Coffrac pendant cet export.\n'
 scalar 'SELECT @@hostname, @@version, @@port, CURRENT_USER();' > "$DIRECTORY/server.tsv"
 {
@@ -60,7 +78,7 @@ scalar 'SELECT @@hostname, @@version, @@port, CURRENT_USER();' > "$DIRECTORY/ser
     scalar "SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COALESCE(CHARACTER_SET_NAME,''), COALESCE(COLLATION_NAME,'') FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$SOURCE' ORDER BY TABLE_NAME, ORDINAL_POSITION;"
 } > "$DIRECTORY/columns.tsv"
 
-printf 'Export SQL transactionnel en cours ; le terminal reste occupe jusqu a la verification...\n'
+printf 'Export SQL complet en cours ; le terminal reste occupe jusqu a la verification...\n'
 nice -n 10 ionice -c 2 -n 7 mysqldump \
     --defaults-file=/etc/mysql/debian.cnf \
     --protocol=socket \
@@ -71,9 +89,12 @@ nice -n 10 ionice -c 2 -n 7 mysqldump \
     "$SOURCE" 2> "$DIRECTORY/mysqldump.stderr" \
     | nice -n 10 gzip -1 > "$DIRECTORY/coffrac.sql.gz.partial"
 gzip -t "$DIRECTORY/coffrac.sql.gz.partial"
+[ "$(scalar "$engines_sql")" = "$engines_before" ] \
+    || stop 'liste des tables ou moteurs modifies pendant la collecte ; export non valide.'
 mv -- "$DIRECTORY/coffrac.sql.gz.partial" "$DIRECTORY/coffrac.sql.gz"
-printf 'source_database=%s\ncollected_at_utc=%s\ncollection_type=online_snapshot\n' \
-    "$SOURCE" "$(date -u +%FT%TZ)" > "$DIRECTORY/collection.txt"
+printf 'source_database=%s\nstarted_at_utc=%s\ncollected_at_utc=%s\ncollection_type=online_preparation_snapshot\ndata_consistency=%s\nnon_transactional_tables=%s\nfinal_cutover_ready=no\n' \
+    "$SOURCE" "$started_at" "$(date -u +%FT%TZ)" "$consistency" \
+    "$non_transactional_tables" > "$DIRECTORY/collection.txt"
 cd "$DIRECTORY"
 sha256sum coffrac.sql.gz server.tsv tables.tsv columns.tsv collection.txt mysqldump.stderr > SHA256SUMS
 sha256sum -c SHA256SUMS
@@ -81,4 +102,5 @@ success=1
 printf 'Export termine : %s\n' "$DIRECTORY"
 printf 'Taille du dump compresse : %s octets.\n' "$(stat -c %s coffrac.sql.gz)"
 printf 'Dossiers, comptes et historique dans le dump prive. Aucun import ni changement de service.\n'
+printf 'Collecte de preparation seulement : une collecte finale coherente reste necessaire.\n'
 printf 'Aucun document copie. Ne pas publier le dump ou les fichiers prives.\n'
