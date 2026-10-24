@@ -220,11 +220,65 @@ code=$(curl --noproxy '*' -sS --resolve "$DOMAIN:443:127.0.0.1" -b /tmp/runtime-
     -o /tmp/runtime-document.pdf -w '%{http_code}' "https://$DOMAIN/v2/dossiers/101/documents-collectes/601")
 test "$code" = 200
 cmp -s /tmp/runtime-document.pdf /srv/cofrac2-document-archive/files/public/documents/test.pdf
+if bash "$SCRIPT" --update-user-management > /tmp/runtime-update-active.log 2>&1; then exit 1; fi
 bash "$SCRIPT" --maintenance --reload-shared-apache > /tmp/runtime-maintenance.log 2>&1
 test ! -e "$STATE/INTERNAL-SITE-OPEN.json"
 test ! -e /etc/apache2/conf-enabled/cofrac2-runtime-modules.conf
 cmp -s "$SITE" "$APP/tools/deploy/apache-production-https.conf.example"
+mysql --defaults-file=/etc/mysql/fixture.cnf --execute "INSERT INTO cofrac2production.users
+    (first_name,last_name,email,password,role,admin,deleted_at,created_at,updated_at)
+    VALUES ('Disabled','Fixture','disabled-runtime@example.invalid','fixture-no-login-hash',2,0,NOW(),NOW(),NOW());"
+mysql --defaults-file=/etc/mysql/fixture.cnf --batch --execute 'SELECT id,email,password,role,admin,deleted_at,external_client_id,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/runtime-users-before-update.tsv
+sha256sum "$APP/.env" /srv/cofrac2-runtime/documents.list0 > /tmp/runtime-before-update.sha256
+cp -p "$STATE/RUNTIME-PREPARED.json" /tmp/runtime-prepared-before-update.json
+printf '\n{{-- Fixture PHP-only update --}}\n' >> "$APP/resources/views/components/user-email-conflict.blade.php"
+runuser -u cofrac2-deploy -- git -C "$APP" add resources/views/components/user-email-conflict.blade.php
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-user-management >/dev/null
+printf '<?php // unrelated configuration change\n' > "$APP/config/unrelated-fixture.php"
+chown cofrac2-deploy:cofrac2-deploy "$APP/config/unrelated-fixture.php"
+runuser -u cofrac2-deploy -- git -C "$APP" add config/unrelated-fixture.php
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-unrelated-config >/dev/null
+if bash "$SCRIPT" --update-user-management > /tmp/runtime-update-bad-code.log 2>&1; then exit 1; fi
+grep -q 'autres changements' /tmp/runtime-update-bad-code.log
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid revert --no-edit HEAD >/dev/null
+cp -p "$APP/.env" /tmp/runtime-before-update.env
+printf '\n# unexpected environment change\n' >> "$APP/.env"
+if bash "$SCRIPT" --update-user-management > /tmp/runtime-update-bad-env.log 2>&1; then exit 1; fi
+cp -p /tmp/runtime-before-update.env "$APP/.env"
+cmp -s "$STATE/RUNTIME-PREPARED.json" /tmp/runtime-prepared-before-update.json
+chmod 0600 "$APP/app/Rules/AvailableUserEmail.php"
+bash "$SCRIPT" --update-user-management > /tmp/runtime-update.log 2>&1
+sha256sum -c /tmp/runtime-before-update.sha256
+runuser -u cofrac2-app -- test -r "$APP/app/Rules/AvailableUserEmail.php"
+runuser -u cofrac2-app -- test ! -w "$APP/app/Rules/AvailableUserEmail.php"
+mysql --defaults-file=/etc/mysql/fixture.cnf --batch --execute 'SELECT id,email,password,role,admin,deleted_at,external_client_id,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/runtime-users-after-update.tsv
+cmp -s /tmp/runtime-users-before-update.tsv /tmp/runtime-users-after-update.tsv
+php8.4 -r '
+    $before=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+    $after=json_decode(file_get_contents($argv[2]),true,32,JSON_THROW_ON_ERROR);
+    $updates=$after["runtime_updates"];unset($after["runtime_updates"]);
+    if(count($updates)!==1||$updates[0]["kind"]!=="user_management_php_only"||$updates[0]["from_revision"]!==$before["revision"]||$updates[0]["to_revision"]!==$after["revision"])exit(1);
+    $after["revision"]=$before["revision"];if($before!==$after)exit(1);
+' /tmp/runtime-prepared-before-update.json "$STATE/RUNTIME-PREPARED.json"
 bash "$SCRIPT" --open --reload-shared-apache > /tmp/runtime-reopen.log 2>&1
 test -f "$STATE/INTERNAL-SITE-OPEN.json"
+curl --noproxy '*' -fsS --resolve "$DOMAIN:443:127.0.0.1" -b /tmp/runtime-cookie.jar -c /tmp/runtime-cookie.jar \
+    "https://$DOMAIN/admin/users" > /tmp/runtime-users.html
+TOKEN=$(php8.4 -r 'preg_match("/name=\"_token\" value=\"([^\"]+)/",file_get_contents($argv[1]),$m);echo $m[1]??"";' /tmp/runtime-users.html)
+test -n "$TOKEN"
+code=$(curl --noproxy '*' -sS --resolve "$DOMAIN:443:127.0.0.1" -b /tmp/runtime-cookie.jar -c /tmp/runtime-cookie.jar \
+    -H "Referer: https://$DOMAIN/admin/users" --data-urlencode "_token=$TOKEN" --data-urlencode 'first_name=Existing' \
+    --data-urlencode 'last_name=Fixture' --data-urlencode 'email=disabled-runtime@example.invalid' \
+    --data-urlencode 'role=1' --data-urlencode 'admin=0' -o /tmp/runtime-user-conflict.body -w '%{http_code}' "https://$DOMAIN/admin/users")
+test "$code" = 302
+curl --noproxy '*' -fsS --resolve "$DOMAIN:443:127.0.0.1" -b /tmp/runtime-cookie.jar -c /tmp/runtime-cookie.jar \
+    "https://$DOMAIN/admin/users" > /tmp/runtime-user-conflict.html
+grep -q 'Retrouver le compte existant' /tmp/runtime-user-conflict.html
+grep -q 'compte interne désactivé' /tmp/runtime-user-conflict.html
+curl --noproxy '*' -fsS --resolve "$DOMAIN:443:127.0.0.1" -b /tmp/runtime-cookie.jar \
+    "https://$DOMAIN/admin/users?q=disabled-runtime%40example.invalid&status=all" > /tmp/runtime-user-existing.html
+grep -q 'Restaurer' /tmp/runtime-user-existing.html
+mysql --defaults-file=/etc/mysql/fixture.cnf --batch --execute 'SELECT id,email,password,role,admin,deleted_at,external_client_id,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/runtime-users-after-request.tsv
+cmp -s /tmp/runtime-users-before-update.tsv /tmp/runtime-users-after-request.tsv
 sha256sum -c /tmp/runtime-original.sha256
-printf 'OK : runtime reel prepare, permissions privees, retour arriere, TLS, authentification, worker et Reverb verifies ; site original inchange.\n'
+printf 'OK : runtime, mise a jour PHP, compte desactive sans doublon, TLS, authentification, worker et Reverb verifies ; site original inchange.\n'

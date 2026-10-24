@@ -7,6 +7,8 @@ use App\Mail\UserCreatedCredentialsMail;
 use App\Models\Department;
 use App\Models\Service;
 use App\Models\User;
+use App\Rules\AvailableUserEmail;
+use App\Services\UserAccountConflict;
 use App\Services\UserBillingPermission;
 use App\Services\UserNameNormalizer;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +27,7 @@ class AdminUserController extends Controller
         abort_unless((bool) $request->user()?->admin, 403);
 
         $validated = $request->validate([
-            'q' => ['nullable', 'string', 'max:120'],
+            'q' => ['nullable', 'string', 'max:190'],
             'role' => ['nullable', Rule::in(['0', '1', '2'])],
             'admin' => ['nullable', Rule::in(['0', '1'])],
             'status' => ['nullable', Rule::in(['active', 'trashed', 'all'])],
@@ -60,9 +62,12 @@ class AdminUserController extends Controller
         }
 
         $users = $query->orderByDesc('id')->paginate(15)->withQueryString();
+        $conflictEmail = $request->session()->get('errors')?->has('email')
+            ? $request->old('email') : ($users->isEmpty() ? ($validated['q'] ?? null) : null);
 
         return view('admin.users.index', [
             'users' => $users,
+            'emailConflict' => app(UserAccountConflict::class)->find($request->user(), $conflictEmail),
             'services' => Service::query()->catalog()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
             'departments' => Department::query()->orderBy('code')->get(['code', 'name']),
             'filters' => [
@@ -83,7 +88,7 @@ class AdminUserController extends Controller
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:190', 'unique:users,email'],
+            'email' => ['bail', 'required', 'email', 'max:190', new AvailableUserEmail($request->user())],
             'role' => ['required', Rule::in([0, 1, 2])],
             'admin' => ['required', 'boolean'],
             'can_manage_billing' => ['sometimes', 'boolean'],
@@ -131,7 +136,7 @@ class AdminUserController extends Controller
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:190', Rule::unique('users', 'email')->ignore($user->id)],
+            'email' => ['bail', 'required', 'email', 'max:190', new AvailableUserEmail($request->user(), $user->id)],
             'role' => ['required', Rule::in([0, 1, 2])],
             'admin' => ['required', 'boolean'],
             'can_manage_billing' => ['sometimes', 'boolean'],

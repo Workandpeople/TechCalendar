@@ -8,6 +8,8 @@ use App\Models\Department;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Rules\AvailableUserEmail;
+use App\Services\UserAccountConflict;
 use App\Services\UserBillingPermission;
 use App\Services\UserNameNormalizer;
 use Carbon\Carbon;
@@ -27,7 +29,7 @@ class ManagerUserController extends Controller
         abort_unless($this->canManageUsers($request), 403);
 
         $validated = $request->validate([
-            'q' => ['nullable', 'string', 'max:120'],
+            'q' => ['nullable', 'string', 'max:190'],
             'role' => ['nullable', Rule::in(['0', '1', '2'])],
             'status' => ['nullable', Rule::in(['active', 'trashed', 'all'])],
         ]);
@@ -66,9 +68,12 @@ class ManagerUserController extends Controller
         }
 
         $users = $query->orderByDesc('id')->paginate(15)->withQueryString();
+        $conflictEmail = $request->session()->get('errors')?->has('email')
+            ? $request->old('email') : ($users->isEmpty() ? ($validated['q'] ?? null) : null);
 
         return view('manager.users.index', [
             'users' => $users,
+            'emailConflict' => app(UserAccountConflict::class)->find($request->user(), $conflictEmail),
             'services' => Service::query()->catalog()->orderBy('type')->orderBy('name')->get(['id', 'type', 'name']),
             'departments' => Department::query()->orderBy('code')->get(['code', 'name']),
             'filters' => [
@@ -88,7 +93,7 @@ class ManagerUserController extends Controller
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:190', 'unique:users,email'],
+            'email' => ['bail', 'required', 'email', 'max:190', new AvailableUserEmail($request->user())],
             'role' => ['required', Rule::in([0, 1, 2])],
             'can_manage_billing' => ['sometimes', 'boolean'],
             'phone' => ['nullable', 'string', 'max:255', 'required_if:role,2'],
@@ -136,7 +141,7 @@ class ManagerUserController extends Controller
         $payload = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:190', Rule::unique('users', 'email')->ignore($target->id)],
+            'email' => ['bail', 'required', 'email', 'max:190', new AvailableUserEmail($request->user(), $target->id)],
             'role' => ['required', Rule::in([0, 1, 2])],
             'can_manage_billing' => ['sometimes', 'boolean'],
             'phone' => ['nullable', 'string', 'max:255', 'required_if:role,2'],

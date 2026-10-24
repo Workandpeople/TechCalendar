@@ -14,6 +14,8 @@
             </div>
         @endif
 
+        <x-user-email-conflict :conflict="$emailConflict" />
+
         <section class="gc-card p-4">
             <form id="user-filters-form" method="GET" action="{{ route('admin.users') }}" class="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <div class="md:col-span-2">
@@ -44,7 +46,7 @@
                     <label class="gc-label" for="status">Statut</label>
                     <select id="status" name="status" class="gc-input">
                         <option value="active" @selected($filters['status'] === 'active')>Actifs</option>
-                        <option value="trashed" @selected($filters['status'] === 'trashed')>Supprimés</option>
+                        <option value="trashed" @selected($filters['status'] === 'trashed')>Désactivés</option>
                         <option value="all" @selected($filters['status'] === 'all')>Tous</option>
                     </select>
                 </div>
@@ -80,7 +82,7 @@
                                     @if ($user->role === 0) Gérant @elseif ($user->role === 1) Planning @else Tech @endif
                                 </td>
                                 <td class="px-4 py-3">{{ $user->admin ? 'Oui' : 'Non' }}</td>
-                                <td class="px-4 py-3">{{ $user->trashed() ? 'Supprimé' : 'Actif' }}</td>
+                                <td class="px-4 py-3">{{ $user->trashed() ? 'Désactivé' : 'Actif' }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
                                         @if (! $user->trashed())

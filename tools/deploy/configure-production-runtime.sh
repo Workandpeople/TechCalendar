@@ -10,9 +10,9 @@ stop() { printf 'STOP : %s\n' "$1" >&2; exit 1; }
 [ "${EUID:-$(id -u)}" = 0 ] && [ "$(hostname -s)" = ns365601 ] || stop 'root sur ns365601 uniquement.'
 case "${1:-}:$#" in
     --prepare:3) ;;
-    --repair-fpm-logging:1) ;;
+    --repair-fpm-logging:1|--update-user-management:1) ;;
     --open:2|--maintenance:2) [ "$2" = --reload-shared-apache ] || stop 'consentement au rechargement gracieux Apache requis.' ;;
-    *) stop 'Usage : --prepare BUNDLE SHA256 | --repair-fpm-logging | --open|--maintenance --reload-shared-apache' ;;
+    *) stop 'Usage : --prepare BUNDLE SHA256 | --repair-fpm-logging | --update-user-management | --open|--maintenance --reload-shared-apache' ;;
 esac
 ACTION=$1
 APP=/var/www/cofrac2
@@ -179,6 +179,63 @@ if [ "$ACTION" = --maintenance ]; then
     if [ -f "$STATE/INTERNAL-SITE-OPEN.json" ]; then mv -- "$STATE/INTERNAL-SITE-OPEN.json" "$WORK/open.before.json"; fi
     success=1
     printf 'Seul cofrac2 remis en maintenance statique. Donnees V2 conservees, ancien Coffrac inchange.\n'
+    exit 0
+fi
+
+if [ "$ACTION" = --update-user-management ]; then
+    [ -f "$STATE/RUNTIME-PREPARED.json" ] && [ ! -L "$STATE/RUNTIME-PREPARED.json" ] \
+        && [ "$(stat -c %u:%a "$STATE/RUNTIME-PREPARED.json")" = 0:600 ] || stop 'preparation runtime privee attendue.'
+    [ ! -e "$STATE/INTERNAL-SITE-OPEN.json" ] && [ ! -e "$MODULES" ] && [ ! -L "$MODULES" ] \
+        || stop 'mettre cofrac2 en maintenance statique avant mise a jour.'
+    cmp -s "$SITE" "$HERE/apache-production-https.conf.example" || stop 'maintenance HTTPS statique attendue.'
+    for name in php-fpm queue reverb; do
+        cmp -s "/etc/systemd/system/cofrac2-$name.service" "$HERE/cofrac2-$name.service.example" || stop 'unite V2 modifiee.'
+        ! systemctl is-active --quiet "cofrac2-$name.service" || stop 'les seuls services V2 doivent etre arretes.'
+    done
+    cmp -s /etc/cofrac2/php-fpm.conf "$HERE/cofrac2-php-fpm.conf.example" || stop 'configuration PHP dediee modifiee.'
+    previous=$(php8.4 -r '
+        $r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+        if(!preg_match("/^[a-f0-9]{40}$/D",$r["revision"]??"")||!hash_equals($r["env_sha256"]??"",hash_file("sha256",$argv[2])))exit(1);
+        echo $r["revision"];
+    ' "$STATE/RUNTIME-PREPARED.json" "$APP/.env") || stop 'configuration preparee modifiee ou revision non valide.'
+    [ "$previous" != "$REVISION" ] || stop 'cette revision est deja preparee ; lancer uniquement --open.'
+    git_app merge-base --is-ancestor "$previous" "$REVISION" || stop 'mise a jour sans lien avec la revision preparee.'
+    # This patch does not require migrations, dependency installation or rebuilt frontend assets.
+    git_app diff --quiet "$previous" "$REVISION" -- . \
+        ':(exclude)app/Http/Controllers/Admin/AdminUserController.php' \
+        ':(exclude)app/Http/Controllers/Manager/ManagerUserController.php' \
+        ':(exclude)app/Http/Requests/Crm/ClientAccountRequest.php' \
+        ':(exclude)app/Rules/AvailableUserEmail.php' \
+        ':(exclude)app/Services/UserAccountConflict.php' \
+        ':(exclude)resources/views/admin/users/index.blade.php' \
+        ':(exclude)resources/views/manager/users/index.blade.php' \
+        ':(exclude)resources/views/components/user-email-conflict.blade.php' \
+        ':(exclude)tests/Feature/UserEmailConflictTest.php' \
+        ':(exclude)tools/deploy/configure-production-runtime.sh' \
+        ':(exclude)tools/deploy/tests/check-production-runtime.sh' \
+        ':(exclude)docs/production-coffrac.md' || stop 'autres changements : cette mise a jour ciblee est refusee.'
+    cp -p "$STATE/RUNTIME-PREPARED.json" "$WORK/prepared.before.json"
+    git_app diff --name-only "$previous" "$REVISION" > "$WORK/changed-files.txt"
+    for directory in app config routes resources tools; do
+        find "$APP/$directory" -type d -exec chgrp "$RUNTIME" {} + -exec chmod 2750 {} +
+        find "$APP/$directory" -type f -exec chgrp "$RUNTIME" {} + -exec chmod u+rw,g=r,o= {} +
+    done
+    cd "$APP"
+    app_cli artisan view:cache --no-interaction --no-ansi > "$WORK/view-cache.log" 2>&1 || stop 'compilation des vues V2 en echec ; site maintenu ferme.'
+    app_cli "$HERE/production-runtime.php" --check > "$WORK/application-check.json"
+    snapshot_services > "$WORK/services.after"
+    snapshot_configs > "$WORK/apache.after"
+    cmp -s "$WORK/services.before" "$WORK/services.after" && cmp -s "$WORK/apache.before" "$WORK/apache.after" || stop 'etat partage modifie pendant la mise a jour.'
+    php8.4 -r '
+        $r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+        $r["runtime_updates"][]=["kind"=>"user_management_php_only","from_revision"=>$r["revision"],"to_revision"=>$argv[2],"at_utc"=>gmdate(DATE_ATOM),"work_directory"=>dirname($argv[1])];
+        $r["revision"]=$argv[2];
+        file_put_contents($argv[3],json_encode($r,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");
+    ' "$WORK/prepared.before.json" "$REVISION" "$WORK/prepared.updated.json"
+    mv -- "$WORK/prepared.updated.json" "$STATE/RUNTIME-PREPARED.json"
+    success=1
+    printf 'Correctif utilisateurs prepare et vues compilees. Comptes, mots de passe et etats inchanges.\n'
+    printf 'Aucune migration, aucun import, aucun service demarre ou recharge. Relancer --open pour les controles HTTPS.\n'
     exit 0
 fi
 

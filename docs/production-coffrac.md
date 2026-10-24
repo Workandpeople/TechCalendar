@@ -1654,3 +1654,35 @@ La collecte SQL coherente actualisee, le differentiel documentaire final,
 les droits externes et l'activation des envois restent des etapes distinctes
 avant de remplacer le domaine de l'ancien Coffrac. Ne jamais relancer l'import
 initial sur la base peuplee et ne pas utiliser les scripts demo du CT 124 ici.
+
+### 13. Correctif de recherche des comptes et adresses deja utilisees
+
+Le correctif conserve l'unicite globale des emails, y compris pour les comptes
+internes desactives et les comptes externes importes. L'erreur precise le type
+de compte et propose son ecran de gestion autorise. Une recherche sans resultat
+peut aussi proposer ce lien ; le statut « Tous » inclut les internes desactives.
+Aucune reactivation ni conversion de compte n'est automatique.
+
+Pour cette mise a jour PHP/Blade uniquement, utiliser le script de maintenance
+AVANT le pull : il faut arreter les seuls services V2 pendant le changement de
+code et conserver la revision preparee pour les controles de compatibilite.
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --maintenance --reload-shared-apache &&
+sudo -H -u cofrac2-deploy git -C /var/www/cofrac2 pull --ff-only origin v2 &&
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --update-user-management &&
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --open --reload-shared-apache
+```
+
+Le mode cible verifie le `.env` inchange, les services et pools dedies, et une
+liste exacte des fichiers PHP/Blade/tests du correctif. Il refuse notamment
+tout changement de dependance, schema, route, assets ou configuration API.
+Les permissions de lecture du runtime et les vues compilees sont actualisees,
+puis le controle applicatif et documentaire est rejoue. La nouvelle revision
+est tracee dans le marqueur prive avec son etat precedent. Le site reste
+statique jusqu'au succes de `--open`. Aucun seeder, migration, import SQL,
+renvoi de mail/SMS, modification de compte ou nouvelle copie documentaire.
+En cas d'echec, conserver le diagnostic et ne pas reinitialiser la base.
