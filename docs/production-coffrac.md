@@ -1588,6 +1588,29 @@ les pools existants ni demarrer/recharger `php8.4-fpm.service`. Le socket dedie
 est accessible a Apache ; les workers PHP tournent sous `cofrac2-app`. Les
 services ne peuvent ecrire que dans les repertoires runtime de la V2, pas dans
 son code ou ses secrets. Le worker utilise un timeout inferieur au retry-after.
+Les erreurs FPM et PHP utilisent syslog : `/proc/self/fd/2` ne peut pas etre
+rouvert lorsque systemd fournit un socket de journalisation comme stderr.
+
+Si la preparation initiale a reussi avec l'ancien modele de journalisation,
+mais que l'ouverture a echoue sur `failed to open error_log (/proc/self/fd/2)`,
+ne relancer ni l'import ni `--prepare`. Apres recuperation du correctif Git :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --repair-fpm-logging
+```
+
+Cette reparation exige le vhost encore statique et les trois services V2
+arretes. Elle verifie le `.env` inchange, l'ancien modele PHP exact et que
+seuls la journalisation du deploiement, ses tests et sa documentation ont
+change depuis la revision preparee. Toute autre modification applicative est
+refusee. Le seul fichier `/etc/cofrac2/php-fpm.conf` est remplace par sa version
+syslog testee ; les assets, l'import, les droits documentaires et les secrets
+restent en place. La nouvelle revision compatible est tracee dans le marqueur
+prive, avec sauvegarde de son etat precedent. Aucun service n'est demarre ni
+recharge par la reparation. L'ouverture explicite ci-dessous reste obligatoire.
+En cas d'echec du demarrage, les etats et journaux des seuls services V2 sont
+conserves dans le diagnostic prive avant leur arret de securite.
 
 L'ouverture est une action separee et exige le consentement explicite au
 rechargement gracieux du service Apache partage :

@@ -22,6 +22,12 @@ while IFS= read -r file; do
 done < <(find /test-source/storage -type f -name .gitignore)
 cp -a /fixture-vendor "$APP/vendor"
 find "$APP/bootstrap/cache" -type f ! -name .gitignore -delete
+if [ "${COFRAC2_RUNTIME_TEST:-}" = 1 ]; then
+    # Reproduce the first deployed template, then exercise the guarded repair on its prepared state.
+    sed -i -e 's|^error_log = syslog$|error_log = /proc/self/fd/2|' -e '/^syslog.ident = cofrac2-php-fpm$/d' \
+        -e 's|^php_admin_value\[error_log\] = syslog$|php_admin_value[error_log] = /proc/self/fd/2|' \
+        "$APP/tools/deploy/cofrac2-php-fpm.conf.example"
+fi
 chown -R --no-dereference cofrac2-deploy:cofrac2-deploy "$APP"
 runuser -u cofrac2-deploy -- git -C "$APP" init --initial-branch=v2 >/dev/null
 runuser -u cofrac2-deploy -- git -C "$APP" add .

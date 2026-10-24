@@ -10,8 +10,9 @@ stop() { printf 'STOP : %s\n' "$1" >&2; exit 1; }
 [ "${EUID:-$(id -u)}" = 0 ] && [ "$(hostname -s)" = ns365601 ] || stop 'root sur ns365601 uniquement.'
 case "${1:-}:$#" in
     --prepare:3) ;;
+    --repair-fpm-logging:1) ;;
     --open:2|--maintenance:2) [ "$2" = --reload-shared-apache ] || stop 'consentement au rechargement gracieux Apache requis.' ;;
-    *) stop 'Usage : --prepare BUNDLE SHA256 | --open|--maintenance --reload-shared-apache' ;;
+    *) stop 'Usage : --prepare BUNDLE SHA256 | --repair-fpm-logging | --open|--maintenance --reload-shared-apache' ;;
 esac
 ACTION=$1
 APP=/var/www/cofrac2
@@ -60,10 +61,17 @@ module_removed=0
 reload_attempted=0
 services_started=0
 env_written=0
+fpm_written=0
 cleanup() {
     result=$?
     trap - EXIT
     if [ "$success" != 1 ]; then
+        if [ "$services_started" = 1 ]; then
+            systemctl show "${UNITS[@]}" --property=Id,ActiveState,SubState,Result,ExecMainStatus > "$WORK/services-failure.log" 2>&1 || true
+            journalctl -u cofrac2-php-fpm.service -u cofrac2-queue.service -u cofrac2-reverb.service -n 60 --no-pager \
+                > "$WORK/services-journal.log" 2>&1 || true
+        fi
+        if [ "$fpm_written" = 1 ]; then install -o root -g root -m 0600 "$WORK/php-fpm.before.conf" /etc/cofrac2/php-fpm.conf; fi
         if [ "$site_written" = 1 ]; then install -o root -g root -m 0644 "$WORK/site.before" "$SITE"; fi
         if [ "$module_written" = 1 ]; then rm -f -- "$MODULES"; fi
         if [ "$module_removed" = 1 ]; then install -o root -g root -m 0644 "$WORK/modules.before" "$MODULES"; fi
@@ -174,6 +182,61 @@ if [ "$ACTION" = --maintenance ]; then
     exit 0
 fi
 
+if [ "$ACTION" = --repair-fpm-logging ]; then
+    [ -f "$STATE/RUNTIME-PREPARED.json" ] && [ ! -L "$STATE/RUNTIME-PREPARED.json" ] \
+        && [ "$(stat -c %u:%a "$STATE/RUNTIME-PREPARED.json")" = 0:600 ] || stop 'preparation runtime privee attendue.'
+    [ ! -e "$STATE/INTERNAL-SITE-OPEN.json" ] && [ ! -e "$MODULES" ] && [ ! -L "$MODULES" ] \
+        || stop 'reparation uniquement avant ouverture, sans modules V2 actifs.'
+    cmp -s "$SITE" "$HERE/apache-production-https.conf.example" || stop 'maintenance HTTPS statique attendue.'
+    for name in php-fpm queue reverb; do
+        cmp -s "/etc/systemd/system/cofrac2-$name.service" "$HERE/cofrac2-$name.service.example" || stop 'unite V2 modifiee.'
+        ! systemctl is-active --quiet "cofrac2-$name.service" || stop 'arreter et examiner les services V2 avant reparation.'
+    done
+    previous=$(php8.4 -r '
+        $r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+        if(!preg_match("/^[a-f0-9]{40}$/D",$r["revision"]??"")||!hash_equals($r["env_sha256"]??"",hash_file("sha256",$argv[2])))exit(1);
+        echo $r["revision"];
+    ' "$STATE/RUNTIME-PREPARED.json" "$APP/.env") || stop 'revision ou configuration preparee non valide.'
+    [ "$previous" != "$REVISION" ] || stop 'aucune nouvelle revision de correction a appliquer.'
+    git_app merge-base --is-ancestor "$previous" "$REVISION" || stop 'la correction doit descendre de la revision preparee.'
+    # Only deployment logging, its regression tests and documentation may differ; application/assets stay pinned.
+    git_app diff --quiet "$previous" "$REVISION" -- . \
+        ':(exclude)tools/deploy/cofrac2-php-fpm.conf.example' \
+        ':(exclude)tools/deploy/configure-production-runtime.sh' \
+        ':(exclude)tools/deploy/tests/check-production-runtime.sh' \
+        ':(exclude)tools/deploy/tests/check-production-native-import.sh' \
+        ':(exclude)docs/production-coffrac.md' || stop 'autres changements de code : reparation ciblee refusee.'
+    [ -f /etc/cofrac2/php-fpm.conf ] && [ ! -L /etc/cofrac2/php-fpm.conf ] \
+        && [ "$(stat -c %u:%a /etc/cofrac2/php-fpm.conf)" = 0:600 ] || stop 'configuration PHP privee attendue.'
+    git_app show "$previous:tools/deploy/cofrac2-php-fpm.conf.example" > "$WORK/php-fpm.before.conf"
+    cmp -s /etc/cofrac2/php-fpm.conf "$WORK/php-fpm.before.conf" || stop 'configuration PHP installee differente de la preparation.'
+    grep -qx 'error_log = /proc/self/fd/2' "$WORK/php-fpm.before.conf" \
+        && grep -qx 'php_admin_value\[error_log\] = /proc/self/fd/2' "$WORK/php-fpm.before.conf" || stop 'ancienne configuration de journalisation non reconnue.'
+    sed -e 's|^error_log = /proc/self/fd/2$|error_log = syslog\nsyslog.ident = cofrac2-php-fpm|' \
+        -e 's|^php_admin_value\[error_log\] = /proc/self/fd/2$|php_admin_value[error_log] = syslog|' \
+        "$WORK/php-fpm.before.conf" > "$WORK/php-fpm.repaired.conf"
+    cmp -s "$WORK/php-fpm.repaired.conf" "$HERE/cofrac2-php-fpm.conf.example" || stop 'la correction PHP depasse le changement de journalisation approuve.'
+    php-fpm8.4 --test --fpm-config "$WORK/php-fpm.repaired.conf"
+    app_cli "$HERE/production-runtime.php" --check > "$WORK/application-check.json"
+    cp -p "$STATE/RUNTIME-PREPARED.json" "$WORK/prepared.before.json"
+    php8.4 -r '
+        $r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+        $r["runtime_repairs"][]=["kind"=>"fpm_syslog","from_revision"=>$r["revision"],"to_revision"=>$argv[2],"at_utc"=>gmdate(DATE_ATOM),"work_directory"=>dirname($argv[1])];
+        $r["revision"]=$argv[2];
+        file_put_contents($argv[3],json_encode($r,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");
+    ' "$WORK/prepared.before.json" "$REVISION" "$WORK/prepared.repaired.json"
+    install -o root -g root -m 0600 "$WORK/php-fpm.repaired.conf" /etc/cofrac2/php-fpm.conf
+    fpm_written=1
+    snapshot_services > "$WORK/services.after"
+    snapshot_configs > "$WORK/apache.after"
+    cmp -s "$WORK/services.before" "$WORK/services.after" && cmp -s "$WORK/apache.before" "$WORK/apache.after" || stop 'etat partage modifie pendant la reparation.'
+    mv -- "$WORK/prepared.repaired.json" "$STATE/RUNTIME-PREPARED.json"
+    success=1
+    printf 'Journalisation PHP V2 corrigee vers syslog. Preparation conservee et revision de correction tracee.\n'
+    printf 'Aucun import, changement du .env, demarrage de service ou rechargement Apache.\n'
+    exit 0
+fi
+
 [ -f "$STATE/RUNTIME-PREPARED.json" ] && [ ! -L "$STATE/RUNTIME-PREPARED.json" ] || stop 'runtime non prepare.'
 [ ! -e "$STATE/INTERNAL-SITE-OPEN.json" ] || stop 'ouverture deja validee.'
 readarray -t prepared < <(php8.4 -r '
@@ -194,12 +257,13 @@ cmp -s /etc/cofrac2/php-fpm.conf "$HERE/cofrac2-php-fpm.conf.example" || stop 'c
 [ -z "$(ss -H -ltn 'sport = :8091')" ] || stop 'port Reverb deja utilise.'
 app_cli "$HERE/production-runtime.php" --check > "$WORK/application-check.json"
 services_started=1
+printf 'Demarrage des seuls services V2 et attente du socket PHP et de Reverb.\n'
 systemctl start "${UNITS[@]}" 9>&-
 for attempt in {1..20}; do
     if [ -S /run/cofrac2/php-fpm.sock ] && php8.4 "$HERE/production-runtime.php" --websocket-direct > "$WORK/reverb-direct.log" 2>&1; then break; fi
     sleep 1
 done
-test -S /run/cofrac2/php-fpm.sock
+[ -S /run/cofrac2/php-fpm.sock ] || stop 'socket PHP V2 absent apres demarrage ; consulter services-journal.log dans le diagnostic prive.'
 php8.4 "$HERE/production-runtime.php" --websocket-direct
 app_cli "$HERE/production-runtime.php" --queue-probe
 cp -p "$SITE" "$WORK/site.before"

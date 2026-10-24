@@ -43,6 +43,17 @@ printf 'subjectAltName=DNS:%s\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serve
 openssl x509 -req -in /tmp/runtime-server.csr -CA /usr/local/share/ca-certificates/cofrac2-fixture.crt -CAkey /tmp/runtime-ca.key -CAcreateserial \
     -days 2 -extfile /tmp/runtime-server.ext -out "$CERT/fullchain.pem" >/dev/null 2>&1
 update-ca-certificates >/dev/null 2>&1
+# systemd supplies a Unix stream socket as stderr, unlike Docker's usual pipe/file descriptors.
+cat > /tmp/runtime-socket-stderr.php <<'PHP'
+<?php
+$sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+$process = proc_open(['/usr/sbin/php-fpm8.4', '--nodaemonize', '--fpm-config', '/etc/cofrac2/php-fpm.conf'],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/tmp/runtime-fpm-stdout.log', 'a'], 2 => $sockets[1]], $pipes);
+fclose($sockets[1]);
+file_put_contents('/tmp/runtime-fpm.log', stream_get_contents($sockets[0]), FILE_APPEND);
+fclose($sockets[0]);
+exit(proc_close($process));
+PHP
 cat > /usr/sbin/systemctl <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
@@ -68,7 +79,7 @@ case "$1" in
             case "$unit" in
                 cofrac2-php-fpm.service)
                     install -d -m 0755 /run/cofrac2
-                    /usr/sbin/php-fpm8.4 --nodaemonize --fpm-config /etc/cofrac2/php-fpm.conf > /tmp/runtime-fpm.log 2>&1 & ;;
+                    php8.4 /tmp/runtime-socket-stderr.php & ;;
                 cofrac2-reverb.service)
                     cd /var/www/cofrac2
                     runuser -u cofrac2-app -- php8.4 artisan reverb:start --host=127.0.0.1 --port=8091 > /tmp/runtime-reverb.log 2>&1 & ;;
@@ -140,6 +151,45 @@ test -f "$STATE/RUNTIME-PREPARED.json"
 test ! -e /etc/apache2/conf-enabled/cofrac2-runtime-modules.conf
 cmp -s "$SITE" "$APP/tools/deploy/apache-production-https.conf.example"
 sha256sum -c /tmp/runtime-original.sha256
+if bash "$SCRIPT" --open --reload-shared-apache > /tmp/runtime-fpm-failure.log 2>&1; then exit 1; fi
+grep -q 'failed to open error_log (/proc/self/fd/2)' /tmp/runtime-fpm.log
+grep -q 'socket PHP V2 absent' /tmp/runtime-fpm-failure.log
+cmp -s "$SITE" "$APP/tools/deploy/apache-production-https.conf.example"
+test ! -e "$STATE/INTERNAL-SITE-OPEN.json"
+sha256sum "$APP/.env" /srv/cofrac2-runtime/documents.list0 > /tmp/runtime-before-repair.sha256
+cp -p /etc/cofrac2/php-fpm.conf /tmp/runtime-legacy-fpm.conf
+cp -p "$STATE/RUNTIME-PREPARED.json" /tmp/runtime-prepared-before-repair.json
+cp /test-source/tools/deploy/cofrac2-php-fpm.conf.example "$APP/tools/deploy/cofrac2-php-fpm.conf.example"
+runuser -u cofrac2-deploy -- git -C "$APP" add tools/deploy/cofrac2-php-fpm.conf.example
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-fpm-syslog >/dev/null
+cp -p "$APP/.env" /tmp/runtime-before-repair.env
+printf '\n# unexpected configuration change\n' >> "$APP/.env"
+if bash "$SCRIPT" --repair-fpm-logging > /tmp/runtime-repair-bad-env.log 2>&1; then exit 1; fi
+cp -p /tmp/runtime-before-repair.env "$APP/.env"
+cmp -s "$STATE/RUNTIME-PREPARED.json" /tmp/runtime-prepared-before-repair.json
+printf '\n# unexpected FPM change\n' >> /etc/cofrac2/php-fpm.conf
+if bash "$SCRIPT" --repair-fpm-logging > /tmp/runtime-repair-bad-fpm.log 2>&1; then exit 1; fi
+cp -p /tmp/runtime-legacy-fpm.conf /etc/cofrac2/php-fpm.conf
+cmp -s "$STATE/RUNTIME-PREPARED.json" /tmp/runtime-prepared-before-repair.json
+printf '<?php // fixture-only unrelated change\n' > "$APP/app/UnrelatedFixture.php"
+chown cofrac2-deploy:cofrac2-deploy "$APP/app/UnrelatedFixture.php"
+runuser -u cofrac2-deploy -- git -C "$APP" add app/UnrelatedFixture.php
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-unrelated >/dev/null
+if bash "$SCRIPT" --repair-fpm-logging > /tmp/runtime-repair-bad-code.log 2>&1; then exit 1; fi
+grep -q 'autres changements de code' /tmp/runtime-repair-bad-code.log
+runuser -u cofrac2-deploy -- git -C "$APP" -c user.name=Fixture -c user.email=fixture@example.invalid revert --no-edit HEAD >/dev/null
+bash "$SCRIPT" --repair-fpm-logging > /tmp/runtime-repair.log 2>&1
+sha256sum -c /tmp/runtime-before-repair.sha256
+cmp -s /etc/cofrac2/php-fpm.conf "$APP/tools/deploy/cofrac2-php-fpm.conf.example"
+test ! -e "$STATE/INTERNAL-SITE-OPEN.json"
+cmp -s "$SITE" "$APP/tools/deploy/apache-production-https.conf.example"
+php8.4 -r '
+    $before=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+    $after=json_decode(file_get_contents($argv[2]),true,32,JSON_THROW_ON_ERROR);
+    $repairs=$after["runtime_repairs"];unset($after["runtime_repairs"]);
+    if(count($repairs)!==1||$repairs[0]["kind"]!=="fpm_syslog"||$repairs[0]["from_revision"]!==$before["revision"]||$repairs[0]["to_revision"]!==$after["revision"])exit(1);
+    $after["revision"]=$before["revision"];if($before!==$after)exit(1);
+' /tmp/runtime-prepared-before-repair.json "$STATE/RUNTIME-PREPARED.json"
 if COFRAC2_FORCE_APACHE_FAILURE=1 bash "$SCRIPT" --open --reload-shared-apache > /tmp/runtime-rollback.log 2>&1; then exit 1; fi
 cmp -s "$SITE" "$APP/tools/deploy/apache-production-https.conf.example"
 test ! -e /etc/apache2/conf-enabled/cofrac2-runtime-modules.conf
