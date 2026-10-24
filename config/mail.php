@@ -16,6 +16,9 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    // Also gates dynamically configured SMTP senders during an internal production rehearsal.
+    'delivery_enabled' => (bool) env('MAIL_DELIVERY_ENABLED', true),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

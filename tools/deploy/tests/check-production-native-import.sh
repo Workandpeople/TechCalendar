@@ -159,3 +159,6 @@ test "$(sql 'SELECT label FROM fiche_crm.original_data WHERE id=1')" = 'ORIGINAL
 test ! -e /tmp/UNEXPECTED-SERVICE
 test -z "$(find /srv/cofrac2-staging-imports -name admin.json -print -quit)"
 printf 'OK : import reel garde-fous production dans Docker, source intacte, compte SQL limite, acces et envois bloques, refus de doublon.\n'
+if [ "${COFRAC2_RUNTIME_TEST:-}" = 1 ]; then
+    bash "$APP/tools/deploy/tests/check-production-runtime.sh" "$PACKAGE"
+fi

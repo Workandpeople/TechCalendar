@@ -1,0 +1,78 @@
+<VirtualHost *:80>
+    ServerName cofrac2.geniuscontrole.com
+    DocumentRoot /var/lib/cofrac2-acme
+    ErrorLog ${APACHE_LOG_DIR}/cofrac2-error.log
+    CustomLog ${APACHE_LOG_DIR}/cofrac2-access.log combined
+    TraceEnable Off
+    <Directory /var/lib/cofrac2-acme>
+        AllowOverride None
+        Options None
+        Require all denied
+    </Directory>
+    <Directory /var/lib/cofrac2-acme/.well-known/acme-challenge>
+        AllowOverride None
+        Options None
+        SetHandler none
+        Require all granted
+    </Directory>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/[A-Za-z0-9_-]+$
+    RewriteRule ^ https://cofrac2.geniuscontrole.com%{REQUEST_URI} [R=302,L,NE]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName cofrac2.geniuscontrole.com
+    DocumentRoot /var/www/cofrac2/public
+    ErrorLog ${APACHE_LOG_DIR}/cofrac2-ssl-error.log
+    CustomLog ${APACHE_LOG_DIR}/cofrac2-ssl-access.log combined
+    TraceEnable Off
+    SSLEngine on
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+    SSLCertificateFile /var/lib/cofrac2-letsencrypt/live/cofrac2.geniuscontrole.com/fullchain.pem
+    SSLCertificateKeyFile /var/lib/cofrac2-letsencrypt/live/cofrac2.geniuscontrole.com/privkey.pem
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyTimeout 180
+    ProxyPass /app/ http://127.0.0.1:8091/app/ upgrade=websocket retry=0 timeout=120
+    ProxyPassReverse /app/ http://127.0.0.1:8091/app/
+
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Cofrac2-Release "v2-internal"
+
+    <Directory /var/www/cofrac2>
+        AllowOverride None
+        Options None
+        Require all denied
+    </Directory>
+    <Directory /var/www/cofrac2/public>
+        AllowOverride None
+        Options FollowSymLinks
+        DirectoryIndex index.php
+        AcceptPathInfo Off
+        Require all granted
+        RewriteEngine On
+        RewriteCond %{HTTP:Authorization} .
+        RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+        RewriteCond %{HTTP:x-xsrf-token} .
+        RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteRule ^ index.php [END]
+        <FilesMatch "(?i)\.(?:php[0-9]?|phtml|phar)(?:$|\.)">
+            SetHandler none
+            Require all denied
+        </FilesMatch>
+        <FilesMatch "^\.">
+            Require all denied
+        </FilesMatch>
+    </Directory>
+    <LocationMatch "^/index\.php$">
+        SetHandler "proxy:unix:/run/cofrac2/php-fpm.sock|fcgi://localhost"
+        Require all granted
+    </LocationMatch>
+    <LocationMatch "(?i)^/(?:phpmyadmin|javascript|server-status|server-info)(?:/|$)|(?:^|/)\.">
+        Require all denied
+    </LocationMatch>
+</VirtualHost>

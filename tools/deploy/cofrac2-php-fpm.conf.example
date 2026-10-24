@@ -1,0 +1,27 @@
+[global]
+pid = /run/cofrac2/php-fpm.pid
+error_log = /proc/self/fd/2
+daemonize = no
+
+[cofrac2]
+user = cofrac2-app
+group = cofrac2-app
+listen = /run/cofrac2/php-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+pm = ondemand
+pm.max_children = 4
+pm.process_idle_timeout = 15s
+pm.max_requests = 400
+request_terminate_timeout = 180s
+catch_workers_output = yes
+clear_env = yes
+security.limit_extensions = .php
+php_admin_value[memory_limit] = 256M
+php_admin_value[upload_max_filesize] = 32M
+php_admin_value[post_max_size] = 40M
+php_admin_value[max_execution_time] = 150
+php_admin_flag[display_errors] = off
+php_admin_flag[log_errors] = on
+php_admin_value[error_log] = /proc/self/fd/2

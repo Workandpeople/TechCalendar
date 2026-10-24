@@ -1,0 +1,21 @@
+[Unit]
+Description=Cofrac 2 isolated loopback Reverb server
+After=network.target mysql.service
+
+[Service]
+User=cofrac2-app
+Group=cofrac2-app
+WorkingDirectory=/var/www/cofrac2
+ExecStart=/usr/bin/php8.4 artisan reverb:start --host=127.0.0.1 --port=8091
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/cofrac2/storage /var/www/cofrac2/bootstrap/cache
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

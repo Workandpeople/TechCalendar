@@ -1539,3 +1539,95 @@ Ces controles n'autorisent toujours pas une bascule finale : les droits externes
 restants, parametrages manquants et donnees en revue doivent etre traites pendant
 la recette. La photographie SQL coherente et le differentiel documentaire seront
 refaits au moment convenu, sans autorisation implicite d'arreter Coffrac original.
+
+### 12. Ouverture de recette interne sur cofrac2 seulement
+
+L'import serveur termine ne demarre aucun service. Le runtime suivant est
+prepare exclusivement dans `/var/www/cofrac2`, avec la base `cofrac2production`
+et les copies documentaires sous `/srv/cofrac2-document-archive`.
+Il ne remplace pas l'ancien Coffrac et ne constitue pas une bascule finale.
+
+Le generateur local construit les assets depuis un `git archive` propre et un
+`npm ci --ignore-scripts` neuf, sans `.env` dans le build ni variables VITE
+locales. Le paquet prive comprend les assets scelles et seulement les reglages
+Mapbox, OpenAI et Global+ TEST autorises. Aucun secret ne doit apparaitre dans
+les assets, dans Git ou dans la sortie du terminal. Le manifeste rattache ces
+assets a la revision du code, au paquet effectivement importe et aux preuves
+documentaires. Transporter ce paquet en 0700/0600, jamais via un lien public.
+
+```bash
+bash tools/deploy/prepare-production-runtime-bundle.sh /CHEMIN/PAQUET-IMPORT-APPROUVE
+```
+
+Sur le serveur, apres mise a jour du checkout V2 et transfert prive :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --prepare /CHEMIN/PAQUET-RUNTIME EMPREINTE_MANIFESTE
+```
+
+Cette preparation ne recharge pas Apache et ne demarre aucun service. Elle :
+
+- recoupe le rapport d'import et les preuves de copie, sans rehasher 232 Go ;
+- autorise uniquement le runtime a lire les fichiers servables de la copie ;
+- conserve les fichiers absents, vides ou en quarantaine hors de la selection ;
+- installe un manifeste documentaire non modifiable par PHP, hors du webroot ;
+- installe les assets et met a jour uniquement le `.env` V2 ;
+- configure les API approuvees sans effectuer de requete reseau externe ;
+- conserve SMS desactives/simulation, CAPCEE desactive, mails en log ;
+- met `MAIL_DELIVERY_ENABLED=false`, qui bloque aussi les expediteurs SMTP
+  dynamiques via l'evenement Laravel `MessageSending` ;
+- installe trois unites dediees et inactives : `cofrac2-php-fpm`, `cofrac2-queue`
+  et `cofrac2-reverb`, puis verifie leurs configurations ;
+- compile les caches Laravel et controle la lecture de chaque document de la
+  selection avec l'utilisateur `cofrac2-app` ;
+- verifie que les configurations et processus partages sont restes identiques.
+
+PHP utilise son propre maitre FPM et `/etc/cofrac2/php-fpm.conf`, sans modifier
+les pools existants ni demarrer/recharger `php8.4-fpm.service`. Le socket dedie
+est accessible a Apache ; les workers PHP tournent sous `cofrac2-app`. Les
+services ne peuvent ecrire que dans les repertoires runtime de la V2, pas dans
+son code ou ses secrets. Le worker utilise un timeout inferieur au retry-after.
+
+L'ouverture est une action separee et exige le consentement explicite au
+rechargement gracieux du service Apache partage :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --open --reload-shared-apache
+```
+
+Si `headers` ou `proxy_http` ne sont pas deja charges, l'ouverture ajoute leurs
+seules directives `LoadModule` dans le fichier dedie
+`/etc/apache2/conf-enabled/cofrac2-runtime-modules.conf`. Elle ne lance pas
+`a2enmod`, ne modifie aucun module/site existant et ne redemarre pas Apache.
+Ce chargement est global a Apache ; examiner les eventuels blocs conditionnels
+des autres vhosts si une politique locale particuliere l'exige.
+
+Le seul vhost `cofrac2` est remplace par son modele applicatif. Seul
+`/index.php` est execute par FPM ; PHP ailleurs, dotfiles et alias administratifs
+herites sont refuses. Les documents historiques restent hors du webroot et
+passent par les autorisations Laravel. Les controles verifient les pages login
+et sante, un asset compile, l'authentification obligatoire, le refus des chemins
+sensibles, le handshake WebSocket via HTTPS et un vrai aller-retour du worker
+sans appel externe. Une erreur remet automatiquement le seul vhost V2 en
+maintenance et arrete ses services ; aucune base n'est effacee.
+
+Apres reussite, les trois unites V2 sont activees au demarrage. Aucun cron,
+import periodique Coffrac ou envoi reel n'est active. Les comptes externes
+restent bloques jusqu'a la validation et l'application de leurs droits.
+Verifier aussi dans le navigateur une connexion super-admin et l'ouverture
+d'un vrai document. Les appels Mapbox/OpenAI/Global+ sont configures, mais leur
+validation reseau n'est pas remplacee par ce controle local.
+
+Retour explicite a la maintenance V2, en conservant ses donnees :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --maintenance --reload-shared-apache
+```
+
+La collecte SQL coherente actualisee, le differentiel documentaire final,
+les droits externes et l'activation des envois restent des etapes distinctes
+avant de remplacer le domaine de l'ancien Coffrac. Ne jamais relancer l'import
+initial sur la base peuplee et ne pas utiliser les scripts demo du CT 124 ici.
