@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 /** Read the collected files in place; the existing archive remains the source of ownership. */
 class CollectedDossierDocuments
 {
-    private const EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'heic', 'heif', 'tif', 'tiff', 'bmp',
+    public const EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'heic', 'heif', 'tif', 'tiff', 'bmp',
         'doc', 'docx', 'xls', 'xlsx', 'xltx', 'ppt', 'pptx', 'odt', 'ods', 'rtf', 'txt', 'csv', 'zip', '7z', 'mp4', 'mov'];
 
     private ?array $manifest = null;

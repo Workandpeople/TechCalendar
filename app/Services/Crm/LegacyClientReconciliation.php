@@ -16,7 +16,8 @@ class LegacyClientReconciliation
         $existing = ExternalDelegataire::where('source', 'coffrac')->get()->keyBy('external_id');
         foreach (DB::table('legacy_records')->where('source_table', 'users')->orderBy('id')->lazyById(200) as $record) {
             $row = json_decode($record->payload, true) ?: [];
-            if (! in_array((int) ($row['type'] ?? 0), [5, 6, 7], true)) {
+            // Source type 6 is AUDITEURS, not an external client account.
+            if (! in_array((int) ($row['type'] ?? 0), [5, 7], true)) {
                 continue;
             }
             $client = $existing->get((string) $record->source_id);

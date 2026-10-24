@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Explicit columns: new production fields are never exported implicitly.
-return static function (PDO $pdo): array {
+return static function (PDO $pdo, bool $planningOnly = false): array {
     $columns = [
         'departments' => 'code,name,created_at,updated_at',
         'users' => 'id,first_name,last_name,email,role,admin,phone,address,department_code,latitude,longitude,day_start_time,day_end_time,break_duration_minutes,created_at,updated_at,deleted_at',
@@ -16,6 +16,10 @@ return static function (PDO $pdo): array {
         'mail_templates' => 'id,name,slug,mail_sender_id,subject,markdown_body,logo_path,is_active,created_by_user_id,updated_by_user_id,created_at,updated_at,deleted_at',
         'technician_absences' => 'id,technician_id,created_by,starts_at,ends_at,reason,created_at,updated_at',
     ];
+    if ($planningOnly) {
+        $columns = array_intersect_key($columns, array_flip(['departments', 'users', 'services', 'department_user']));
+        $columns['users'] = 'id,email,role,department_code,day_start_time,day_end_time,break_duration_minutes,deleted_at';
+    }
 
     $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     if (! in_array($driver, ['mysql', 'sqlite'], true) || $pdo->inTransaction()) {
@@ -24,7 +28,7 @@ return static function (PDO $pdo): array {
 
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $report = [
-        'format' => 'techcalendar.reference-snapshot',
+        'format' => $planningOnly ? 'techcalendar.planning-snapshot' : 'techcalendar.reference-snapshot',
         'version' => 1,
         'source' => 'techcalendar',
         'exported_at' => gmdate(DATE_ATOM),
@@ -65,7 +69,17 @@ return static function (PDO $pdo): array {
             $cursor = null;
 
             do {
-                $where = $cursor === null ? '' : " WHERE `{$key}` > ?";
+                $conditions = [];
+                if ($planningOnly && $table === 'users') {
+                    $conditions[] = '`role` = 2';
+                }
+                if ($planningOnly && $table === 'department_user') {
+                    $conditions[] = '`user_id` IN (SELECT `id` FROM `users` WHERE `role` = 2)';
+                }
+                if ($cursor !== null) {
+                    $conditions[] = "`{$key}` > ?";
+                }
+                $where = $conditions === [] ? '' : ' WHERE '.implode(' AND ', $conditions);
                 $statement = $pdo->prepare("SELECT /*+ MAX_EXECUTION_TIME(10000) */ {$select} FROM `{$table}`{$where} ORDER BY `{$key}` LIMIT 1000");
                 $statement->execute($cursor === null ? [] : [$cursor]);
                 $page = $statement->fetchAll(PDO::FETCH_ASSOC);

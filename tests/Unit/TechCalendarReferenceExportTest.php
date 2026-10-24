@@ -97,3 +97,26 @@ test('reference collector does not interfere with an existing transaction', func
         ->and($pdo->inTransaction())->toBeTrue();
     $pdo->rollBack();
 });
+
+test('planning collection limits identities to technicians and does not require mail or external client tables', function () {
+    $pdo = techCalendarReferenceConnection();
+    $pdo->exec("INSERT INTO users (id, email, role, department_code, deleted_at, password) VALUES
+        (1, 'tech@example.test', 2, '75', NULL, 'SECRET_PASSWORD'),
+        (2, 'inactive@example.test', 2, '01', '2026-01-01', 'SECRET_PASSWORD'),
+        (3, 'external@example.test', 3, '33', NULL, 'SECRET_PASSWORD')");
+    $pdo->exec("INSERT INTO department_user (id, user_id, department_code) VALUES (1, 1, '75'), (2, 2, '01'), (3, 3, '33')");
+    $pdo->exec('DROP TABLE mail_templates');
+    $pdo->exec('DROP TABLE external_delegataires');
+    $before = $pdo->query('SELECT * FROM users')->fetchAll();
+    $collect = require __DIR__.'/../../tools/fixtures/collect-techcalendar-references.php';
+    $result = $collect($pdo, true);
+    expect($result['format'])->toBe('techcalendar.planning-snapshot')
+        ->and($result['complete'])->toBeTrue()
+        ->and(array_keys($result['tables']))->toBe(['departments', 'users', 'services', 'department_user'])
+        ->and(array_column($result['tables']['users']['rows'], 'id'))->toBe([1, 2])
+        ->and(array_column($result['tables']['department_user']['rows'], 'user_id'))->toBe(['1', '2'])
+        ->and($result['tables']['users']['columns'])->not->toContain('address', 'phone', 'first_name', 'password')
+        ->and(json_encode($result))->not->toContain('SECRET_PASSWORD', 'external@example.test')
+        ->and($pdo->query('SELECT * FROM users')->fetchAll())->toBe($before)
+        ->and($pdo->inTransaction())->toBeFalse();
+});

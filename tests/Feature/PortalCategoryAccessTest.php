@@ -69,6 +69,43 @@ it('preserves access by default and counts distinct assigned dossiers per catego
         });
 });
 
+it('keeps assigned reports accessible after billing without widening ownership categories or document audiences', function (string $kind, string $status) {
+    $dossier = ($this->makeDossier)('REPORT-AFTER-BILLING', [$status]);
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, $kind, ['report']);
+    $this->actingAs($this->accounts[$kind])->get(route('client.dossiers.show', $dossier))->assertOk();
+    $operation = $dossier->operations()->sole();
+    DB::table('dossier_billings')->insert(['dossier_id' => $dossier->id, 'dossier_operation_id' => $operation->id,
+        'source' => 'coffrac', 'marked_at' => now(), 'invoice_reference' => 'INTERNAL-INVOICE-REFERENCE']);
+    $private = $dossier->documents()->create(['name' => 'INTERNAL-REPORT', 'path' => 'crm/dossiers/private.pdf',
+        'mime_type' => 'application/pdf', 'size' => 9]);
+    $clientOnly = $dossier->documents()->create(['name' => 'CLIENT-REPORT', 'path' => 'crm/dossiers/client.pdf',
+        'mime_type' => 'application/pdf', 'size' => 9, 'client_visible' => true]);
+    $shared = $dossier->documents()->create(['name' => 'SHARED-REPORT', 'path' => 'crm/dossiers/shared.pdf',
+        'mime_type' => 'application/pdf', 'size' => 9, 'client_visible' => true, 'delegataire_visible' => true]);
+    foreach ([$private, $clientOnly, $shared] as $doc) {
+        Storage::disk('local')->put($doc->path, '%PDF test');
+    }
+    $response = $this->get(route('client.dossiers.show', $dossier))->assertOk()
+        ->assertSee('SHARED-REPORT')->assertDontSee('INTERNAL-REPORT')->assertDontSee('INTERNAL-INVOICE-REFERENCE');
+    $this->get(route('client.documents.download', $private))->assertNotFound();
+    $this->get(route('client.documents.download', $shared))->assertDownload();
+    if ($kind === 'client') {
+        $response->assertSee('CLIENT-REPORT');
+        $this->get(route('client.documents.download', $clientOnly))->assertDownload();
+    } else {
+        $response->assertDontSee('CLIENT-REPORT');
+        $this->get(route('client.documents.download', $clientOnly))->assertNotFound();
+    }
+    $this->get(route('client.dossiers', ['status' => 'report']))->assertOk()
+        ->assertViewHas('dossiers', fn ($rows) => $rows->total() === 1);
+    $this->get(route('client.dossiers.show', $this->blocked))->assertForbidden();
+    $foreign = ($this->makeDossier)('FOREIGN-REPORT', [$status]);
+    $foreign->forceFill(['client_id' => null, 'delegataire_id' => null])->save();
+    $this->get(route('client.dossiers.show', $foreign))->assertForbidden();
+    $this->organisations[$kind]->update(['portal_categories' => []]);
+    $this->actingAs($this->accounts[$kind]->fresh())->get(route('client.dossiers.show', $dossier))->assertForbidden();
+})->with(['client', 'delegataire'])->with(['RAPPORT GENIUS', 'DOSSIERS FACTURER']);
+
 it('enforces defaults on lists counters direct links searches and filters for each kind', function (string $kind) {
     app(PortalCategoryAccess::class)->saveDefaults($this->staff, $kind, ['non_compliant']);
     $this->actingAs($this->accounts[$kind])->get(route('client.dossiers'))->assertOk()->assertSee('VISIBLE')

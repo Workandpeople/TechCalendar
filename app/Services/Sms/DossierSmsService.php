@@ -6,6 +6,7 @@ use App\Jobs\SendDossierSms;
 use App\Models\Dossier;
 use App\Models\DossierSms;
 use App\Models\User;
+use App\Services\Coffrac\LegacyTemplateText;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -27,12 +28,20 @@ class DossierSmsService
         return DB::table('legacy_records')->where('source_table', 'sms_tempalte')->orderBy('source_id')->limit(100)
             ->get(['source_id', 'payload'])->map(function ($row): ?array {
                 $data = json_decode($row->payload, true);
-                if (! is_array($data) || ! is_string($data['message'] ?? null)) {
+                $body = is_array($data) ? LegacyTemplateText::read($data, 'message') : null;
+                $title = is_array($data) ? LegacyTemplateText::read($data, 'titre') : null;
+                if ($body === null || trim($body) === '' || mb_strlen($body) > 1500
+                    || ($title === null && (isset($data['titre']) || array_key_exists('titre_base64', $data)))
+                    || ($title !== null && mb_strlen($title) > 190)) {
+                    return null;
+                }
+                $body = SmsText::plain($body);
+                if ($body === '') {
                     return null;
                 }
 
-                return ['id' => $row->source_id, 'name' => is_string($data['titre'] ?? null) ? $data['titre'] : 'Modèle #'.$row->source_id,
-                    'body' => SmsText::plain($data['message'])];
+                return ['id' => (int) $row->source_id, 'name' => filled($title) ? $title : 'Modèle #'.$row->source_id,
+                    'body' => $body];
             })->filter()->values()->all();
     }
 

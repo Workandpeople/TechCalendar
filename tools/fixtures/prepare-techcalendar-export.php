@@ -5,7 +5,10 @@ declare(strict_types=1);
 // Run locally. Outputs a self-contained command to paste into the production CT console.
 // Neither the application nor a database connection is loaded by this generator.
 $project = $argv[1] ?? '/var/www/TechCalendar';
-if (! str_starts_with($project, '/') || str_contains($project, "\n") || str_contains($project, "\r")) {
+$planningOnly = ($argv[2] ?? null) === '--planning-only';
+$productionSettings = ($argv[2] ?? null) === '--production-settings';
+if (! str_starts_with($project, '/') || str_contains($project, "\n") || str_contains($project, "\r")
+    || (isset($argv[2]) && ! $planningOnly && ! $productionSettings) || $argc > 3) {
     fwrite(STDERR, "Indiquer le chemin absolu du projet dans le CT.\n");
     exit(1);
 }
@@ -34,8 +37,14 @@ try {
     }
     $capsule = new Illuminate\Database\Capsule\Manager;
     $capsule->addConnection($connection);
-    $snapshot = $collect($capsule->getConnection()->getPdo());
+    if ($requireProduction && ($app->make('config')->get('app.env') !== 'production'
+        || preg_match('/demo|simulat|test/i', $capsule->getConnection()->getDatabaseName()))) {
+        throw new RuntimeException('Configuration de demonstration/test refusee pour la reprise des reglages TechCalendar.');
+    }
+    $snapshot = $collect($capsule->getConnection()->getPdo(), $planningOnly);
     $snapshot['app_environment'] = $app->make('config')->get('app.env');
+    $snapshot['source_database'] = $capsule->getConnection()->getDatabaseName();
+    $snapshot['source_project'] = getcwd();
     $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $gzip = gzencode($json, 6);
     if ($gzip === false) {
@@ -73,5 +82,7 @@ try {
 PHP;
 
 echo "(\ncd ".escapeshellarg($project)." || exit 1\nphp -d display_errors=0 <<'TECHCALENDAR_REFERENCE_EXPORT_PHP'\n<?php\n";
+echo '$planningOnly = '.($planningOnly ? 'true' : 'false').";\n";
+echo '$requireProduction = '.($planningOnly || $productionSettings ? 'true' : 'false').";\n";
 echo '$collect = (static function () {'."\n".$collector."\n})();\n".$runner."\n";
 echo "TECHCALENDAR_REFERENCE_EXPORT_PHP\n)\n";

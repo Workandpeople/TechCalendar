@@ -2,13 +2,12 @@
 
 namespace App\Services\Simulation;
 
+use App\Services\Coffrac\CoffracDataset;
 use Generator;
 use RuntimeException;
 
-class SnapshotReader
+class SnapshotReader implements CoffracDataset
 {
-    public const TABLES = ['clients', 'dossier_comment', 'dossier_document', 'dossier_fiche_facturation', 'dossier_fiche_rdv', 'dossier_fiches', 'dossier_historique', 'dossier_letige', 'dossiers', 'entreprise', 'fiche_document', 'fiche_type', 'lot_dossier', 'mail_templates', 'media', 'planings', 'rdv_extern', 'sms_tempalte', 'status', 'user_type', 'users'];
-
     public array $references;
 
     public array $manifest;

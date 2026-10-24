@@ -48,6 +48,24 @@ it('previews without sending or queuing and reuses the legacy templates safely',
     Queue::assertNothingPushed();
 });
 
+it('reads UTF32 archived SMS templates and skips damaged rows without reactivating sending', function () {
+    $encode = fn (string $text) => base64_encode(mb_convert_encoding($text, 'UTF-32BE', 'UTF-8'));
+    $valid = ['titre_base64' => $encode('Rappel confirmé'), 'titre_charset' => 'utf32',
+        'message_base64' => $encode('Bonjour {client_name}'), 'message_charset' => 'utf32'];
+    $rows = [$valid, [...$valid, 'message_base64' => 'invalid'], [...$valid, 'titre_charset' => 'unknown'],
+        [...$valid, 'message_base64' => $encode('<p></p>')], [...$valid, 'message' => 'Conflicting text'],
+        [...$valid, 'message_base64' => $encode(str_repeat('a', 1501))]];
+    foreach ($rows as $index => $row) {
+        DB::table('legacy_records')->insert(['source_table' => 'sms_tempalte', 'source_id' => $index + 1, 'payload' => json_encode($row)]);
+    }
+    config(['services.smsfactor.enabled' => false]);
+    expect(app(DossierSmsService::class)->templates())->toBe([['id' => 1, 'name' => 'Rappel confirmé', 'body' => 'Bonjour {client_name}']])
+        ->and(config('services.smsfactor.enabled'))->toBeFalse()
+        ->and(DB::table('dossier_sms')->count())->toBe(0);
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+});
+
 it('requires an explicit confirmation and an untampered preview for the same actor and dossier', function () {
     $service = app(DossierSmsService::class);
     $token = $service->preview($this->manager, $this->dossier, $this->smsInput)['preview_token'];

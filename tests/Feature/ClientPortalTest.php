@@ -271,11 +271,11 @@ it('preserves the selected client through preview confirmation and physical book
 });
 
 it('keeps legacy reconciliation idempotent and never enables or creates login accounts', function () {
-    foreach ([[21, 5, 'Legacy Client'], [22, 7, 'Legacy Delegataire'], [23, 1, 'Internal Admin']] as [$id, $type, $name]) {
+    foreach ([[21, 5, 'Legacy Client'], [22, 7, 'Legacy Delegataire'], [23, 1, 'Internal Admin'], [24, 6, 'Internal Auditor']] as [$id, $type, $name]) {
         DB::table('legacy_records')->insert(['source_table' => 'users', 'source_id' => $id,
             'payload' => json_encode(['id' => $id, 'type' => $type, 'name' => $name, 'actif' => 1])]);
     }
-    foreach ([[201, 21, null], [202, 21, 22], [203, 23, null]] as [$id, $client, $delegate]) {
+    foreach ([[201, 21, null], [202, 21, 22], [203, 23, null], [204, 24, null]] as [$id, $client, $delegate]) {
         Dossier::create(['reference' => 'LEGACY-'.$id, 'source' => 'coffrac', 'source_reference' => (string) $id, 'address' => 'Rue', 'city' => 'Paris']);
         DB::table('legacy_records')->insert(['source_table' => 'dossiers', 'source_id' => $id,
             'payload' => json_encode(['client_id' => $client, 'delegataire_id' => $delegate])]);
@@ -290,6 +290,8 @@ it('keeps legacy reconciliation idempotent and never enables or creates login ac
         ->and(Dossier::where('reference', 'LEGACY-202')->first()->client->kind)->toBe('client')
         ->and(Dossier::where('reference', 'LEGACY-202')->first()->delegataire->kind)->toBe('delegataire')
         ->and(Dossier::where('reference', 'LEGACY-203')->first()->delegataire_id)->toBeNull()
+        ->and(Dossier::where('reference', 'LEGACY-204')->first()->client_id)->toBeNull()
+        ->and(ExternalDelegataire::where('source', 'coffrac')->where('external_id', '24')->exists())->toBeFalse()
         ->and(User::count())->toBe($before);
     expect($service->run(true)['dossiers_a_rattacher'])->toBe(0)->and(ExternalDelegataire::count())->toBe(4);
 });
