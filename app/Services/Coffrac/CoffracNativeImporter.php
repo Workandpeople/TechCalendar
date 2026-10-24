@@ -61,6 +61,9 @@ final class CoffracNativeImporter extends CoffracProjector
             if (($report['matching']['external_access']['policy_version'] ?? null) !== NativeExternalAccessReview::POLICY_VERSION) {
                 throw new RuntimeException('Regles de droits differentes : creer une nouvelle base jetable.');
             }
+            if (($report['matching']['seeded_admin']['source_user_id'] ?? null) !== config('admin.coffrac_source_user_id')) {
+                throw new RuntimeException('Identite du super admin differente de l import existant.');
+            }
 
             return $report;
         }
@@ -78,10 +81,19 @@ final class CoffracNativeImporter extends CoffracProjector
         if (! filter_var($adminEmail, FILTER_VALIDATE_EMAIL) || strlen((string) config('admin.password')) < 8) {
             throw new RuntimeException('Super admin de repetition non configure.');
         }
+        $adminSourceId = config('admin.coffrac_source_user_id');
+        if ($adminSourceId !== null) {
+            $source = is_int($adminSourceId) ? ($sourceUsers[$adminSourceId] ?? null) : null;
+            if (! $source || $source['type'] !== 1 || (int) $source['actif'] !== 1 || $source['is_archived']
+                || strtolower(trim($source['email'])) !== $adminEmail) {
+                throw new RuntimeException('Reprise du super admin reservee au compte interne actif explicitement choisi.');
+            }
+        }
         $emails = [];
         foreach ($sourceUsers as $row) {
             $email = strtolower(trim((string) ($row['email'] ?? '')));
-            if (! filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190 || isset($emails[$email]) || $email === $adminEmail) {
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190 || isset($emails[$email])
+                || ($email === $adminEmail && $row['id'] !== $adminSourceId)) {
                 throw new RuntimeException('Email de compte ambigu, incompatible ou reserve au seeder.');
             }
             if (! in_array($row['type'], [1, 2, 3, 4, 5, 6, 7], true)) {
@@ -95,7 +107,7 @@ final class CoffracNativeImporter extends CoffracProjector
         $this->users = $this->services = $this->delegataires = $this->dossiers = $this->operations = [];
         $this->operationParents = null;
 
-        return DB::transaction(function () use ($snapshot, $sourceUsers, $adminEmail, $planning): array {
+        return DB::transaction(function () use ($snapshot, $sourceUsers, $adminEmail, $adminSourceId, $planning): array {
             $this->dossiers = $snapshot->keyed('dossiers');
             foreach ($snapshot->rows('dossier_fiches') as $row) {
                 $this->operations[$row['id']] = ['dossier_id' => $row['dossier_id']];
@@ -110,9 +122,12 @@ final class CoffracNativeImporter extends CoffracProjector
                 ]);
             }
             $this->delegataires = DB::table('external_delegataires')->where('kind', 'delegataire')->pluck('id', 'external_id')->all();
+            config(['admin.mail' => $adminEmail]);
             (new AdminUserSeeder)->run();
             $this->actorId = (int) DB::table('users')->where('email', $adminEmail)->value('id');
-            $this->importUsers($snapshot, $sourceUsers);
+            $this->importUsers($snapshot, $sourceUsers, $adminSourceId);
+            $this->report['matching']['seeded_admin'] = ['source_user_id' => $adminSourceId, 'user_id' => $this->actorId,
+                'reused_source_account' => $adminSourceId !== null, 'source_password_reset' => $adminSourceId !== null];
             $this->report['matching']['communications'] = app(NativeCommunicationTemplates::class)->import($snapshot);
             $grants = [];
             $technicians = 0;
@@ -183,7 +198,7 @@ final class CoffracNativeImporter extends CoffracProjector
         });
     }
 
-    private function importUsers(ProductionDataset $snapshot, array $sourceUsers): void
+    private function importUsers(ProductionDataset $snapshot, array $sourceUsers, ?int $adminSourceId): void
     {
         $organisations = DB::table('external_delegataires')->pluck('id', 'external_id')->all();
         $seen = [];
@@ -193,7 +208,7 @@ final class CoffracNativeImporter extends CoffracProjector
             $held = in_array($row['type'], [2, 3, 6], true);
             $inactive = (int) $row['actif'] !== 1 || (bool) $row['is_archived'];
             $role = $external ? 3 : ($row['type'] === 4 ? 2 : ($held ? 1 : 0));
-            $id = DB::table('users')->insertGetId([
+            $values = [
                 'first_name' => $row['prenom'] ?? '', 'last_name' => $row['name'],
                 'email' => strtolower(trim($row['email'])), 'password' => $credential['password_hash'],
                 'role' => $role, 'admin' => false, 'can_manage_billing' => false,
@@ -207,7 +222,16 @@ final class CoffracNativeImporter extends CoffracProjector
                 'email_verified_at' => $this->timestamp($row['email_verified_at'] ?? null),
                 'deleted_at' => $inactive || $held ? now() : null,
                 'created_at' => $this->timestamp($row['created_at']), 'updated_at' => $this->timestamp($row['updated_at']),
-            ]);
+            ];
+            if ($row['id'] === $adminSourceId) {
+                // Reuse the seeded identity; retain its new password and global privilege only here.
+                unset($values['password'], $values['email_verified_at']);
+                $values['admin'] = true;
+                $id = $this->actorId;
+                DB::table('users')->where('id', $id)->update($values);
+            } else {
+                $id = DB::table('users')->insertGetId($values);
+            }
             DB::table('coffrac_user_links')->insert(['source_user_id' => $row['id'], 'user_id' => $id,
                 'source_type' => $row['type'], 'access_state' => $held ? 'profile_review' : ($inactive ? 'source_inactive' : ($external ? 'portal_review' : 'active'))]);
             $this->users[$row['id']] = $id;
@@ -269,10 +293,11 @@ final class CoffracNativeImporter extends CoffracProjector
         foreach (['users', 'dossiers', 'dossier_operations', 'appointments', 'external_delegataires', 'dossier_activities', 'legacy_records', 'dossier_billings', 'mail_templates', 'department_user', 'service_user'] as $table) {
             $this->report['counts'][$table] = DB::table($table)->count();
         }
-        if ($this->report['counts']['users'] !== $snapshot->manifest['tables']['users']['count'] + 1
+        if ($this->report['counts']['users'] !== $snapshot->manifest['tables']['users']['count'] + (config('admin.coffrac_source_user_id') === null ? 1 : 0)
             || $this->report['counts']['dossiers'] !== $snapshot->manifest['tables']['dossiers']['count']
             || $this->report['counts']['dossier_operations'] !== $snapshot->manifest['tables']['dossier_fiches']['count']
-            || DB::table('users')->where('admin', true)->count() !== 1) {
+            || DB::table('users')->where('admin', true)->count() !== 1
+            || DB::table('users')->where('admin', true)->value('id') !== $this->actorId) {
             throw new RuntimeException('Effectif natif ou unicite super admin non conforme.');
         }
     }

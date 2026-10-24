@@ -107,3 +107,32 @@ it('detects an input modified after construction before a transaction may be com
     file_put_contents($this->package.'/rehearsal.json', "\n", FILE_APPEND);
     expect(fn () => $package->assertUnchanged())->toThrow(RuntimeException::class, 'Contenu du paquet modifie');
 });
+
+it('requires a sealed explicit policy to reuse an active internal source account as super admin', function () {
+    expect((new StagingImportPackage($this->package, $this->digest))->seededAdminSourceId)->toBeNull();
+    $digest = resealStagingImportPackageFixture($this->package, function ($manifest) {
+        $manifest['seeded_admin'] = ['source_user_id' => 11, 'policy' => 'reuse_active_internal_account_reset_password'];
+
+        return $manifest;
+    });
+    expect((new StagingImportPackage($this->package, $digest))->seededAdminSourceId)->toBe(11);
+});
+
+it('rejects unsafe resealed super admin identity policies', function (array $policy) {
+    $digest = resealStagingImportPackageFixture($this->package, function ($manifest) use ($policy) {
+        $manifest['seeded_admin'] = $policy;
+
+        return $manifest;
+    });
+    expect(fn () => new StagingImportPackage($this->package, $digest))->toThrow(RuntimeException::class, 'super admin');
+})->with([
+    'inactive internal' => [['source_user_id' => 12, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'technician' => [['source_user_id' => 21, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'client' => [['source_user_id' => 31, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'delegate' => [['source_user_id' => 41, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'held auditor' => [['source_user_id' => 51, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'unknown' => [['source_user_id' => 999, 'policy' => 'reuse_active_internal_account_reset_password']],
+    'wrong policy' => [['source_user_id' => 11, 'policy' => 'guess_from_email']],
+    'missing policy' => [['source_user_id' => 11]],
+    'string id' => [['source_user_id' => '11', 'policy' => 'reuse_active_internal_account_reset_password']],
+]);

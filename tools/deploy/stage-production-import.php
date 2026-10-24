@@ -167,7 +167,8 @@ try {
     $app = require $appPath.'/bootstrap/app.php';
     $app->make(Kernel::class)->bootstrap();
     Http::preventStrayRequests();
-    config(['admin.mail' => strtolower(trim($admin['email'])), 'admin.password' => $admin['password'], 'logging.default' => 'stderr']);
+    config(['admin.mail' => strtolower(trim($admin['email'])), 'admin.password' => $admin['password'],
+        'admin.coffrac_source_user_id' => $package->seededAdminSourceId, 'logging.default' => 'stderr']);
     $report = NativeImportTarget::production($package, function () use ($package): array {
         $dataset = new ProductionDataset($package->directory.'/dataset');
         $planning = new TechCalendarPlanningSnapshot($package->directory.'/planning', $package->manifest['planning_sha256']);
@@ -178,18 +179,39 @@ try {
             $report = app(CoffracNativeImporter::class)->stageProduction($dataset, $planning);
             $report['document_verification'] = app(NativeDocumentAudit::class)->rehearse($dataset, $documents);
             $expected = json_decode(file_get_contents($package->directory.'/rehearsal.json'), true, 512, JSON_THROW_ON_ERROR);
+            $adminSourceId = $package->seededAdminSourceId;
+            if ($adminSourceId !== null) {
+                // The sealed baseline rehearsed a separate admin; explicit identity reuse removes that one extra row.
+                $expected['counts']['users']--;
+            }
             foreach ($expected['counts'] as $table => $count) {
                 if (($report['counts'][$table] ?? null) !== $count) {
                     throw new RuntimeException('Effectif natif different de la repetition approuvee.');
                 }
             }
             $hashes = 0;
+            $seededPasswords = 0;
             foreach ($dataset->credentials() as $credential) {
                 $id = $report['matching']['users'][$credential['id']];
-                if (! hash_equals($credential['password_hash'], DB::table('users')->where('id', $id)->value('password'))) {
+                $password = DB::table('users')->where('id', $id)->value('password');
+                if ($credential['id'] === $adminSourceId) {
+                    if ($id !== $report['matching']['seeded_admin']['user_id']
+                        || ! DB::table('users')->where('id', $id)->where('admin', true)->exists()
+                        || ! password_verify(config('admin.password'), $password)) {
+                        throw new RuntimeException('Mot de passe du compte super admin repris non verifie.');
+                    }
+                    $seededPasswords++;
+
+                    continue;
+                }
+                if (! hash_equals($credential['password_hash'], $password)) {
                     throw new RuntimeException('Hash source non conserve.');
                 }
                 $hashes++;
+            }
+            if ($seededPasswords !== ($adminSourceId === null ? 0 : 1)
+                || $hashes + $seededPasswords !== $dataset->manifest['tables']['users']['count']) {
+                throw new RuntimeException('Couverture des mots de passe importes incomplete.');
             }
             foreach (['jobs', 'failed_jobs', 'sessions', 'password_reset_tokens', 'mobile_access_tokens', 'mobile_push_tokens', 'dossier_sms', 'capcee_deliveries'] as $table) {
                 if (DB::table($table)->exists()) {
@@ -201,7 +223,7 @@ try {
             }
             $package->assertUnchanged();
             $report['staging_import'] = ['purpose' => 'isolated_production_preparation', 'package_sha256' => $package->fingerprint,
-                'matching_password_hashes' => $hashes, 'completed_at_utc' => gmdate(DATE_ATOM),
+                'matching_password_hashes' => $hashes, 'seeded_source_password_resets' => $seededPasswords, 'completed_at_utc' => gmdate(DATE_ATOM),
                 'external_portals_enabled' => false, 'serving_enabled' => false, 'final_cutover_ready' => false];
 
             return $report;

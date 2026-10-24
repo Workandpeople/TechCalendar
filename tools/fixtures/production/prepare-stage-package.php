@@ -14,8 +14,8 @@ ini_set('display_errors', '0');
 require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 try {
-    if ($argc !== 9 || explode('.', gethostname())[0] === 'ns365601') {
-        throw new RuntimeException('Usage local : DATASET PLANNING DOCUMENT_PLAN REHEARSAL_REPORT NEW_DIRECTORY PLANNING_SHA SERVER_INVENTORY SERVER_VERIFICATION');
+    if (! in_array($argc, [9, 10], true) || explode('.', gethostname())[0] === 'ns365601') {
+        throw new RuntimeException('Usage local : DATASET PLANNING DOCUMENT_PLAN REHEARSAL_REPORT NEW_DIRECTORY PLANNING_SHA SERVER_INVENTORY SERVER_VERIFICATION [SEEDED_ADMIN_SOURCE_ID]');
     }
     $repo = dirname(__DIR__, 3);
     $git = static function (array $args) use ($repo): string {
@@ -80,6 +80,12 @@ try {
         'planning_sha256' => $planning->fingerprint, 'document_plan_sha256' => $documents->fingerprint,
         'access_policy_version' => NativeExternalAccessReview::POLICY_VERSION,
         'server_documents' => ['inventory' => $argv[7], 'verification' => $argv[8]], 'files' => $files];
+    if ($argc === 10) {
+        if (! preg_match('/^[1-9][0-9]*$/D', $argv[9])) {
+            throw new RuntimeException('Identifiant source du super admin invalide.');
+        }
+        $manifest['seeded_admin'] = ['source_user_id' => (int) $argv[9], 'policy' => 'reuse_active_internal_account_reset_password'];
+    }
     file_put_contents($output.'/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n");
     chmod($output.'/manifest.json', 0600);
     $digest = hash_file('sha256', $output.'/manifest.json');

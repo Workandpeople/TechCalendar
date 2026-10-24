@@ -116,6 +116,55 @@ it('refuses a seeded admin email collision rather than upgrading a source accoun
     expect(DB::table('users')->count())->toBe(0);
 });
 
+it('reuses only the explicitly approved active internal identity for the seeded super admin', function () {
+    config(['admin.mail' => 'SOURCE-11@example.test', 'admin.coffrac_source_user_id' => 11]);
+    $dataset = new ProductionDataset($this->datasetDirectory);
+    $report = app(CoffracNativeImporter::class)->rehearse($dataset);
+    $adminId = $report['matching']['users'][11];
+    $admin = DB::table('users')->where('id', $adminId)->first();
+    expect(DB::table('users')->count())->toBe(6)
+        ->and(DB::table('users')->where('admin', true)->count())->toBe(1)
+        ->and(DB::table('users')->where('email', 'source-11@example.test')->count())->toBe(1)
+        ->and($admin->admin)->toBe(1)
+        ->and($admin->role)->toBe(0)
+        ->and($admin->first_name)->toBe('Compte')
+        ->and($admin->last_name)->toBe('Source')
+        ->and($admin->deleted_at)->toBeNull()
+        ->and(Hash::check('Seed-password-123', $admin->password))->toBeTrue()
+        ->and(Hash::check('Source-password-123', $admin->password))->toBeFalse()
+        ->and(DB::table('coffrac_user_links')->where('source_user_id', 11)->value('user_id'))->toBe($adminId)
+        ->and(DB::table('dossiers')->where('id', 101)->value('created_by'))->toBe($adminId)
+        ->and(DB::table('dossiers')->where('id', 101)->value('planning_user_id'))->toBe($adminId)
+        ->and($report['matching']['seeded_admin'])->toBe(['source_user_id' => 11, 'user_id' => $adminId,
+            'reused_source_account' => true, 'source_password_reset' => true]);
+    foreach ($dataset->credentials() as $credential) {
+        if ($credential['id'] !== 11) {
+            expect(DB::table('users')->where('id', $report['matching']['users'][$credential['id']])->value('password'))
+                ->toBe($credential['password_hash']);
+        }
+    }
+    expect(app(CoffracNativeImporter::class)->rehearse($dataset))->toBe($report);
+    config(['admin.coffrac_source_user_id' => null]);
+    expect(fn () => app(CoffracNativeImporter::class)->rehearse($dataset))->toThrow(RuntimeException::class, 'Identite');
+    Http::assertNothingSent();
+});
+
+it('refuses implicit external inactive mismatched and unproven super admin identities', function (mixed $sourceId, string $email) {
+    config(['admin.mail' => $email, 'admin.coffrac_source_user_id' => $sourceId]);
+    expect(fn () => app(CoffracNativeImporter::class)->rehearse(new ProductionDataset($this->datasetDirectory)))
+        ->toThrow(RuntimeException::class);
+    expect(DB::table('users')->count())->toBe(0)->and(DB::table('legacy_records')->count())->toBe(0);
+})->with([
+    'inactive internal' => [12, 'source-12@example.test'],
+    'technician' => [21, 'source-21@example.test'],
+    'client' => [31, 'source-31@example.test'],
+    'delegate' => [41, 'source-41@example.test'],
+    'held auditor' => [51, 'source-51@example.test'],
+    'unknown id' => [999, 'source-11@example.test'],
+    'string id' => ['11', 'source-11@example.test'],
+    'wrong email' => [11, 'seed-admin@example.test'],
+]);
+
 it('rolls back the entire import when credential ownership does not match', function () {
     $path = $this->datasetDirectory.'/credentials.jsonl';
     $rows = file($path);

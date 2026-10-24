@@ -11,6 +11,8 @@ final class StagingImportPackage
 
     public readonly string $fingerprint;
 
+    public readonly ?int $seededAdminSourceId;
+
     public function __construct(public readonly string $directory, string $expectedSha256)
     {
         $this->file('manifest.json');
@@ -49,6 +51,18 @@ final class StagingImportPackage
         }
         $this->assertUnchanged();
         $dataset = new ProductionDataset($directory.'/dataset');
+        $admin = $manifest['seeded_admin'] ?? null;
+        if ($admin !== null) {
+            if (! is_array($admin) || count($admin) !== 2 || ! is_int($admin['source_user_id'] ?? null)
+                || ($admin['policy'] ?? null) !== 'reuse_active_internal_account_reset_password') {
+                throw new RuntimeException('Politique de reprise du super admin invalide.');
+            }
+            $source = $dataset->keyed('users')[$admin['source_user_id']] ?? null;
+            if (! $source || $source['type'] !== 1 || (int) $source['actif'] !== 1 || $source['is_archived']) {
+                throw new RuntimeException('Politique de reprise du super admin invalide.');
+            }
+        }
+        $this->seededAdminSourceId = $admin['source_user_id'] ?? null;
         if ($dataset->fingerprint !== $manifest['dataset_sha256'] || $dataset->manifest['dump_sha256'] !== $manifest['dump_sha256']
             || hash_file('sha256', $directory.'/planning/references.json.gz') !== $manifest['planning_sha256']
             || hash_file('sha256', $directory.'/documents/SHA256SUMS') !== $manifest['document_plan_sha256']) {

@@ -1487,7 +1487,18 @@ L'import prend un verrou propre a la preparation V2 et recopie les entrees dans
 un dossier root non modifiable par le runtime. Il demande dans le terminal
 l'adresse et le mot de passe du seul super-admin (minimum huit caracteres,
 confirmation masquee). Une collision avec un compte Coffrac annule l'import,
-sans elever ce compte. Le mot de passe ne figure ni dans les arguments, ni dans
+sauf si le manifeste scelle approuve explicitement la reprise de ce compte
+interne actif via `seeded_admin.source_user_id` et la politique
+`reuse_active_internal_account_reset_password`. Le generateur accepte cet ID
+comme dernier argument optionnel. Le compte selectionne est alors reutilise
+sans doublon : identite, correspondance Coffrac et liens metier conserves ;
+seuls ses privileges globaux et son mot de passe sont definis par le seeder.
+Un client, delegataire, technicien, profil en revue ou compte inactif est refuse.
+Les autres comptes gardent leur hash exact et aucun autre super-admin n'est cree.
+Le comptage de reference est diminue d'une seule ligne utilisateur puisque le
+super-admin ne constitue plus un compte supplementaire. Le rapport distingue
+les hashes sources conserves et l'unique mot de passe reinitialise par le seeder.
+Le mot de passe ne figure ni dans les arguments, ni dans
 le `.env`, ni dans les logs ; son fichier temporaire root est accessible au seul
 runtime le temps necessaire puis supprime en sortie, y compris en cas d'erreur.
 Les entrees protegees cessent aussi d'etre accessibles au runtime en sortie.

@@ -77,7 +77,17 @@ if [ "${COFRAC2_REAL_PACKAGE:-}" = /real-package ]; then
     install -d -o root -g cofrac2-app -m 0750 "$REAL_RUN" "$REAL_RUN/inputs"
     cp -a /real-package/. "$REAL_RUN/inputs/"
     REAL_DIGEST=$(sha256sum "$REAL_RUN/inputs/manifest.json" | cut -d' ' -f1)
-    php8.4 -r 'file_put_contents($argv[1],json_encode(["package_sha256"=>$argv[2],"email"=>"local-proof-".bin2hex(random_bytes(8))."@example.invalid","password"=>bin2hex(random_bytes(24))],JSON_THROW_ON_ERROR));' "$REAL_RUN/admin.json" "$REAL_DIGEST"
+    php8.4 -r '
+        $m=json_decode(file_get_contents(dirname($argv[1])."/inputs/manifest.json"),true,512,JSON_THROW_ON_ERROR);
+        $email="local-proof-".bin2hex(random_bytes(8))."@example.invalid";
+        if (isset($m["seeded_admin"]["source_user_id"])) {
+            foreach (file(dirname($argv[1])."/inputs/dataset/users.jsonl") as $line) {
+                $row=json_decode($line,true,512,JSON_THROW_ON_ERROR);
+                if ($row["id"]===$m["seeded_admin"]["source_user_id"]) $email=strtolower(trim($row["email"]));
+            }
+        }
+        file_put_contents($argv[1],json_encode(["package_sha256"=>$argv[2],"email"=>$email,"password"=>bin2hex(random_bytes(24))],JSON_THROW_ON_ERROR));
+    ' "$REAL_RUN/admin.json" "$REAL_DIGEST"
     find "$REAL_RUN" -type d -exec chown root:cofrac2-app {} + -exec chmod 0750 {} +
     find "$REAL_RUN" -type f -exec chown root:cofrac2-app {} + -exec chmod 0440 {} +
     runuser -u cofrac2-app -- env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/cofrac2-app \

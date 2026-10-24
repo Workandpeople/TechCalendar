@@ -62,7 +62,7 @@ find "$INPUT_RUN/inputs" -type d -exec chown root:"$RUNTIME" {} + -exec chmod 07
 find "$INPUT_RUN/inputs" -type f -exec chown root:"$RUNTIME" {} + -exec chmod 0440 {} +
 php8.4 -d memory_limit=768M "$HERE/stage-production-import.php" --check "$INPUT_RUN/inputs" "$3" "$RUN/mysql.cnf" > "$RUN/preflight.json"
 
-printf 'Email du seul super-admin V2 (distinct des comptes Coffrac importes) : ' >/dev/tty
+printf 'Email du seul super-admin V2 (compte Coffrac reutilise seulement si autorise dans le paquet) : ' >/dev/tty
 IFS= read -r ADMIN_EMAIL </dev/tty
 printf 'Mot de passe unique, 8 caracteres minimum (saisie masquee) : ' >/dev/tty
 IFS= read -r -s ADMIN_PASSWORD </dev/tty
