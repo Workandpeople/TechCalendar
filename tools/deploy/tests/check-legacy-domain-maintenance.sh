@@ -10,6 +10,8 @@ if [ "${EUID:-$(id -u)}" -ne 0 ] || [ ! -f /.dockerenv ] \
 fi
 test ! -e /var/lib/cofrac2-production
 cp -a /test-deploy /fixture-deploy
+# Simulate the already published wording, then update it without reopening V1.
+sed -i 's/Nouvel espace Cofrac/Nouvelle plateforme Cofrac 2/' /fixture-deploy/legacy-domain-maintenance.html
 SCRIPT=/fixture-deploy/configure-legacy-domain-maintenance.sh
 STATE=/var/lib/cofrac2-production
 HISTORY="$STATE/legacy-domain-maintenance"
@@ -122,6 +124,8 @@ original() {
 original
 if bash "$SCRIPT" --activate > /tmp/legacy-no-consent.log 2>&1; then exit 1; fi
 original
+if bash "$SCRIPT" --update-page --no-reload > /tmp/legacy-no-active-page.log 2>&1; then exit 1; fi
+original
 cp /fixture-deploy/legacy-domain-maintenance.php /tmp/helper.original
 sed -i 's/TraceEnable Off/InvalidFixtureDirective On/' /fixture-deploy/legacy-domain-maintenance.php
 if bash "$SCRIPT" --activate --reload-shared-apache > /tmp/legacy-invalid.log 2>&1; then exit 1; fi
@@ -140,7 +144,7 @@ for host in cofrac.geniuscontrole.com www.cofrac.geniuscontrole.com; do
             '/index.php/extra' '/index.html?next=https://evil.invalid' '/.well-known/acme-challenge/evil.php'; do
             test "$(curl --noproxy '*' -sS --resolve "$host:$port:127.0.0.1" \
                 -o /tmp/maintenance.body -w '%{http_code}' "$protocol://$host$path")" = 503
-            grep -q 'Nouvelle plateforme Cofrac 2' /tmp/maintenance.body
+            grep -q 'data-cofrac-maintenance="true"' /tmp/maintenance.body
             ! grep -q 'ORIGINAL COFFRAC INTACT\|PRIVATE ORIGINAL\|DO NOT EXECUTE PHP' /tmp/maintenance.body
         done
         test "$(curl --noproxy '*' -fsS --resolve "$host:$port:127.0.0.1" \
@@ -153,8 +157,28 @@ sha256sum --status -c /tmp/untouched.sha256
 reloads=$(wc -l < /tmp/fixture-reloads)
 bash "$SCRIPT" --activate --reload-shared-apache
 test "$(wc -l < /tmp/fixture-reloads)" = "$reloads"
+# Updating the page must preserve the vhosts, original files, and rollback hashes.
+sha256sum "$SITE" "$SSL" > /tmp/active-vhosts.sha256
+cp /fixture-deploy/legacy-domain-maintenance.html /tmp/old-page-source
+printf '<html>INVALID PAGE</html>\n' > /fixture-deploy/legacy-domain-maintenance.html
+if bash "$SCRIPT" --update-page --no-reload > /tmp/legacy-invalid-page.log 2>&1; then exit 1; fi
+cp /test-deploy/legacy-domain-maintenance.html /fixture-deploy/legacy-domain-maintenance.html
+bash "$SCRIPT" --update-page --no-reload
+test "$(wc -l < /tmp/fixture-reloads)" = "$reloads"
+sha256sum --status -c /tmp/active-vhosts.sha256
+active_run=$(cat "$HISTORY/active-run")
+sha256sum --status -c "$active_run/active.sha256"
+curl --noproxy '*' -sS --resolve cofrac.geniuscontrole.com:443:127.0.0.1 \
+    https://cofrac.geniuscontrole.com/ > /tmp/updated-page.body
+cmp -s /test-deploy/legacy-domain-maintenance.html /tmp/updated-page.body
+! grep -q 'Cofrac 2' /tmp/updated-page.body
+bash "$SCRIPT" --update-page --no-reload
+test "$(wc -l < /tmp/fixture-reloads)" = "$reloads"
+sha256sum --status -c /tmp/source.sha256
+sha256sum --status -c /tmp/untouched.sha256
 cp "$SSL" /tmp/active-ssl
 printf '\n# Concurrent modification\n' >> "$SSL"
+if bash "$SCRIPT" --update-page --no-reload > /tmp/legacy-refused-page.log 2>&1; then exit 1; fi
 if bash "$HISTORY/rollback.sh" > /tmp/legacy-refused-rollback.log 2>&1; then exit 1; fi
 test -f "$HISTORY/active-run"
 cp /tmp/active-ssl "$SSL"
@@ -165,4 +189,4 @@ test ! -e "$HISTORY/active-run"
 bash "$SCRIPT" --activate --reload-shared-apache
 bash "$HISTORY/rollback.sh"
 original
-printf 'OK : maintenance HTTP/HTTPS et URL profondes, alias, ACME, certificat conserve, V2 inchangee, echec config/reload, retour arriere et refus de modifications concurrentes.\n'
+printf 'OK : maintenance HTTP/HTTPS, mise a jour du texte sans reload, retour arriere conserve, chemins profonds, ACME, certificat et V2 inchanges, refus et echecs controles.\n'

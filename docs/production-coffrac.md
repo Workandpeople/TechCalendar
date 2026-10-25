@@ -1744,6 +1744,21 @@ refuse egalement d'ecraser des vhosts modifies apres l'activation.
 sudo bash /var/lib/cofrac2-production/legacy-domain-maintenance/rollback.sh
 ```
 
+Le libelle visible est « nouvel espace Cofrac », sans numero de version. Les
+liens gardent le domaine temporaire `cofrac2.geniuscontrole.com`. Si la maintenance
+est deja active, le paquet actualise permet de changer uniquement sa page :
+
+```bash
+sha256sum -c SHA256SUMS &&
+sudo bash ./configure-legacy-domain-maintenance.sh --update-page --no-reload
+```
+
+Cette commande verifie les empreintes existantes, sauvegarde l'ancienne page,
+remplace le HTML et actualise l'empreinte du retour arriere sous le meme verrou.
+Elle controle la page HTTPS 503 et le login V2, sans rechargement Apache, pull
+du checkout V2 ou changement des acces. Sans maintenance active, elle refuse.
+Utiliser alors d'abord le script d'activation deja installe sur le serveur.
+
 Cette maintenance HTTP **n'est pas un gel transactionnel de la source** : les
 workers, cron et autres domaines historiques, notamment `preprod`, ne sont pas
 modifies. La collecte finale coherente et le differentiel documentaire restent

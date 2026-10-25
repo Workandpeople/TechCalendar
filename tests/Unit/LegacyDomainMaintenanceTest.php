@@ -78,5 +78,6 @@ it('keeps login and password recovery on fixed trusted URLs without forms script
         ->toContain('href="https://cofrac2.geniuscontrole.com/forgot-password"')
         ->toContain('activation par l&rsquo;&eacute;quipe')
         ->toContain('si vous ne recevez pas l&rsquo;email')
-        ->not->toContain('<script')->not->toContain('<form')->not->toContain('http-equiv="refresh"');
+        ->toContain('Nouvel espace Cofrac')->toContain('data-cofrac-maintenance="true"')
+        ->not->toContain('Cofrac 2')->not->toContain('<script')->not->toContain('<form')->not->toContain('http-equiv="refresh"');
 });

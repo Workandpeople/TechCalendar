@@ -6,11 +6,13 @@ umask 077
 export LC_ALL=C
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 stop() { printf 'STOP : %s\n' "$1" >&2; exit 1; }
-if [ "${EUID:-$(id -u)}" -ne 0 ] || [ "$#" -ne 2 ] \
-    || [ "${2:-}" != --reload-shared-apache ] || [ "$(hostname -s)" != ns365601 ]; then
-    stop 'Usage : sudo bash configure-legacy-domain-maintenance.sh --activate|--rollback --reload-shared-apache'
+if [ "${EUID:-$(id -u)}" -ne 0 ] || [ "$#" -ne 2 ] || [ "$(hostname -s)" != ns365601 ]; then
+    stop 'Usage : --activate|--rollback --reload-shared-apache, ou --update-page --no-reload'
 fi
-case "$1" in --activate|--rollback) ;; *) stop 'action inconnue.' ;; esac
+case "$1:$2" in
+    --activate:--reload-shared-apache|--rollback:--reload-shared-apache|--update-page:--no-reload) ;;
+    *) stop 'action ou consentement de rechargement inattendu.' ;;
+esac
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 STATE=/var/lib/cofrac2-production
 HISTORY="$STATE/legacy-domain-maintenance"
@@ -78,7 +80,7 @@ for name in "${SITES[@]}"; do
 done
 
 ACTIVE_RUN=
-if [ "$1" = --rollback ] || [ -e "$HISTORY/active-run" ]; then
+if [ "$1" != --activate ] || [ -e "$HISTORY/active-run" ]; then
     [ -f "$HISTORY/active-run" ] && [ ! -L "$HISTORY/active-run" ] \
         || stop 'aucune activation precedente a restaurer.'
     IFS= read -r ACTIVE_RUN < "$HISTORY/active-run"
@@ -92,6 +94,75 @@ if [ "$1" = --rollback ] || [ -e "$HISTORY/active-run" ]; then
         || stop 'sauvegarde originale modifiee ; aucun retour arriere automatique.'
     if [ "$1" = --activate ]; then
         printf 'Maintenance deja active. Retour arriere : sudo bash %s/rollback.sh\n' "$HISTORY"
+        exit 0
+    fi
+    if [ "$1" = --update-page ]; then
+        [ -d "$WEBROOT" ] && [ ! -L "$WEBROOT" ] && [ "$(stat -c %u:%a "$WEBROOT")" = 0:755 ] \
+            && [ -f "$WEBROOT/index.html" ] && [ ! -L "$WEBROOT/index.html" ] \
+            && [ "$(stat -c %u:%a "$WEBROOT/index.html")" = 0:644 ] \
+            && [ "$(find "$WEBROOT" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ] \
+            || stop 'page de maintenance active inattendue.'
+        [ -f "$HERE/legacy-domain-maintenance.html" ] && [ ! -L "$HERE/legacy-domain-maintenance.html" ] \
+            || stop 'nouvelle page absente ou indirecte.'
+        install -o root -g root -m 0600 "$HERE/legacy-domain-maintenance.html" "$WORK/page.next"
+        grep -q 'data-cofrac-maintenance="true"' "$WORK/page.next" \
+            && grep -q 'href="https://cofrac2.geniuscontrole.com/login"' "$WORK/page.next" \
+            || stop 'nouvelle page de maintenance inattendue.'
+        if cmp -s "$WEBROOT/index.html" "$WORK/page.next"; then
+            printf 'Page deja a jour. Aucun rechargement ou service modifie.\n'
+            exit 0
+        fi
+        install -o root -g root -m 0600 "$WEBROOT/index.html" "$WORK/page.before"
+        cp -p "$ACTIVE_RUN/active.sha256" "$WORK/active.before.sha256"
+        {
+            for name in "${SITES[@]}"; do sha256sum "/etc/apache2/sites-available/$name"; done
+            printf '%s  %s\n' "$(sha256sum "$WORK/page.next" | cut -d ' ' -f 1)" "$WEBROOT/index.html"
+        } > "$WORK/active.next.sha256"
+        page_written=0
+        page_success=0
+        page_temporary=
+        cleanup_page() {
+            result=$?
+            trap - EXIT
+            [ -z "$page_temporary" ] || rm -f -- "$page_temporary"
+            if [ "$page_success" != 1 ] && [ "$page_written" = 1 ]; then
+                if cmp -s "$WEBROOT/index.html" "$WORK/page.next" \
+                    && { cmp -s "$ACTIVE_RUN/active.sha256" "$WORK/active.next.sha256" \
+                        || cmp -s "$ACTIVE_RUN/active.sha256" "$WORK/active.before.sha256"; }; then
+                    install -o root -g root -m 0644 "$WORK/page.before" "$WEBROOT/index.html"
+                    install -o root -g root -m 0600 "$WORK/active.before.sha256" "$ACTIVE_RUN/active.sha256"
+                    printf 'Page precedente et empreinte restaurees, maintenance conservee.\n' >&2
+                else
+                    printf 'ATTENTION : modification concurrente ; ne pas ecraser. Diagnostic prive : %s\n' "$WORK" >&2
+                fi
+            fi
+            exit "$result"
+        }
+        trap cleanup_page EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        sha256sum --status -c "$ACTIVE_RUN/active.sha256" || stop 'maintenance modifiee pendant la preparation.'
+        page_temporary=$(mktemp "$WEBROOT/.page-XXXXXXXX")
+        install -o root -g root -m 0644 "$WORK/page.next" "$page_temporary"
+        page_written=1
+        mv -f -- "$page_temporary" "$WEBROOT/index.html"
+        page_temporary=
+        page_temporary=$(mktemp "$ACTIVE_RUN/.active-XXXXXXXX")
+        install -o root -g root -m 0600 "$WORK/active.next.sha256" "$page_temporary"
+        mv -f -- "$page_temporary" "$ACTIVE_RUN/active.sha256"
+        page_temporary=
+        code=$(curl --noproxy '*' --silent --show-error --max-time 20 \
+            --resolve "$DOMAIN:443:127.0.0.1" -o "$WORK/page.response" -w '%{http_code}' "https://$DOMAIN/")
+        [ "$code" = 503 ] && cmp -s "$WORK/page.next" "$WORK/page.response" || stop 'nouvelle page HTTPS non validee.'
+        check_v2
+        sha256sum --status -c "$ACTIVE_RUN/active.sha256" || stop 'empreintes de maintenance non conformes.'
+        snapshot_other_configs > "$WORK/other-configs.after"
+        snapshot_services > "$WORK/services.after"
+        cmp -s "$WORK/other-configs.before" "$WORK/other-configs.after" \
+            && cmp -s "$WORK/services.before" "$WORK/services.after" || stop 'configuration ou service modifie pendant la mise a jour.'
+        page_success=1
+        printf 'Page mise a jour : nouvel espace Cofrac. Maintenance et retour arriere conserves.\n'
+        printf 'Aucune configuration Apache ou V2 modifiee ; aucun rechargement. Diagnostic prive : %s\n' "$WORK"
         exit 0
     fi
     for name in "${SITES[@]}"; do cp -p -- "$ACTIVE_RUN/before/$name" "$WORK/next/$name"; done
@@ -171,7 +242,7 @@ if [ "$1" = --activate ]; then
                         --resolve "$DOMAIN:$port:127.0.0.1" -H "Host: $host" \
                         -D "$WORK/response.headers" -o "$WORK/response.body" -w '%{http_code}' \
                         "$protocol://$DOMAIN$path")
-                    if [ "$code" = 503 ] && grep -q 'Nouvelle plateforme Cofrac 2' "$WORK/response.body" \
+                    if [ "$code" = 503 ] && grep -q 'data-cofrac-maintenance="true"' "$WORK/response.body" \
                         && grep -qi '^Cache-Control:.*no-store' "$WORK/response.headers"; then
                         ready=1; break
                     fi
@@ -200,7 +271,7 @@ if [ "$1" = --activate ]; then
     printf '%s\n' "$WORK" > "$HISTORY/active-run"
     success=1
     printf 'Ancien domaine en maintenance : https://%s (HTTP 503).\n' "$DOMAIN"
-    printf 'Lien vers Cofrac 2 et aide a la connexion visibles. Aucun email ou SMS active.\n'
+    printf 'Lien vers le nouvel espace Cofrac et aide a la connexion visibles. Aucun email ou SMS active.\n'
     printf 'Retour arriere : sudo bash %s/rollback.sh\n' "$HISTORY"
 else
     mv -- "$HISTORY/active-run" "$WORK/restored-activation"
