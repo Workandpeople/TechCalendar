@@ -70,7 +70,7 @@
                             <th class="px-4 py-3 font-semibold">Role</th>
                             <th class="px-4 py-3 font-semibold">Admin</th>
                             <th class="px-4 py-3 font-semibold">Statut</th>
-                            <th class="px-4 py-3 font-semibold">Actions</th>
+                            <th class="w-px whitespace-nowrap px-4 py-3 font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -83,8 +83,8 @@
                                 </td>
                                 <td class="px-4 py-3">{{ $user->admin ? 'Oui' : 'Non' }}</td>
                                 <td class="px-4 py-3">{{ $user->trashed() ? 'Désactivé' : 'Actif' }}</td>
-                                <td class="px-4 py-3">
-                                    <div class="flex flex-wrap gap-2">
+                                <td class="w-px whitespace-nowrap px-4 py-3">
+                                    <div class="gc-user-actions">
                                         @if (! $user->trashed())
                                             <button
                                                 type="button"
@@ -109,14 +109,14 @@
                                                 data-user-department-codes='@json($user->departments->pluck('code')->values())'
                                             >Modifier</button>
 
-                                            <form method="POST" action="{{ route('admin.users.send-reset-link', $user->id) }}" class="inline">
+                                            <form method="POST" action="{{ route('admin.users.send-reset-link', $user->id) }}">
                                                 @csrf
                                                 <button type="submit" class="gc-btn-soft">Envoyer reset</button>
                                             </form>
 
                                             <button type="button" class="gc-btn-danger" data-modal-open="delete-user-modal" data-delete-url="{{ route('admin.users.destroy', $user->id) }}" data-user-name="{{ $user->full_name_with_departments }}">Soft delete</button>
                                         @else
-                                            <form method="POST" action="{{ route('admin.users.restore', $user->id) }}" class="inline">
+                                            <form method="POST" action="{{ route('admin.users.restore', $user->id) }}">
                                                 @csrf
                                                 <button type="submit" class="gc-btn-soft">Restaurer</button>
                                             </form>
