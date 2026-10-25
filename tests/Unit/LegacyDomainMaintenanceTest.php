@@ -71,13 +71,14 @@ it('refuses ambiguous vhosts aliases roots and unknown HTTPS includes', function
     expect(fn () => legacyMaintenanceSite($source, 443))->toThrow(RuntimeException::class);
 })->with(['other-domain', 'other-alias', 'other-root', 'multiple-hosts', 'wrong-port', 'missing-cert', 'other-include', 'multiple-names']);
 
-it('keeps login and password recovery on fixed trusted URLs without forms scripts or automatic redirects', function () {
+it('shows only the maintenance message without links login information or redirects', function () {
     $page = file_get_contents(__DIR__.'/../../tools/deploy/legacy-domain-maintenance.html');
+    $dom = new DOMDocument;
+    $dom->loadHTML($page, LIBXML_NOERROR | LIBXML_NOWARNING);
 
-    expect($page)->toContain('href="https://cofrac2.geniuscontrole.com/login"')
-        ->toContain('href="https://cofrac2.geniuscontrole.com/forgot-password"')
-        ->toContain('activation par l&rsquo;&eacute;quipe')
-        ->toContain('si vous ne recevez pas l&rsquo;email')
-        ->toContain('Nouvel espace Cofrac')->toContain('data-cofrac-maintenance="true"')
-        ->not->toContain('Cofrac 2')->not->toContain('<script')->not->toContain('<form')->not->toContain('http-equiv="refresh"');
+    expect(trim($dom->getElementsByTagName('body')->item(0)->textContent))->toBe('Maintenance en cours');
+    expect($dom->getElementsByTagName('a')->length)->toBe(0);
+    expect($page)->toContain('data-cofrac-maintenance="true"')
+        ->not->toContain('cofrac2')->not->toContain('mot de passe')
+        ->not->toContain('<script')->not->toContain('<form')->not->toContain('http-equiv="refresh"');
 });

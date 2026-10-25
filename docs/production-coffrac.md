@@ -1692,11 +1692,11 @@ En cas d'echec, conserver le diagnostic et ne pas reinitialiser la base.
 
 ### 14. Maintenance de l'ancien domaine, autorisation du 25 octobre
 
-L'utilisateur demande explicitement l'activation immediate, meme si les portails
-externes et l'envoi reel des emails V2 sont encore fermes. La page indique les
-identifiants conserves, propose « Mot de passe oublie » et precise qu'une
-activation par l'equipe peut etre necessaire. Ne pas promettre qu'un email sera
-livre tant que l'envoi reel n'a pas ete valide et active separement.
+L'utilisateur demande une maintenance immediate. La page affiche uniquement
+« Maintenance en cours », sans lien, annonce de nouvel espace, identifiants ou
+aide au mot de passe. La future page de redirection sera preparee separement.
+Les portails externes et l'envoi reel des emails V2 restent fermes ; cette
+maintenance ne change aucune permission ou configuration de livraison.
 
 Le paquet autonome contient uniquement :
 
@@ -1744,9 +1744,9 @@ refuse egalement d'ecraser des vhosts modifies apres l'activation.
 sudo bash /var/lib/cofrac2-production/legacy-domain-maintenance/rollback.sh
 ```
 
-Le libelle visible est « nouvel espace Cofrac », sans numero de version. Les
-liens gardent le domaine temporaire `cofrac2.geniuscontrole.com`. Si la maintenance
-est deja active, le paquet actualise permet de changer uniquement sa page :
+Le seul texte visible est « Maintenance en cours ». Si la maintenance est deja
+active, le paquet actualise permet de remplacer uniquement sa page, sans lien
+vers la V2 ni redirection :
 
 ```bash
 sha256sum -c SHA256SUMS &&

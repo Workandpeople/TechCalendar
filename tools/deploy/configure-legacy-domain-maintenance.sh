@@ -106,7 +106,7 @@ if [ "$1" != --activate ] || [ -e "$HISTORY/active-run" ]; then
             || stop 'nouvelle page absente ou indirecte.'
         install -o root -g root -m 0600 "$HERE/legacy-domain-maintenance.html" "$WORK/page.next"
         grep -q 'data-cofrac-maintenance="true"' "$WORK/page.next" \
-            && grep -q 'href="https://cofrac2.geniuscontrole.com/login"' "$WORK/page.next" \
+            && grep -q '<h1>Maintenance en cours</h1>' "$WORK/page.next" \
             || stop 'nouvelle page de maintenance inattendue.'
         if cmp -s "$WEBROOT/index.html" "$WORK/page.next"; then
             printf 'Page deja a jour. Aucun rechargement ou service modifie.\n'
@@ -161,7 +161,7 @@ if [ "$1" != --activate ] || [ -e "$HISTORY/active-run" ]; then
         cmp -s "$WORK/other-configs.before" "$WORK/other-configs.after" \
             && cmp -s "$WORK/services.before" "$WORK/services.after" || stop 'configuration ou service modifie pendant la mise a jour.'
         page_success=1
-        printf 'Page mise a jour : nouvel espace Cofrac. Maintenance et retour arriere conserves.\n'
+        printf 'Page de maintenance mise a jour. Aucun lien ou redirection ajoute. Retour arriere conserve.\n'
         printf 'Aucune configuration Apache ou V2 modifiee ; aucun rechargement. Diagnostic prive : %s\n' "$WORK"
         exit 0
     fi
@@ -271,7 +271,7 @@ if [ "$1" = --activate ]; then
     printf '%s\n' "$WORK" > "$HISTORY/active-run"
     success=1
     printf 'Ancien domaine en maintenance : https://%s (HTTP 503).\n' "$DOMAIN"
-    printf 'Lien vers le nouvel espace Cofrac et aide a la connexion visibles. Aucun email ou SMS active.\n'
+    printf 'Page de maintenance affichee. Aucun email ou SMS active.\n'
     printf 'Retour arriere : sudo bash %s/rollback.sh\n' "$HISTORY"
 else
     mv -- "$HISTORY/active-run" "$WORK/restored-activation"

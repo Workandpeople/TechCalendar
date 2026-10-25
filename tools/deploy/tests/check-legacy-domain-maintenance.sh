@@ -11,7 +11,7 @@ fi
 test ! -e /var/lib/cofrac2-production
 cp -a /test-deploy /fixture-deploy
 # Simulate the already published wording, then update it without reopening V1.
-sed -i 's/Nouvel espace Cofrac/Nouvelle plateforme Cofrac 2/' /fixture-deploy/legacy-domain-maintenance.html
+sed -i 's/Maintenance en cours/Ancienne page de maintenance/g' /fixture-deploy/legacy-domain-maintenance.html
 SCRIPT=/fixture-deploy/configure-legacy-domain-maintenance.sh
 STATE=/var/lib/cofrac2-production
 HISTORY="$STATE/legacy-domain-maintenance"
@@ -151,7 +151,7 @@ for host in cofrac.geniuscontrole.com www.cofrac.geniuscontrole.com; do
             "$protocol://$host/.well-known/acme-challenge/TOKEN_123")" = existing-acme-token
     done
 done
-grep -q 'href="https://cofrac2.geniuscontrole.com/forgot-password"' /tmp/maintenance.body
+! grep -Eq '<a[[:space:]]|cofrac2\.geniuscontrole\.com|forgot-password' /tmp/maintenance.body
 sha256sum --status -c /tmp/source.sha256
 sha256sum --status -c /tmp/untouched.sha256
 reloads=$(wc -l < /tmp/fixture-reloads)
@@ -171,7 +171,8 @@ sha256sum --status -c "$active_run/active.sha256"
 curl --noproxy '*' -sS --resolve cofrac.geniuscontrole.com:443:127.0.0.1 \
     https://cofrac.geniuscontrole.com/ > /tmp/updated-page.body
 cmp -s /test-deploy/legacy-domain-maintenance.html /tmp/updated-page.body
-! grep -q 'Cofrac 2' /tmp/updated-page.body
+grep -q '<h1>Maintenance en cours</h1>' /tmp/updated-page.body
+! grep -Eq '<a[[:space:]]|cofrac2\.geniuscontrole\.com|forgot-password|Ancienne page' /tmp/updated-page.body
 bash "$SCRIPT" --update-page --no-reload
 test "$(wc -l < /tmp/fixture-reloads)" = "$reloads"
 sha256sum --status -c /tmp/source.sha256
