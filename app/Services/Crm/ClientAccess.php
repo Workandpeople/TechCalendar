@@ -90,7 +90,7 @@ class ClientAccess
 
     public function viewDossier(User $user, Dossier $dossier): bool
     {
-        return $this->active($user) && ! $user->must_change_password
+        return ! $dossier->trashed() && $this->active($user) && ! $user->must_change_password
             && (int) ($user->externalClient->kind === 'client'
                 ? ($dossier->client_id ?? $dossier->delegataire_id) : $dossier->delegataire_id) === $user->external_client_id
             && $this->categories->restrict(Dossier::query()->whereKey($dossier->id), $this->categoryKeys($user))->exists();
@@ -104,9 +104,6 @@ class ClientAccess
     public function lotRows(Builder $rows, User $user): Builder
     {
         $allowed = $this->categoryKeys($user);
-        if (count($allowed) === count(PortalCategoryAccess::catalogue())) {
-            return $rows;
-        }
         if ($allowed === []) {
             return $rows->whereRaw('1 = 0');
         }

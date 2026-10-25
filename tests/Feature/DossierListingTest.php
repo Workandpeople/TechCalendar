@@ -3,6 +3,7 @@
 use App\Models\Dossier;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Crm\DossierArchiving;
 use App\Services\Crm\DossierRegistry;
 use App\Services\Crm\DossierStatusCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,13 +52,14 @@ it('counts each dossier once per category and matches service and state on the s
     expect($counts['all']['count'])->toBe(1)->and($counts['problem']['count'])->toBe(0)->and($counts['report']['count'])->toBe(1);
 });
 
-it('keeps unclassified dossiers visible including those without operations', function () {
+it('classifies historical unknown dossiers as reversible deletions including those without operations', function () {
     ($this->dossierWithStatus)(null, 'EMPTY-STATE');
     ($this->dossierWithStatus)('État historique inconnu', 'OTHER-STATE');
     Dossier::create(['reference' => 'NO-OPERATION', 'address' => '10 rue du Test', 'city' => 'Lyon']);
     ($this->dossierWithStatus)('RDV VISITE', 'KNOWN');
+    app(DossierArchiving::class)->classifyLegacyDeleted();
     $this->actingAs($this->manager)->get(route('v2.dossiers.index', ['status' => 'unknown']))
-        ->assertOk()->assertSee('État historique inconnu')->assertSee('État non renseigné')
+        ->assertOk()->assertSee('Dossiers supprimés')->assertDontSee('État non renseigné / autre')
         ->assertViewHas('dossiers', fn ($rows) => $rows->total() === 3)
         ->assertViewHas('categories', fn ($categories) => $categories['unknown']['count'] === 3);
     $this->get(route('v2.dossiers.index', ['status' => 'unknown', 'service_id' => $this->service->id]))

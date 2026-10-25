@@ -1,4 +1,5 @@
 import { initDossierAssignment } from './dossier-assignment.js';
+import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 
 const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns'];
 
@@ -87,6 +88,11 @@ export function initDossierList(root = document, browser = window) {
     let retry;
     let composing = false;
     let renderedUrl = new URL(browser.location.href);
+    const preferencesKey = listing.dataset?.preferencesKey;
+    const storePreferences = url => {
+        if (!preferencesKey) return;
+        try { saveDossierPreferences(browser.localStorage, preferencesKey, url); } catch { /* Storage can be disabled. */ }
+    };
     const formUrl = (changes = {}) => dossierListUrl(form.action, new browser.FormData(form), changes);
     const exportLink = listing.querySelector('[data-dossier-export]');
     exportLink?.addEventListener('click', () => {
@@ -122,8 +128,12 @@ export function initDossierList(root = document, browser = window) {
             results.innerHTML = payload.results;
             root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-updated'));
             renderedUrl = url;
+            storePreferences(url);
             if (exportLink) exportLink.href = dossierListUrl(exportLink.dataset.exportUrl, url.searchParams).href;
-            if (options.history !== false && url.href !== browser.location.href) browser.history.pushState(null, '', url.href);
+            if (options.history !== false && url.href !== browser.location.href) {
+                if (options.history === 'replace') browser.history.replaceState(null, '', url.href);
+                else browser.history.pushState(null, '', url.href);
+            }
             busy(false);
             status.textContent = `${payload.total.toLocaleString('fr-FR')} dossier(s) trouvé(s).`;
             if (restoreFocus) {
@@ -157,6 +167,11 @@ export function initDossierList(root = document, browser = window) {
     search.addEventListener('input', () => { if (!composing) loader.load(formUrl(), { delay: 300 }); });
     form.addEventListener('change', event => {
         if (event.target !== search) loader.load(formUrl());
+    });
+    listing.addEventListener('change', event => {
+        if (!event.target.matches('[data-dossier-page-size]')) return;
+        form.elements.namedItem('per_page').value = event.target.value;
+        loader.load(formUrl());
     });
     listing.addEventListener('click', event => {
         const link = event.target.closest('a[href]');
@@ -197,4 +212,13 @@ export function initDossierList(root = document, browser = window) {
     browser.addEventListener('popstate', restoreLocation);
     browser.addEventListener('pageshow', event => { if (event.persisted) restoreLocation(); });
     browser.addEventListener('pagehide', loader.cancel);
+    if (preferencesKey) {
+        try {
+            const preferred = preferredDossierUrl(renderedUrl, readDossierPreferences(browser.localStorage, preferencesKey));
+            if (preferred.href !== renderedUrl.href) {
+                syncForm(preferred);
+                loader.load(preferred, { history: 'replace' });
+            } else storePreferences(renderedUrl);
+        } catch { /* Keep the server-rendered page when storage is unavailable. */ }
+    }
 }

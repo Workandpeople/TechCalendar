@@ -77,6 +77,7 @@
                                         <span class="gc-dossier-cell-lines" title="{{ $dossier->phone }}">{{ $dossier->phone ?: '—' }}</span>
                                         @break
                                     @case('service')
+                                        @if ($dossier->trashed())<span class="gc-dossier-status" data-tone="slate">Dossier supprimé</span>@endif
                                         <ul class="space-y-2">@forelse ($dossier->operations as $operation)
                                             <li><span class="gc-dossier-cell-lines" title="{{ $operation->service?->name ?: $operation->legacy_service_name }}">{{ $operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher' }}</span><x-dossier-status :status="$operation->legacy_status" /></li>
                                         @empty<li><x-dossier-status /></li>@endforelse</ul>

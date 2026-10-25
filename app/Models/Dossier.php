@@ -8,9 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Dossier extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'reference', 'source', 'source_reference', 'delegataire_id', 'client_id', 'client_contact', 'delegataire_contact', 'created_by',
         'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',

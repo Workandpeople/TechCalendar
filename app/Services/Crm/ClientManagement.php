@@ -18,6 +18,9 @@ class ClientManagement
             $data['portal_categories'] = $data['category_mode'] === 'custom' ? array_values($data['categories'] ?? []) : null;
         }
         unset($data['category_mode'], $data['categories']);
+        if (($data['kind'] ?? $client->kind) !== 'delegataire') {
+            $data['capcee_enabled'] = false;
+        }
         DB::transaction(function () use ($client, $data): void {
             $client->fill($data)->save();
             if ($client->wasChanged('name')) {

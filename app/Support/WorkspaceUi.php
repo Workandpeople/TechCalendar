@@ -103,6 +103,7 @@ final class WorkspaceUi
             'report' => ['document', 'Rapport finalisé'],
             'invoiced' => ['check', 'Facturation effectuée'],
             'cancelled' => ['close', 'Dossier annulé'],
+            'unknown' => ['trash', 'Suppression réversible'],
             'all' => ['dossiers', 'Vue d’ensemble'],
             default => ['dossiers', 'État à vérifier'],
         };

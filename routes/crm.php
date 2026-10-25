@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Crm\AutomaticCapceeController;
 use App\Http\Controllers\Crm\CapceeReportController;
 use App\Http\Controllers\Crm\DossierAppointmentController;
+use App\Http\Controllers\Crm\DossierArchivingController;
 use App\Http\Controllers\Crm\DossierBillingController;
 use App\Http\Controllers\Crm\DossierController;
 use App\Http\Controllers\Crm\DossierExportController;
@@ -20,7 +22,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::get('/documents/{document}', [DossierController::class, 'download'])->name('documents.download');
     Route::patch('/documents/{document}/partage', [DossierController::class, 'shareDocument'])->name('documents.sharing');
     Route::patch('/dossiers/{dossier}/commentaires/{comment}/partage', [DossierController::class, 'shareComment'])->whereNumber('comment')->name('dossiers.comments.sharing');
-    Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
+    Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->withTrashed()->name('dossiers.show');
     Route::get('/dossiers/{dossier}/sms/suivi', [DossierSmsController::class, 'status'])->middleware('throttle:60,1')->name('dossiers.sms.status');
     Route::post('/dossiers/{dossier}/sms/apercu', [DossierSmsController::class, 'preview'])->middleware('throttle:30,1')->name('dossiers.sms.preview');
     Route::post('/dossiers/{dossier}/sms', [DossierSmsController::class, 'store'])->middleware('throttle:10,1')->name('dossiers.sms.store');
@@ -31,12 +33,15 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::get('/dossiers/{dossier}/capcee/envois/{delivery}/pdf', [CapceeReportController::class, 'download'])->name('capcee.download');
     Route::get('/dossiers/{dossier}/prestations/{operation}/capcee/nouveau', [CapceeReportController::class, 'create'])->name('capcee.create');
     Route::get('/dossiers/{dossier}/prestations/{operation}/capcee/{report}/nouvelle-version', [CapceeReportController::class, 'create'])->name('capcee.revision');
-    Route::get('/dossiers/{dossier}/documents-lots/{document}', [DossierController::class, 'downloadLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.download');
-    Route::get('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'downloadCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.download');
+    Route::get('/dossiers/{dossier}/documents-lots/{document}', [DossierController::class, 'downloadLotDocument'])->withTrashed()->whereNumber('document')->name('dossiers.lot-documents.download');
+    Route::get('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'downloadCollectedDocument'])->withTrashed()->whereNumber('document')->name('dossiers.collected-documents.download');
     Route::patch('/dossiers/{dossier}/documents-collectes/{document}/partage', [DossierController::class, 'shareCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.sharing');
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::patch('/dossiers/{dossier}/capcee/automatique/{submission}', [AutomaticCapceeController::class, 'update'])->name('capcee.automatic.update');
+        Route::delete('/dossiers/{dossier}', [DossierArchivingController::class, 'destroy'])->name('dossiers.destroy');
+        Route::post('/dossiers/{dossier}/restaurer', [DossierArchivingController::class, 'restore'])->withTrashed()->name('dossiers.restore');
         Route::post('/dossiers/{dossier}/prestations/{operation}/facturation', DossierBillingController::class)->name('dossiers.billing.store');
         Route::post('/dossiers/{dossier}/facturation', [DossierBillingController::class, 'store'])->name('dossiers.billing.mark');
         Route::delete('/documents/{document}', [DossierController::class, 'removeDocument'])->name('documents.destroy');

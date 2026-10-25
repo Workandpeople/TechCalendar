@@ -44,7 +44,10 @@ class NativeAppointmentPlacement
         if (! $operation) {
             $source = $row ? 'lot' : 'appointment';
             $sourceId = (string) ($row?->id ?? $appointment->id);
-            $dossier = Dossier::query()->where('source', $source)->where('source_reference', $sourceId)->lockForUpdate()->first();
+            $dossier = Dossier::withTrashed()->where('source', $source)->where('source_reference', $sourceId)->lockForUpdate()->first();
+            if ($dossier?->trashed()) {
+                throw ValidationException::withMessages(['lot_appointment_id' => 'Ce dossier a été supprimé. Un gérant doit le restaurer avant de placer un rendez-vous.']);
+            }
             if (! $dossier) {
                 $dossier = $this->createDossier($actor, $appointment, $row, $source, $sourceId);
             }

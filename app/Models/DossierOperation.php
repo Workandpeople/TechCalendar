@@ -36,12 +36,13 @@ class DossierOperation extends Model
     public function scopeAwaitingBooking(Builder $query): Builder
     {
         return $query->whereIn('legacy_status', DossierStatusCatalog::STATUSES['pending']['values'])
+            ->whereHas('dossier', fn ($query) => $query->whereNull('dossiers.deleted_at'))
             ->whereDoesntHave('appointments', fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED));
     }
 
     public function dossier(): BelongsTo
     {
-        return $this->belongsTo(Dossier::class);
+        return $this->belongsTo(Dossier::class)->withTrashed();
     }
 
     public function billing(): HasOne

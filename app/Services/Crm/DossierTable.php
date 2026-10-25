@@ -133,6 +133,9 @@ class DossierTable
         }
 
         $fields = $activity->changed_fields ?? [];
+        if (in_array($activity->kind, ['dossier_deleted', 'dossier_restored'], true)) {
+            return ['date' => $activity->created_at, 'label' => $activity->kind === 'dossier_deleted' ? 'Dossier supprimé' : 'Dossier restauré'];
+        }
         $status = $fields['status'] ?? $fields['after']['legacy_status'] ?? null;
         if ($activity->kind === 'legacy_history') {
             // One small reference lookup per table/export, never one query per dossier.

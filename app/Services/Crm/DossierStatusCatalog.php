@@ -18,7 +18,8 @@ final class DossierStatusCatalog
         'report' => ['label' => 'Rapport Genius', 'tone' => 'teal', 'values' => ['RAPPORT GENIUS', 'DOSSIERS FACTURER']],
         'invoiced' => ['label' => 'Dossiers facturés', 'tone' => 'green', 'values' => ['DOSSIERS FACTURER']],
         'cancelled' => ['label' => 'Dossier annulé', 'tone' => 'slate', 'values' => ['DOSSIER ANNULE']],
-        'unknown' => ['label' => 'État non renseigné / autre', 'tone' => 'slate', 'values' => []],
+        // Keep the URL key for old bookmarks and source reconciliation.
+        'unknown' => ['label' => 'Dossiers supprimés', 'tone' => 'slate', 'values' => []],
     ];
 
     public static function describe(?string $value): array
@@ -29,7 +30,7 @@ final class DossierStatusCatalog
             }
         }
 
-        return ['key' => 'unknown', ...self::STATUSES['unknown'], 'label' => filled($value) ? $value : 'État non renseigné'];
+        return ['key' => 'unknown', ...self::STATUSES['unknown']];
     }
 
     public static function filter(Builder $query, string $status): void

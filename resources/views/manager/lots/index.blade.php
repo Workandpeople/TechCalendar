@@ -1,5 +1,5 @@
 <x-layouts.app>
-    <div class="space-y-6">
+    <div class="space-y-6" data-ajax-list="lots">
         <x-workspace-heading title="Les lots" eyebrow="Campagnes de contrôle" description="Importez vos dossiers, suivez les objectifs et retrouvez les résultats. Ouvrez une carte pour accéder au détail du lot.">
             <button id="lot-import-form-open" type="button" class="gc-btn-primary justify-center">
                 <x-nav-icon name="upload" /> Importer un lot
@@ -16,7 +16,7 @@
             </div>
         @endif
 
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <section data-ajax-results="stats" class="grid grid-cols-1 gap-3 md:grid-cols-3">
             @foreach ($stats['status_widgets'] as $widget)
                 <article class="gc-kpi-card flex items-center justify-between gap-4 p-4">
                     <div>
@@ -32,7 +32,7 @@
         </section>
 
         <section class="gc-card p-4">
-            <form id="manager-lot-filters-form" method="GET" action="{{ route('manager.lots') }}" class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <form data-ajax-filters id="manager-lot-filters-form" method="GET" action="{{ route('manager.lots') }}" class="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                     <label class="gc-label" for="q">Recherche</label>
                     <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Client, délégataire, adresse, téléphone, référence" autocomplete="off" />
@@ -65,6 +65,7 @@
             </form>
         </section>
 
+        <div data-ajax-results="lots">
         <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             @forelse ($lots as $lot)
                 @php
@@ -292,6 +293,7 @@
             </div>
         @endif
 
+        </div>
         <div id="lot-action-modal" class="gc-modal hidden">
             <div class="gc-modal-panel flex max-w-3xl flex-col overflow-hidden p-0">
                 <div class="flex items-start justify-between gap-4 border-b p-5" style="border-color:var(--gc-border);">
@@ -751,7 +753,6 @@
         let currentLotAction = null;
 
         const lotImportFormOpen = document.getElementById('lot-import-form-open');
-        const lotImportEmptyOpen = document.getElementById('lot-import-empty-open');
         const lotImportFormModal = document.getElementById('lot-import-form-modal');
         const lotImportFormClose = document.getElementById('lot-import-form-close');
         const lotImportFormCancel = document.getElementById('lot-import-form-cancel');
@@ -816,31 +817,37 @@
         let lotAppointmentAddressTimer = null;
         let lotAppointmentAddressAbortController = null;
 
-        document.querySelectorAll('[data-lot-json]').forEach((script) => {
-            try {
-                const lot = JSON.parse(script.textContent || '{}');
+        const refreshLotPayloads = () => {
+            lotData.clear(); lotAppointmentData.clear();
+            document.querySelectorAll('[data-lot-json]').forEach((script) => {
+                try {
+                    const lot = JSON.parse(script.textContent || '{}');
 
-                if (lot.id) {
-                    lotData.set(String(lot.id), lot);
+                    if (lot.id) {
+                        lotData.set(String(lot.id), lot);
+                    }
+                } catch (error) {
+                    // Données invalides ignorées : le lot reste consultable, seul le modal d’action ne s’ouvrira pas.
                 }
-            } catch (error) {
-                // Données invalides ignorées : le lot reste consultable, seul le modal d’action ne s’ouvrira pas.
-            }
-        });
+            });
 
-        document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
-            try {
-                const appointment = JSON.parse(script.textContent || '{}');
+            document.querySelectorAll('[data-lot-appointment-json]').forEach((script) => {
+                try {
+                    const appointment = JSON.parse(script.textContent || '{}');
 
-                if (appointment.id) {
-                    lotAppointmentData.set(String(appointment.id), appointment);
+                    if (appointment.id) {
+                        lotAppointmentData.set(String(appointment.id), appointment);
+                    }
+                } catch (error) {
+                    // Données de secours ignorées : la ligne restera visible, seul le modal ne s’ouvrira pas.
                 }
-            } catch (error) {
-                // Données de secours ignorées : la ligne restera visible, seul le modal ne s’ouvrira pas.
-            }
-        });
+            });
 
-        if (lotFiltersForm) {
+        };
+        refreshLotPayloads();
+        document.addEventListener('techcalendar:filters-updated', refreshLotPayloads);
+
+        if (lotFiltersForm && !lotFiltersForm.hasAttribute('data-ajax-filters')) {
             lotFiltersForm.querySelectorAll('select').forEach((select) => {
                 select.addEventListener('change', () => lotFiltersForm.submit());
             });
@@ -851,39 +858,15 @@
             });
         }
 
-        document.querySelectorAll('[data-lot-card-href]').forEach((card) => {
-            const goToLotDetail = () => {
-                const target = card.dataset.lotCardHref;
-
-                if (target) {
-                    window.location.href = target;
-                }
-            };
-
-            card.addEventListener('click', (event) => {
-                if (event.target.closest('button, a, input, select, textarea, label')) {
-                    return;
-                }
-
-                goToLotDetail();
-            });
-
-            card.addEventListener('keydown', (event) => {
-                if (!['Enter', ' '].includes(event.key)) {
-                    return;
-                }
-
-                event.preventDefault();
-                goToLotDetail();
-            });
+        document.addEventListener('click', (event) => {
+            const action = event.target.closest('.lot-action-trigger');
+            if (action) { event.preventDefault(); openLotActionModal(action.dataset.lotId); return; }
+            const card = event.target.closest('[data-lot-card-href]');
+            if (card && !event.target.closest('button,a,input,select,textarea,label')) window.location.href = card.dataset.lotCardHref;
         });
-
-        document.querySelectorAll('.lot-action-trigger').forEach((button) => {
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openLotActionModal(button.dataset.lotId);
-            });
+        document.addEventListener('keydown', (event) => {
+            const card = event.target.closest('[data-lot-card-href]');
+            if (card && event.target === card && ['Enter', ' '].includes(event.key)) { event.preventDefault(); window.location.href = card.dataset.lotCardHref; }
         });
 
         lotActionClose?.addEventListener('click', closeLotActionModal);
@@ -2118,9 +2101,7 @@
             }
         }
 
-        document.querySelectorAll('.lot-appointment-edit-trigger').forEach((button) => {
-            button.addEventListener('click', () => openLotAppointmentEditModal(button.dataset.lotAppointmentId));
-        });
+        document.addEventListener('click', event => { const button = event.target.closest('.lot-appointment-edit-trigger'); if (button) openLotAppointmentEditModal(button.dataset.lotAppointmentId); });
 
         lotAppointmentEditClose?.addEventListener('click', closeLotAppointmentEditModal);
         lotAppointmentEditCancel?.addEventListener('click', closeLotAppointmentEditModal);
@@ -2236,7 +2217,7 @@
         lotPhysicalSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotContactSamplingPercentage?.addEventListener('input', updateLotImportState);
         lotImportFormOpen?.addEventListener('click', openLotImportFormModal);
-        lotImportEmptyOpen?.addEventListener('click', openLotImportFormModal);
+        document.addEventListener('click', event => { if (event.target.closest('#lot-import-empty-open')) openLotImportFormModal(); });
         lotImportFormClose?.addEventListener('click', closeLotImportFormModal);
         lotImportFormCancel?.addEventListener('click', closeLotImportFormModal);
         updateLotImportState();

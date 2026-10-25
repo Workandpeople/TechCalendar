@@ -33,6 +33,9 @@ class DossierDocumentRequest extends FormRequest
             'inspected_on' => [Rule::requiredIf($report), 'nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
             'issued_on' => [Rule::requiredIf($report), 'nullable', 'date_format:Y-m-d', 'after_or_equal:inspected_on', 'before_or_equal:today'],
             'outcome' => [Rule::requiredIf($report), 'nullable', Rule::in(array_keys(PostVisitWorkflow::OUTCOMES))],
+            'capcee_emmy_reference' => ['nullable', 'string', 'max:255', 'not_regex:/[\x00-\x1F\x7F]/'],
+            'capcee_object_type' => ['nullable', Rule::in(['Operation__c', 'Action__c'])],
+            'capcee_inspection_type' => ['nullable', Rule::in(['site', 'contact'])],
             'workflow_action' => ['sometimes', Rule::in(['store', 'submit_control', 'revise_control', 'validate_report'])],
             'version' => [Rule::requiredIf($report || $visit), 'nullable', 'integer', 'min:1'],
         ];

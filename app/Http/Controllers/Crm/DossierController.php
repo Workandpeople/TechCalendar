@@ -7,6 +7,7 @@ use App\Http\Requests\Crm\DossierDocumentRequest;
 use App\Http\Requests\Crm\DossierListRequest;
 use App\Http\Requests\Crm\DossierRequest;
 use App\Models\Appointment;
+use App\Models\CapceeAutomaticSubmission;
 use App\Models\Dossier;
 use App\Models\DossierActivity;
 use App\Models\DossierDocument;
@@ -87,6 +88,17 @@ class DossierController extends Controller
     public function show(Request $request, Dossier $dossier, DossierLinkedDocuments $linkedDocuments, CollectedDossierDocuments $collectedDocuments): View
     {
         Gate::authorize('view', $dossier);
+        if ($dossier->trashed()) {
+            return view('crm.dossiers.archived', [
+                'dossier' => $dossier->load('operations.service'),
+                'services' => app(DossierRegistry::class)->references()['services'],
+                'documents' => $dossier->documents()->latest('id')->paginate(25),
+                'legacyDocuments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
+                    ->where('source_table', 'dossier_document')->whereNull('hidden_at')->orderByDesc('source_id')
+                    ->paginate(20, ['*'], 'legacy_documents_page')->through(fn ($record) => $collectedDocuments->describe($record)),
+                'activities' => $dossier->activities()->with('author')->latest('id')->paginate(25, ['*'], 'history_page'),
+            ]);
+        }
         $dossier->load(['client', 'delegataire', 'planningUser', 'operations' => fn ($query) => $query
             ->with(['service', 'billing.marker', 'reportDocument', 'controlValidator', 'capceeReports.latestDelivery', 'appointments' => fn ($appointments) => $appointments->latest('starts_at')->latest('id')->limit(1)])
             ->withCount('appointments')]);
@@ -110,6 +122,9 @@ class DossierController extends Controller
                 ->get(['appointments.id', 'dossier_operation_id', 'starts_at'])->groupBy('dossier_operation_id'),
             'controlDocuments' => $dossier->documents()->where('mime_type', 'application/pdf')->orderBy('name')->get(['id', 'name', 'document_type', 'dossier_operation_id']),
             'capceeUnavailable' => app(CapceeReports::class)->availability(),
+            'automaticCapcee' => CapceeAutomaticSubmission::query()
+                ->whereHas('document', fn ($query) => $query->where('dossier_id', $dossier->id))
+                ->with('document', 'delivery')->latest('id')->limit(30)->get(),
             'legacyDocuments' => $legacyDocuments,
             'comments' => $dossier->comments()->with('author')->latest('created_at')->latest('id')
                 ->paginate(25, ['*'], 'comments_page')->withQueryString()->fragment('commentaires'),
@@ -153,7 +168,7 @@ class DossierController extends Controller
     {
         $intake->store($request->user(), $dossier, $request->validated(), ContentAudience::fromRequest($request, 'client'));
 
-        return redirect()->to(route('v2.dossiers.show', $dossier).'#documents')->with('status', 'Document enregistré. Aucun envoi externe automatique.');
+        return redirect()->to(route('v2.dossiers.show', $dossier).'#documents')->with('status', 'Document enregistré. Pour un délégataire CAPCEE, consulte le suivi de la transmission après validation du rapport.');
     }
 
     public function download(DossierDocument $document, Request $request, DossierRegistry $registry): StreamedResponse

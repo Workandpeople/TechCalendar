@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\CapceeAutomaticSubmission;
 use App\Models\CapceeDelivery;
+use App\Services\Capcee\AutomaticCapceeReports;
 use App\Services\Capcee\CapceeDeliveryProcessor;
 use App\Services\Capcee\CapceeReports;
 use Illuminate\Console\Command;
@@ -21,6 +23,11 @@ class DispatchCapceeReports extends Command
             return self::FAILURE;
         }
         $count = 0;
+        CapceeAutomaticSubmission::query()->with('document')->whereNull('capcee_delivery_id')
+            ->where('environment', config('capcee.environment'))
+            ->whereIn('block_reason', ['configuration', 'previous_delivery', 'preparation'])
+            ->orderBy('updated_at')->orderBy('id')->limit(50)->get()
+            ->each(fn ($submission) => app(AutomaticCapceeReports::class)->dispatch($submission));
         CapceeDelivery::query()->whereHas('report', fn ($query) => $query->where('environment', config('capcee.environment')))
             ->where(function ($query): void {
                 $query->where(fn ($query) => $query->where('status', 'queued')->where('next_attempt_at', '<=', now()))

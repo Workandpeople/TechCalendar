@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'payload',
     'last_synced_at',
     'portal_categories',
+    'capcee_enabled',
 ])]
 class ExternalDelegataire extends Model
 {
@@ -38,6 +39,7 @@ class ExternalDelegataire extends Model
     {
         return [
             'is_active' => 'boolean',
+            'capcee_enabled' => 'boolean',
             'payload' => 'array',
             'portal_categories' => 'array',
             'last_synced_at' => 'datetime',

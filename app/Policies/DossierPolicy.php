@@ -23,15 +23,15 @@ class DossierPolicy
 
     public function comment(User $user, Dossier $dossier): bool
     {
-        return $this->view($user, $dossier) && (! $user->isExternal()
+        return ! $dossier->trashed() && $this->view($user, $dossier) && (! $user->isExternal()
             || app(ClientAccess::class)->allows($user, 'add_comments'));
     }
 
     public function uploadDocument(User $user, Dossier $dossier): bool
     {
-        return $user->isExternal()
+        return ! $dossier->trashed() && ($user->isExternal()
             ? app(ClientAccess::class)->uploadDocument($user, $dossier)
-            : $this->view($user, $dossier);
+            : $this->view($user, $dossier));
     }
 
     public function respondToNonConformity(User $user, Dossier $dossier): bool
@@ -46,27 +46,37 @@ class DossierPolicy
 
     public function update(User $user, Dossier $dossier): bool
     {
-        return $this->viewAny($user);
+        return ! $dossier->trashed() && $this->viewAny($user);
     }
 
     public function sendSms(User $user, Dossier $dossier): bool
     {
-        return $this->viewAny($user);
+        return ! $dossier->trashed() && $this->viewAny($user);
     }
 
     public function transmitReport(User $user, Dossier $dossier): bool
     {
-        return $this->view($user, $dossier) && ($user->admin || $user->role === 0);
+        return ! $dossier->trashed() && $this->view($user, $dossier) && ($user->admin || $user->role === 0);
     }
 
     public function reviewControl(User $user, Dossier $dossier): bool
     {
-        return $this->view($user, $dossier) && ($user->admin || $user->role === 0);
+        return ! $dossier->trashed() && $this->view($user, $dossier) && ($user->admin || $user->role === 0);
     }
 
     public function manageBilling(User $user, Dossier $dossier): bool
     {
-        return $this->viewAny($user) && ($user->admin || $user->role === 0
+        return ! $dossier->trashed() && $this->viewAny($user) && ($user->admin || $user->role === 0
             || ($user->role === 1 && $user->can_manage_billing));
+    }
+
+    public function delete(User $user, Dossier $dossier): bool
+    {
+        return ! $dossier->trashed() && $this->viewAny($user) && ($user->admin || $user->role === 0);
+    }
+
+    public function restore(User $user, Dossier $dossier): bool
+    {
+        return $dossier->trashed() && $this->viewAny($user) && ($user->admin || $user->role === 0);
     }
 }

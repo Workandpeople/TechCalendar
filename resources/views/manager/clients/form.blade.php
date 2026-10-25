@@ -14,6 +14,13 @@
                 <div><label for="phone" class="gc-label">Téléphone</label><input id="phone" name="phone" value="{{ old('phone', $client->phone) }}" class="gc-input" maxlength="60"></div>
                 <div><label for="is_active" class="gc-label">Accès de l’organisation</label><select id="is_active" name="is_active" class="gc-input"><option value="1" @selected(old('is_active', $client->is_active))>Actif</option><option value="0" @selected(! old('is_active', $client->is_active))>Désactivé</option></select><p class="mt-2 text-xs text-slate-500">Désactiver bloque immédiatement tous ses comptes, sans supprimer ses dossiers.</p></div>
             </div>
+            <fieldset class="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-2" data-capcee-organisation>
+                <legend class="px-2 font-semibold">Intégration CAPCEE</legend>
+                <input type="hidden" name="capcee_enabled" value="0">
+                <label class="flex items-center gap-2"><input type="checkbox" name="capcee_enabled" value="1" @checked(old('capcee_enabled', $client->capcee_enabled))>Activer l’envoi automatique des rapports validés pour ce délégataire</label>
+                <p class="text-xs text-slate-600">Réservé aux délégataires. Les prochains rapports validés en « Rapport Genius » seront préparés depuis le PDF déjà enregistré, avec une référence EMMY explicite. Cette case ne renvoie pas les archives, ne crée pas d’identifiants API et n’active aucun email bénéficiaire.</p>
+                @if (! config('capcee.enabled'))<p class="text-xs font-semibold">L’API est actuellement désactivée : aucun envoi réel tant que sa configuration n’est pas validée.</p>@endif
+            </fieldset>
             <fieldset class="gc-category-policy space-y-4 rounded-xl border border-slate-200 p-4">
                 <legend class="px-2 font-semibold">Catégories de dossiers accessibles</legend>
                 @php

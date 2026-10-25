@@ -1,5 +1,5 @@
 <x-layouts.app :crm-navigation="true">
-    <div class="space-y-6" data-dossier-list>
+    <div class="space-y-6" data-dossier-list data-preferences-key="techcalendar:dossiers:v1:{{ auth()->id() }}">
         <x-workspace-heading title="Les dossiers" eyebrow="Suivi des inspections" description="Retrouvez une inspection, consultez ses pièces et faites avancer ses prestations, de la prise de RDV au rapport.">
             <a href="{{ route('v2.dossiers.export', $filters) }}" data-dossier-export data-export-url="{{ route('v2.dossiers.export') }}" class="gc-btn-success"><x-nav-icon name="download" />Exporter les résultats filtrés</a>
             <a href="{{ route('v2.dossiers.create') }}" class="gc-btn-primary"><x-nav-icon name="plus" /> Nouveau dossier</a>

@@ -13,7 +13,7 @@ beforeEach(function () {
     config(['crm.v2_enabled' => true]);
     Http::preventStrayRequests();
     $this->actor = User::factory()->create(['role' => 0, 'admin' => false]);
-    $this->planner = User::factory()->create(['role' => 1, 'first_name' => 'Alice', 'last_name' => 'Planning']);
+    $this->planner = User::factory()->create(['role' => 0, 'first_name' => 'Alice', 'last_name' => 'Gérante']);
     $this->dossier = Dossier::create(['reference' => 'VISITED-1', 'company_name' => 'Inspection test', 'address' => '1 rue du Test', 'city' => 'Lyon']);
     $this->operation = $this->dossier->operations()->create();
     $this->operation->forceFill(['legacy_status' => 'RDV VISITE'])->save();
@@ -33,7 +33,7 @@ it('assigns and reassigns visited dossiers with a private audit without changing
     expect($activity->author_id)->toBe($this->actor->id)->and($activity->client_visible)->toBeFalse()
         ->and($activity->kind)->toBe('planning_assigned')
         ->and($activity->changed_fields)->toBe(['previous_planning_user_id' => null, 'planning_user_id' => $this->planner->id]);
-    $other = User::factory()->create(['role' => 1]);
+    $other = User::factory()->create(['role' => 0]);
     $this->patchJson($this->url, ['planning_user_id' => $other->id, 'version' => 2])->assertOk()->assertJsonPath('version', 3);
     expect($this->dossier->refresh()->planning_user_id)->toBe($other->id)
         ->and($this->dossier->activities()->count())->toBe(2);
@@ -41,7 +41,7 @@ it('assigns and reassigns visited dossiers with a private audit without changing
 });
 
 it('allows planning staff to assign and to remove an assignment without duplicate history', function () {
-    $this->actingAs($this->planner);
+    $this->actingAs(User::factory()->create(['role' => 1]));
     $this->patchJson($this->url, ['planning_user_id' => $this->planner->id, 'version' => 1])->assertOk();
     $this->patchJson($this->url, ['planning_user_id' => $this->planner->id, 'version' => 2])->assertOk()->assertJsonPath('version', 2);
     expect($this->dossier->activities()->count())->toBe(1);
@@ -69,9 +69,9 @@ it('supports mixed dossiers as long as one operation is visited', function () {
     expect($this->dossier->operations()->pluck('legacy_status')->all())->toBe(['RDV VISITE', 'PRISE DE RDV']);
 });
 
-it('rejects non planning external and deleted targets including stale role assignments', function (string $kind) {
+it('rejects non manager external and deleted targets including stale role assignments', function (string $kind) {
     $target = User::factory()->create(['role' => match ($kind) {
-        'manager' => 0, 'technician' => 2, 'external' => 3, default => 1,
+        'planner' => 1, 'technician' => 2, 'external' => 3, default => 0,
     }]);
     if ($kind === 'deleted') {
         $target->delete();
@@ -83,7 +83,7 @@ it('rejects non planning external and deleted targets including stale role assig
     $this->patchJson($this->url, ['planning_user_id' => $target->id, 'version' => 1])->assertUnprocessable();
     expect(app(DossierPlanningAssignment::class)->users()->modelKeys())->not->toContain($target->id)
         ->and($this->dossier->activities()->count())->toBe(0);
-})->with(['manager', 'technician', 'external', 'linked_external', 'deleted']);
+})->with(['planner', 'technician', 'external', 'linked_external', 'deleted']);
 
 it('validates assignment and version inputs before any write', function (array $payload) {
     $this->patchJson($this->url, $payload)->assertUnprocessable();

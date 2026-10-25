@@ -14,7 +14,7 @@ class DossierPlanningAssignment
 {
     private function eligibleUsers(): Builder
     {
-        return User::query()->internal()->where('role', 1);
+        return User::query()->internal()->where('role', 0);
     }
 
     public function users(): Collection
@@ -38,7 +38,7 @@ class DossierPlanningAssignment
 
             $user = $userId === null ? null : $this->eligibleUsers()->lockForUpdate()->find($userId);
             if ($userId !== null && ! $user) {
-                throw ValidationException::withMessages(['planning_user_id' => 'Choisis un utilisateur planning interne non supprimé.']);
+                throw ValidationException::withMessages(['planning_user_id' => 'Choisis un gérant interne actif.']);
             }
             if ($locked->planning_user_id === $userId) {
                 return $locked;

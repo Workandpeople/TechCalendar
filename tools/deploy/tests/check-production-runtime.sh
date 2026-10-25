@@ -282,3 +282,4 @@ mysql --defaults-file=/etc/mysql/fixture.cnf --batch --execute 'SELECT id,email,
 cmp -s /tmp/runtime-users-before-update.tsv /tmp/runtime-users-after-request.tsv
 sha256sum -c /tmp/runtime-original.sha256
 printf 'OK : runtime, mise a jour PHP, compte desactive sans doublon, TLS, authentification, worker et Reverb verifies ; site original inchange.\n'
+bash "$APP/tools/deploy/tests/check-production-release.sh"

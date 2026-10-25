@@ -9,6 +9,17 @@
             <a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>
             <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier les informations</a>
         </x-workspace-heading>
+        @can('delete', $dossier)
+            <div class="flex justify-end"><a href="#supprimer-dossier" class="gc-link text-sm"><x-nav-icon name="trash" />Supprimer le dossier</a></div>
+            <x-dossier-dialog id="supprimer-dossier" title="Supprimer ce dossier ?">
+                <form method="POST" action="{{ route('v2.dossiers.destroy', $dossier) }}" class="space-y-3">
+                    @csrf @method('DELETE')<input type="hidden" name="version" value="{{ $dossier->version }}">
+                    <p>Le dossier sera retiré des listes actives et des accès externes. Ses pièces, rendez-vous, historique et marquage de facturation seront conservés. Un gérant pourra le restaurer.</p>
+                    <label class="gc-label">Motif (facultatif)<textarea name="reason" class="gc-input" maxlength="1000" rows="2"></textarea></label>
+                    <footer class="gc-dialog-actions"><button type="button" data-dialog-close class="gc-btn-secondary">Annuler</button><button type="submit" class="gc-btn-danger">Confirmer la suppression</button></footer>
+                </form>
+            </x-dossier-dialog>
+        @endcan
         @include('crm.dossiers.notice')
         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
         <a href="#facturation" class="inline-block"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>

@@ -1752,3 +1752,86 @@ necessaires ; aucun import existant ne doit etre relance sur la V2 peuplee.
 Validation : tests unitaires du rendu et fixture jetable avec vrais Apache/TLS,
 refus sans consentement, echec de config/rechargement, chemins profonds, ACME,
 certificats conserves, V2 intacte, retour arriere et modification concurrente.
+
+### 15. Correctifs du compte rendu du 25 octobre
+
+Cette release ne remplace pas Coffrac original. L'utilisateur a execute le retour
+arriere de la section 14 : l'ancien domaine sert donc de nouveau la V1. Les
+commandes de cette section ne remettent pas ce domaine en maintenance.
+
+- « Suivi planning » propose les gerants internes actifs (role 0), pas les
+  utilisateurs Planning. Une affectation ancienne reste lisible, sans conversion
+  automatique des comptes ni reassignment silencieux.
+- La categorie et les choix 25/50/100 lignes sont conserves par compte dans le
+  navigateur. Les recherches personnelles et noms de clients ne sont pas stockes.
+  Une URL avec filtres explicites reste prioritaire sur les preferences.
+- L'ancienne categorie `unknown` devient « Dossiers supprimes ». La migration
+  classe tous ses anciens dossiers en suppression logique, y compris sans fiche
+  ou avec plusieurs fiches dont une sans etat connu. Elle conserve les donnees
+  sources brutes et tous les marquages de facturation. Aucun DELETE physique.
+  Les gerants/admins peuvent supprimer et restaurer, avec version et audit prives.
+  Une fiche historique sans etat reprend en prise de RDV ; un dossier sans fiche
+  exige de choisir une prestation. Les autres etats ne sont pas reinitialises.
+- Les dossiers supprimes sortent des listes actives et des acces externes ; leurs
+  documents et historiques restent consultables en interne. Les modifications,
+  nouvelles reservations et facturations sont bloquees avant restauration.
+- Filtres AJAX sur les listes dossiers, utilisateurs internes, organisations,
+  prestations, mails, lots et dossiers d'un lot. Les modales et donnees JSON des
+  lignes sont reinitialisees apres rafraichissement, sans rejouer de script HTML.
+- La case CAPCEE d'un delegataire est desactivee par defaut. Seules les nouvelles
+  validations de rapports Genius creent une intention de transmission du PDF deja
+  depose. Aucun rattrapage automatique des anciennes archives. Les identifiants
+  EMMY, objet et type doivent etre explicites ; jamais deduits de la reference du
+  dossier/controle. Le suivi permet de les completer sans redeposer le PDF.
+  La file/version existante est reutilisee ; un PDF et des metadonnees identiques
+  reutilisent l'envoi existant. L'email beneficiaire est toujours desactive dans
+  ce parcours automatique. Permissions, affectation, validation et environnement
+  sont reverifies par le worker. API desactivee : intention locale seulement,
+  aucun appel, debit, livraison ou replay de job externe.
+
+Cette release comporte deux migrations V2 et des assets reconstruits. **Ne pas
+utiliser `--update-user-management`**, ne pas relancer le seeder ou l'import, et
+ne pas recopier les documents. Le nouvel outil reste limite a la recette interne :
+emails/portails fermes, SMS desactives/simules, CAPCEE desactive, Global+ TEST.
+
+Sur le Mac, apres commit du code, construire sans le `.env` local :
+
+```bash
+bash tools/deploy/prepare-production-update.sh REVISION_COMPLETE_DU_RUNTIME_ACTUEL
+```
+
+Le paquet contient les assets et un manifeste lie aux revisions exacte ancienne
+et nouvelle, sans secret, base, document ni dependance a installer sur le serveur.
+Envoyer ce repertoire dans `/home/ubuntu`, puis sur `ns365601` :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --maintenance --reload-shared-apache &&
+sudo -H -u cofrac2-deploy git -C /var/www/cofrac2 pull --ff-only origin v2 &&
+sudo bash /var/www/cofrac2/tools/deploy/update-production-release.sh \
+    --apply /home/ubuntu/PAQUET_ASSETS SHA256_DU_MANIFESTE &&
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh \
+    --open --reload-shared-apache
+```
+
+L'updater refuse un service V2 actif, un `.env` modifie, des dependances ou des
+migrations inattendues, une autre revision et toute configuration PHP/service
+dediee differente. Il sauvegarde la base V2 avec le seul compte SQL V2 limite,
+le code precedent, les assets et le `.env` dans un repertoire root prive
+`/var/lib/cofrac2-production/release-*`. Il ne lit pas le SQL Coffrac original.
+Seules les deux nouvelles migrations sont appliquees, sans seeder, puis les
+caches et assets sont prepares et la revision runtime avance apres controles.
+La configuration partagee et les processus existants sont compares avant/apres.
+Seul `--open` relance les trois services dedies et recharge Apache gracieusement.
+
+En cas d'echec, **la V2 reste en maintenance**. Ne pas lancer de `migrate:fresh`,
+rollback automatique, restauration SQL ou reimport. Conserver le diagnostic
+prive pour une reprise ciblee. Le retour arriere de l'ancien domaine (section 14)
+n'annule pas une release V2 et ne doit pas etre utilise pour la mettre a jour.
+
+La fixture jetable teste MySQL reel, sauvegarde et restauration de controle dans
+une autre base jetable, les deux migrations depuis l'ancien schema, les refus,
+une panne de migration suivie d'une reprise, les assets, HTTPS, worker et Reverb.
+Elle verifie les comptes et les fichiers source inchanges. Le durcissement
+systemd du vrai serveur et les livraisons d'API reelles restent des controles
+distincts ; aucun acces ou envoi externe n'est active par cette release.

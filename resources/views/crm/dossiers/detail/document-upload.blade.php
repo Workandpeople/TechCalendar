@@ -35,7 +35,16 @@
             <div><label class="gc-label" for="report-inspected">Date du rendez-vous réalisé *</label><input class="gc-input" id="report-inspected" name="inspected_on" type="date" max="{{ now()->toDateString() }}" value="{{ old('inspected_on') }}" required></div>
             <div><label class="gc-label" for="report-issued">Date d’émission *</label><input class="gc-input" id="report-issued" name="issued_on" type="date" max="{{ now()->toDateString() }}" value="{{ old('issued_on') }}" required></div>
             <div><label class="gc-label" for="report-outcome">Avis du rapport *</label><select class="gc-input" id="report-outcome" name="outcome" required><option value="">Choisir</option>@foreach (\App\Services\Crm\PostVisitWorkflow::OUTCOMES as $key => $label)<option value="{{ $key }}" @selected(old('outcome') === $key)>{{ $label }}</option>@endforeach</select></div>
-            <p class="text-xs text-slate-500 sm:col-span-2">L’avis met à jour la satisfaction physique du lot lié, sans décider de l’état. L’envoi CAPCEE reste une action séparée.</p>
+            <p class="text-xs text-slate-500 sm:col-span-2">L’avis met à jour la satisfaction physique du lot lié, sans décider de l’état.</p>
+            @if ($dossier->delegataire?->kind === 'delegataire' && $dossier->delegataire->capcee_enabled)
+                <fieldset class="sm:col-span-2 space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <legend class="font-semibold">Transmission automatique CAPCEE</legend>
+                    <p class="text-xs">Ce PDF sera préparé pour CAPCEE après validation en « Rapport Genius ». Si ces identifiants manquent, le rapport est conservé localement et la transmission reste bloquée. Aucun email bénéficiaire.</p>
+                    <label class="gc-label">Référence EMMY (distincte de la référence du contrôle)<input class="gc-input" name="capcee_emmy_reference" maxlength="255" value="{{ old('capcee_emmy_reference') }}"></label>
+                    <label class="gc-label">Objet CAPCEE<select class="gc-input" name="capcee_object_type"><option value="">À renseigner</option>@foreach (['Operation__c' => 'Opération', 'Action__c' => 'Action'] as $key => $label)<option value="{{ $key }}" @selected(old('capcee_object_type') === $key)>{{ $label }}</option>@endforeach</select></label>
+                    <label class="gc-label">Type d’inspection<select class="gc-input" name="capcee_inspection_type"><option value="">À renseigner</option><option value="site" @selected(old('capcee_inspection_type') === 'site')>Sur site</option><option value="contact" @selected(old('capcee_inspection_type') === 'contact')>Par contact</option></select></label>
+                </fieldset>
+            @endif
         </fieldset>
         <p class="text-sm font-medium" role="status" data-document-effect></p>
         <div><label class="gc-label" for="document-description">Description / observations</label><textarea id="document-description" name="description" class="gc-input" rows="3" maxlength="10000">{{ old('description') }}</textarea></div>

@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 for (const area of ['admin', 'manager']) {
     const source = readFileSync(new URL(`../../resources/views/${area}/users/index.blade.php`, import.meta.url), 'utf8');
     const toggleSource = source.slice(source.indexOf('const toggleBillingPermission ='), source.indexOf('const toggleTechFields ='));
-    const modalSource = source.slice(source.indexOf('openButtons.forEach('), source.indexOf('closeButtons.forEach('));
+    const modalSource = source.slice(source.indexOf("document.addEventListener('click', (event) => {"), source.indexOf('closeButtons.forEach('));
 
     test(`${area}: only Planning can receive an explicit billing grant`, () => {
         const role = { value: '1' };
@@ -39,6 +39,10 @@ for (const area of ['admin', 'manager']) {
                 if (!elements.has(id)) elements.set(id, { value: '', checked: false, disabled: false });
                 return elements.get(id);
             },
+            addEventListener(event, callback) {
+                assert.equal(event, 'click');
+                callbacks.push(callback);
+            },
         };
         const callbacks = [];
         const datasets = [
@@ -51,7 +55,6 @@ for (const area of ['admin', 'manager']) {
             const toggleTechFields = (prefix) => toggleBillingPermission(prefix);
             ${modalSource}`, {
             document,
-            openButtons: datasets.map((dataset) => ({ dataset, addEventListener: (_, callback) => callbacks.push(callback) })),
             window: {},
             parseJsonDataset: () => [],
             setCheckboxValues() {},
@@ -63,18 +66,21 @@ for (const area of ['admin', 'manager']) {
             openModal() {},
         });
 
-        callbacks[0]();
+        assert.equal(callbacks.length, 1);
+        const click = (dataset) => callbacks[0]({ target: { closest: () => dataset ? { dataset } : null } });
+        click(null);
+        click(datasets[0]);
         assert.equal(document.getElementById('edit_can_manage_billing').checked, true);
         assert.equal(document.getElementById('edit_can_manage_billing').disabled, false);
-        callbacks[1]();
+        click(datasets[1]);
         assert.equal(document.getElementById('edit_can_manage_billing').checked, false);
-        callbacks[2]();
+        click(datasets[2]);
         assert.equal(document.getElementById('edit_can_manage_billing').checked, false);
         assert.equal(document.getElementById('edit_can_manage_billing').disabled, true);
 
         document.getElementById('create_role').value = '1';
         document.getElementById('create_can_manage_billing').checked = true;
-        callbacks[3]();
+        click(datasets[3]);
         assert.equal(document.getElementById('create_can_manage_billing').checked, false);
         assert.equal(document.getElementById('create_can_manage_billing').disabled, false);
     });

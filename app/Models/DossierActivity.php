@@ -25,7 +25,7 @@ class DossierActivity extends Model
     public function scopeStatusChanges(Builder $query): void
     {
         $query->where(function (Builder $query): void {
-            $query->where(function (Builder $query): void {
+            $query->whereIn('kind', ['dossier_deleted', 'dossier_restored'])->orWhere(function (Builder $query): void {
                 $query->whereIn('kind', ['status_changed', 'appointment_linked'])
                     ->whereNotNull('changed_fields->status')
                     ->where(fn (Builder $query) => $query->whereNull('changed_fields->previous_status')

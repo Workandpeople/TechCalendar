@@ -33,7 +33,10 @@ final class DossierDocumentIntake
                     'dossier_operation_id' => $operation?->id];
                 if ($report) {
                     $metadata += ['dossier_operation_id' => $operation->id, 'control_reference' => $data['control_reference'],
-                        'inspected_on' => $data['inspected_on'], 'issued_on' => $data['issued_on'], 'control_outcome' => $data['outcome']];
+                        'inspected_on' => $data['inspected_on'], 'issued_on' => $data['issued_on'], 'control_outcome' => $data['outcome'],
+                        'capcee_emmy_reference' => $data['capcee_emmy_reference'] ?? null,
+                        'capcee_object_type' => $data['capcee_object_type'] ?? null,
+                        'capcee_inspection_type' => $data['capcee_inspection_type'] ?? null];
                 }
                 $document = app(DossierRegistry::class)->addDocument($actor, $dossier, $data['document'], $data['name'],
                     $audience['client_visible'], $audience['delegataire_visible'], $metadata);

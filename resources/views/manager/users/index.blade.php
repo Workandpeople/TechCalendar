@@ -1,5 +1,5 @@
 <x-layouts.app>
-    <div class="space-y-6">
+    <div class="space-y-6" data-ajax-list="manager-users">
         <x-workspace-heading title="Utilisateurs internes" eyebrow="Votre équipe" description="Gérez les rôles, les disponibilités et les habilitations de vos collaborateurs. Les comptes clients sont dans Clients et délégataires." />
 
         @if ($errors->any())
@@ -14,10 +14,10 @@
             </div>
         @endif
 
-        <x-user-email-conflict :conflict="$emailConflict" />
+        <div data-ajax-results="email-conflict"><x-user-email-conflict :conflict="$emailConflict" /></div>
 
         <section class="gc-card p-4">
-            <form id="manager-user-filters-form" method="GET" action="{{ route('manager.users') }}" class="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <form data-ajax-filters id="manager-user-filters-form" method="GET" action="{{ route('manager.users') }}" class="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <div class="md:col-span-3">
                     <label class="gc-label" for="q">Recherche</label>
                     <input id="q" name="q" type="text" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom, prénom, email" />
@@ -51,7 +51,7 @@
             </form>
         </section>
 
-        <section class="gc-card overflow-hidden">
+        <section data-ajax-results="table-0" class="gc-card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-left text-sm">
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
@@ -249,7 +249,6 @@
         const escapeMapboxText = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
         const MAPBOX_TOKEN = @json(config('services.mapbox.token'));
         const DEPARTMENT_GEOJSON_URL = @json(asset('geo/departements.geojson'));
-        const openButtons = document.querySelectorAll('[data-modal-open]');
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('manager-user-filters-form');
         const roleInputs = document.querySelectorAll('[data-role-input]');
@@ -649,73 +648,73 @@
             if (modal) modal.classList.add('hidden');
         };
 
-        openButtons.forEach((button) => {
-            button.addEventListener('click', () => {
-                const modalId = button.dataset.modalOpen;
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-modal-open]');
+            if (!button) return;
+            const modalId = button.dataset.modalOpen;
 
-                if (modalId === 'edit-user-modal') {
-                    const form = document.getElementById('edit-user-form');
-                    const userId = button.dataset.userId || '';
-                    form.action = `/manager/users/${userId}`;
-                    document.getElementById('edit_first_name').value = button.dataset.userFirstName || '';
-                    document.getElementById('edit_last_name').value = button.dataset.userLastName || '';
-                    document.getElementById('edit_email').value = button.dataset.userEmail || '';
-                    document.getElementById('edit_role').value = String(button.dataset.userRole ?? 0);
-                    document.getElementById('edit_can_manage_billing').checked = button.dataset.userCanManageBilling === '1';
-                    document.getElementById('edit_phone').value = button.dataset.userPhone || '';
-                    document.getElementById('edit_address').value = button.dataset.userAddress || '';
-                    document.getElementById('edit_department_code').value = button.dataset.userDepartmentCode || '';
-                    document.getElementById('edit_latitude').value = button.dataset.userLatitude || '';
-                    document.getElementById('edit_longitude').value = button.dataset.userLongitude || '';
-                    document.getElementById('edit_day_start_time').value = (button.dataset.userDayStartTime || '').slice(0, 5);
-                    document.getElementById('edit_day_end_time').value = (button.dataset.userDayEndTime || '').slice(0, 5);
-                    document.getElementById('edit_break_duration_minutes').value = button.dataset.userBreakDurationMinutes || '';
-                    setCheckboxValues('[data-service-checkbox="edit"]', parseJsonDataset(button.dataset.userServiceIds));
-                    syncServiceSelectAll('edit');
-                    setCheckboxValues('[data-department-checkbox="edit"]', parseJsonDataset(button.dataset.userDepartmentCodes));
-                    toggleTechFields('edit');
-                    initMapboxAutocomplete('edit');
-                    bindDepartmentCheckboxes('edit');
-                    updateDepartmentMapVisibility('edit');
-                    window.TechCalendarForms?.refresh(form);
-                }
+            if (modalId === 'edit-user-modal') {
+                const form = document.getElementById('edit-user-form');
+                const userId = button.dataset.userId || '';
+                form.action = `/manager/users/${userId}`;
+                document.getElementById('edit_first_name').value = button.dataset.userFirstName || '';
+                document.getElementById('edit_last_name').value = button.dataset.userLastName || '';
+                document.getElementById('edit_email').value = button.dataset.userEmail || '';
+                document.getElementById('edit_role').value = String(button.dataset.userRole ?? 0);
+                document.getElementById('edit_can_manage_billing').checked = button.dataset.userCanManageBilling === '1';
+                document.getElementById('edit_phone').value = button.dataset.userPhone || '';
+                document.getElementById('edit_address').value = button.dataset.userAddress || '';
+                document.getElementById('edit_department_code').value = button.dataset.userDepartmentCode || '';
+                document.getElementById('edit_latitude').value = button.dataset.userLatitude || '';
+                document.getElementById('edit_longitude').value = button.dataset.userLongitude || '';
+                document.getElementById('edit_day_start_time').value = (button.dataset.userDayStartTime || '').slice(0, 5);
+                document.getElementById('edit_day_end_time').value = (button.dataset.userDayEndTime || '').slice(0, 5);
+                document.getElementById('edit_break_duration_minutes').value = button.dataset.userBreakDurationMinutes || '';
+                setCheckboxValues('[data-service-checkbox="edit"]', parseJsonDataset(button.dataset.userServiceIds));
+                syncServiceSelectAll('edit');
+                setCheckboxValues('[data-department-checkbox="edit"]', parseJsonDataset(button.dataset.userDepartmentCodes));
+                toggleTechFields('edit');
+                initMapboxAutocomplete('edit');
+                bindDepartmentCheckboxes('edit');
+                updateDepartmentMapVisibility('edit');
+                window.TechCalendarForms?.refresh(form);
+            }
 
-                if (modalId === 'create-user-modal') {
-                    document.getElementById('create_can_manage_billing').checked = false;
-                    toggleBillingPermission('create');
-                    setCheckboxValues('[data-service-checkbox="create"]', []);
-                    syncServiceSelectAll('create');
-                    setCheckboxValues('[data-department-checkbox="create"]', []);
-                    refreshDepartmentUi('create');
-                    initMapboxAutocomplete('create');
-                    updateDepartmentMapVisibility('create');
-                    window.TechCalendarForms?.refresh(document.getElementById('create_role')?.form);
-                }
+            if (modalId === 'create-user-modal') {
+                document.getElementById('create_can_manage_billing').checked = false;
+                toggleBillingPermission('create');
+                setCheckboxValues('[data-service-checkbox="create"]', []);
+                syncServiceSelectAll('create');
+                setCheckboxValues('[data-department-checkbox="create"]', []);
+                refreshDepartmentUi('create');
+                initMapboxAutocomplete('create');
+                updateDepartmentMapVisibility('create');
+                window.TechCalendarForms?.refresh(document.getElementById('create_role')?.form);
+            }
 
-                if (modalId === 'delete-user-modal') {
-                    document.getElementById('delete-user-form').action = button.dataset.deleteUrl;
-                    document.getElementById('delete-user-name').textContent = button.dataset.userName || '';
-                }
+            if (modalId === 'delete-user-modal') {
+                document.getElementById('delete-user-form').action = button.dataset.deleteUrl;
+                document.getElementById('delete-user-name').textContent = button.dataset.userName || '';
+            }
 
-                if (modalId === 'force-delete-user-modal') {
-                    document.getElementById('force-delete-user-form').action = button.dataset.forceDeleteUrl;
-                    document.getElementById('force-delete-user-name').textContent = button.dataset.userName || '';
-                }
+            if (modalId === 'force-delete-user-modal') {
+                document.getElementById('force-delete-user-form').action = button.dataset.forceDeleteUrl;
+                document.getElementById('force-delete-user-name').textContent = button.dataset.userName || '';
+            }
 
-                if (modalId === 'absence-user-modal') {
-                    const userId = button.dataset.userId || '';
-                    const absences = parseJsonDataset(button.dataset.userAbsences);
-                    document.getElementById('absence-user-name').textContent = button.dataset.userName || '';
-                    document.getElementById('absence-user-form').action = absenceStoreUrlTemplate.replace('__USER__', encodeURIComponent(userId));
-                    document.getElementById('absence_starts_on').value = '';
-                    document.getElementById('absence_ends_on').value = '';
-                    document.getElementById('absence_reason').value = '';
-                    renderAbsenceList(userId, absences);
-                    window.TechCalendarForms?.refresh(document.getElementById('absence-user-form'));
-                }
+            if (modalId === 'absence-user-modal') {
+                const userId = button.dataset.userId || '';
+                const absences = parseJsonDataset(button.dataset.userAbsences);
+                document.getElementById('absence-user-name').textContent = button.dataset.userName || '';
+                document.getElementById('absence-user-form').action = absenceStoreUrlTemplate.replace('__USER__', encodeURIComponent(userId));
+                document.getElementById('absence_starts_on').value = '';
+                document.getElementById('absence_ends_on').value = '';
+                document.getElementById('absence_reason').value = '';
+                renderAbsenceList(userId, absences);
+                window.TechCalendarForms?.refresh(document.getElementById('absence-user-form'));
+            }
 
-                openModal(modalId);
-            });
+            openModal(modalId);
         });
 
         closeButtons.forEach((button) => {
@@ -732,7 +731,7 @@
             Object.values(departmentMaps).forEach((mapState) => mapState?.map?.resize());
         });
 
-        if (filtersForm) {
+        if (filtersForm && !filtersForm.hasAttribute('data-ajax-filters')) {
             const searchInput = document.getElementById('q');
             const instantInputs = ['role', 'status']
                 .map((id) => document.getElementById(id))

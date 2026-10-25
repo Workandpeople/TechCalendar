@@ -10,6 +10,7 @@ use App\Models\DossierOperation;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\User;
+use App\Services\Capcee\AutomaticCapceeReports;
 use App\Services\LotStatusService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -169,6 +170,9 @@ class PostVisitWorkflow
                     'lot_ids' => $lots->modelKeys(), 'visit_document_id' => $data['visit_document_id'] ?? null],
             ]);
             $dossier->increment('version');
+            if ($transition['to'] === 'report') {
+                app(AutomaticCapceeReports::class)->capture($actor, $dossier, $operation);
+            }
 
             return $activity;
         }, 3);

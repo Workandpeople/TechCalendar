@@ -1,5 +1,5 @@
 @php
-    $canAssignPlanning = $dossier->operations->contains(fn ($operation) => in_array($operation->legacy_status, \App\Services\Crm\DossierStatusCatalog::STATUSES['visited']['values'], true));
+    $canAssignPlanning = ! $dossier->trashed() && $dossier->operations->contains(fn ($operation) => in_array($operation->legacy_status, \App\Services\Crm\DossierStatusCatalog::STATUSES['visited']['values'], true));
 @endphp
 @if ($canAssignPlanning)
     <div data-planning-assignment data-assignment-id="{{ $dossier->id }}"
@@ -16,7 +16,7 @@
                 <option value="{{ $planningUser->id }}" @selected($dossier->planning_user_id === $planningUser->id)>{{ $planningUser->full_name }}</option>
             @endforeach
         </select>
-        <p id="assignment-feedback-{{ $dossier->id }}" data-assignment-feedback class="gc-dossier-cell-muted" role="status" aria-live="polite">{{ $planningUsers->isEmpty() ? 'Aucun utilisateur planning disponible.' : '' }}</p>
+        <p id="assignment-feedback-{{ $dossier->id }}" data-assignment-feedback class="gc-dossier-cell-muted" role="status" aria-live="polite">{{ $planningUsers->isEmpty() ? 'Aucun gérant disponible.' : '' }}</p>
         <button type="button" data-assignment-refresh hidden class="mt-1 text-xs underline">Actualiser</button>
     </div>
 @else

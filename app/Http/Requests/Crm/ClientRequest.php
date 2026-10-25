@@ -29,6 +29,7 @@ class ClientRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:190'],
             'phone' => ['nullable', 'string', 'max:60'],
             'is_active' => ['required', 'boolean'],
+            'capcee_enabled' => ['sometimes', 'boolean', Rule::prohibitedIf($this->input('kind') !== 'delegataire' && $this->boolean('capcee_enabled'))],
             'category_mode' => ['sometimes', 'required', Rule::in(['inherit', 'custom'])],
             'categories' => ['sometimes', 'array', 'max:'.count(PortalCategoryAccess::catalogue())],
             'categories.*' => ['required', 'string', 'distinct', Rule::in(array_keys(PortalCategoryAccess::catalogue()))],

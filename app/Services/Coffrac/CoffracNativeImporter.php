@@ -4,6 +4,7 @@ namespace App\Services\Coffrac;
 
 use App\Models\ExternalDelegataire;
 use App\Services\Crm\ClientAccess;
+use App\Services\Crm\DossierArchiving;
 use App\Services\Crm\DossierContacts;
 use App\Services\Crm\LegacyBillingReconciliation;
 use App\Services\Crm\LegacyClientReconciliation;
@@ -157,6 +158,7 @@ final class CoffracNativeImporter extends CoffracProjector
             }
             $this->projectDossiers($snapshot);
             $this->projectOperations($snapshot);
+            $this->report['matching']['deleted_dossiers'] = app(DossierArchiving::class)->classifyLegacyDeleted();
             $this->report['matching']['clients'] = app(LegacyClientReconciliation::class)->run(true);
             $this->projectContactsAndOwners($sourceUsers);
             $this->projectAppointments($snapshot);

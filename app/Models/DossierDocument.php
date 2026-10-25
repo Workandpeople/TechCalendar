@@ -11,7 +11,8 @@ class DossierDocument extends Model
     use SoftDeletes;
 
     protected $fillable = ['author_id', 'name', 'path', 'mime_type', 'size', 'client_visible', 'delegataire_visible',
-        'description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome'];
+        'description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome',
+        'capcee_emmy_reference', 'capcee_object_type', 'capcee_inspection_type'];
 
     protected function casts(): array
     {
@@ -30,6 +31,6 @@ class DossierDocument extends Model
 
     public function dossier(): BelongsTo
     {
-        return $this->belongsTo(Dossier::class);
+        return $this->belongsTo(Dossier::class)->withTrashed();
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Services\Crm;
 
 use App\Models\Appointment;
+use App\Models\CapceeAutomaticSubmission;
 use App\Models\Dossier;
 use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
@@ -43,6 +44,13 @@ class DossierRegistry
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
         $query = $this->filteredQuery($filters);
+        if (($filters['status'] ?? null) === 'unknown') {
+            return $query->withTrashed()->where(function ($deleted): void {
+                $deleted->whereNotNull('dossiers.deleted_at')->orWhere(function ($legacy): void {
+                    $legacy->whereDoesntHave('operations')->orWhereHas('operations', fn ($operations) => DossierStatusCatalog::filter($operations, 'unknown'));
+                });
+            });
+        }
         if (filled($filters['status'] ?? null)) {
             $query->where(function ($query) use ($filters): void {
                 $query->whereHas('operations', function ($operations) use ($filters): void {
@@ -66,16 +74,17 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
-        $query = $this->filteredQuery($filters);
+        $query = $this->filteredQuery($filters)->withTrashed();
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
-        $counts = DB::query()->fromSub((clone $query)->select('dossiers.id'), 'matching_dossiers')
+        $categorySql = "CASE WHEN matching_dossiers.deleted_at IS NOT NULL THEN 'unknown' ELSE $categorySql END";
+        $counts = DB::query()->fromSub((clone $query)->select('dossiers.id', 'dossiers.deleted_at'), 'matching_dossiers')
             ->leftJoin('dossier_operations', 'dossier_operations.dossier_id', '=', 'matching_dossiers.id')
             ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('dossier_operations.service_id', $id))
             ->selectRaw($categorySql.' AS category', $bindings)
             ->selectRaw('COUNT(DISTINCT matching_dossiers.id) AS total')
             ->groupBy('category')->pluck('total', 'category');
 
-        $categories = ['all' => ['label' => 'Tous les dossiers', 'tone' => 'slate', 'count' => $query->count()]];
+        $categories = ['all' => ['label' => 'Tous les dossiers actifs', 'tone' => 'slate', 'count' => (clone $query)->whereNull('dossiers.deleted_at')->count()]];
         foreach (DossierStatusCatalog::STATUSES as $key => $status) {
             if ($key === 'invoiced') {
                 continue;
@@ -186,9 +195,13 @@ class DossierRegistry
     public function addComment(User $actor, Dossier $dossier, string $body, bool $clientVisible = false, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('comment', $dossier);
-        $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $body,
-            'client_visible' => $actor->isExternal() || $clientVisible,
-            'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible))]);
+        DB::transaction(function () use ($actor, $dossier, $body, $clientVisible, $delegataireVisible): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            Gate::forUser($actor)->authorize('comment', $dossier);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $body,
+                'client_visible' => $actor->isExternal() || $clientVisible,
+                'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible))]);
+        });
     }
 
     public function addDocument(User $actor, Dossier $dossier, UploadedFile $file, string $name, bool $clientVisible = false, ?bool $delegataireVisible = null, array $metadata = []): DossierDocument
@@ -208,7 +221,8 @@ class DossierRegistry
                     'mime_type' => $file->getMimeType(), 'size' => $file->getSize(),
                     'client_visible' => $actor->isExternal() || $clientVisible,
                     'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible)),
-                    ...Arr::only($metadata, ['description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome']),
+                    ...Arr::only($metadata, ['description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome',
+                        'capcee_emmy_reference', 'capcee_object_type', 'capcee_inspection_type']),
                 ]);
                 $dossier->activities()->create([
                     'author_id' => $actor->id, 'kind' => 'document', 'body' => 'Document ajouté : '.$name,
@@ -245,8 +259,11 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('update', $document->dossier);
         DB::transaction(function () use ($actor, $document, $visible, $delegataireVisible): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
+            Gate::forUser($actor)->authorize('update', $dossier);
+            $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
             $document->update(['client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible)]);
-            $document->dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
                 'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($document->client_visible, $document->delegataire_visible)].' » : '.$document->name,
                 'changed_fields' => ['document_id' => $document->id, 'client_visible' => $document->client_visible, 'delegataire_visible' => $document->delegataire_visible]]);
         });
@@ -256,6 +273,8 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('update', $dossier);
         DB::transaction(function () use ($actor, $dossier, $id, $visible, $delegataireVisible): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            Gate::forUser($actor)->authorize('update', $dossier);
             $comment = $dossier->comments()->lockForUpdate()->findOrFail($id);
             $comment->update(['client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible), 'visibility_reviewed_at' => now()]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment_visibility',
@@ -268,6 +287,8 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('update', $dossier);
         DB::transaction(function () use ($actor, $dossier, $id): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            Gate::forUser($actor)->authorize('update', $dossier);
             $comment = $dossier->comments()->whereIn('kind', ['comment', 'legacy_comment'])->lockForUpdate()->findOrFail($id);
             $comment->update(['hidden_at' => now(), 'client_visible' => false, 'delegataire_visible' => false]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment_removed',
@@ -281,7 +302,11 @@ class DossierRegistry
         DB::transaction(function () use ($actor, $document): void {
             // Same parent lock as the report workflow: a validated PDF cannot disappear mid-review.
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
+            Gate::forUser($actor)->authorize('update', $dossier);
             $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
+            if (CapceeAutomaticSubmission::where('dossier_document_id', $document->id)->exists()) {
+                throw ValidationException::withMessages(['document' => 'Ce rapport possède un suivi CAPCEE. Il est conservé pour garantir la traçabilité des transmissions.']);
+            }
             if ($dossier->operations()->where('report_document_id', $document->id)->exists()
                 || ($document->document_type === 'visit' && $dossier->activities()->where('changed_fields->visit_document_id', $document->id)->exists())) {
                 throw ValidationException::withMessages(['document' => 'Ce document justifie une visite ou le dernier avis du contrôle. Il est conservé dans l’historique et ne peut pas être supprimé.']);
@@ -294,7 +319,7 @@ class DossierRegistry
 
     private function reportDuplicateReference(string $reference, UniqueConstraintViolationException $exception): never
     {
-        if (Dossier::query()->where('reference', $reference)->exists()) {
+        if (Dossier::withTrashed()->where('reference', $reference)->exists()) {
             throw ValidationException::withMessages(['reference' => 'Cette référence est déjà utilisée. Le dossier n’a pas été créé en double.']);
         }
         throw $exception;

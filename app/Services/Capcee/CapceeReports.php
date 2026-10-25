@@ -60,6 +60,8 @@ class CapceeReports
         $path = null;
         try {
             $delivery = DB::transaction(function () use ($actor, $dossier, $operation, $data, $file, $report, $metadata, $size, $hash, &$path): CapceeDelivery {
+                $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+                Gate::forUser($actor)->authorize('transmitReport', $dossier);
                 // Serializes creation and revisions without holding a DB lock during HTTP calls.
                 DossierOperation::query()->lockForUpdate()->findOrFail($operation->id);
                 $existing = CapceeDelivery::query()->where('submission_token', $data['submission_token'])->first();
@@ -134,6 +136,8 @@ class CapceeReports
         abort_unless($delivery->report->operation->dossier_id === $dossier->id, 404);
         $this->assertReady();
         DB::transaction(function () use ($dossier, $actor, $delivery): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            Gate::forUser($actor)->authorize('transmitReport', $dossier);
             $locked = CapceeDelivery::query()->lockForUpdate()->findOrFail($delivery->id);
             if ($locked->status !== 'failed' || in_array($locked->stage, ['uploading', 'linking'], true)
                 || $locked->report->environment !== config('capcee.environment')) {

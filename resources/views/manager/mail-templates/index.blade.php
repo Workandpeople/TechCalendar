@@ -39,7 +39,7 @@ MD;
         ];
     @endphp
 
-    <div class="space-y-6">
+    <div class="space-y-6" data-ajax-list="mail-templates">
         <x-workspace-heading title="Modèles de mails" eyebrow="Communication" description="Préparez vos messages et leurs expéditeurs. Consultez l’aperçu avant d’utiliser un modèle pour un rendez-vous." />
 
         @if ($errors->any())
@@ -53,7 +53,7 @@ MD;
         @endif
 
         <section class="gc-card p-4">
-            <form id="mail-template-filters-form" method="GET" action="{{ route('manager.mail-templates') }}" class="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+            <form data-ajax-filters id="mail-template-filters-form" method="GET" action="{{ route('manager.mail-templates') }}" class="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                 <div>
                     <label class="gc-label" for="q">Recherche</label>
                     <input id="q" name="q" type="text" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom ou sujet" />
@@ -75,7 +75,7 @@ MD;
             </form>
         </section>
 
-        <section class="gc-card overflow-hidden">
+        <section data-ajax-results="table-0" class="gc-card overflow-hidden">
             <div class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between" style="border-color:var(--gc-border);">
                 <div>
                     <h2 class="gc-workspace-section-title text-lg font-semibold" style="color:var(--gc-text);"><x-nav-icon name="mail" />Expéditeurs</h2>
@@ -162,7 +162,7 @@ MD;
             </div>
         </section>
 
-        <section class="gc-card overflow-hidden">
+        <section data-ajax-results="table-1" class="gc-card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-left text-sm">
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
@@ -733,36 +733,38 @@ MD;
 
         document.querySelector('[data-template-create]')?.addEventListener('click', () => setEditorMode());
 
-        document.querySelectorAll('[data-template-edit]').forEach((button) => {
-            button.addEventListener('click', () => {
-                setEditorMode(JSON.parse(button.dataset.templateEdit || '{}'));
-            });
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-template-edit]');
+            if (!button) return;
+            setEditorMode(JSON.parse(button.dataset.templateEdit || '{}'));
         });
 
-        document.querySelectorAll('[data-template-delete]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const template = JSON.parse(button.dataset.templateDelete || '{}');
-                deleteForm.action = template.delete_url || '#';
-                deleteName.textContent = template.name || '';
-                openModal(deleteModal);
-            });
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-template-delete]');
+            if (!button) return;
+            const template = JSON.parse(button.dataset.templateDelete || '{}');
+            deleteForm.action = template.delete_url || '#';
+            deleteName.textContent = template.name || '';
+            openModal(deleteModal);
         });
 
-        document.querySelector('[data-mail-sender-create]')?.addEventListener('click', () => setSenderEditorMode());
-
-        document.querySelectorAll('[data-mail-sender-edit]').forEach((button) => {
-            button.addEventListener('click', () => {
-                setSenderEditorMode(JSON.parse(button.dataset.mailSenderEdit || '{}'));
-            });
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('[data-mail-sender-create]')) setSenderEditorMode();
         });
 
-        document.querySelectorAll('[data-mail-sender-delete]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const sender = JSON.parse(button.dataset.mailSenderDelete || '{}');
-                deleteSenderForm.action = sender.delete_url || '#';
-                deleteSenderName.textContent = sender.name || '';
-                openModal(deleteSenderModal);
-            });
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-mail-sender-edit]');
+            if (!button) return;
+            setSenderEditorMode(JSON.parse(button.dataset.mailSenderEdit || '{}'));
+        });
+
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-mail-sender-delete]');
+            if (!button) return;
+            const sender = JSON.parse(button.dataset.mailSenderDelete || '{}');
+            deleteSenderForm.action = sender.delete_url || '#';
+            deleteSenderName.textContent = sender.name || '';
+            openModal(deleteSenderModal);
         });
 
         document.querySelectorAll('[data-mail-template-editor-close]').forEach((button) => {
@@ -802,7 +804,7 @@ MD;
             });
         });
 
-        if (filtersForm) {
+        if (filtersForm && !filtersForm.hasAttribute('data-ajax-filters')) {
             const searchInput = document.getElementById('q');
             const statusInput = document.getElementById('status');
             let filterTimer = null;

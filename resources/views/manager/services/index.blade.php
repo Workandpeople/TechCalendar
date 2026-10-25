@@ -1,5 +1,5 @@
 <x-layouts.app>
-    <div class="space-y-6">
+    <div class="space-y-6" data-ajax-list="services">
         <x-workspace-heading title="Prestations" eyebrow="Référentiel métier" description="Définissez les prestations et leur durée pour préparer des rendez-vous adaptés aux habilitations des techniciens." />
 
         @if ($errors->any())
@@ -13,7 +13,7 @@
         @endif
 
         <section class="gc-card p-4">
-            <form id="service-filters-form" method="GET" action="{{ route('manager.services') }}" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <form data-ajax-filters id="service-filters-form" method="GET" action="{{ route('manager.services') }}" class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="gc-label" for="q">Recherche</label>
                     <input id="q" name="q" type="text" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom de la prestation" />
@@ -38,7 +38,7 @@
             </form>
         </section>
 
-        <section class="gc-card overflow-hidden">
+        <section data-ajax-results="table-0" class="gc-card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-left text-sm">
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
@@ -189,7 +189,6 @@
     </div>
 
     <script>
-        const openButtons = document.querySelectorAll('[data-modal-open]');
         const closeButtons = document.querySelectorAll('[data-modal-close]');
         const filtersForm = document.getElementById('service-filters-form');
         const serviceTechnicianCheckboxes = Array.from(document.querySelectorAll('[data-service-technician-checkbox]'));
@@ -204,31 +203,31 @@
             if (modal) modal.classList.add('hidden');
         };
 
-        openButtons.forEach((button) => {
-            button.addEventListener('click', () => {
-                const modalId = button.dataset.modalOpen;
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-modal-open]');
+            if (!button) return;
+            const modalId = button.dataset.modalOpen;
 
-                if (modalId === 'edit-service-modal') {
-                    const form = document.getElementById('edit-service-form');
-                    form.action = `/manager/services/${button.dataset.serviceId}`;
-                    document.getElementById('edit_type').value = button.dataset.serviceType || '';
-                    document.getElementById('edit_name').value = button.dataset.serviceName || '';
-                    document.getElementById('edit_average_duration_minutes').value = button.dataset.serviceDuration || '';
-                    if (document.getElementById('edit_external_aliases')) document.getElementById('edit_external_aliases').value = JSON.parse(button.dataset.serviceAliases || '[]').join('\n');
-                    window.TechCalendarForms?.refresh(form);
-                }
+            if (modalId === 'edit-service-modal') {
+                const form = document.getElementById('edit-service-form');
+                form.action = `/manager/services/${button.dataset.serviceId}`;
+                document.getElementById('edit_type').value = button.dataset.serviceType || '';
+                document.getElementById('edit_name').value = button.dataset.serviceName || '';
+                document.getElementById('edit_average_duration_minutes').value = button.dataset.serviceDuration || '';
+                if (document.getElementById('edit_external_aliases')) document.getElementById('edit_external_aliases').value = JSON.parse(button.dataset.serviceAliases || '[]').join('\n');
+                window.TechCalendarForms?.refresh(form);
+            }
 
-                if (modalId === 'create-service-modal') {
-                    window.TechCalendarForms?.refresh(document.querySelector('#create-service-modal form'));
-                }
+            if (modalId === 'create-service-modal') {
+                window.TechCalendarForms?.refresh(document.querySelector('#create-service-modal form'));
+            }
 
-                if (modalId === 'delete-service-modal') {
-                    document.getElementById('delete-service-form').action = button.dataset.deleteUrl;
-                    document.getElementById('delete-service-name').textContent = button.dataset.serviceName || '';
-                }
+            if (modalId === 'delete-service-modal') {
+                document.getElementById('delete-service-form').action = button.dataset.deleteUrl;
+                document.getElementById('delete-service-name').textContent = button.dataset.serviceName || '';
+            }
 
-                openModal(modalId);
-            });
+            openModal(modalId);
         });
 
         closeButtons.forEach((button) => {
@@ -253,7 +252,7 @@
             });
         });
 
-        if (filtersForm) {
+        if (filtersForm && !filtersForm.hasAttribute('data-ajax-filters')) {
             const searchInput = document.getElementById('q');
             const typeInput = document.getElementById('type');
 
