@@ -6,8 +6,11 @@
 - URL temporaire confirmee : `https://cofrac2.geniuscontrole.com`.
 - URL finale : `https://cofrac.geniuscontrole.com`.
 - Coffrac actuel : `/home/ubuntu/www/coffrac_preprod`, toujours en service.
-- Consigne confirmee : ne modifier ni les fichiers, ni la base, ni les vhosts,
-  ni les regles d'acces de Coffrac original. Aucun confinement de l'ancien site.
+- Consigne initiale : ne modifier ni les fichiers, ni la base, ni les vhosts,
+  ni les regles d'acces de Coffrac original. Exception confirmee le 25 octobre :
+  mise en maintenance immediate des seuls vhosts de `cofrac.geniuscontrole.com`,
+  avec page statique vers Cofrac 2 et sauvegarde de retour arriere (section 14).
+  Le code, les donnees, les documents et les processus originaux restent intacts.
 - Ne redemarrer aucun service existant. L'ajout du seul vhost `cofrac2` et du
   certificat a ete demande separement le 23 octobre : il autorise le rechargement
   gracieux d'Apache partage, apres controle de configuration, sans modifier les
@@ -1686,3 +1689,66 @@ est tracee dans le marqueur prive avec son etat precedent. Le site reste
 statique jusqu'au succes de `--open`. Aucun seeder, migration, import SQL,
 renvoi de mail/SMS, modification de compte ou nouvelle copie documentaire.
 En cas d'echec, conserver le diagnostic et ne pas reinitialiser la base.
+
+### 14. Maintenance de l'ancien domaine, autorisation du 25 octobre
+
+L'utilisateur demande explicitement l'activation immediate, meme si les portails
+externes et l'envoi reel des emails V2 sont encore fermes. La page indique les
+identifiants conserves, propose « Mot de passe oublie » et precise qu'une
+activation par l'equipe peut etre necessaire. Ne pas promettre qu'un email sera
+livre tant que l'envoi reel n'a pas ete valide et active separement.
+
+Le paquet autonome contient uniquement :
+
+- `configure-legacy-domain-maintenance.sh` ;
+- `legacy-domain-maintenance.php` ;
+- `legacy-domain-maintenance.html` ;
+- leur manifeste `SHA256SUMS`.
+
+Il peut etre envoye et execute depuis `/home/ubuntu` sans faire de pull dans la
+V2 active. Aucun changement de son marqueur de revision n'est necessaire et le
+mode `--update-user-management` n'est pas a rejouer pour cette operation.
+
+```bash
+cd /home/ubuntu/PAQUET_MAINTENANCE
+sha256sum -c SHA256SUMS &&
+sudo bash ./configure-legacy-domain-maintenance.sh \
+    --activate --reload-shared-apache
+```
+
+Le script exige le serveur `ns365601`, les deux vhosts connus actives par leurs
+liens habituels, les modules deja charges et une page de connexion HTTPS V2 en
+HTTP 200. Il refuse les alias ou includes TLS non reconnus. Il conserve les
+directives du certificat/TLS existant sans lancer Certbot, puis remplace seulement :
+
+- `/etc/apache2/sites-available/cofrac.geniuscontrole.com.conf` ;
+- `/etc/apache2/sites-available/cofrac.geniuscontrole.com-le-ssl.conf`.
+
+Les originaux sont sauvegardes sous le repertoire root prive
+`/var/lib/cofrac2-production/legacy-domain-maintenance/run-*`. La page statique
+est installee dans `/var/www/cofrac-legacy-maintenance`, en lecture seule. Les
+URL ordinaires de l'ancien domaine et de son alias `www`, y compris les liens
+profonds, PHP, documents et alias administratifs, retournent HTTP 503 avec cette
+page. Aucun ancien `.htaccess` n'est execute. Seuls les jetons ACME au nom strict
+sont encore servis en texte depuis le webroot de renouvellement original ; le
+script ne cree ni ne modifie aucun fichier dans ce webroot.
+
+Apres configtest, seul un rechargement **gracieux** d'Apache partage est effectue.
+Les controles comparent les autres configurations actives et les etats/PID des
+services, verifient le meme PID Apache, les reponses 503 sans cache et le login
+HTTPS V2 toujours en 200. Une erreur restaure les deux configurations precedentes
+si elles n'ont pas subi de modification concurrente. Le script de retour arriere
+refuse egalement d'ecraser des vhosts modifies apres l'activation.
+
+```bash
+sudo bash /var/lib/cofrac2-production/legacy-domain-maintenance/rollback.sh
+```
+
+Cette maintenance HTTP **n'est pas un gel transactionnel de la source** : les
+workers, cron et autres domaines historiques, notamment `preprod`, ne sont pas
+modifies. La collecte finale coherente et le differentiel documentaire restent
+necessaires ; aucun import existant ne doit etre relance sur la V2 peuplee.
+
+Validation : tests unitaires du rendu et fixture jetable avec vrais Apache/TLS,
+refus sans consentement, echec de config/rechargement, chemins profonds, ACME,
+certificats conserves, V2 intacte, retour arriere et modification concurrente.
