@@ -751,7 +751,7 @@
                 @json($appointment)
             </script>
         @endforeach
-        </div>
+    </div>
     </div>
 
     <div id="lot-physical-detail-modal" class="gc-modal hidden">
@@ -1164,7 +1164,6 @@
                     // Une ligne mal sérialisée ne doit pas bloquer le tableau complet.
                 }
             });
-
         };
         refreshLotAppointmentPayloads();
         document.addEventListener('techcalendar:filters-updated', refreshLotAppointmentPayloads);
@@ -1636,1154 +1635,1154 @@
 
             lotAppointmentDetails.set(String(appointment.id), appointment);
 
-                document.querySelectorAll('[data-lot-appointment-row]').forEach((row) => {
-                    if (row.dataset.lotAppointmentId !== String(appointment.id)) return;
-                    row.querySelectorAll('[data-lot-file-field]').forEach((cell) => {
-                        const value = appointment[cell.dataset.lotFileField];
-                        cell.textContent = value === null || value === undefined || String(value).trim() === '' ? '-' : String(value);
-                    });
+            document.querySelectorAll('[data-lot-appointment-row]').forEach((row) => {
+                if (row.dataset.lotAppointmentId !== String(appointment.id)) return;
+                row.querySelectorAll('[data-lot-file-field]').forEach((cell) => {
+                    const value = appointment[cell.dataset.lotFileField];
+                    cell.textContent = value === null || value === undefined || String(value).trim() === '' ? '-' : String(value);
                 });
+            });
 
-                const lotDocumentsIndex = lotDocumentsAppointments.findIndex((item) => String(item.id) === String(appointment.id));
+            const lotDocumentsIndex = lotDocumentsAppointments.findIndex((item) => String(item.id) === String(appointment.id));
 
-                if (lotDocumentsIndex >= 0) {
-                    lotDocumentsAppointments[lotDocumentsIndex] = appointment;
-                }
-
-                if (currentPhysicalLotAppointment?.id === appointment.id) {
-                    currentPhysicalLotAppointment = appointment;
-                }
-
-                if (currentContactLotAppointment?.id === appointment.id) {
-                    currentContactLotAppointment = appointment;
-                }
-
-                updateGlobalPlusBadges(appointment);
+            if (lotDocumentsIndex >= 0) {
+                lotDocumentsAppointments[lotDocumentsIndex] = appointment;
             }
 
-            function renderLotDocumentsList(appointment, listElement, countElement) {
-                if (!listElement || !countElement) {
-                    return;
-                }
+            if (currentPhysicalLotAppointment?.id === appointment.id) {
+                currentPhysicalLotAppointment = appointment;
+            }
 
-                const documents = Array.isArray(appointment?.documents) ? appointment.documents : [];
-                countElement.textContent = String(documents.length);
+            if (currentContactLotAppointment?.id === appointment.id) {
+                currentContactLotAppointment = appointment;
+            }
 
-                if (documents.length === 0) {
-                    listElement.innerHTML = `
-                        <div class="flex min-h-[180px] items-center justify-center rounded-3xl border border-dashed p-6 text-center text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text-soft);">
-                            <div>
-                                <p class="font-semibold" style="color:var(--gc-text);">Aucun document</p>
-                                <p class="mt-1">Ajoute les fichiers depuis le panneau de droite.</p>
-                            </div>
+            updateGlobalPlusBadges(appointment);
+        }
+
+        function renderLotDocumentsList(appointment, listElement, countElement) {
+            if (!listElement || !countElement) {
+                return;
+            }
+
+            const documents = Array.isArray(appointment?.documents) ? appointment.documents : [];
+            countElement.textContent = String(documents.length);
+
+            if (documents.length === 0) {
+                listElement.innerHTML = `
+                    <div class="flex min-h-[180px] items-center justify-center rounded-3xl border border-dashed p-6 text-center text-sm" style="border-color:var(--gc-border);background:var(--gc-panel-muted);color:var(--gc-text-soft);">
+                        <div>
+                            <p class="font-semibold" style="color:var(--gc-text);">Aucun document</p>
+                            <p class="mt-1">Ajoute les fichiers depuis le panneau de droite.</p>
                         </div>
-                    `;
-                    return;
-                }
-
-                listElement.innerHTML = documents.map((document) => {
-                    const meta = documentStatusMeta(document.status);
-                    const remoteLink = document.remote_url
-                        ? `<a href="${escapeHtml(document.remote_url)}" target="_blank" rel="noopener" class="gc-link text-xs">Ouvrir côté Coffrac</a>`
-                        : '';
-                    const visibilityBadge = document.is_private
-                        ? '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#fee2e2;color:#991b1b;">Privé</span>'
-                        : '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#dcfce7;color:#166534;">Public</span>';
-                    const actions = `
-                        <div class="flex flex-wrap items-center gap-2">
-                            ${document.can_update ? '<button type="button" class="gc-btn-soft px-3 py-1.5 text-xs" data-document-action="rename">Renommer</button>' : ''}
-                            ${document.can_delete ? '<button type="button" class="gc-btn-danger px-3 py-1.5 text-xs" data-document-action="delete">Supprimer</button>' : ''}
-                            ${remoteLink}
-                        </div>
-                    `;
-
-                    return `
-                        <article class="rounded-2xl border p-4 shadow-sm" data-lot-document-id="${document.id}" data-document-update-url="${escapeHtml(document.update_url || '')}" data-document-delete-url="${escapeHtml(document.delete_url || '')}" style="border-color:var(--gc-border);background:#ffffff;">
-                            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                <div class="min-w-0 flex-1">
-                                    <input type="text" class="gc-input h-11 text-sm font-semibold" value="${escapeHtml(document.name || document.original_name || 'Document')}" ${document.can_update ? '' : 'disabled'} data-document-name-input>
-                                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
-                                        <span>${escapeHtml(document.original_name || '')} · ${escapeHtml(document.size_label || '')}</span>
-                                        ${visibilityBadge}
-                                    </div>
-                                    ${document.error_message ? `<p class="mt-1 text-xs" style="color:#be123c;">${escapeHtml(document.error_message)}</p>` : ''}
-                                </div>
-                                <div class="flex shrink-0 flex-col gap-2 lg:items-end">
-                                    <span class="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold" style="background:${meta.background};color:${meta.color};">${escapeHtml(document.status_label || 'En attente')}</span>
-                                    ${actions}
-                                </div>
-                            </div>
-                        </article>
-                    `;
-                }).join('');
+                    </div>
+                `;
+                return;
             }
 
-            function renderStagedDocumentFiles(files, listElement) {
-                if (!listElement) {
-                    return;
-                }
-
-                listElement.innerHTML = files.map((file, index) => {
-                    const defaultName = (file.name || 'Document').replace(/\.[^.]+$/, '');
-
-                    return `
-                        <div class="rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
-                            <div class="flex items-start gap-3">
-                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">${index + 1}</div>
-                                <div class="min-w-0 flex-1">
-                                    <label class="gc-label">Nom du document</label>
-                                    <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(defaultName)}" data-staged-document-name="${index}">
-                                </div>
-                            </div>
-                            <div class="mt-3 flex flex-wrap items-center justify-between gap-3 pl-0 md:pl-[52px]">
-                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(file.name)} · ${Math.max(1, Math.round((file.size || 0) / 1024))} Ko</p>
-                                <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);background:#ffffff;">
-                                    <input type="checkbox" class="rounded border-slate-300" data-staged-document-private="${index}">
-                                    Privé
-                                </label>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            function setDocumentUploadStatus(statusElement, message, color = 'var(--gc-text-soft)') {
-                if (!statusElement) {
-                    return;
-                }
-
-                statusElement.textContent = message;
-                statusElement.style.color = color;
-                statusElement.classList.remove('hidden');
-            }
-
-            function clearDocumentUploadStatus(statusElement) {
-                statusElement?.classList.add('hidden');
-                if (statusElement) {
-                    statusElement.textContent = '';
-                }
-            }
-
-            function stageDocumentFiles(context, files) {
-                context.stagedFiles = Array.from(files || []);
-                context.form?.classList.toggle('hidden', context.stagedFiles.length === 0);
-                renderStagedDocumentFiles(context.stagedFiles, context.uploadList);
-                clearDocumentUploadStatus(context.status);
-                if (context.stagedFiles.length === 0 && context.fileInput) {
-                    context.fileInput.value = '';
-                }
-            }
-
-            async function uploadStagedDocuments(context) {
-                const appointment = context.getAppointment();
-
-                if (!appointment?.documents_upload_url || context.stagedFiles.length === 0 || context.submit?.disabled) {
-                    return;
-                }
-
-                context.submit.disabled = true;
-                context.submit.textContent = 'Ajout en cours...';
-                setDocumentUploadStatus(context.status, 'Upload des documents en cours...');
-
-                let latestAppointment = appointment;
-
-                try {
-                    for (let index = 0; index < context.stagedFiles.length; index++) {
-                        const file = context.stagedFiles[index];
-                        const nameInput = context.uploadList?.querySelector(`[data-staged-document-name="${index}"]`);
-                        const privateInput = context.uploadList?.querySelector(`[data-staged-document-private="${index}"]`);
-                        const formData = new FormData();
-
-                        formData.append('document', file);
-                        formData.append('name', nameInput?.value || file.name);
-                        formData.append('is_private', privateInput?.checked ? '1' : '0');
-
-                        const response = await fetch(appointment.documents_upload_url, {
-                            method: 'POST',
-                            headers: {
-                                Accept: 'application/json',
-                                'X-CSRF-TOKEN': lotDetailCsrfToken,
-                            },
-                            body: formData,
-                        });
-                        const payload = await response.json();
-
-                        if (!response.ok) {
-                            throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Upload impossible.');
-                        }
-
-                        latestAppointment = payload.appointment || latestAppointment;
-                        updateLotAppointmentState(latestAppointment);
-                        context.onAppointmentUpdated?.(latestAppointment);
-                    }
-
-                    context.stagedFiles = [];
-                    context.form?.classList.add('hidden');
-                    context.fileInput.value = '';
-                    renderStagedDocumentFiles([], context.uploadList);
-                    setDocumentUploadStatus(context.status, 'Documents ajoutés.', '#15803d');
-                } catch (error) {
-                    setDocumentUploadStatus(context.status, error.message || 'Upload impossible.', '#be123c');
-                } finally {
-                    context.submit.disabled = false;
-                    context.submit.textContent = context.submitLabel;
-                }
-            }
-
-            function setupDocumentUploader(context) {
-                const defaultBorderColor = context.defaultBorderColor || 'var(--gc-border)';
-                const defaultBackground = context.defaultBackground || '#fbfaf6';
-
-                context.dropzone?.addEventListener('click', () => context.fileInput?.click());
-                context.fileInput?.addEventListener('change', () => stageDocumentFiles(context, context.fileInput.files));
-                context.dropzone?.addEventListener('dragover', (event) => {
-                    event.preventDefault();
-                    context.dropzone.style.borderColor = 'var(--gc-accent)';
-                    context.dropzone.style.background = '#fff7d6';
-                });
-                context.dropzone?.addEventListener('dragleave', () => {
-                    context.dropzone.style.borderColor = defaultBorderColor;
-                    context.dropzone.style.background = defaultBackground;
-                });
-                context.dropzone?.addEventListener('drop', (event) => {
-                    event.preventDefault();
-                    context.dropzone.style.borderColor = defaultBorderColor;
-                    context.dropzone.style.background = defaultBackground;
-                    stageDocumentFiles(context, event.dataTransfer?.files || []);
-                });
-                context.form?.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    uploadStagedDocuments(context);
-                });
-            }
-
-            async function handleDocumentListAction(event, getAppointment, onAppointmentUpdated) {
-                const button = event.target.closest('[data-document-action]');
-
-                if (!button) {
-                    return;
-                }
-
-                const item = button.closest('[data-lot-document-id]');
-                const action = button.dataset.documentAction;
-                const nameInput = item?.querySelector('[data-document-name-input]');
-
-                if (!item || !action) {
-                    return;
-                }
-
-                button.disabled = true;
-
-                try {
-                    const response = await fetch(action === 'rename' ? item.dataset.documentUpdateUrl : item.dataset.documentDeleteUrl, {
-                        method: action === 'rename' ? 'PATCH' : 'DELETE',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': lotDetailCsrfToken,
-                        },
-                        body: action === 'rename'
-                            ? JSON.stringify({ name: nameInput?.value || 'Document' })
-                            : null,
-                    });
-                    const payload = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Action impossible.');
-                    }
-
-                    const appointment = payload.appointment || getAppointment();
-                    updateLotAppointmentState(appointment);
-                    onAppointmentUpdated?.(appointment);
-                } catch (error) {
-                    window.alert(error.message || 'Action impossible.');
-                } finally {
-                    button.disabled = false;
-                }
-            }
-
-            function renderLotDocumentsCard() {
-                const appointment = currentLotDocumentsAppointment();
-                const total = lotDocumentsAppointments.length;
-
-                lotDocumentsCounter.textContent = total > 0 ? `${lotDocumentsCurrentIndex + 1} / ${total}` : '0 / 0';
-                lotDocumentsPrev.disabled = lotDocumentsCurrentIndex <= 0;
-                lotDocumentsNext.disabled = lotDocumentsCurrentIndex >= total - 1;
-
-                if (!appointment) {
-                    lotDocumentsEmpty.classList.remove('hidden');
-                    lotDocumentsCard.classList.add('hidden');
-                    return;
-                }
-
-                lotDocumentsEmpty.classList.add('hidden');
-                lotDocumentsCard.classList.remove('hidden');
-                lotDocumentsCardReference.textContent = appointment.row_number
-                    ? `Ligne ${appointment.row_number}${appointment.external_reference ? ` · Réf. ${appointment.external_reference}` : ''}`
-                    : (appointment.external_reference ? `Réf. ${appointment.external_reference}` : 'Dossier du lot');
-                lotDocumentsCardTitle.textContent = customerLabel(appointment);
-                lotDocumentsCardSubtitle.textContent = [appointment.site_name ? `Site : ${appointment.site_name}` : null, appointment.installer_name ? `Installateur : ${appointment.installer_name}` : null].filter(Boolean).join(' · ');
-                lotDocumentsCardStatus.textContent = appointment.status_label || 'À traiter';
-                lotDocumentsCardInfos.innerHTML = lotDocumentsInfoGrid([
-                    ['Téléphone', appointment.customer_phone],
-                    ['Adresse', fullAddress(appointment)],
-                    ['Prestation', appointment.service_label],
-                    ['Commentaire', appointment.comment],
-                ]);
-                renderLotDocumentsList(appointment, lotDocumentsCardList, lotDocumentsCardDocCount);
-            }
-
-            async function loadLotDocuments() {
-                const url = new URL(lotDocumentsUrl, window.location.origin);
-                const search = lotDocumentsSearch?.value?.trim();
-
-                if (search) {
-                    url.searchParams.set('q', search);
-                }
-
-                lotDocumentsStatus.textContent = 'Chargement des dossiers...';
-                lotDocumentsStatus.style.color = 'var(--gc-text-soft)';
-
-                try {
-                    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
-                    const payload = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(payload.message || 'Chargement impossible.');
-                    }
-
-                    lotDocumentsAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
-                    lotDocumentsAppointments.forEach(updateLotAppointmentState);
-                    lotDocumentsCurrentIndex = 0;
-                    lotDocumentsStatus.textContent = lotDocumentsAppointments.length
-                        ? `${lotDocumentsAppointments.length} dossier(s) trouvé(s).`
-                        : 'Aucun dossier ne correspond à la recherche.';
-                    renderLotDocumentsCard();
-                } catch (error) {
-                    lotDocumentsStatus.textContent = error.message || 'Chargement impossible.';
-                    lotDocumentsStatus.style.color = '#be123c';
-                    lotDocumentsAppointments = [];
-                    lotDocumentsCurrentIndex = 0;
-                    renderLotDocumentsCard();
-                }
-            }
-
-            const lotDocumentsUploadContext = {
-                dropzone: lotDocumentsDropzone,
-                fileInput: lotDocumentsFileInput,
-                form: lotDocumentsUploadForm,
-                uploadList: lotDocumentsUploadList,
-                submit: lotDocumentsUploadSubmit,
-                status: lotDocumentsUploadStatus,
-                submitLabel: 'Ajouter au dossier',
-                stagedFiles: [],
-                defaultBorderColor: '#d8c27a',
-                defaultBackground: '#ffffff',
-                getAppointment: currentLotDocumentsAppointment,
-                onAppointmentUpdated: (appointment) => {
-                    updateLotAppointmentState(appointment);
-                    renderLotDocumentsCard();
-                },
-            };
-            const physicalDocumentsUploadContext = {
-                dropzone: physicalDocumentsDropzone,
-                fileInput: physicalDocumentsFileInput,
-                form: physicalDocumentsUploadForm,
-                uploadList: physicalDocumentsUploadList,
-                submit: physicalDocumentsUploadSubmit,
-                status: physicalDocumentsUploadStatus,
-                submitLabel: 'Ajouter les documents',
-                stagedFiles: [],
-                getAppointment: () => currentPhysicalLotAppointment,
-                onAppointmentUpdated: (appointment) => {
-                    updateLotAppointmentState(appointment);
-                    renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount);
-                },
-            };
-            const contactDocumentsUploadContext = {
-                dropzone: contactDocumentsDropzone,
-                fileInput: contactDocumentsFileInput,
-                form: contactDocumentsUploadForm,
-                uploadList: contactDocumentsUploadList,
-                submit: contactDocumentsUploadSubmit,
-                status: contactDocumentsUploadStatus,
-                submitLabel: 'Ajouter les documents',
-                stagedFiles: [],
-                getAppointment: () => currentContactLotAppointment,
-                onAppointmentUpdated: (appointment) => {
-                    updateLotAppointmentState(appointment);
-                    renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
-                },
-            };
-
-            setupDocumentUploader(lotDocumentsUploadContext);
-            setupDocumentUploader(physicalDocumentsUploadContext);
-            setupDocumentUploader(contactDocumentsUploadContext);
-            lotDocumentsCardList?.addEventListener('click', (event) => handleDocumentListAction(event, currentLotDocumentsAppointment, renderLotDocumentsCard));
-            physicalDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
-                event,
-                () => currentPhysicalLotAppointment,
-                (appointment) => renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount),
-            ));
-            contactDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
-                event,
-                () => currentContactLotAppointment,
-                (appointment) => renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount),
-            ));
-
-            function isLotDetailSamplingType(type) {
-                return lotDetailSamplingTypes.includes(type);
-            }
-
-            function isLotDetailHybridType(type) {
-                return type === lotDetailHybridType;
-            }
-
-            function lotDetailCoffracAliasesForService(serviceId) {
-                const service = lotDetailServices.find((item) => String(item.id) === String(serviceId));
-
-                return Array.isArray(service?.aliases) ? service.aliases : [];
-            }
-
-            function lotDetailCoffracAliasSelectedValue() {
-                return lotDetailEditCoffracAliasId?.value || lotDetailCurrentLot.coffrac_service_alias_id || '';
-            }
-
-            function populateLotDetailCoffracAliasSelect(serviceId, selectedAliasId = '', options = {}) {
-                if (!lotDetailEditCoffracAliasId) {
-                    return;
-                }
-
-                const aliases = lotDetailCoffracAliasesForService(serviceId);
-
-                lotDetailEditCoffracAliasId.innerHTML = '';
-
-                if (!serviceId) {
-                    lotDetailEditCoffracAliasId.add(new Option('Sélectionner une prestation', ''));
-                    lotDetailEditCoffracAliasId.disabled = true;
-                    return;
-                }
-
-                if (!aliases.length) {
-                    lotDetailEditCoffracAliasId.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
-                    lotDetailEditCoffracAliasId.disabled = true;
-                    return;
-                }
-
-                lotDetailEditCoffracAliasId.add(new Option('Utiliser le fallback automatique', ''));
-                aliases.forEach((alias) => {
-                    lotDetailEditCoffracAliasId.add(new Option(alias.label, alias.id));
-                });
-
-                const selectedValue = selectedAliasId
-                    ? String(selectedAliasId)
-                    : (options.selectFirst ? String(aliases[0]?.id || '') : '');
-
-                lotDetailEditCoffracAliasId.value = aliases.some((alias) => String(alias.id) === selectedValue)
-                    ? selectedValue
+            listElement.innerHTML = documents.map((document) => {
+                const meta = documentStatusMeta(document.status);
+                const remoteLink = document.remote_url
+                    ? `<a href="${escapeHtml(document.remote_url)}" target="_blank" rel="noopener" class="gc-link text-xs">Ouvrir côté Coffrac</a>`
                     : '';
-                lotDetailEditCoffracAliasId.disabled = false;
+                const visibilityBadge = document.is_private
+                    ? '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#fee2e2;color:#991b1b;">Privé</span>'
+                    : '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#dcfce7;color:#166534;">Public</span>';
+                const actions = `
+                    <div class="flex flex-wrap items-center gap-2">
+                        ${document.can_update ? '<button type="button" class="gc-btn-soft px-3 py-1.5 text-xs" data-document-action="rename">Renommer</button>' : ''}
+                        ${document.can_delete ? '<button type="button" class="gc-btn-danger px-3 py-1.5 text-xs" data-document-action="delete">Supprimer</button>' : ''}
+                        ${remoteLink}
+                    </div>
+                `;
+
+                return `
+                    <article class="rounded-2xl border p-4 shadow-sm" data-lot-document-id="${document.id}" data-document-update-url="${escapeHtml(document.update_url || '')}" data-document-delete-url="${escapeHtml(document.delete_url || '')}" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div class="min-w-0 flex-1">
+                                <input type="text" class="gc-input h-11 text-sm font-semibold" value="${escapeHtml(document.name || document.original_name || 'Document')}" ${document.can_update ? '' : 'disabled'} data-document-name-input>
+                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs" style="color:var(--gc-text-soft);">
+                                    <span>${escapeHtml(document.original_name || '')} · ${escapeHtml(document.size_label || '')}</span>
+                                    ${visibilityBadge}
+                                </div>
+                                ${document.error_message ? `<p class="mt-1 text-xs" style="color:#be123c;">${escapeHtml(document.error_message)}</p>` : ''}
+                            </div>
+                            <div class="flex shrink-0 flex-col gap-2 lg:items-end">
+                                <span class="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold" style="background:${meta.background};color:${meta.color};">${escapeHtml(document.status_label || 'En attente')}</span>
+                                ${actions}
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function renderStagedDocumentFiles(files, listElement) {
+            if (!listElement) {
+                return;
             }
 
-            function updateLotDetailEditSamplingState() {
-                if (!lotDetailEditType || !lotDetailEditSamplingPercentage) {
-                    return;
-                }
+            listElement.innerHTML = files.map((file, index) => {
+                const defaultName = (file.name || 'Document').replace(/\.[^.]+$/, '');
 
-                const currentType = lotDetailEditType.value;
-                const needsSampling = isLotDetailSamplingType(currentType);
-                const needsHybridSampling = isLotDetailHybridType(currentType);
-                const needsSingleSampling = needsSampling && !needsHybridSampling;
+                return `
+                    <div class="rounded-2xl border bg-white p-3" style="border-color:var(--gc-border);">
+                        <div class="flex items-start gap-3">
+                            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">${index + 1}</div>
+                            <div class="min-w-0 flex-1">
+                                <label class="gc-label">Nom du document</label>
+                                <input type="text" class="gc-input h-10 text-sm" value="${escapeHtml(defaultName)}" data-staged-document-name="${index}">
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 pl-0 md:pl-[52px]">
+                            <p class="truncate text-xs" style="color:var(--gc-text-soft);">${escapeHtml(file.name)} · ${Math.max(1, Math.round((file.size || 0) / 1024))} Ko</p>
+                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold" style="border-color:var(--gc-border);color:var(--gc-text);background:#ffffff;">
+                                <input type="checkbox" class="rounded border-slate-300" data-staged-document-private="${index}">
+                                Privé
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
 
-                lotDetailEditSingleSamplingWrap?.classList.toggle('hidden', !needsSingleSampling);
-                lotDetailEditPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
-                lotDetailEditContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
-
-                lotDetailEditSamplingPercentage.disabled = !needsSingleSampling;
-                lotDetailEditSamplingPercentage.required = needsSingleSampling;
-
-                if (lotDetailEditPhysicalSamplingPercentage) {
-                    lotDetailEditPhysicalSamplingPercentage.disabled = !needsHybridSampling;
-                    lotDetailEditPhysicalSamplingPercentage.required = needsHybridSampling;
-                }
-
-                if (lotDetailEditContactSamplingPercentage) {
-                    lotDetailEditContactSamplingPercentage.disabled = !needsHybridSampling;
-                    lotDetailEditContactSamplingPercentage.required = needsHybridSampling;
-                }
-
-                if (!needsSingleSampling) {
-                    lotDetailEditSamplingPercentage.value = '';
-                }
-
-                if (!needsHybridSampling) {
-                    if (lotDetailEditPhysicalSamplingPercentage) lotDetailEditPhysicalSamplingPercentage.value = '';
-                    if (lotDetailEditContactSamplingPercentage) lotDetailEditContactSamplingPercentage.value = '';
-                }
+        function setDocumentUploadStatus(statusElement, message, color = 'var(--gc-text-soft)') {
+            if (!statusElement) {
+                return;
             }
 
-            function openModal(modal) {
-                modal?.classList.remove('hidden');
-                modal?.classList.add('flex');
+            statusElement.textContent = message;
+            statusElement.style.color = color;
+            statusElement.classList.remove('hidden');
+        }
+
+        function clearDocumentUploadStatus(statusElement) {
+            statusElement?.classList.add('hidden');
+            if (statusElement) {
+                statusElement.textContent = '';
+            }
+        }
+
+        function stageDocumentFiles(context, files) {
+            context.stagedFiles = Array.from(files || []);
+            context.form?.classList.toggle('hidden', context.stagedFiles.length === 0);
+            renderStagedDocumentFiles(context.stagedFiles, context.uploadList);
+            clearDocumentUploadStatus(context.status);
+            if (context.stagedFiles.length === 0 && context.fileInput) {
+                context.fileInput.value = '';
+            }
+        }
+
+        async function uploadStagedDocuments(context) {
+            const appointment = context.getAppointment();
+
+            if (!appointment?.documents_upload_url || context.stagedFiles.length === 0 || context.submit?.disabled) {
+                return;
             }
 
-            function closeModal(modal) {
-                modal?.classList.add('hidden');
-                modal?.classList.remove('flex');
-            }
-
-            function setPhysicalVisitsStatus(message, color = 'var(--gc-text-soft)') {
-                if (!physicalVisitsStatus) return;
-
-                physicalVisitsStatus.textContent = message;
-                physicalVisitsStatus.style.color = color;
-                physicalVisitsStatus.classList.remove('hidden');
-            }
-
-            function statsExclusionStatusText(appointment) {
-                if (!appointment.excluded_from_lot_stats) {
-                    return 'Ce dossier compte actuellement dans les statistiques et objectifs du lot.';
-                }
-
-                const excludedAt = formatDateTime(appointment.excluded_from_lot_stats_at);
-                const excludedBy = appointment.excluded_from_lot_stats_by_name
-                    ? ` par ${appointment.excluded_from_lot_stats_by_name}`
-                    : '';
-
-                return `Ce dossier ne compte plus dans les statistiques du lot depuis le ${excludedAt}${excludedBy}.`;
-            }
-
-            function configureStatsExclusionControls(appointment, statusElement, toggleElement) {
-                if (!statusElement || !toggleElement) {
-                    return;
-                }
-
-                statusElement.textContent = statsExclusionStatusText(appointment);
-                statusElement.style.color = appointment.excluded_from_lot_stats ? '#991b1b' : 'var(--gc-text-soft)';
-                toggleElement.textContent = appointment.excluded_from_lot_stats
-                    ? 'Réintégrer dans les stats du lot'
-                    : 'Sortir des stats du lot';
-                toggleElement.disabled = !appointment.stats_exclusion_update_url;
-            }
-
-            async function toggleStatsExclusion(appointment, statusElement, toggleElement) {
-                if (!appointment?.stats_exclusion_update_url || !toggleElement) {
-                    return;
-                }
-
-                toggleElement.disabled = true;
-                toggleElement.textContent = 'Mise à jour...';
-
-                try {
-                    const response = await fetch(appointment.stats_exclusion_update_url, {
-                        method: 'PATCH',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': lotDetailCsrfToken,
-                        },
-                        body: JSON.stringify({
-                            excluded_from_lot_stats: !appointment.excluded_from_lot_stats,
-                        }),
-                    });
-                    const payload = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Mise à jour impossible.');
-                    }
-
-                    statusElement.textContent = `${payload.message || 'Statut mis à jour.'} Rechargement des statistiques...`;
-                    statusElement.style.color = '#15803d';
-                    window.setTimeout(() => window.location.reload(), 650);
-                } catch (error) {
-                    statusElement.textContent = error.message || 'Mise à jour impossible.';
-                    statusElement.style.color = '#be123c';
-                    toggleElement.disabled = false;
-                    toggleElement.textContent = appointment.excluded_from_lot_stats
-                        ? 'Réintégrer dans les stats du lot'
-                        : 'Sortir des stats du lot';
-                }
-            }
-
-            function configureResetProcessingControls(appointment, statusElement, buttonElement) {
-                if (!statusElement || !buttonElement) {
-                    return;
-                }
-
-                const canReset = Boolean(appointment?.can_reset_processing && appointment?.reset_processing_url);
-
-                statusElement.textContent = canReset
-                    ? 'Le dossier peut être remis dans le flux de traitement du lot.'
-                    : 'Aucun traitement à annuler pour ce dossier.';
-                statusElement.style.color = canReset ? 'var(--gc-text-soft)' : '#64748b';
-                buttonElement.disabled = !canReset;
-                buttonElement.textContent = 'Remettre en non placé';
-            }
-
-            async function resetLotAppointmentProcessing(appointment, statusElement, buttonElement) {
-                if (!appointment?.reset_processing_url || !buttonElement || buttonElement.disabled) {
-                    return;
-                }
-
-                buttonElement.disabled = true;
-                buttonElement.textContent = 'Remise à traiter...';
-                statusElement.textContent = 'Suppression de l’état de traitement et recalcul des statistiques...';
-                statusElement.style.color = 'var(--gc-text-soft)';
-
-                try {
-                    const response = await fetch(appointment.reset_processing_url, {
-                        method: 'PATCH',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': lotDetailCsrfToken,
-                        },
-                    });
-                    const payload = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Remise à traiter impossible.');
-                    }
-
-                    statusElement.textContent = `${payload.message || 'Dossier remis à traiter.'} Rechargement des statistiques...`;
-                    statusElement.style.color = '#15803d';
-                    window.setTimeout(() => window.location.reload(), 650);
-                } catch (error) {
-                    statusElement.textContent = error.message || 'Remise à traiter impossible.';
-                    statusElement.style.color = '#be123c';
-                    buttonElement.disabled = false;
-                    buttonElement.textContent = 'Remettre en non placé';
-                }
-            }
-
-            function setGlobalPlusFormStatus(message, color = 'var(--gc-text-soft)') {
-                if (!physicalGlobalPlusFormStatus) return;
-
-                physicalGlobalPlusFormStatus.textContent = message;
-                physicalGlobalPlusFormStatus.style.color = color;
-                physicalGlobalPlusFormStatus.classList.remove('hidden');
-            }
-
-            function clearGlobalPlusFormStatus() {
-                physicalGlobalPlusFormStatus?.classList.add('hidden');
-                if (physicalGlobalPlusFormStatus) {
-                    physicalGlobalPlusFormStatus.textContent = '';
-                }
-            }
-
-            function defaultGlobalPlusTitle(appointment) {
-                return `Lot ${lotDetailCurrentLot.name || appointment.lot_id || ''}`.trim();
-            }
-
-            function defaultGlobalPlusSubTitle(appointment) {
-                if (appointment.internal_reference) return appointment.internal_reference;
-                return [
-                    lotDetailCurrentLot.name,
-                    appointment.row_number ? `Ligne ${appointment.row_number}` : null,
-                    customerLabel(appointment),
-                    appointment.site_name,
-                ].filter(Boolean).join(' - ');
-            }
-
-            let globalPlusPollTimer;
-            let globalPlusPollGeneration = 0;
-
-            function watchGlobalPlusStatus(appointment, delay = 3000) {
-                window.clearTimeout(globalPlusPollTimer);
-                const generation = ++globalPlusPollGeneration;
-                if (!appointment?.global_plus_processing || !appointment.global_plus_status_url) return;
-                globalPlusPollTimer = window.setTimeout(async () => {
-                    if (physicalModal?.classList.contains('hidden') || currentPhysicalLotAppointment?.id !== appointment.id) return;
-                    try {
-                        const response = await fetch(appointment.global_plus_status_url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-                        if (!response.ok) throw new Error('Suivi Global+ indisponible');
-                        const payload = await response.json();
-                        if (generation !== globalPlusPollGeneration || currentPhysicalLotAppointment?.id !== appointment.id) return;
-                        currentPhysicalLotAppointment = payload.appointment;
-                        updateLotAppointmentState(payload.appointment);
-                        configureGlobalPlusStatus(payload.appointment);
-                    } catch (error) {
-                        if (generation === globalPlusPollGeneration) watchGlobalPlusStatus(appointment, 10000);
-                    }
-                }, delay);
-            }
-
-            function configureGlobalPlusStatus(appointment) {
-                watchGlobalPlusStatus(appointment);
-                const meta = globalPlusStatusMeta(appointment);
-                const hasDemand = Boolean(appointment.global_plus_demand_id);
-                const canCreate = Boolean(appointment.can_create_global_plus);
-                const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
-                if (physicalGlobalPlusSubmit) physicalGlobalPlusSubmit.disabled = !canCreate;
-
-                if (physicalGlobalPlusClient) physicalGlobalPlusClient.disabled = hasDemand;
-                if (physicalGlobalPlusVersion) physicalGlobalPlusVersion.disabled = hasDemand;
-                if (hasDemand) document.getElementById('lot-physical-global-plus-client-confirmation').classList.add('hidden');
-
-                if (physicalGlobalPlusBadge) {
-                    physicalGlobalPlusBadge.textContent = appointment.global_plus_status_label || 'Non créé';
-                    physicalGlobalPlusBadge.style.background = meta.background;
-                    physicalGlobalPlusBadge.style.color = meta.color;
-                }
-
-                if (physicalGlobalPlusSummary) {
-                    physicalGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
-                        : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.'
-                        : appointment.global_plus_status === 'appointment_sent' ? `Dossier ${appointment.global_plus_demand_id} : Global+ a accepté l’affectation, mais ne renvoie pas les champs permettant de la vérifier. À contrôler dans Global+.` : hasDemand
-                        ? `Référence Global+ ${appointment.global_plus_demand_id}.`
-                        : (canCreate ? 'Prêt à créer dans Global+.' : 'Le dossier doit être placé physiquement avant l’envoi Global+.');
-                }
-
-                if (physicalGlobalPlusError) {
-                    physicalGlobalPlusError.textContent = appointment.global_plus_error_message || '';
-                    physicalGlobalPlusError.classList.toggle('hidden', !appointment.global_plus_error_message);
-                }
-
-                if (physicalGlobalPlusOpen) {
-                    physicalGlobalPlusOpen.disabled = !canCreate;
-                    physicalGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+');
-                    if (appointment.global_plus_processing) {
-                        physicalGlobalPlusOpen.innerHTML = '<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span> Traitement Global+ en cours';
-                    }
-                }
-
-                if (physicalGlobalPlusSyncDocuments) {
-                    physicalGlobalPlusSyncDocuments.classList.toggle('hidden', !canSyncDocuments);
-                    physicalGlobalPlusSyncDocuments.disabled = !canSyncDocuments;
-                }
-
-                if (!canCreate) {
-                    physicalGlobalPlusForm?.classList.add('hidden');
-                }
-            }
-
-            function option(label, value = '', selected = false, disabled = false) {
-                return `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
-            }
-
-            function updateGlobalPlusClientSelection() {
-                const client = (currentGlobalPlusReferences?.clients || []).find((item) => String(item.address_id) === physicalGlobalPlusClient.value);
-                const matched = (currentGlobalPlusReferences?.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value);
-                const needsConfirmation = Boolean(client) && !matched && !physicalGlobalPlusClient.disabled;
-                const confirmation = document.getElementById('lot-physical-global-plus-client-confirmation');
-                physicalGlobalPlusClientConfirmed.checked = false;
-                confirmation.classList.toggle('hidden', !needsConfirmation);
-                confirmation.classList.toggle('flex', needsConfirmation);
-                document.getElementById('lot-physical-global-plus-client-summary').textContent = client
-                    ? [client.label, client.address, [client.postal_code, client.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
-                    : 'Choisis le délégataire dans Global+, pas le client bénéficiaire de l’inspection.';
-            }
-
-            physicalGlobalPlusClient?.addEventListener('change', updateGlobalPlusClientSelection);
-
-            function populateGlobalPlusReferences(appointment, references) {
-                currentGlobalPlusReferences = references || {};
-                const versions = Array.isArray(currentGlobalPlusReferences.intervention_versions)
-                    ? currentGlobalPlusReferences.intervention_versions
-                    : [];
-                const installers = Array.isArray(currentGlobalPlusReferences.installers)
-                    ? currentGlobalPlusReferences.installers
-                    : [];
-                const controllers = Array.isArray(currentGlobalPlusReferences.controllers)
-                    ? currentGlobalPlusReferences.controllers
-                    : [];
-                const suggestedVersion = String(currentGlobalPlusReferences.suggested_version_formulaire_id || '');
-                if (physicalGlobalPlusClient) {
-                    const selectedClient = String(currentGlobalPlusReferences.existing_client_address_id || currentGlobalPlusReferences.suggested_client_address_id || '');
-                    physicalGlobalPlusClient.innerHTML = [
-                        option('Choisir le client Global+', ''),
-                        ...(currentGlobalPlusReferences.clients || []).map((client) => option(
-                            client.label || `Client ${client.address_id}`, client.address_id, String(client.address_id) === selectedClient,
-                            (currentGlobalPlusReferences.matching_client_address_ids || []).length > 0 && !currentGlobalPlusReferences.matching_client_address_ids.map(String).includes(String(client.address_id)),
-                        )),
-                    ].join('');
-                    physicalGlobalPlusClient.disabled = Boolean(appointment.global_plus_demand_id);
-                }
-                document.getElementById('lot-physical-global-plus-delegataire').textContent = `Délégataire du lot : ${currentGlobalPlusReferences.delegataire || 'non renseigné'}`;
-                updateGlobalPlusClientSelection();
-                physicalGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer le dossier Global+';
-                const savedInstaller = currentGlobalPlusReferences.existing_installer;
-                const suggestedInstaller = String((savedInstaller ? savedInstaller.address_id : currentGlobalPlusReferences.suggested_installer_address_id) || '');
-                const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
-                document.getElementById('lot-physical-global-plus-installer-hint').textContent = appointment.global_plus_demand_id
-                    ? 'Installateur déjà transmis : conservé à l’identique. Cette reprise concerne uniquement le technicien et les horaires.'
-                    : 'Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.';
-
-                if (physicalGlobalPlusVersion) {
-                    physicalGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
-                    physicalGlobalPlusVersion.innerHTML = [
-                        option('Choisir une prestation Global+', ''),
-                        ...versions.map((version) => option(
-                            `${version.label || version.code} · ${version.code || version.version_formulaire_id}`,
-                            version.version_formulaire_id,
-                            String(version.version_formulaire_id) === suggestedVersion,
-                        )),
-                    ].join('');
-                }
-
-                if (physicalGlobalPlusInstaller) {
-                    physicalGlobalPlusInstaller.disabled = Boolean(appointment.global_plus_demand_id);
-                    physicalGlobalPlusInstaller.innerHTML = [
-                        option('Saisie manuelle / installateur du dossier', ''),
-                        ...(suggestedInstaller && savedInstaller && !installers.some((item) => String(item.address_id) === suggestedInstaller)
-                            ? [option(savedInstaller.name || 'Installateur enregistré', suggestedInstaller, true)] : []),
-                        ...installers.map((installer) => option(
-                            `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
-                            installer.address_id,
-                            String(installer.address_id) === suggestedInstaller,
-                            Boolean(installer.blocked),
-                        )),
-                    ].join('');
-                }
-
-                if (physicalGlobalPlusController) {
-                    physicalGlobalPlusController.innerHTML = [
-                        option('Choisir un technicien Global+', ''),
-                        ...controllers.map((controller) => option(
-                            `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}${controller.active === false ? ' · inactif' : ''}`,
-                            controller.id,
-                            String(controller.id) === suggestedController,
-                            controller.active === false,
-                        )),
-                    ].join('');
-                }
-
-                if (physicalGlobalPlusControllerSummary) {
-                    const controller = controllers.find((item) => String(item.id) === suggestedController);
-
-                    physicalGlobalPlusControllerSummary.textContent = controller
-                        ? `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}`
-                        : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
-                }
-
-                const installerFields = [
-                    [physicalGlobalPlusInstallerName, 'name', appointment.installer_name],
-                    [physicalGlobalPlusInstallerSiren, 'siren', appointment.installer_siren],
-                    [physicalGlobalPlusInstallerAddress, 'address'],
-                    [physicalGlobalPlusInstallerPostalCode, 'postal_code'],
-                    [physicalGlobalPlusInstallerCity, 'city'],
-                    [physicalGlobalPlusInstallerPhone, 'phone'],
-                ];
-                installerFields.forEach(([field, key, fallback]) => {
-                    if (!field) return;
-                    field.value = savedInstaller ? (savedInstaller[key] || '') : (fallback || '');
-                    field.readOnly = Boolean(appointment.global_plus_demand_id);
-                });
-                if (!savedInstaller) fillGlobalPlusInstallerFieldsFromSelection();
-
-                if (physicalGlobalPlusTitle) {
-                    physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 50);
-                }
-
-                if (physicalGlobalPlusSubTitle) {
-                    physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 255);
-                }
-
-                if (physicalGlobalPlusPrecariousness) {
-                    physicalGlobalPlusPrecariousness.value = '';
-                }
-
-                if (physicalGlobalPlusSendDocuments) {
-                    physicalGlobalPlusSendDocuments.checked = true;
-                }
-            }
-
-            function selectedGlobalPlusInstaller() {
-                const selectedAddressId = String(physicalGlobalPlusInstaller?.value || '');
-
-                if (!selectedAddressId || !currentGlobalPlusReferences?.installers) {
-                    return null;
-                }
-
-                return currentGlobalPlusReferences.installers.find((installer) => String(installer.address_id) === selectedAddressId) || null;
-            }
-
-            function fillGlobalPlusInstallerFieldsFromSelection() {
-                const installer = selectedGlobalPlusInstaller();
-
-                if (!installer) {
-                    physicalGlobalPlusInstallerName.value = currentPhysicalLotAppointment?.installer_name || physicalGlobalPlusInstallerName.value || '';
-                    return;
-                }
-
-                physicalGlobalPlusInstallerName.value = installer.name || installer.label || '';
-                physicalGlobalPlusInstallerSiren.value = installer.siren || '';
-                physicalGlobalPlusInstallerAddress.value = installer.address || '';
-                physicalGlobalPlusInstallerPostalCode.value = installer.postal_code || '';
-                physicalGlobalPlusInstallerCity.value = installer.city || '';
-                physicalGlobalPlusInstallerPhone.value = installer.phone || '';
-            }
-
-            async function loadGlobalPlusReferences(appointment) {
-                if (!appointment?.global_plus_references_url) {
-                    throw new Error('Référentiel Global+ indisponible.');
-                }
-
-                if (globalPlusReferencesCache.has(String(appointment.id))) {
-                    return globalPlusReferencesCache.get(String(appointment.id));
-                }
-
-                setGlobalPlusFormStatus('Chargement des référentiels Global+...');
-
-                const response = await fetch(appointment.global_plus_references_url, {
-                    headers: { Accept: 'application/json' },
-                });
-                const payload = await response.json();
-
-                if (!response.ok || payload.configured === false) {
-                    throw new Error(payload.message || 'Référentiels Global+ indisponibles.');
-                }
-
-                globalPlusReferencesCache.set(String(appointment.id), payload);
-
-                return payload;
-            }
-
-            async function openGlobalPlusCreateForm() {
-                const appointment = currentPhysicalLotAppointment;
-
-                if (!appointment?.can_create_global_plus) {
-                    return;
-                }
-
-                physicalGlobalPlusForm?.classList.toggle('hidden');
-
-                if (physicalGlobalPlusForm?.classList.contains('hidden')) {
-                    return;
-                }
-
-                clearGlobalPlusFormStatus();
-
-                try {
-                    const references = await loadGlobalPlusReferences(appointment);
-                    populateGlobalPlusReferences(appointment, references);
-                    clearGlobalPlusFormStatus();
-                } catch (error) {
-                    setGlobalPlusFormStatus(error.message || 'Impossible de charger Global+.', '#be123c');
-                }
-            }
-
-            async function submitGlobalPlusCreate() {
-                const appointment = currentPhysicalLotAppointment;
-
-                if (!appointment?.global_plus_store_url || !physicalGlobalPlusSubmit) {
-                    return;
-                }
-
-                if (!appointment.global_plus_demand_id && !physicalGlobalPlusVersion?.value) {
-                    setGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
-                    return;
-                }
-
-                if (!appointment.global_plus_demand_id && !physicalGlobalPlusClient?.value) {
-                    setGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
-                    return;
-                }
-
-                if (!appointment.global_plus_demand_id && !(currentGlobalPlusReferences.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value) && !physicalGlobalPlusClientConfirmed.checked) {
-                    setGlobalPlusFormStatus('Confirme la correspondance entre le client Global+ et le délégataire du lot.', '#be123c');
-                    return;
-                }
-
-                if (!physicalGlobalPlusController?.value) {
-                    setGlobalPlusFormStatus('Choisis le technicien Global+.', '#be123c');
-                    return;
-                }
-
-                physicalGlobalPlusSubmit.disabled = true;
-                physicalGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
-                setGlobalPlusFormStatus(appointment.global_plus_demand_id ? 'Reprise de l’affectation du technicien, sans recréer le dossier ni modifier le client...' : 'Création du dossier dans Global+...');
-
-                try {
-                    const response = await fetch(appointment.global_plus_store_url, {
+            context.submit.disabled = true;
+            context.submit.textContent = 'Ajout en cours...';
+            setDocumentUploadStatus(context.status, 'Upload des documents en cours...');
+
+            let latestAppointment = appointment;
+
+            try {
+                for (let index = 0; index < context.stagedFiles.length; index++) {
+                    const file = context.stagedFiles[index];
+                    const nameInput = context.uploadList?.querySelector(`[data-staged-document-name="${index}"]`);
+                    const privateInput = context.uploadList?.querySelector(`[data-staged-document-private="${index}"]`);
+                    const formData = new FormData();
+
+                    formData.append('document', file);
+                    formData.append('name', nameInput?.value || file.name);
+                    formData.append('is_private', privateInput?.checked ? '1' : '0');
+
+                    const response = await fetch(appointment.documents_upload_url, {
                         method: 'POST',
                         headers: {
                             Accept: 'application/json',
-                            'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': lotDetailCsrfToken,
                         },
-                        body: JSON.stringify(appointment.global_plus_demand_id ? { controller_id: Number(physicalGlobalPlusController.value) } : {
-                            version_formulaire_id: Number(physicalGlobalPlusVersion.value),
-                            client_address_id: Number(physicalGlobalPlusClient.value),
-                            client_delegataire_confirmed: physicalGlobalPlusClientConfirmed.checked,
-                            controller_id: Number(physicalGlobalPlusController.value),
-                            installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
-                            installer_name: physicalGlobalPlusInstallerName?.value || null,
-                            installer_siren: physicalGlobalPlusInstallerSiren?.value || null,
-                            installer_phone: physicalGlobalPlusInstallerPhone?.value || null,
-                            installer_address: physicalGlobalPlusInstallerAddress?.value || null,
-                            installer_postal_code: physicalGlobalPlusInstallerPostalCode?.value || null,
-                            installer_city: physicalGlobalPlusInstallerCity?.value || null,
-                            precariousness: physicalGlobalPlusPrecariousness?.value ? Number(physicalGlobalPlusPrecariousness.value) : null,
-                            title: physicalGlobalPlusTitle?.value || null,
-                            sub_title: physicalGlobalPlusSubTitle?.value || null,
-                            send_documents: Boolean(physicalGlobalPlusSendDocuments?.checked),
-                        }),
+                        body: formData,
                     });
                     const payload = await response.json();
 
                     if (!response.ok) {
-                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Création Global+ impossible.');
+                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Upload impossible.');
                     }
 
-                    const updatedAppointment = payload.appointment || appointment;
-                    globalPlusReferencesCache.delete(String(appointment.id));
-                    updateLotAppointmentState(updatedAppointment);
-                    currentPhysicalLotAppointment = updatedAppointment;
-                    configureGlobalPlusStatus(updatedAppointment);
-                    renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
-                    physicalGlobalPlusForm?.classList.toggle('hidden', !payload.warning);
-                    setGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', payload.warning ? '#be123c' : '#15803d');
-                } catch (error) {
-                    setGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
-                } finally {
-                    physicalGlobalPlusSubmit.disabled = Boolean(currentPhysicalLotAppointment?.global_plus_processing);
-                    physicalGlobalPlusSubmit.textContent = currentPhysicalLotAppointment?.global_plus_status === 'appointment_failed' ? 'Confirmer l’affectation' : 'Créer le dossier Global+';
+                    latestAppointment = payload.appointment || latestAppointment;
+                    updateLotAppointmentState(latestAppointment);
+                    context.onAppointmentUpdated?.(latestAppointment);
                 }
+
+                context.stagedFiles = [];
+                context.form?.classList.add('hidden');
+                context.fileInput.value = '';
+                renderStagedDocumentFiles([], context.uploadList);
+                setDocumentUploadStatus(context.status, 'Documents ajoutés.', '#15803d');
+            } catch (error) {
+                setDocumentUploadStatus(context.status, error.message || 'Upload impossible.', '#be123c');
+            } finally {
+                context.submit.disabled = false;
+                context.submit.textContent = context.submitLabel;
+            }
+        }
+
+        function setupDocumentUploader(context) {
+            const defaultBorderColor = context.defaultBorderColor || 'var(--gc-border)';
+            const defaultBackground = context.defaultBackground || '#fbfaf6';
+
+            context.dropzone?.addEventListener('click', () => context.fileInput?.click());
+            context.fileInput?.addEventListener('change', () => stageDocumentFiles(context, context.fileInput.files));
+            context.dropzone?.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                context.dropzone.style.borderColor = 'var(--gc-accent)';
+                context.dropzone.style.background = '#fff7d6';
+            });
+            context.dropzone?.addEventListener('dragleave', () => {
+                context.dropzone.style.borderColor = defaultBorderColor;
+                context.dropzone.style.background = defaultBackground;
+            });
+            context.dropzone?.addEventListener('drop', (event) => {
+                event.preventDefault();
+                context.dropzone.style.borderColor = defaultBorderColor;
+                context.dropzone.style.background = defaultBackground;
+                stageDocumentFiles(context, event.dataTransfer?.files || []);
+            });
+            context.form?.addEventListener('submit', (event) => {
+                event.preventDefault();
+                uploadStagedDocuments(context);
+            });
+        }
+
+        async function handleDocumentListAction(event, getAppointment, onAppointmentUpdated) {
+            const button = event.target.closest('[data-document-action]');
+
+            if (!button) {
+                return;
             }
 
-            async function syncGlobalPlusDocuments() {
-                const appointment = currentPhysicalLotAppointment;
+            const item = button.closest('[data-lot-document-id]');
+            const action = button.dataset.documentAction;
+            const nameInput = item?.querySelector('[data-document-name-input]');
 
-                if (!appointment?.global_plus_documents_sync_url || !physicalGlobalPlusSyncDocuments) {
-                    return;
-                }
-
-                physicalGlobalPlusSyncDocuments.disabled = true;
-                physicalGlobalPlusSyncDocuments.textContent = 'Synchronisation...';
-
-                try {
-                    const response = await fetch(appointment.global_plus_documents_sync_url, {
-                        method: 'PUT',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': lotDetailCsrfToken,
-                        },
-                    });
-                    const payload = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Synchronisation Global+ impossible.');
-                    }
-
-                    const updatedAppointment = payload.appointment || appointment;
-                    updateLotAppointmentState(updatedAppointment);
-                    currentPhysicalLotAppointment = updatedAppointment;
-                    configureGlobalPlusStatus(updatedAppointment);
-                    renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
-                    setGlobalPlusFormStatus(payload.message || 'Documents synchronisés avec Global+.', '#15803d');
-                } catch (error) {
-                    setGlobalPlusFormStatus(error.message || 'Synchronisation Global+ impossible.', '#be123c');
-                } finally {
-                    physicalGlobalPlusSyncDocuments.disabled = false;
-                    physicalGlobalPlusSyncDocuments.textContent = 'Synchroniser les documents';
-                }
+            if (!item || !action) {
+                return;
             }
 
-            function openPhysicalDetail(appointment) {
-                currentPhysicalLotAppointment = appointment;
-                const postVisitLink = document.getElementById('lot-physical-post-visit');
-                if (postVisitLink) {
-                    postVisitLink.classList.toggle('hidden', !appointment.post_visit_url);
-                    if (appointment.post_visit_url) postVisitLink.href = appointment.post_visit_url;
-                    else postVisitLink.removeAttribute('href');
-                }
-                physicalTitle.textContent = customerLabel(appointment);
-                physicalSubtitle.textContent = appointment.is_placed
-                    ? 'RDV physique placé'
-                    : 'Dossier non encore placé physiquement';
-                physicalInfos.innerHTML = infoGrid([
-                    ['Statut', appointment.status_label],
-                    ...(appointment.post_visit_status ? [['Traitement du dossier', appointment.post_visit_status]] : []),
-                    ...(appointment.post_visit_outcome ? [['Conclusion du contrôle', appointment.post_visit_outcome]] : []),
-                    ['Technicien', appointment.placed_technician_name],
-                    ['Date du RDV', formatDateTime(appointment.placed_at)],
-                    ['Prestation', appointment.placed_service_label],
-                    ['Raison sociale bénéficiaire', appointment.company_name],
-                    ['Nom du site', appointment.site_name],
-                    ['Installateur', appointment.installer_name],
-                    ['Téléphone', appointment.customer_phone],
-                    ['Adresse', fullAddress(appointment)],
-                    ['Référence', appointment.external_reference],
-                    ['Satisfaction physique', appointment.physical_satisfaction === null || appointment.physical_satisfaction === undefined ? '-' : (appointment.physical_satisfaction ? 'Satisfaisant' : 'Non satisfaisant')],
-                ]);
+            button.disabled = true;
 
-                physicalVisitsInput.value = appointment.unsuccessful_visits_count ?? 0;
-                physicalVisitsInput.disabled = !appointment.can_update_visits;
-                physicalVisitsSubmit.disabled = !appointment.can_update_visits;
-                physicalVisitsStatus.classList.add('hidden');
-                stageDocumentFiles(physicalDocumentsUploadContext, []);
+            try {
+                const response = await fetch(action === 'rename' ? item.dataset.documentUpdateUrl : item.dataset.documentDeleteUrl, {
+                    method: action === 'rename' ? 'PATCH' : 'DELETE',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: action === 'rename'
+                        ? JSON.stringify({ name: nameInput?.value || 'Document' })
+                        : null,
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Action impossible.');
+                }
+
+                const appointment = payload.appointment || getAppointment();
+                updateLotAppointmentState(appointment);
+                onAppointmentUpdated?.(appointment);
+            } catch (error) {
+                window.alert(error.message || 'Action impossible.');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function renderLotDocumentsCard() {
+            const appointment = currentLotDocumentsAppointment();
+            const total = lotDocumentsAppointments.length;
+
+            lotDocumentsCounter.textContent = total > 0 ? `${lotDocumentsCurrentIndex + 1} / ${total}` : '0 / 0';
+            lotDocumentsPrev.disabled = lotDocumentsCurrentIndex <= 0;
+            lotDocumentsNext.disabled = lotDocumentsCurrentIndex >= total - 1;
+
+            if (!appointment) {
+                lotDocumentsEmpty.classList.remove('hidden');
+                lotDocumentsCard.classList.add('hidden');
+                return;
+            }
+
+            lotDocumentsEmpty.classList.add('hidden');
+            lotDocumentsCard.classList.remove('hidden');
+            lotDocumentsCardReference.textContent = appointment.row_number
+                ? `Ligne ${appointment.row_number}${appointment.external_reference ? ` · Réf. ${appointment.external_reference}` : ''}`
+                : (appointment.external_reference ? `Réf. ${appointment.external_reference}` : 'Dossier du lot');
+            lotDocumentsCardTitle.textContent = customerLabel(appointment);
+            lotDocumentsCardSubtitle.textContent = [appointment.site_name ? `Site : ${appointment.site_name}` : null, appointment.installer_name ? `Installateur : ${appointment.installer_name}` : null].filter(Boolean).join(' · ');
+            lotDocumentsCardStatus.textContent = appointment.status_label || 'À traiter';
+            lotDocumentsCardInfos.innerHTML = lotDocumentsInfoGrid([
+                ['Téléphone', appointment.customer_phone],
+                ['Adresse', fullAddress(appointment)],
+                ['Prestation', appointment.service_label],
+                ['Commentaire', appointment.comment],
+            ]);
+            renderLotDocumentsList(appointment, lotDocumentsCardList, lotDocumentsCardDocCount);
+        }
+
+        async function loadLotDocuments() {
+            const url = new URL(lotDocumentsUrl, window.location.origin);
+            const search = lotDocumentsSearch?.value?.trim();
+
+            if (search) {
+                url.searchParams.set('q', search);
+            }
+
+            lotDocumentsStatus.textContent = 'Chargement des dossiers...';
+            lotDocumentsStatus.style.color = 'var(--gc-text-soft)';
+
+            try {
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Chargement impossible.');
+                }
+
+                lotDocumentsAppointments = Array.isArray(payload.appointments) ? payload.appointments : [];
+                lotDocumentsAppointments.forEach(updateLotAppointmentState);
+                lotDocumentsCurrentIndex = 0;
+                lotDocumentsStatus.textContent = lotDocumentsAppointments.length
+                    ? `${lotDocumentsAppointments.length} dossier(s) trouvé(s).`
+                    : 'Aucun dossier ne correspond à la recherche.';
+                renderLotDocumentsCard();
+            } catch (error) {
+                lotDocumentsStatus.textContent = error.message || 'Chargement impossible.';
+                lotDocumentsStatus.style.color = '#be123c';
+                lotDocumentsAppointments = [];
+                lotDocumentsCurrentIndex = 0;
+                renderLotDocumentsCard();
+            }
+        }
+
+        const lotDocumentsUploadContext = {
+            dropzone: lotDocumentsDropzone,
+            fileInput: lotDocumentsFileInput,
+            form: lotDocumentsUploadForm,
+            uploadList: lotDocumentsUploadList,
+            submit: lotDocumentsUploadSubmit,
+            status: lotDocumentsUploadStatus,
+            submitLabel: 'Ajouter au dossier',
+            stagedFiles: [],
+            defaultBorderColor: '#d8c27a',
+            defaultBackground: '#ffffff',
+            getAppointment: currentLotDocumentsAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
+                renderLotDocumentsCard();
+            },
+        };
+        const physicalDocumentsUploadContext = {
+            dropzone: physicalDocumentsDropzone,
+            fileInput: physicalDocumentsFileInput,
+            form: physicalDocumentsUploadForm,
+            uploadList: physicalDocumentsUploadList,
+            submit: physicalDocumentsUploadSubmit,
+            status: physicalDocumentsUploadStatus,
+            submitLabel: 'Ajouter les documents',
+            stagedFiles: [],
+            getAppointment: () => currentPhysicalLotAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
                 renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount);
-                clearDocumentUploadStatus(physicalDocumentsUploadStatus);
-
-                if (appointment.tracking_url) {
-                    physicalTrackingLink.href = appointment.tracking_url;
-                    physicalTrackingWrap.classList.remove('hidden');
-                } else {
-                    physicalTrackingWrap.classList.add('hidden');
-                }
-
-                configureStatsExclusionControls(appointment, physicalStatsExclusionStatus, physicalStatsExclusionToggle);
-                configureResetProcessingControls(appointment, physicalResetProcessingStatus, physicalResetProcessingButton);
-                configureGlobalPlusStatus(appointment);
-                clearGlobalPlusFormStatus();
-                physicalGlobalPlusForm?.classList.add('hidden');
-                openModal(physicalModal);
-                window.setTimeout(() => {
-                    renderLotDetailMap('lot-physical-detail-map', 'lot-physical-detail-map-status', appointment);
-                }, 80);
-            }
-
-            function openContactDetail(appointment) {
-                currentContactLotAppointment = appointment;
-                contactTitle.textContent = customerLabel(appointment);
-                contactSubtitle.textContent = appointment.contact_satisfaction === null || appointment.contact_satisfaction === undefined
-                    ? 'Contact non qualifié'
-                    : (appointment.contact_satisfaction ? 'Contact satisfaisant' : 'Contact non satisfaisant');
-                contactInfos.innerHTML = infoGrid([
-                    ['Statut', appointment.status_label],
-                    ['Traité le', formatDateTime(appointment.contact_processed_at)],
-                    ['Traité par', appointment.contact_processed_by_name],
-                    ['Raison sociale bénéficiaire', appointment.company_name],
-                    ['Nom du site', appointment.site_name],
-                    ['Installateur', appointment.installer_name],
-                    ['Téléphone', appointment.customer_phone],
-                    ['Adresse', fullAddress(appointment)],
-                    ['Référence', appointment.external_reference],
-                ]);
-                contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
-                stageDocumentFiles(contactDocumentsUploadContext, []);
+            },
+        };
+        const contactDocumentsUploadContext = {
+            dropzone: contactDocumentsDropzone,
+            fileInput: contactDocumentsFileInput,
+            form: contactDocumentsUploadForm,
+            uploadList: contactDocumentsUploadList,
+            submit: contactDocumentsUploadSubmit,
+            status: contactDocumentsUploadStatus,
+            submitLabel: 'Ajouter les documents',
+            stagedFiles: [],
+            getAppointment: () => currentContactLotAppointment,
+            onAppointmentUpdated: (appointment) => {
+                updateLotAppointmentState(appointment);
                 renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
-                clearDocumentUploadStatus(contactDocumentsUploadStatus);
+            },
+        };
 
-                configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
-                configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);
-                openModal(contactModal);
-                window.setTimeout(() => {
-                    renderLotDetailMap('lot-contact-detail-map', 'lot-contact-detail-map-status', appointment);
-                }, 80);
+        setupDocumentUploader(lotDocumentsUploadContext);
+        setupDocumentUploader(physicalDocumentsUploadContext);
+        setupDocumentUploader(contactDocumentsUploadContext);
+        lotDocumentsCardList?.addEventListener('click', (event) => handleDocumentListAction(event, currentLotDocumentsAppointment, renderLotDocumentsCard));
+        physicalDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
+            event,
+            () => currentPhysicalLotAppointment,
+            (appointment) => renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount),
+        ));
+        contactDocumentsList?.addEventListener('click', (event) => handleDocumentListAction(
+            event,
+            () => currentContactLotAppointment,
+            (appointment) => renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount),
+        ));
+
+        function isLotDetailSamplingType(type) {
+            return lotDetailSamplingTypes.includes(type);
+        }
+
+        function isLotDetailHybridType(type) {
+            return type === lotDetailHybridType;
+        }
+
+        function lotDetailCoffracAliasesForService(serviceId) {
+            const service = lotDetailServices.find((item) => String(item.id) === String(serviceId));
+
+            return Array.isArray(service?.aliases) ? service.aliases : [];
+        }
+
+        function lotDetailCoffracAliasSelectedValue() {
+            return lotDetailEditCoffracAliasId?.value || lotDetailCurrentLot.coffrac_service_alias_id || '';
+        }
+
+        function populateLotDetailCoffracAliasSelect(serviceId, selectedAliasId = '', options = {}) {
+            if (!lotDetailEditCoffracAliasId) {
+                return;
             }
 
-            document.addEventListener('click', event => {
-                const button = event.target.closest('.lot-appointment-detail-trigger');
-                if (!button) return;
-                const appointment = lotAppointmentDetails.get(String(button.dataset.lotAppointmentId));
+            const aliases = lotDetailCoffracAliasesForService(serviceId);
 
-                if (!appointment) {
-                    return;
-                }
+            lotDetailEditCoffracAliasId.innerHTML = '';
 
-                if (appointment.is_contact_processed || appointment.processing_mode === 'contact') {
-                    openContactDetail(appointment);
-                    return;
-                }
+            if (!serviceId) {
+                lotDetailEditCoffracAliasId.add(new Option('Sélectionner une prestation', ''));
+                lotDetailEditCoffracAliasId.disabled = true;
+                return;
+            }
 
-                openPhysicalDetail(appointment);
+            if (!aliases.length) {
+                lotDetailEditCoffracAliasId.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
+                lotDetailEditCoffracAliasId.disabled = true;
+                return;
+            }
+
+            lotDetailEditCoffracAliasId.add(new Option('Utiliser le fallback automatique', ''));
+            aliases.forEach((alias) => {
+                lotDetailEditCoffracAliasId.add(new Option(alias.label, alias.id));
             });
 
-            const boundLotRows = new WeakSet();
-            const bindLotRows = () => {
+            const selectedValue = selectedAliasId
+                ? String(selectedAliasId)
+                : (options.selectFirst ? String(aliases[0]?.id || '') : '');
+
+            lotDetailEditCoffracAliasId.value = aliases.some((alias) => String(alias.id) === selectedValue)
+                ? selectedValue
+                : '';
+            lotDetailEditCoffracAliasId.disabled = false;
+        }
+
+        function updateLotDetailEditSamplingState() {
+            if (!lotDetailEditType || !lotDetailEditSamplingPercentage) {
+                return;
+            }
+
+            const currentType = lotDetailEditType.value;
+            const needsSampling = isLotDetailSamplingType(currentType);
+            const needsHybridSampling = isLotDetailHybridType(currentType);
+            const needsSingleSampling = needsSampling && !needsHybridSampling;
+
+            lotDetailEditSingleSamplingWrap?.classList.toggle('hidden', !needsSingleSampling);
+            lotDetailEditPhysicalSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+            lotDetailEditContactSamplingWrap?.classList.toggle('hidden', !needsHybridSampling);
+
+            lotDetailEditSamplingPercentage.disabled = !needsSingleSampling;
+            lotDetailEditSamplingPercentage.required = needsSingleSampling;
+
+            if (lotDetailEditPhysicalSamplingPercentage) {
+                lotDetailEditPhysicalSamplingPercentage.disabled = !needsHybridSampling;
+                lotDetailEditPhysicalSamplingPercentage.required = needsHybridSampling;
+            }
+
+            if (lotDetailEditContactSamplingPercentage) {
+                lotDetailEditContactSamplingPercentage.disabled = !needsHybridSampling;
+                lotDetailEditContactSamplingPercentage.required = needsHybridSampling;
+            }
+
+            if (!needsSingleSampling) {
+                lotDetailEditSamplingPercentage.value = '';
+            }
+
+            if (!needsHybridSampling) {
+                if (lotDetailEditPhysicalSamplingPercentage) lotDetailEditPhysicalSamplingPercentage.value = '';
+                if (lotDetailEditContactSamplingPercentage) lotDetailEditContactSamplingPercentage.value = '';
+            }
+        }
+
+        function openModal(modal) {
+            modal?.classList.remove('hidden');
+            modal?.classList.add('flex');
+        }
+
+        function closeModal(modal) {
+            modal?.classList.add('hidden');
+            modal?.classList.remove('flex');
+        }
+
+        function setPhysicalVisitsStatus(message, color = 'var(--gc-text-soft)') {
+            if (!physicalVisitsStatus) return;
+
+            physicalVisitsStatus.textContent = message;
+            physicalVisitsStatus.style.color = color;
+            physicalVisitsStatus.classList.remove('hidden');
+        }
+
+        function statsExclusionStatusText(appointment) {
+            if (!appointment.excluded_from_lot_stats) {
+                return 'Ce dossier compte actuellement dans les statistiques et objectifs du lot.';
+            }
+
+            const excludedAt = formatDateTime(appointment.excluded_from_lot_stats_at);
+            const excludedBy = appointment.excluded_from_lot_stats_by_name
+                ? ` par ${appointment.excluded_from_lot_stats_by_name}`
+                : '';
+
+            return `Ce dossier ne compte plus dans les statistiques du lot depuis le ${excludedAt}${excludedBy}.`;
+        }
+
+        function configureStatsExclusionControls(appointment, statusElement, toggleElement) {
+            if (!statusElement || !toggleElement) {
+                return;
+            }
+
+            statusElement.textContent = statsExclusionStatusText(appointment);
+            statusElement.style.color = appointment.excluded_from_lot_stats ? '#991b1b' : 'var(--gc-text-soft)';
+            toggleElement.textContent = appointment.excluded_from_lot_stats
+                ? 'Réintégrer dans les stats du lot'
+                : 'Sortir des stats du lot';
+            toggleElement.disabled = !appointment.stats_exclusion_update_url;
+        }
+
+        async function toggleStatsExclusion(appointment, statusElement, toggleElement) {
+            if (!appointment?.stats_exclusion_update_url || !toggleElement) {
+                return;
+            }
+
+            toggleElement.disabled = true;
+            toggleElement.textContent = 'Mise à jour...';
+
+            try {
+                const response = await fetch(appointment.stats_exclusion_update_url, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: JSON.stringify({
+                        excluded_from_lot_stats: !appointment.excluded_from_lot_stats,
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Mise à jour impossible.');
+                }
+
+                statusElement.textContent = `${payload.message || 'Statut mis à jour.'} Rechargement des statistiques...`;
+                statusElement.style.color = '#15803d';
+                window.setTimeout(() => window.location.reload(), 650);
+            } catch (error) {
+                statusElement.textContent = error.message || 'Mise à jour impossible.';
+                statusElement.style.color = '#be123c';
+                toggleElement.disabled = false;
+                toggleElement.textContent = appointment.excluded_from_lot_stats
+                    ? 'Réintégrer dans les stats du lot'
+                    : 'Sortir des stats du lot';
+            }
+        }
+
+        function configureResetProcessingControls(appointment, statusElement, buttonElement) {
+            if (!statusElement || !buttonElement) {
+                return;
+            }
+
+            const canReset = Boolean(appointment?.can_reset_processing && appointment?.reset_processing_url);
+
+            statusElement.textContent = canReset
+                ? 'Le dossier peut être remis dans le flux de traitement du lot.'
+                : 'Aucun traitement à annuler pour ce dossier.';
+            statusElement.style.color = canReset ? 'var(--gc-text-soft)' : '#64748b';
+            buttonElement.disabled = !canReset;
+            buttonElement.textContent = 'Remettre en non placé';
+        }
+
+        async function resetLotAppointmentProcessing(appointment, statusElement, buttonElement) {
+            if (!appointment?.reset_processing_url || !buttonElement || buttonElement.disabled) {
+                return;
+            }
+
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Remise à traiter...';
+            statusElement.textContent = 'Suppression de l’état de traitement et recalcul des statistiques...';
+            statusElement.style.color = 'var(--gc-text-soft)';
+
+            try {
+                const response = await fetch(appointment.reset_processing_url, {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Remise à traiter impossible.');
+                }
+
+                statusElement.textContent = `${payload.message || 'Dossier remis à traiter.'} Rechargement des statistiques...`;
+                statusElement.style.color = '#15803d';
+                window.setTimeout(() => window.location.reload(), 650);
+            } catch (error) {
+                statusElement.textContent = error.message || 'Remise à traiter impossible.';
+                statusElement.style.color = '#be123c';
+                buttonElement.disabled = false;
+                buttonElement.textContent = 'Remettre en non placé';
+            }
+        }
+
+        function setGlobalPlusFormStatus(message, color = 'var(--gc-text-soft)') {
+            if (!physicalGlobalPlusFormStatus) return;
+
+            physicalGlobalPlusFormStatus.textContent = message;
+            physicalGlobalPlusFormStatus.style.color = color;
+            physicalGlobalPlusFormStatus.classList.remove('hidden');
+        }
+
+        function clearGlobalPlusFormStatus() {
+            physicalGlobalPlusFormStatus?.classList.add('hidden');
+            if (physicalGlobalPlusFormStatus) {
+                physicalGlobalPlusFormStatus.textContent = '';
+            }
+        }
+
+        function defaultGlobalPlusTitle(appointment) {
+            return `Lot ${lotDetailCurrentLot.name || appointment.lot_id || ''}`.trim();
+        }
+
+        function defaultGlobalPlusSubTitle(appointment) {
+            if (appointment.internal_reference) return appointment.internal_reference;
+            return [
+                lotDetailCurrentLot.name,
+                appointment.row_number ? `Ligne ${appointment.row_number}` : null,
+                customerLabel(appointment),
+                appointment.site_name,
+            ].filter(Boolean).join(' - ');
+        }
+
+        let globalPlusPollTimer;
+        let globalPlusPollGeneration = 0;
+
+        function watchGlobalPlusStatus(appointment, delay = 3000) {
+            window.clearTimeout(globalPlusPollTimer);
+            const generation = ++globalPlusPollGeneration;
+            if (!appointment?.global_plus_processing || !appointment.global_plus_status_url) return;
+            globalPlusPollTimer = window.setTimeout(async () => {
+                if (physicalModal?.classList.contains('hidden') || currentPhysicalLotAppointment?.id !== appointment.id) return;
+                try {
+                    const response = await fetch(appointment.global_plus_status_url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+                    if (!response.ok) throw new Error('Suivi Global+ indisponible');
+                    const payload = await response.json();
+                    if (generation !== globalPlusPollGeneration || currentPhysicalLotAppointment?.id !== appointment.id) return;
+                    currentPhysicalLotAppointment = payload.appointment;
+                    updateLotAppointmentState(payload.appointment);
+                    configureGlobalPlusStatus(payload.appointment);
+                } catch (error) {
+                    if (generation === globalPlusPollGeneration) watchGlobalPlusStatus(appointment, 10000);
+                }
+            }, delay);
+        }
+
+        function configureGlobalPlusStatus(appointment) {
+            watchGlobalPlusStatus(appointment);
+            const meta = globalPlusStatusMeta(appointment);
+            const hasDemand = Boolean(appointment.global_plus_demand_id);
+            const canCreate = Boolean(appointment.can_create_global_plus);
+            const canSyncDocuments = Boolean(appointment.can_sync_global_plus_documents);
+            if (physicalGlobalPlusSubmit) physicalGlobalPlusSubmit.disabled = !canCreate;
+
+            if (physicalGlobalPlusClient) physicalGlobalPlusClient.disabled = hasDemand;
+            if (physicalGlobalPlusVersion) physicalGlobalPlusVersion.disabled = hasDemand;
+            if (hasDemand) document.getElementById('lot-physical-global-plus-client-confirmation').classList.add('hidden');
+
+            if (physicalGlobalPlusBadge) {
+                physicalGlobalPlusBadge.textContent = appointment.global_plus_status_label || 'Non créé';
+                physicalGlobalPlusBadge.style.background = meta.background;
+                physicalGlobalPlusBadge.style.color = meta.color;
+            }
+
+            if (physicalGlobalPlusSummary) {
+                physicalGlobalPlusSummary.textContent = appointment.global_plus_processing ? appointment.global_plus_status_label
+                    : appointment.global_plus_status === 'creation_uncertain' ? 'Création à vérifier avec Global+ avant tout nouvel envoi.'
+                    : appointment.global_plus_status === 'appointment_sent' ? `Dossier ${appointment.global_plus_demand_id} : Global+ a accepté l’affectation, mais ne renvoie pas les champs permettant de la vérifier. À contrôler dans Global+.` : hasDemand
+                    ? `Référence Global+ ${appointment.global_plus_demand_id}.`
+                    : (canCreate ? 'Prêt à créer dans Global+.' : 'Le dossier doit être placé physiquement avant l’envoi Global+.');
+            }
+
+            if (physicalGlobalPlusError) {
+                physicalGlobalPlusError.textContent = appointment.global_plus_error_message || '';
+                physicalGlobalPlusError.classList.toggle('hidden', !appointment.global_plus_error_message);
+            }
+
+            if (physicalGlobalPlusOpen) {
+                physicalGlobalPlusOpen.disabled = !canCreate;
+                physicalGlobalPlusOpen.textContent = appointment.global_plus_status === 'appointment_failed' ? 'Réessayer l’affectation du technicien' : (hasDemand ? 'Déjà ajouté à Global+' : 'Ajouter à Global+');
+                if (appointment.global_plus_processing) {
+                    physicalGlobalPlusOpen.innerHTML = '<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span> Traitement Global+ en cours';
+                }
+            }
+
+            if (physicalGlobalPlusSyncDocuments) {
+                physicalGlobalPlusSyncDocuments.classList.toggle('hidden', !canSyncDocuments);
+                physicalGlobalPlusSyncDocuments.disabled = !canSyncDocuments;
+            }
+
+            if (!canCreate) {
+                physicalGlobalPlusForm?.classList.add('hidden');
+            }
+        }
+
+        function option(label, value = '', selected = false, disabled = false) {
+            return `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
+        }
+
+        function updateGlobalPlusClientSelection() {
+            const client = (currentGlobalPlusReferences?.clients || []).find((item) => String(item.address_id) === physicalGlobalPlusClient.value);
+            const matched = (currentGlobalPlusReferences?.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value);
+            const needsConfirmation = Boolean(client) && !matched && !physicalGlobalPlusClient.disabled;
+            const confirmation = document.getElementById('lot-physical-global-plus-client-confirmation');
+            physicalGlobalPlusClientConfirmed.checked = false;
+            confirmation.classList.toggle('hidden', !needsConfirmation);
+            confirmation.classList.toggle('flex', needsConfirmation);
+            document.getElementById('lot-physical-global-plus-client-summary').textContent = client
+                ? [client.label, client.address, [client.postal_code, client.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
+                : 'Choisis le délégataire dans Global+, pas le client bénéficiaire de l’inspection.';
+        }
+
+        physicalGlobalPlusClient?.addEventListener('change', updateGlobalPlusClientSelection);
+
+        function populateGlobalPlusReferences(appointment, references) {
+            currentGlobalPlusReferences = references || {};
+            const versions = Array.isArray(currentGlobalPlusReferences.intervention_versions)
+                ? currentGlobalPlusReferences.intervention_versions
+                : [];
+            const installers = Array.isArray(currentGlobalPlusReferences.installers)
+                ? currentGlobalPlusReferences.installers
+                : [];
+            const controllers = Array.isArray(currentGlobalPlusReferences.controllers)
+                ? currentGlobalPlusReferences.controllers
+                : [];
+            const suggestedVersion = String(currentGlobalPlusReferences.suggested_version_formulaire_id || '');
+            if (physicalGlobalPlusClient) {
+                const selectedClient = String(currentGlobalPlusReferences.existing_client_address_id || currentGlobalPlusReferences.suggested_client_address_id || '');
+                physicalGlobalPlusClient.innerHTML = [
+                    option('Choisir le client Global+', ''),
+                    ...(currentGlobalPlusReferences.clients || []).map((client) => option(
+                        client.label || `Client ${client.address_id}`, client.address_id, String(client.address_id) === selectedClient,
+                        (currentGlobalPlusReferences.matching_client_address_ids || []).length > 0 && !currentGlobalPlusReferences.matching_client_address_ids.map(String).includes(String(client.address_id)),
+                    )),
+                ].join('');
+                physicalGlobalPlusClient.disabled = Boolean(appointment.global_plus_demand_id);
+            }
+            document.getElementById('lot-physical-global-plus-delegataire').textContent = `Délégataire du lot : ${currentGlobalPlusReferences.delegataire || 'non renseigné'}`;
+            updateGlobalPlusClientSelection();
+            physicalGlobalPlusSubmit.textContent = appointment.global_plus_demand_id ? 'Réessayer l’affectation' : 'Créer le dossier Global+';
+            const savedInstaller = currentGlobalPlusReferences.existing_installer;
+            const suggestedInstaller = String((savedInstaller ? savedInstaller.address_id : currentGlobalPlusReferences.suggested_installer_address_id) || '');
+            const suggestedController = String(currentGlobalPlusReferences.suggested_controller_id || '');
+            document.getElementById('lot-physical-global-plus-installer-hint').textContent = appointment.global_plus_demand_id
+                ? 'Installateur déjà transmis : conservé à l’identique. Cette reprise concerne uniquement le technicien et les horaires.'
+                : 'Si l’installateur n’est pas dans la liste, la saisie manuelle ci-dessous sera envoyée.';
+
+            if (physicalGlobalPlusVersion) {
+                physicalGlobalPlusVersion.disabled = Boolean(appointment.global_plus_demand_id);
+                physicalGlobalPlusVersion.innerHTML = [
+                    option('Choisir une prestation Global+', ''),
+                    ...versions.map((version) => option(
+                        `${version.label || version.code} · ${version.code || version.version_formulaire_id}`,
+                        version.version_formulaire_id,
+                        String(version.version_formulaire_id) === suggestedVersion,
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusInstaller) {
+                physicalGlobalPlusInstaller.disabled = Boolean(appointment.global_plus_demand_id);
+                physicalGlobalPlusInstaller.innerHTML = [
+                    option('Saisie manuelle / installateur du dossier', ''),
+                    ...(suggestedInstaller && savedInstaller && !installers.some((item) => String(item.address_id) === suggestedInstaller)
+                        ? [option(savedInstaller.name || 'Installateur enregistré', suggestedInstaller, true)] : []),
+                    ...installers.map((installer) => option(
+                        `${installer.label || installer.name}${installer.siren ? ` · ${installer.siren}` : ''}${installer.blocked ? ' · bloqué' : ''}`,
+                        installer.address_id,
+                        String(installer.address_id) === suggestedInstaller,
+                        Boolean(installer.blocked),
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusController) {
+                physicalGlobalPlusController.innerHTML = [
+                    option('Choisir un technicien Global+', ''),
+                    ...controllers.map((controller) => option(
+                        `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}${controller.active === false ? ' · inactif' : ''}`,
+                        controller.id,
+                        String(controller.id) === suggestedController,
+                        controller.active === false,
+                    )),
+                ].join('');
+            }
+
+            if (physicalGlobalPlusControllerSummary) {
+                const controller = controllers.find((item) => String(item.id) === suggestedController);
+
+                physicalGlobalPlusControllerSummary.textContent = controller
+                    ? `${controller.name || 'Technicien'} · ${controller.email || 'email non renseigné'}`
+                    : 'Aucun technicien Global+ actif trouvé avec le même email. Sélectionne le technicien Global+ à utiliser.';
+            }
+
+            const installerFields = [
+                [physicalGlobalPlusInstallerName, 'name', appointment.installer_name],
+                [physicalGlobalPlusInstallerSiren, 'siren', appointment.installer_siren],
+                [physicalGlobalPlusInstallerAddress, 'address'],
+                [physicalGlobalPlusInstallerPostalCode, 'postal_code'],
+                [physicalGlobalPlusInstallerCity, 'city'],
+                [physicalGlobalPlusInstallerPhone, 'phone'],
+            ];
+            installerFields.forEach(([field, key, fallback]) => {
+                if (!field) return;
+                field.value = savedInstaller ? (savedInstaller[key] || '') : (fallback || '');
+                field.readOnly = Boolean(appointment.global_plus_demand_id);
+            });
+            if (!savedInstaller) fillGlobalPlusInstallerFieldsFromSelection();
+
+            if (physicalGlobalPlusTitle) {
+                physicalGlobalPlusTitle.value = defaultGlobalPlusTitle(appointment).slice(0, 50);
+            }
+
+            if (physicalGlobalPlusSubTitle) {
+                physicalGlobalPlusSubTitle.value = defaultGlobalPlusSubTitle(appointment).slice(0, 255);
+            }
+
+            if (physicalGlobalPlusPrecariousness) {
+                physicalGlobalPlusPrecariousness.value = '';
+            }
+
+            if (physicalGlobalPlusSendDocuments) {
+                physicalGlobalPlusSendDocuments.checked = true;
+            }
+        }
+
+        function selectedGlobalPlusInstaller() {
+            const selectedAddressId = String(physicalGlobalPlusInstaller?.value || '');
+
+            if (!selectedAddressId || !currentGlobalPlusReferences?.installers) {
+                return null;
+            }
+
+            return currentGlobalPlusReferences.installers.find((installer) => String(installer.address_id) === selectedAddressId) || null;
+        }
+
+        function fillGlobalPlusInstallerFieldsFromSelection() {
+            const installer = selectedGlobalPlusInstaller();
+
+            if (!installer) {
+                physicalGlobalPlusInstallerName.value = currentPhysicalLotAppointment?.installer_name || physicalGlobalPlusInstallerName.value || '';
+                return;
+            }
+
+            physicalGlobalPlusInstallerName.value = installer.name || installer.label || '';
+            physicalGlobalPlusInstallerSiren.value = installer.siren || '';
+            physicalGlobalPlusInstallerAddress.value = installer.address || '';
+            physicalGlobalPlusInstallerPostalCode.value = installer.postal_code || '';
+            physicalGlobalPlusInstallerCity.value = installer.city || '';
+            physicalGlobalPlusInstallerPhone.value = installer.phone || '';
+        }
+
+        async function loadGlobalPlusReferences(appointment) {
+            if (!appointment?.global_plus_references_url) {
+                throw new Error('Référentiel Global+ indisponible.');
+            }
+
+            if (globalPlusReferencesCache.has(String(appointment.id))) {
+                return globalPlusReferencesCache.get(String(appointment.id));
+            }
+
+            setGlobalPlusFormStatus('Chargement des référentiels Global+...');
+
+            const response = await fetch(appointment.global_plus_references_url, {
+                headers: { Accept: 'application/json' },
+            });
+            const payload = await response.json();
+
+            if (!response.ok || payload.configured === false) {
+                throw new Error(payload.message || 'Référentiels Global+ indisponibles.');
+            }
+
+            globalPlusReferencesCache.set(String(appointment.id), payload);
+
+            return payload;
+        }
+
+        async function openGlobalPlusCreateForm() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.can_create_global_plus) {
+                return;
+            }
+
+            physicalGlobalPlusForm?.classList.toggle('hidden');
+
+            if (physicalGlobalPlusForm?.classList.contains('hidden')) {
+                return;
+            }
+
+            clearGlobalPlusFormStatus();
+
+            try {
+                const references = await loadGlobalPlusReferences(appointment);
+                populateGlobalPlusReferences(appointment, references);
+                clearGlobalPlusFormStatus();
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Impossible de charger Global+.', '#be123c');
+            }
+        }
+
+        async function submitGlobalPlusCreate() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.global_plus_store_url || !physicalGlobalPlusSubmit) {
+                return;
+            }
+
+            if (!appointment.global_plus_demand_id && !physicalGlobalPlusVersion?.value) {
+                setGlobalPlusFormStatus('Choisis une prestation Global+.', '#be123c');
+                return;
+            }
+
+            if (!appointment.global_plus_demand_id && !physicalGlobalPlusClient?.value) {
+                setGlobalPlusFormStatus('Choisis le délégataire Global+.', '#be123c');
+                return;
+            }
+
+            if (!appointment.global_plus_demand_id && !(currentGlobalPlusReferences.matching_client_address_ids || []).map(String).includes(physicalGlobalPlusClient.value) && !physicalGlobalPlusClientConfirmed.checked) {
+                setGlobalPlusFormStatus('Confirme la correspondance entre le client Global+ et le délégataire du lot.', '#be123c');
+                return;
+            }
+
+            if (!physicalGlobalPlusController?.value) {
+                setGlobalPlusFormStatus('Choisis le technicien Global+.', '#be123c');
+                return;
+            }
+
+            physicalGlobalPlusSubmit.disabled = true;
+            physicalGlobalPlusSubmit.textContent = 'Envoi et vérification en cours...';
+            setGlobalPlusFormStatus(appointment.global_plus_demand_id ? 'Reprise de l’affectation du technicien, sans recréer le dossier ni modifier le client...' : 'Création du dossier dans Global+...');
+
+            try {
+                const response = await fetch(appointment.global_plus_store_url, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                    body: JSON.stringify(appointment.global_plus_demand_id ? { controller_id: Number(physicalGlobalPlusController.value) } : {
+                        version_formulaire_id: Number(physicalGlobalPlusVersion.value),
+                        client_address_id: Number(physicalGlobalPlusClient.value),
+                        client_delegataire_confirmed: physicalGlobalPlusClientConfirmed.checked,
+                        controller_id: Number(physicalGlobalPlusController.value),
+                        installer_address_id: physicalGlobalPlusInstaller?.value ? Number(physicalGlobalPlusInstaller.value) : null,
+                        installer_name: physicalGlobalPlusInstallerName?.value || null,
+                        installer_siren: physicalGlobalPlusInstallerSiren?.value || null,
+                        installer_phone: physicalGlobalPlusInstallerPhone?.value || null,
+                        installer_address: physicalGlobalPlusInstallerAddress?.value || null,
+                        installer_postal_code: physicalGlobalPlusInstallerPostalCode?.value || null,
+                        installer_city: physicalGlobalPlusInstallerCity?.value || null,
+                        precariousness: physicalGlobalPlusPrecariousness?.value ? Number(physicalGlobalPlusPrecariousness.value) : null,
+                        title: physicalGlobalPlusTitle?.value || null,
+                        sub_title: physicalGlobalPlusSubTitle?.value || null,
+                        send_documents: Boolean(physicalGlobalPlusSendDocuments?.checked),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Création Global+ impossible.');
+                }
+
+                const updatedAppointment = payload.appointment || appointment;
+                globalPlusReferencesCache.delete(String(appointment.id));
+                updateLotAppointmentState(updatedAppointment);
+                currentPhysicalLotAppointment = updatedAppointment;
+                configureGlobalPlusStatus(updatedAppointment);
+                renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
+                physicalGlobalPlusForm?.classList.toggle('hidden', !payload.warning);
+                setGlobalPlusFormStatus(payload.message || 'Dossier créé dans Global+.', payload.warning ? '#be123c' : '#15803d');
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Création Global+ impossible.', '#be123c');
+            } finally {
+                physicalGlobalPlusSubmit.disabled = Boolean(currentPhysicalLotAppointment?.global_plus_processing);
+                physicalGlobalPlusSubmit.textContent = currentPhysicalLotAppointment?.global_plus_status === 'appointment_failed' ? 'Confirmer l’affectation' : 'Créer le dossier Global+';
+            }
+        }
+
+        async function syncGlobalPlusDocuments() {
+            const appointment = currentPhysicalLotAppointment;
+
+            if (!appointment?.global_plus_documents_sync_url || !physicalGlobalPlusSyncDocuments) {
+                return;
+            }
+
+            physicalGlobalPlusSyncDocuments.disabled = true;
+            physicalGlobalPlusSyncDocuments.textContent = 'Synchronisation...';
+
+            try {
+                const response = await fetch(appointment.global_plus_documents_sync_url, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': lotDetailCsrfToken,
+                    },
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || Object.values(payload.errors || {})?.[0]?.[0] || 'Synchronisation Global+ impossible.');
+                }
+
+                const updatedAppointment = payload.appointment || appointment;
+                updateLotAppointmentState(updatedAppointment);
+                currentPhysicalLotAppointment = updatedAppointment;
+                configureGlobalPlusStatus(updatedAppointment);
+                renderLotDocumentsList(updatedAppointment, physicalDocumentsList, physicalDocumentsCount);
+                setGlobalPlusFormStatus(payload.message || 'Documents synchronisés avec Global+.', '#15803d');
+            } catch (error) {
+                setGlobalPlusFormStatus(error.message || 'Synchronisation Global+ impossible.', '#be123c');
+            } finally {
+                physicalGlobalPlusSyncDocuments.disabled = false;
+                physicalGlobalPlusSyncDocuments.textContent = 'Synchroniser les documents';
+            }
+        }
+
+        function openPhysicalDetail(appointment) {
+            currentPhysicalLotAppointment = appointment;
+            const postVisitLink = document.getElementById('lot-physical-post-visit');
+            if (postVisitLink) {
+                postVisitLink.classList.toggle('hidden', !appointment.post_visit_url);
+                if (appointment.post_visit_url) postVisitLink.href = appointment.post_visit_url;
+                else postVisitLink.removeAttribute('href');
+            }
+            physicalTitle.textContent = customerLabel(appointment);
+            physicalSubtitle.textContent = appointment.is_placed
+                ? 'RDV physique placé'
+                : 'Dossier non encore placé physiquement';
+            physicalInfos.innerHTML = infoGrid([
+                ['Statut', appointment.status_label],
+                ...(appointment.post_visit_status ? [['Traitement du dossier', appointment.post_visit_status]] : []),
+                ...(appointment.post_visit_outcome ? [['Conclusion du contrôle', appointment.post_visit_outcome]] : []),
+                ['Technicien', appointment.placed_technician_name],
+                ['Date du RDV', formatDateTime(appointment.placed_at)],
+                ['Prestation', appointment.placed_service_label],
+                ['Raison sociale bénéficiaire', appointment.company_name],
+                ['Nom du site', appointment.site_name],
+                ['Installateur', appointment.installer_name],
+                ['Téléphone', appointment.customer_phone],
+                ['Adresse', fullAddress(appointment)],
+                ['Référence', appointment.external_reference],
+                ['Satisfaction physique', appointment.physical_satisfaction === null || appointment.physical_satisfaction === undefined ? '-' : (appointment.physical_satisfaction ? 'Satisfaisant' : 'Non satisfaisant')],
+            ]);
+
+            physicalVisitsInput.value = appointment.unsuccessful_visits_count ?? 0;
+            physicalVisitsInput.disabled = !appointment.can_update_visits;
+            physicalVisitsSubmit.disabled = !appointment.can_update_visits;
+            physicalVisitsStatus.classList.add('hidden');
+            stageDocumentFiles(physicalDocumentsUploadContext, []);
+            renderLotDocumentsList(appointment, physicalDocumentsList, physicalDocumentsCount);
+            clearDocumentUploadStatus(physicalDocumentsUploadStatus);
+
+            if (appointment.tracking_url) {
+                physicalTrackingLink.href = appointment.tracking_url;
+                physicalTrackingWrap.classList.remove('hidden');
+            } else {
+                physicalTrackingWrap.classList.add('hidden');
+            }
+
+            configureStatsExclusionControls(appointment, physicalStatsExclusionStatus, physicalStatsExclusionToggle);
+            configureResetProcessingControls(appointment, physicalResetProcessingStatus, physicalResetProcessingButton);
+            configureGlobalPlusStatus(appointment);
+            clearGlobalPlusFormStatus();
+            physicalGlobalPlusForm?.classList.add('hidden');
+            openModal(physicalModal);
+            window.setTimeout(() => {
+                renderLotDetailMap('lot-physical-detail-map', 'lot-physical-detail-map-status', appointment);
+            }, 80);
+        }
+
+        function openContactDetail(appointment) {
+            currentContactLotAppointment = appointment;
+            contactTitle.textContent = customerLabel(appointment);
+            contactSubtitle.textContent = appointment.contact_satisfaction === null || appointment.contact_satisfaction === undefined
+                ? 'Contact non qualifié'
+                : (appointment.contact_satisfaction ? 'Contact satisfaisant' : 'Contact non satisfaisant');
+            contactInfos.innerHTML = infoGrid([
+                ['Statut', appointment.status_label],
+                ['Traité le', formatDateTime(appointment.contact_processed_at)],
+                ['Traité par', appointment.contact_processed_by_name],
+                ['Raison sociale bénéficiaire', appointment.company_name],
+                ['Nom du site', appointment.site_name],
+                ['Installateur', appointment.installer_name],
+                ['Téléphone', appointment.customer_phone],
+                ['Adresse', fullAddress(appointment)],
+                ['Référence', appointment.external_reference],
+            ]);
+            contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
+            stageDocumentFiles(contactDocumentsUploadContext, []);
+            renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
+            clearDocumentUploadStatus(contactDocumentsUploadStatus);
+
+            configureStatsExclusionControls(appointment, contactStatsExclusionStatus, contactStatsExclusionToggle);
+            configureResetProcessingControls(appointment, contactResetProcessingStatus, contactResetProcessingButton);
+            openModal(contactModal);
+            window.setTimeout(() => {
+                renderLotDetailMap('lot-contact-detail-map', 'lot-contact-detail-map-status', appointment);
+            }, 80);
+        }
+
+        document.addEventListener('click', event => {
+            const button = event.target.closest('.lot-appointment-detail-trigger');
+            if (!button) return;
+            const appointment = lotAppointmentDetails.get(String(button.dataset.lotAppointmentId));
+
+            if (!appointment) {
+                return;
+            }
+
+            if (appointment.is_contact_processed || appointment.processing_mode === 'contact') {
+                openContactDetail(appointment);
+                return;
+            }
+
+            openPhysicalDetail(appointment);
+        });
+
+        const boundLotRows = new WeakSet();
+        const bindLotRows = () => {
             document.querySelectorAll('[data-lot-appointment-row]').forEach((row) => {
                 if (boundLotRows.has(row)) return;
                 boundLotRows.add(row);
@@ -2795,7 +2794,6 @@
                 row.addEventListener('mousemove', moveLotAppointmentTooltip);
                 row.addEventListener('mouseleave', hideLotAppointmentTooltip);
             });
-
         };
         bindLotRows();
         document.addEventListener('techcalendar:filters-before-update', hideLotAppointmentTooltip);
