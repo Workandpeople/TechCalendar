@@ -29,6 +29,8 @@ class PostVisitWorkflow
         'unverifiable' => 'Inaccessible / non vérifiable',
     ];
 
+    public const REPORT_STATES = ['visited', 'rt_control', 'recontrol', 'report'];
+
     public const TRANSITIONS = [
         'record_visit' => ['from' => ['awaiting_visit'], 'to' => 'visited', 'label' => 'Visite effectuée', 'review' => false],
         'submit_control' => ['from' => ['visited'], 'to' => 'rt_control', 'label' => 'Contrôle soumis au RT', 'review' => false],
@@ -41,13 +43,11 @@ class PostVisitWorkflow
 
     public function recordReport(User $actor, Dossier $dossier, DossierOperation $operation, DossierDocument $document, array $data): void
     {
-        $state = DossierStatusCatalog::describe($operation->legacy_status)['key'];
-        $review = in_array($state, ['rt_control', 'recontrol'], true);
-        Gate::forUser($actor)->authorize($review ? 'reviewControl' : 'update', $dossier);
+        Gate::forUser($actor)->authorize('update', $dossier);
         $this->transition($actor, $dossier, $operation, [
             ...$data, 'action' => 'record_report', 'report_document_id' => $document->id,
-        ], ['from' => [$review ? $state : 'visited'], 'to' => $document->client_visible ? 'report' : 'rt_control',
-            'review' => $review, 'label' => $document->client_visible ? 'Rapport Genius enregistré' : 'Rapport privé transmis au contrôle RT']);
+        ], ['from' => self::REPORT_STATES, 'to' => $document->client_visible ? 'report' : 'rt_control',
+            'label' => $document->client_visible ? 'Rapport Genius enregistré' : 'Rapport privé transmis au contrôle RT']);
     }
 
     public function apply(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void
@@ -107,6 +107,9 @@ class PostVisitWorkflow
         return DB::transaction(function () use ($actor, $dossier, $operation, $data, $transition): DossierActivity {
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
             $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
+            if ($data['action'] === 'record_report') {
+                $transition['review'] = DossierStatusCatalog::describe($operation->legacy_status)['key'] !== 'visited';
+            }
             if ($data['action'] === 'client_response') {
                 // Recheck ownership under the lock in case staff reassigned the dossier.
                 Gate::forUser($actor)->authorize('respondToNonConformity', $dossier);

@@ -1992,3 +1992,26 @@ barre du tableau ; les mises a jour AJAX remplacent aussi ses options de lecture
 Les preferences locales restent limitees a la categorie et a la pagination,
 sans stocker de recherche ou d'identite client. Les filtres fonctionnent aussi
 sans JavaScript avec le bouton de soumission de secours.
+
+Un rapport peut aussi etre depose pour corriger une fiche deja en Rapport Genius,
+avec les droits de validation d'un gerant. Les memes automatismes restent appliques :
+partage client vers Rapport Genius, prive vers Controle RT, avis projete dans le lot.
+Le choix d'une prestation unique est automatique et n'est jamais un select obligatoire
+masque invalide. En l'absence de prestation eligible, le formulaire explique le blocage
+avant tout transfert ; les choix multi-prestations restent visibles et valides.
+
+Le retrait d'une piece de controle est une suppression logique reservee aux validateurs.
+Le fichier prive, ses metadonnees, les references et la trace restent conserves ; ni
+l'etat, ni l'avis, ni les resultats de lot, ni le marquage/date de facturation ne sont
+reinitialises. Le document retire n'est plus liste ou telechargeable dans les espaces
+actifs. Un suivi CAPCEE existant continue d'interdire ce retrait. Les erreurs sont
+rouvertes dans leur propre dialogue de suppression, et non dans l'ajout de document.
+Aucune migration, reprise de donnees ou activation d'envoi n'est necessaire.
+
+Dans la prise de RDV, propositions et rendez-vous places partagent l'infobulle
+des trajets, avec le nom complet du technicien. Les voisins sont limites aux
+vrais RDV du meme technicien et du meme jour. Le calcul des distances d'un RDV
+place est differe au survol/focus, annule a la sortie et mis en cache en memoire
+pour 15 minutes (128 trajets maximum), sans calcul supplementaire au chargement.
+Les donnees de propositions deja calculees restent reutilisees ; coordonnees ou
+distances absentes sont indiquees indisponibles, et les estimations sont libellees.

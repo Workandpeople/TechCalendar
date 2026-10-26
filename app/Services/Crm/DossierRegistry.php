@@ -335,20 +335,25 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('update', $document->dossier);
         DB::transaction(function () use ($actor, $document): void {
-            // Same parent lock as the report workflow: a validated PDF cannot disappear mid-review.
+            // Serialize withdrawal with control validation and CAPCEE preparation.
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
             Gate::forUser($actor)->authorize('update', $dossier);
             $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
             if (CapceeAutomaticSubmission::where('dossier_document_id', $document->id)->exists()) {
                 throw ValidationException::withMessages(['document' => 'Ce rapport possède un suivi CAPCEE. Il est conservé pour garantir la traçabilité des transmissions.']);
             }
-            if ($dossier->operations()->where('report_document_id', $document->id)->exists()
-                || ($document->document_type === 'visit' && $dossier->activities()->where('changed_fields->visit_document_id', $document->id)->exists())) {
-                throw ValidationException::withMessages(['document' => 'Ce document justifie une visite ou le dernier avis du contrôle. Il est conservé dans l’historique et ne peut pas être supprimé.']);
+            $controlEvidence = $dossier->operations()->where('report_document_id', $document->id)->exists()
+                || ($document->document_type === 'visit' && $dossier->activities()->where('changed_fields->visit_document_id', $document->id)->exists());
+            if ($controlEvidence) {
+                Gate::forUser($actor)->authorize('reviewControl', $dossier);
             }
+            // Soft deletion hides the attachment, not the control result or its retained evidence.
+            $document->forceFill(['client_visible' => false, 'delegataire_visible' => false])->save();
             $document->delete();
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
-                'body' => 'Document retiré : '.$document->name, 'changed_fields' => ['document_id' => $document->id]]);
+                'body' => 'Document retiré : '.$document->name.'. Fichier et trace conservés ; état, avis et facturation inchangés.',
+                'changed_fields' => ['document_id' => $document->id, 'document_type' => $document->document_type,
+                    'control_evidence_retained' => $controlEvidence, 'control_reference' => $document->control_reference]]);
         });
     }
 

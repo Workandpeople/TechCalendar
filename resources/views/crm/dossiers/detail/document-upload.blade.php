@@ -1,4 +1,4 @@
-<x-dossier-dialog id="documents-dossier" title="Ajouter un document ou un rapport" :reopen="$errors->any() && (old('_form') === 'document' || $errors->has('document'))">
+<x-dossier-dialog id="documents-dossier" title="Ajouter un document ou un rapport" :reopen="$errors->any() && (old('_form') === 'document' || (! old('_form') && $errors->has('document')))">
     <form method="POST" enctype="multipart/form-data" action="{{ route('v2.dossiers.documents.store', $dossier) }}" class="mt-4 space-y-4" data-document-upload data-can-review="{{ auth()->user()->can('reviewControl', $dossier) ? '1' : '0' }}">
         @csrf
         <input type="hidden" name="_form" value="document">
@@ -12,7 +12,7 @@
         <div data-document-name><label for="document_name" class="gc-label">Nom du document *</label><input id="document_name" name="name" maxlength="190" class="gc-input" required value="{{ old('name') }}" placeholder="Ex. Facture travaux, plan…"><p class="text-xs text-slate-500">Le nom du bénéficiaire sera ajouté automatiquement.</p></div>
         <fieldset data-operation-fields class="gc-report-fields grid gap-4 sm:grid-cols-2" @disabled(old('document_type', 'free') === 'free') @if (old('document_type', 'free') === 'free') hidden @endif>
             <legend class="sr-only">Informations du rapport</legend>
-            <div class="sm:col-span-2" @if ($dossier->operations->count() === 1) hidden @endif><label class="gc-label" for="report-operation">Prestation concernée *</label>
+            <div class="sm:col-span-2" data-operation-picker><label class="gc-label" for="report-operation">Prestation concernée *</label>
                 <select class="gc-input" id="report-operation" name="operation_id" required data-report-operation><option value="">Choisir une fiche</option>
                     @foreach ($dossier->operations as $operation)
                         @php($state = \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'])
@@ -20,6 +20,7 @@
                     @endforeach
                 </select>
             </div>
+            <p class="text-xs text-slate-500 sm:col-span-2" data-operation-summary hidden></p>
         </fieldset>
         <fieldset data-visit-fields class="grid gap-4" disabled hidden>
             <legend class="sr-only">Visite effectuée</legend>

@@ -2,6 +2,7 @@
 
 use App\Models\Dossier;
 use App\Models\DossierActivity;
+use App\Models\DossierBilling;
 use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
 use App\Models\Lot;
@@ -141,17 +142,16 @@ it('removes comments from all presentations while keeping a private audit trail'
     $this->actingAs($this->clientUser)->get(route('client.dossiers.show', $this->dossier))->assertDontSee('DELETED-NOTE');
 });
 
-it('provides safe inline preview and blocks removal of a report used by a control', function () {
+it('provides safe inline preview and withdraws a control attachment without erasing its evidence', function () {
     $this->post(route('v2.dossiers.documents.store', $this->dossier), ['name' => 'Preview', 'document' => UploadedFile::fake()->image('preview.png')])->assertSessionHasNoErrors();
     $doc = $this->dossier->documents()->sole();
     $this->get(route('v2.documents.download', ['document' => $doc, 'preview' => 1]))->assertOk()->assertHeader('Content-Type', 'image/png')
         ->assertHeader('X-Content-Type-Options', 'nosniff')->assertHeader('X-Frame-Options', 'SAMEORIGIN');
     $this->operation->forceFill(['report_document_id' => $doc->id])->save();
-    $this->deleteJson(route('v2.documents.destroy', $doc))->assertUnprocessable();
-    $this->operation->forceFill(['report_document_id' => null])->save();
     $this->delete(route('v2.documents.destroy', $doc))->assertRedirect();
     $this->get(route('v2.documents.download', $doc))->assertNotFound();
-    expect(Storage::disk('local')->exists($doc->path))->toBeTrue()->and(DossierDocument::withTrashed()->find($doc->id)->trashed())->toBeTrue();
+    expect(Storage::disk('local')->exists($doc->path))->toBeTrue()->and(DossierDocument::withTrashed()->find($doc->id)->trashed())->toBeTrue()
+        ->and($this->operation->fresh()->report_document_id)->toBe($doc->id);
 });
 
 it('offers downloads but no browser preview for Office documents', function () {
@@ -250,7 +250,85 @@ it('refuses reports before the visit or outside a review stage without orphan fi
         ->assertUnprocessable()->assertJsonValidationErrors('operation_id');
     expect($this->dossier->fresh()->version)->toBe(1)->and($this->dossier->documents()->count())->toBe(0)
         ->and(Storage::disk('local')->allFiles())->toBe([]);
-})->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'NON CONFORMITES', 'RAPPORT GENIUS', 'DOSSIER ANNULE']);
+})->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'NON CONFORMITES', 'DOSSIER ANNULE']);
+
+it('replaces a published report with a corrected version and keeps the previous file removable', function (string $audience, string $status) {
+    $url = route('v2.dossiers.documents.store', $this->dossier);
+    $this->post($url, experienceReport($this))->assertSessionHasNoErrors();
+    $previous = $this->dossier->documents()->sole();
+    $this->post($url, experienceReport($this, ['control_reference' => 'CORRECTED', 'outcome' => 'unsatisfactory', 'audience' => $audience]))
+        ->assertSessionHasNoErrors()->assertRedirect();
+    $current = $this->dossier->documents()->latest('id')->firstOrFail();
+    expect($this->operation->fresh()->legacy_status)->toBe($status)
+        ->and($this->operation->fresh()->report_document_id)->toBe($current->id)
+        ->and($this->operation->fresh()->control_outcome)->toBe('unsatisfactory')
+        ->and($this->dossier->documents()->count())->toBe(2);
+    $this->delete(route('v2.documents.destroy', $previous))->assertSessionHasNoErrors()->assertRedirect();
+    expect($this->dossier->documents()->sole()->id)->toBe($current->id);
+    Storage::disk('local')->assertExists($previous->path);
+})->with([['client', 'RAPPORT GENIUS'], ['shared', 'RAPPORT GENIUS'], ['internal', 'CONTROLE RT']]);
+
+it('does not allow planning to replace a published report without review rights', function () {
+    $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    $this->actingAs($planner)->postJson(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this))->assertForbidden();
+    expect($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
+});
+
+it('withdraws the active report only for reviewers and leaves control billing and private evidence intact', function () {
+    $this->post(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this, ['audience' => 'shared']))->assertSessionHasNoErrors();
+    $document = $this->dossier->documents()->sole();
+    $operation = $this->operation->fresh()->getAttributes();
+    $billing = DossierBilling::forceCreate(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $this->operation->id,
+        'marked_at' => now()->subDay(), 'source' => 'native', 'invoice_reference' => 'KEEP-ME']);
+    $preserved = $billing->refresh()->getAttributes();
+    $url = route('v2.documents.destroy', $document);
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    foreach ([$planner, $this->clientUser, $this->delegataireUser] as $user) {
+        $this->actingAs($user)->deleteJson($url)->assertForbidden();
+        expect($document->fresh()->trashed())->toBeFalse();
+    }
+    $this->actingAs($this->staff)->delete($url)->assertSessionHasNoErrors()->assertRedirect();
+    expect($document->fresh()->trashed())->toBeTrue()
+        ->and($document->fresh()->client_visible)->toBeFalse()->and($document->fresh()->delegataire_visible)->toBeFalse()
+        ->and($this->operation->fresh()->getAttributes())->toBe($operation)
+        ->and($billing->fresh()->getAttributes())->toBe($preserved)
+        ->and($this->dossier->activities()->where('kind', 'document_removed')->sole()->changed_fields['control_evidence_retained'])->toBeTrue();
+    Storage::disk('local')->assertExists($document->path);
+    $this->get(route('v2.documents.download', $document))->assertNotFound();
+    foreach ([$this->clientUser, $this->delegataireUser] as $user) {
+        $this->actingAs($user)->get(route('client.documents.download', $document))->assertNotFound();
+        $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertDontSee('Rapport de contrôle - CONTROL-001');
+    }
+});
+
+it('rolls back document withdrawal when the audit cannot be written', function () {
+    $this->post(route('v2.dossiers.documents.store', $this->dossier), experienceReport($this, ['audience' => 'shared']))->assertSessionHasNoErrors();
+    $document = $this->dossier->documents()->sole();
+    DossierActivity::creating(function ($activity) {
+        if ($activity->kind === 'document_removed') {
+            throw new RuntimeException('Audit unavailable');
+        }
+    });
+    $this->deleteJson(route('v2.documents.destroy', $document))->assertServerError();
+    expect($document->fresh()->trashed())->toBeFalse()
+        ->and($document->fresh()->client_visible)->toBeTrue()->and($document->fresh()->delegataire_visible)->toBeTrue()
+        ->and($this->operation->fresh()->report_document_id)->toBe($document->id);
+    Storage::disk('local')->assertExists($document->path);
+});
+
+it('uses the dossier sole operation when replacing an imported billed report without losing billing', function () {
+    $this->operation->forceFill(['legacy_status' => 'DOSSIERS FACTURER'])->save();
+    $billing = DossierBilling::forceCreate(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $this->operation->id,
+        'marked_at' => now()->subDays(10), 'source' => 'coffrac', 'invoice_reference' => 'HISTORIC']);
+    $preserved = $billing->refresh()->getAttributes();
+    $data = experienceReport($this);
+    unset($data['operation_id']);
+    $this->postJson(route('v2.dossiers.documents.store', $this->dossier), $data)->assertRedirect();
+    expect($this->operation->fresh()->legacy_status)->toBe('RAPPORT GENIUS')
+        ->and($this->operation->fresh()->report_document_id)->not->toBeNull()
+        ->and($billing->fresh()->getAttributes())->toBe($preserved);
+});
 
 it('rolls back an uploaded report and opinion together if the workflow audit fails', function () {
     DossierActivity::creating(function ($activity) {

@@ -46,6 +46,27 @@ beforeEach(function () {
 
 afterEach(fn () => Http::assertNothingSent());
 
+it('reopens the correct withdrawal dialog when CAPCEE protects the report instead of reopening upload', function () {
+    ($this->upload)()->assertSessionHasNoErrors();
+    $document = $this->dossier->documents()->sole();
+    $url = route('v2.documents.destroy', $document);
+    $dialog = 'supprimer-'.sha1($url);
+    $this->from(route('v2.dossiers.show', $this->dossier))->delete($url, ['_form' => $dialog])
+        ->assertRedirect()->assertSessionHasErrors('document')->assertSessionHasInput('_form', $dialog);
+    // Model the following request with the JSON session serializer used in production.
+    $response = $this->withSession(['errors' => ['default' => ['format' => ':message', 'messages' => [
+        'document' => ['Ce rapport possède un suivi CAPCEE.'],
+    ]]], '_old_input' => ['_form' => $dialog]])->get(route('v2.dossiers.show', $this->dossier))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML($response->getContent(), LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+    expect($xpath->query('//dialog[@id="'.$dialog.'"][@data-dialog-reopen]')->length)->toBe(1)
+        ->and($xpath->query('//dialog[@id="documents-dossier"][@data-dialog-reopen]')->length)->toBe(0)
+        ->and($document->fresh()->trashed())->toBeFalse()
+        ->and($this->operation->fresh()->report_document_id)->toBe($document->id);
+    Storage::disk('local')->assertExists($document->path);
+});
+
 it('captures a validated report but creates no delivery or job while the API is disabled', function () {
     ($this->upload)()->assertSessionHasNoErrors();
     $submission = CapceeAutomaticSubmission::sole();

@@ -29,8 +29,8 @@
             @if ($remove)
                 @php($removeDialog = 'supprimer-'.sha1($remove))
                 <a href="#{{ $removeDialog }}" class="gc-btn-danger gc-document-action" title="Supprimer {{ $name }}" aria-label="Supprimer {{ $name }}"><x-nav-icon name="trash" /></a>
-                <x-dossier-dialog :id="$removeDialog" :title="'Supprimer : '.$name">
-                    <form method="POST" action="{{ $remove }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Retirer ce document ? La trace est conservée.</p><button class="gc-btn-danger" type="submit">Confirmer la suppression</button></form>
+                <x-dossier-dialog :id="$removeDialog" :title="'Supprimer : '.$name" :reopen="$errors->any() && old('_form') === $removeDialog">
+                    <form method="POST" action="{{ $remove }}" class="mt-2 space-y-2">@csrf @method('DELETE')<input type="hidden" name="_form" value="{{ $removeDialog }}"><p class="text-xs">Retirer ce document de la fiche ? Le fichier et sa trace sont conservés. L’état du dossier, l’avis du contrôle et la facturation ne changent pas. Un rapport suivi par CAPCEE reste protégé.</p><button class="gc-btn-danger" type="submit">Confirmer la suppression</button></form>
                 </x-dossier-dialog>
             @endif
         </div>

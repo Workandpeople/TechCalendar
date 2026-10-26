@@ -434,7 +434,7 @@ it('supports imported appointments without a modification date but still rejects
         ->assertUnprocessable()->assertJsonValidationErrors('appointment');
 });
 
-it('records a technical visit only after its document upload and blocks its removal', function () {
+it('records a technical visit only after upload and retains the proof when withdrawn by a manager', function () {
     $url = route('v2.dossiers.documents.store', $this->dossier);
     $payload = ['document_type' => 'visit', 'operation_id' => $this->operation->id,
         'appointment_id' => $this->appointment->id, 'version' => 1, 'name' => 'Compte rendu visite'];
@@ -445,7 +445,10 @@ it('records a technical visit only after its document upload and blocks its remo
     expect($this->operation->fresh()->legacy_status)->toBe('RDV VISITE')->and($visit->document_type)->toBe('visit')
         ->and($this->operation->fresh()->visit_appointment_id)->toBe($this->appointment->id)
         ->and($this->row->fresh()->physical_satisfaction)->toBeNull();
-    $this->deleteJson(route('v2.documents.destroy', $visit))->assertUnprocessable();
+    $this->actingAs($this->planner)->deleteJson(route('v2.documents.destroy', $visit))->assertForbidden();
+    $this->actingAs($this->manager)->deleteJson(route('v2.documents.destroy', $visit))->assertRedirect();
+    expect($visit->fresh()->trashed())->toBeTrue();
+    Storage::disk('local')->assertExists($visit->path);
     postVisitAction($this, 'submit_control')->assertRedirect();
     expect($this->operation->fresh()->legacy_status)->toBe('CONTROLE RT')->and($this->operation->fresh()->control_outcome)->toBeNull();
 });

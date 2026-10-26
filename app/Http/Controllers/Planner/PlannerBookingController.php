@@ -2097,6 +2097,7 @@ class PlannerBookingController extends Controller
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $appointment->technician?->full_name_with_departments,
+                    'technician_full_name' => $appointment->technician?->full_name,
                     'technician_address' => $appointment->technician?->address,
                     'technician_latitude' => $appointment->technician?->latitude ? (float) $appointment->technician->latitude : null,
                     'technician_longitude' => $appointment->technician?->longitude ? (float) $appointment->technician->longitude : null,
@@ -3042,6 +3043,7 @@ class PlannerBookingController extends Controller
             'extendedProps' => [
                 'technician_id' => $technician->id,
                 'technician_name' => $technician->full_name_with_departments,
+                'technician_full_name' => $technician->full_name,
                 'technician_address' => $technician->address,
                 'technician_latitude' => $technician->latitude ? (float) $technician->latitude : null,
                 'technician_longitude' => $technician->longitude ? (float) $technician->longitude : null,

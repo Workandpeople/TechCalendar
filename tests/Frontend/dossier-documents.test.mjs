@@ -1,15 +1,125 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reportActions, documentPreviewKind, initDocumentPreview } from '../../resources/js/dossier-documents.js';
+import { reportActions, documentPreviewKind, initDocumentPreview, syncDossierDocumentUpload, initDossierDocuments } from '../../resources/js/dossier-documents.js';
 
 test('report actions follow existing states instead of permitting arbitrary status jumps', () => {
     assert.deepEqual(reportActions('visited'), ['submit_control']);
     assert.deepEqual(reportActions('rt_control'), ['validate_report']);
     assert.deepEqual(reportActions('rt_control', false), []);
     assert.deepEqual(reportActions('recontrol'), ['validate_report']);
-    for (const state of ['pending', 'awaiting_visit', 'non_compliant', 'report', 'invoiced', undefined]) {
+    assert.deepEqual(reportActions('report'), ['validate_report']);
+    assert.deepEqual(reportActions('report', false), []);
+    for (const state of ['pending', 'awaiting_visit', 'non_compliant', 'invoiced', undefined]) {
         assert.deepEqual(reportActions(state), []);
     }
+});
+
+function uploadHarness(states = ['report'], canReview = true) {
+    const select = options => ({
+        options: [{ value: '', dataset: {}, textContent: 'Choisir' }, ...options], value: '', required: true,
+        get selectedOptions() { return this.options.filter(option => option.value === this.value); },
+    });
+    const operation = select(states.map((state, index) => ({ value: String(index + 1), dataset: { state }, textContent: `Fiche ${index + 1}` })));
+    const appointment = select([{ value: '10', dataset: { operation: '1' } }]);
+    const name = {};
+    const nameField = { querySelector: () => name };
+    const reportInput = { required: true };
+    const fields = inputs => ({ querySelectorAll: () => inputs });
+    const nodes = {
+        '[data-report-operation]': operation, '[data-document-name]': nameField,
+        '[data-operation-picker]': {}, '[data-operation-summary]': {},
+        '[data-operation-fields]': fields([operation]), '[data-report-fields]': fields([reportInput]),
+        '[data-visit-fields]': fields([appointment]), '[data-visit-appointment]': appointment,
+        '[data-document-effect]': {}, '[type="file"]': {}, '[type="submit"]': {},
+    };
+    const handlers = {};
+    const form = { type: 'report', audience: 'client', dataset: { canReview: canReview ? '1' : '0' },
+        querySelector(selector) {
+            if (selector === '[name="document_type"]:checked') return { value: this.type };
+            if (selector === '[name="audience"]:checked') return { value: this.audience };
+            return nodes[selector];
+        },
+        addEventListener(name, handler) { handlers[name] = handler; },
+    };
+    return { form, nodes, operation, appointment, handlers, name, reportInput };
+}
+
+test('auto-selects the sole published report prestation without any hidden invalid required field', () => {
+    const ui = uploadHarness();
+    assert.equal(syncDossierDocumentUpload(ui.form), true);
+    assert.equal(ui.operation.value, '1');
+    assert.equal(ui.operation.disabled, false);
+    assert.equal(ui.operation.required, false);
+    assert.equal(ui.nodes['[data-operation-picker]'].hidden, true);
+    assert.equal(ui.nodes['[data-operation-summary]'].textContent, 'Prestation : Fiche 1');
+    assert.equal(ui.nodes['[type="submit"]'].disabled, false);
+    assert.match(ui.nodes['[data-document-effect]'].textContent, /Rapport Genius/);
+});
+
+test('keeps a required multi-prestation choice visible and selects the only eligible prestation', () => {
+    const ui = uploadHarness(['pending', 'report']);
+    assert.equal(syncDossierDocumentUpload(ui.form), true);
+    assert.equal(ui.operation.value, '2');
+    assert.equal(ui.operation.required, true);
+    assert.equal(ui.nodes['[data-operation-picker]'].hidden, false);
+    const multiple = uploadHarness(['visited', 'report']);
+    syncDossierDocumentUpload(multiple.form);
+    assert.equal(multiple.operation.value, '');
+    assert.equal(multiple.operation.required, true);
+    assert.equal(multiple.nodes['[data-operation-picker]'].hidden, false);
+});
+
+test('explains unavailable report types or review rights instead of leaving a hidden required error', () => {
+    for (const ui of [uploadHarness(['pending']), uploadHarness(['report'], false), uploadHarness([])]) {
+        assert.equal(syncDossierDocumentUpload(ui.form), false);
+        assert.equal(ui.operation.required, false);
+        assert.equal(ui.operation.disabled, true);
+        assert.equal(ui.nodes['[data-operation-picker]'].hidden, false);
+        assert.equal(ui.nodes['[type="submit"]'].disabled, true);
+        assert.match(ui.nodes['[data-document-effect]'].textContent, /Aucune fiche/);
+        ui.form.type = 'free';
+        assert.equal(syncDossierDocumentUpload(ui.form), true);
+        assert.equal(ui.nodes['[type="submit"]'].disabled, false);
+        assert.equal(ui.name.disabled, false);
+        assert.equal(ui.reportInput.disabled, true);
+    }
+});
+
+test('resynchronizes visit, report and free fields without disabling the selected report by mistake', () => {
+    const ui = uploadHarness(['awaiting_visit', 'report']);
+    ui.form.type = 'visit';
+    assert.equal(syncDossierDocumentUpload(ui.form), true);
+    assert.equal(ui.operation.value, '1');
+    assert.equal(ui.appointment.value, '10');
+    assert.equal(ui.appointment.disabled, false);
+    assert.equal(ui.reportInput.disabled, true);
+    ui.form.type = 'report';
+    ui.form.audience = 'internal';
+    assert.equal(syncDossierDocumentUpload(ui.form), true);
+    assert.equal(ui.operation.value, '2');
+    assert.equal(ui.appointment.disabled, true);
+    assert.equal(ui.reportInput.disabled, false);
+    assert.match(ui.nodes['[data-document-effect]'].textContent, /Contrôle RT/);
+    ui.form.type = 'free';
+    syncDossierDocumentUpload(ui.form);
+    assert.equal(ui.operation.disabled, true);
+    assert.equal(ui.operation.required, false);
+    assert.equal(ui.nodes['[data-document-name]'].hidden, false);
+});
+
+test('blocks an impossible keyboard submission and allows a valid report after switching type', () => {
+    const ui = uploadHarness(['report']);
+    ui.form.type = 'visit';
+    initDossierDocuments({ querySelectorAll: selector => selector === '[data-document-upload]' ? [ui.form] : [], querySelector: () => null }, {});
+    let prevented = false;
+    ui.handlers.submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    ui.form.type = 'report';
+    ui.handlers.change({ target: { name: 'document_type' } });
+    prevented = false;
+    ui.handlers.submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, false);
+    assert.equal(ui.nodes['[type="submit"]'].disabled, false);
 });
 
 function response(mime = 'application/pdf', disposition = 'inline; filename="report.pdf"', extra = {}) {

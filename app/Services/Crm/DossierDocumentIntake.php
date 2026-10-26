@@ -36,8 +36,8 @@ final class DossierDocumentIntake
                 if ($operation && $dossier->version !== (int) $data['version']) {
                     throw ValidationException::withMessages(['version' => 'Le dossier a changé. Recharge la fiche avant de déposer ce rapport.']);
                 }
-                if ($report && ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], ['visited', 'rt_control', 'recontrol'], true)) {
-                    throw ValidationException::withMessages(['operation_id' => 'Le rapport peut être ajouté en RDV visité, contrôle RT ou recontrôle.']);
+                if ($report && ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], PostVisitWorkflow::REPORT_STATES, true)) {
+                    throw ValidationException::withMessages(['operation_id' => 'Le rapport peut être ajouté à partir de RDV visité, y compris pour corriger un rapport existant.']);
                 }
                 $metadata = ['description' => $data['description'] ?? null, 'document_type' => $type,
                     'dossier_operation_id' => $operation?->id];

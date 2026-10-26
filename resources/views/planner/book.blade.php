@@ -1467,7 +1467,7 @@
         let crmDetailMapMarkers = [];
         let currentCrmDetailAppointmentId = null;
         let bookingInitialCrmDetailComment = '';
-        let bookingSuggestionTooltip = null;
+        let bookingTravelTooltip = null;
         let bookingCrmAppointmentTooltip = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
@@ -3452,7 +3452,7 @@
             }
         };
 
-        const fetchRouteBetween = async (origin, destination) => {
+        const fetchRouteBetween = async (origin, destination, signal = undefined) => {
             const fallback = () => {
                 const distanceKm = haversineDistanceKm(origin.lat, origin.lng, destination.lat, destination.lng);
 
@@ -3486,7 +3486,7 @@
                     destination,
                     url: sanitizeMapboxUrl(url),
                 });
-                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' }, signal });
                 const data = await response.json();
                 const route = data.routes?.[0];
 
@@ -3538,104 +3538,12 @@
 
         const formatRouteDistance = (distanceKm) => `${Number(distanceKm || 0).toFixed(1)} km`;
 
-        const ensureSuggestionTooltip = () => {
-            if (bookingSuggestionTooltip) {
-                return bookingSuggestionTooltip;
-            }
-
-            bookingSuggestionTooltip = document.createElement('div');
-            bookingSuggestionTooltip.style.cssText = [
-                'position:fixed',
-                'z-index:90',
-                'display:none',
-                'pointer-events:none',
-                'max-width:360px',
-                'border-radius:16px',
-                'padding:12px 14px',
-                'background:#31424c',
-                'color:#ffffff',
-                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
-                'font-size:12px',
-                'line-height:1.45',
-                'transform:translate(-50%, calc(-100% - 14px))',
-            ].join(';');
-            document.body.appendChild(bookingSuggestionTooltip);
-
-            return bookingSuggestionTooltip;
-        };
-
-        const moveSuggestionTooltip = (event) => {
-            const tooltip = ensureSuggestionTooltip();
-            const safeLeft = Math.min(Math.max(event.clientX, 170), window.innerWidth - 170);
-            const safeTop = Math.max(event.clientY, 120);
-
-            tooltip.style.left = `${safeLeft}px`;
-            tooltip.style.top = `${safeTop}px`;
-        };
-
-        const showSuggestionTooltip = (event, props) => {
-            if (!props?.is_suggestion) return;
-
-            const tooltip = ensureSuggestionTooltip();
-            const originName = props.origin_name ? String(props.origin_name) : '';
-            const hasPreviousAppointment = Boolean(props.has_previous_appointment)
-                || String(props.origin_label || '').toLowerCase().includes('rdv');
-            const hasNextAppointment = Boolean(props.has_next_appointment || props.next_appointment_id);
-            const tooltipRows = [{
-                title: 'Domicile → proposition',
-                detail: props.technician_address || 'Adresse du technicien',
-                distance: props.home_to_distance_km ?? props.travel_to_distance_km,
-                duration: props.home_to_minutes ?? props.travel_to_minutes,
-            }];
-
-            if (hasPreviousAppointment) {
-                tooltipRows.push({
-                    title: 'RDV précédent → proposition',
-                    detail: originName || 'Dernier RDV de la journée',
-                    distance: props.travel_to_distance_km,
-                    duration: props.travel_to_minutes,
-                });
-            }
-
-            if (hasNextAppointment) {
-                tooltipRows.push({
-                    title: 'Proposition → prochain RDV',
-                    detail: 'Trajet nécessaire pour conserver la suite du planning',
-                    distance: props.travel_after_distance_km,
-                    duration: props.travel_after_minutes,
-                });
-            } else {
-                tooltipRows.push({
-                    title: 'Proposition → retour domicile',
-                    detail: props.technician_address || 'Adresse du technicien',
-                    distance: props.return_home_distance_km ?? props.travel_after_distance_km,
-                    duration: props.return_home_minutes ?? props.travel_after_minutes,
-                });
-            }
-
-            const rowsHtml = tooltipRows.map((row, index) => `
-                <div style="${index === 0 ? 'margin-top:10px;' : 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;'}">
-                    <p style="font-weight:700;">${escapeHtml(row.title)}</p>
-                    ${row.detail ? `<p style="margin-top:3px;color:rgba(255,255,255,.72);">${escapeHtml(row.detail)}</p>` : ''}
-                    <p style="margin-top:5px;color:rgba(255,255,255,.92);">${escapeHtml(formatRouteDistance(row.distance))} · ${escapeHtml(formatRouteDuration(row.duration))}</p>
-                </div>
-            `).join('');
-
-            tooltip.innerHTML = `
-                <div>
-                    <p style="font-weight:800;letter-spacing:.02em;">Distances de la proposition</p>
-                    ${rowsHtml}
-                </div>
-            `;
-            tooltip.style.display = 'block';
-            moveSuggestionTooltip(event);
-        };
-
-        const hideSuggestionTooltip = () => {
-            if (bookingSuggestionTooltip) {
-                bookingSuggestionTooltip.style.display = 'none';
-            }
-        };
+        const ensureBookingTravelTooltip = () => bookingTravelTooltip ||= window.TechCalendarBookingTravel.create({
+            routeBetween: fetchRouteBetween,
+            getEvents: () => bookingCalendar?.getEvents() || [],
+            getTechnician: (id) => technicianById(id),
+        });
+        const hideSuggestionTooltip = () => bookingTravelTooltip?.hide();
 
         const addMinutes = (date, minutes) => new Date(date.getTime() + (Number(minutes || 0) * 60000));
 
@@ -5678,12 +5586,11 @@
                 },
                 eventContent: bookingCalendarEventContent,
                 eventMouseEnter: (info) => {
-                    if (!info.event.extendedProps?.is_suggestion) return;
-
-                    const moveHandler = (event) => moveSuggestionTooltip(event);
+                    const tooltip = ensureBookingTravelTooltip();
+                    const moveHandler = (event) => tooltip.move(event);
                     info.el._bookingSuggestionTooltipMoveHandler = moveHandler;
                     info.el.addEventListener('mousemove', moveHandler);
-                    showSuggestionTooltip(info.jsEvent, info.event.extendedProps);
+                    tooltip.show(info.jsEvent, info.event, info.el);
                 },
                 eventMouseLeave: (info) => {
                     const moveHandler = info.el._bookingSuggestionTooltipMoveHandler;
@@ -5693,6 +5600,22 @@
                         delete info.el._bookingSuggestionTooltipMoveHandler;
                     }
 
+                    hideSuggestionTooltip();
+                },
+                eventDidMount: (info) => {
+                    info.el.tabIndex = 0;
+                    const focus = () => {
+                        const box = info.el.getBoundingClientRect();
+                        ensureBookingTravelTooltip().show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
+                    };
+                    info.el._bookingTravelFocus = focus;
+                    info.el.addEventListener('focus', focus);
+                    info.el.addEventListener('blur', hideSuggestionTooltip);
+                },
+                eventWillUnmount: (info) => {
+                    info.el.removeEventListener('mousemove', info.el._bookingSuggestionTooltipMoveHandler);
+                    info.el.removeEventListener('focus', info.el._bookingTravelFocus);
+                    info.el.removeEventListener('blur', hideSuggestionTooltip);
                     hideSuggestionTooltip();
                 },
                 dateClick: openCalendarSlotModal,

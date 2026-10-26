@@ -18,8 +18,10 @@ import { initMultiSelects } from './multi-select';
 import { initDocumentUploadLimits } from './document-upload-limit';
 import { initBookingDossierSummary } from './booking-dossier-summary';
 import { initCommentExcerpts } from './comment-excerpts';
+import { createBookingTravelTooltip } from './booking-travel-tooltip';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
+window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
 initCommentMarkup();
 initCommentExcerpts();
 

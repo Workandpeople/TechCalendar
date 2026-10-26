@@ -1,6 +1,58 @@
 export function reportActions(state, canReview = true) {
     if (state === 'visited') return ['submit_control'];
-    return canReview && ['rt_control', 'recontrol'].includes(state) ? ['validate_report'] : [];
+    return canReview && ['rt_control', 'recontrol', 'report'].includes(state) ? ['validate_report'] : [];
+}
+
+export function syncDossierDocumentUpload(form) {
+    const operation = form.querySelector('[data-report-operation]');
+    const type = form.querySelector('[name="document_type"]:checked')?.value || 'free';
+    const report = type === 'report';
+    const canReview = form.dataset.canReview === '1';
+    const nameField = form.querySelector('[data-document-name]');
+    nameField.hidden = type !== 'free';
+    nameField.querySelector('input').disabled = type !== 'free';
+    const options = Array.from(operation.options);
+    options.forEach(option => {
+        option.disabled = !!option.value && (report ? reportActions(option.dataset.state, canReview).length === 0
+            : type === 'visit' && option.dataset.state !== 'awaiting_visit');
+    });
+    if (operation.selectedOptions[0]?.disabled) operation.value = '';
+    const available = options.filter(option => option.value && !option.disabled);
+    if (!operation.value && available.length === 1) operation.value = available[0].value;
+    const single = options.filter(option => option.value).length === 1 && available.length === 1;
+    const blocked = type !== 'free' && available.length === 0;
+    // A sole prestation is inferred on the server too: never hide an invalid required select.
+    operation.required = type !== 'free' && !single && !blocked;
+    form.querySelector('[data-operation-picker]').hidden = single;
+    const summary = form.querySelector('[data-operation-summary]');
+    summary.hidden = !single;
+    summary.textContent = single ? `Prestation : ${operation.selectedOptions[0].textContent}` : '';
+    for (const [selector, visible] of [['[data-operation-fields]', type !== 'free'], ['[data-report-fields]', report], ['[data-visit-fields]', type === 'visit']]) {
+        const fields = form.querySelector(selector);
+        fields.hidden = !visible;
+        fields.disabled = !visible || blocked;
+        fields.querySelectorAll('select, input').forEach(input => { input.disabled = !visible || blocked; });
+    }
+    const state = operation.selectedOptions[0]?.dataset.state;
+    const appointment = form.querySelector('[data-visit-appointment]');
+    Array.from(appointment.options).forEach(option => { option.disabled = !!option.value && option.dataset.operation !== operation.value; });
+    if (appointment.selectedOptions[0]?.disabled) appointment.value = '';
+    const candidates = Array.from(appointment.options).filter(option => option.value && !option.disabled);
+    if (!appointment.value && candidates.length === 1) appointment.value = candidates[0].value;
+    const unavailableVisit = type === 'visit' && operation.value && candidates.length === 0;
+    form.querySelector('[data-document-effect]').textContent = blocked
+        ? (report ? 'Aucune fiche ne permet ce dépôt avec vos droits actuels. Le rapport est disponible en RDV visité, contrôle RT, recontrôle ou Rapport Genius.'
+            : 'Aucune fiche en attente de visite. Choisissez une autre pièce ou vérifiez l’état du dossier.')
+        : unavailableVisit ? 'Aucun rendez-vous réalisé pour cette fiche. Vérifiez le rendez-vous avant d’ajouter la visite technique.'
+        : type === 'free' ? 'Pièce libre : aucun changement d’état.'
+        : type === 'visit' ? 'Ce document confirmera la visite et passera la fiche en RDV visité.'
+        : state ? (form.querySelector('[name="audience"]:checked')?.value === 'internal'
+            ? 'Rapport privé : la fiche passera en Contrôle RT, quel que soit l’avis.'
+            : 'Rapport partagé : la fiche passera en Rapport Genius, quel que soit l’avis.')
+        : 'Choisissez la fiche concernée par le rapport.';
+    form.querySelector('[type="file"]').accept = report ? '.pdf,application/pdf' : '.pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx';
+    form.querySelector('[type="submit"]').disabled = Boolean(blocked || unavailableVisit);
+    return !blocked && !unavailableVisit;
 }
 
 export function initDossierDocuments(root = document, browser = window) {
@@ -19,40 +71,12 @@ export function initDossierDocuments(root = document, browser = window) {
 
     root.querySelectorAll('[data-document-upload]').forEach((form) => {
         const operation = form.querySelector('[data-report-operation]');
-        const update = () => {
-            const type = form.querySelector('[name="document_type"]:checked')?.value || 'free';
-            const report = type === 'report';
-            const canReview = form.dataset.canReview === '1';
-            const nameField = form.querySelector('[data-document-name]');
-            nameField.hidden = type !== 'free';
-            nameField.querySelector('input').disabled = type !== 'free';
-            for (const [selector, enabled] of [['[data-operation-fields]', type !== 'free'], ['[data-report-fields]', report], ['[data-visit-fields]', type === 'visit']]) {
-                const fields = form.querySelector(selector);
-                fields.hidden = !enabled;
-                fields.disabled = !enabled;
-                fields.querySelectorAll('select, input').forEach((input) => { input.disabled = !enabled; });
-            }
-            Array.from(operation.options).forEach((option) => {
-                option.disabled = !!option.value && (report ? reportActions(option.dataset.state, canReview).length === 0 : type === 'visit' && option.dataset.state !== 'awaiting_visit');
-            });
-            if (operation.selectedOptions[0]?.disabled) operation.value = '';
-            const state = operation.selectedOptions[0]?.dataset.state;
-            const appointment = form.querySelector('[data-visit-appointment]');
-            Array.from(appointment.options).forEach((option) => { option.disabled = !!option.value && option.dataset.operation !== operation.value; });
-            if (appointment.selectedOptions[0]?.disabled) appointment.value = '';
-            const candidates = Array.from(appointment.options).filter(option => option.value && !option.disabled);
-            if (!appointment.value && candidates.length === 1) appointment.value = candidates[0].value;
-            form.querySelector('[data-document-effect]').textContent = type === 'free' ? 'Pièce libre : aucun changement d’état.'
-                : type === 'visit' ? 'Ce document confirmera la visite et passera la fiche en RDV visité.'
-                : ['visited', 'rt_control', 'recontrol'].includes(state) ? (form.querySelector('[name="audience"]:checked')?.value === 'internal'
-                    ? 'Rapport privé : la fiche passera en Contrôle RT, quel que soit l’avis.'
-                    : 'Rapport partagé : la fiche passera en Rapport Genius, quel que soit l’avis.')
-                : 'Choisissez une fiche en RDV visité, contrôle RT ou recontrôle.';
-            form.querySelector('[type="file"]').accept = report ? '.pdf,application/pdf' : '.pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx';
-        };
+        const update = () => syncDossierDocumentUpload(form);
         form.addEventListener('change', (event) => {
             if (['document_type', 'audience'].includes(event.target.name) || event.target === operation) update();
         });
+        form.addEventListener('submit', event => { if (!update()) event.preventDefault(); });
+        form.addEventListener('reset', () => browser.setTimeout(update, 0));
         update();
     });
 
