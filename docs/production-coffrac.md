@@ -1967,3 +1967,17 @@ les noms des techniciens desactives sur les anciens rendez-vous sont conserves.
 Les listes de gestion des utilisateurs affichent les comptes desactives avec
 une ligne grisee, un nom barre et un badge distinct, y compris apres filtrage AJAX.
 Les actions de restauration/suppression et les filtres de statut restent inchanges.
+
+Le marquage comptable conserve sa date serveur dans dossier_billings.marked_at ;
+la date n'est pas redemandee ni reecrite lors d'un changement d'etat. Elle est
+visible pres du badge en haut de fiche et dans le suivi de facturation, sans
+deplier l'historique. L'export Excel ajoute Date du passage en facture (colonne Q).
+Pour plusieurs marquages historiques, la premiere date connue est retenue ; une
+date Coffrac absente reste inconnue (cellule vide), sans reprise de updated_at
+ou d'une date d'import. Aucune migration ni reprise de donnees n'est necessaire.
+
+Les nouveaux rapports deposes dans un dossier sont nommes Rapport de controle -
+reference du controle, sans suffixe beneficiaire. Le nom est borne a 190 caracteres,
+mais la reference complete reste conservee dans control_reference. Les documents
+libres et visites techniques gardent leur suffixe beneficiaire. Aucun ancien
+document n'est renomme, et ni les audiences ni les transitions ne sont modifiees.

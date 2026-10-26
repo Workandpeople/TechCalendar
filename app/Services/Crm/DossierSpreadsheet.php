@@ -49,7 +49,7 @@ final class DossierSpreadsheet
                 $xml->endElement();
                 $xml->endElement();
                 $xml->startElement('sheetData');
-                $this->row($xml, ['Numéro de lot', 'Création', 'Modifié le', 'Modification', 'Date RDV', 'Bénéficiaire', 'Adresse', 'Code postal', 'Ville', 'Client', 'Délégataire', 'Téléphone', 'Prestations / états', 'Technicien', 'Suivi planning', 'Facturation']);
+                $this->row($xml, ['Numéro de lot', 'Création', 'Modifié le', 'Modification', 'Date RDV', 'Bénéficiaire', 'Adresse', 'Code postal', 'Ville', 'Client', 'Délégataire', 'Téléphone', 'Prestations / états', 'Technicien', 'Suivi planning', 'Facturation', 'Date du passage en facturé']);
                 $count = 1;
                 foreach ($query->lazy(200) as $dossier) {
                     $this->row($xml, $this->values($dossier, $table));
@@ -57,7 +57,7 @@ final class DossierSpreadsheet
                 }
                 $xml->endElement();
                 $xml->startElement('autoFilter');
-                $xml->writeAttribute('ref', 'A1:P'.$count);
+                $xml->writeAttribute('ref', 'A1:Q'.$count);
                 $xml->endElement();
                 $xml->endElement();
                 $xml->endDocument();
@@ -105,7 +105,8 @@ final class DossierSpreadsheet
             $dossier->client?->company_name ?: $dossier->client?->name ?: ($dossier->client_contact['company_name'] ?? $dossier->client_contact['name'] ?? ''),
             $dossier->delegataire?->company_name ?: $dossier->delegataire?->name ?: ($dossier->delegataire_contact['company_name'] ?? $dossier->delegataire_contact['name'] ?? ''),
             $dossier->phone, $dossier->operations->map(fn ($op) => ($op->service?->name ?: $op->legacy_service_name).' : '.DossierStatusCatalog::describe($op->legacy_status)['label'])->implode("\n"),
-            $dossier->listingAppointment?->technician?->full_name, $dossier->planningUser?->full_name, DossierBillingService::summary($dossier)['label']];
+            $dossier->listingAppointment?->technician?->full_name, $dossier->planningUser?->full_name, DossierBillingService::summary($dossier)['label'],
+            DossierBillingService::firstMarkedAt($dossier)?->format('d/m/Y H:i')];
     }
 
     private function row(XMLWriter $xml, array $values): void

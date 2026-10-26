@@ -74,6 +74,51 @@ it('keeps the mark through a real reopening and return to non conformity', funct
     $this->getJson(route('v2.dossiers.index', ['status' => 'invoiced']))->assertOk()->assertJsonPath('total', 1);
 });
 
+it('keeps the server marking date immutable and visible outside collapsed history after status changes or repeated requests', function () {
+    $markedAt = now()->setDate(2026, 10, 20)->setTime(9, 17, 42);
+    $this->travelTo($markedAt);
+    markDossierBilled($this, ['marked_at' => '1990-01-01 00:00:00'])->assertRedirect();
+    expect($this->dossier->billings()->sole()->marked_at->format('Y-m-d H:i:s'))->toBe('2026-10-20 09:17:42')
+        ->and($this->dossier->activities()->where('kind', 'billing')->sole()->changed_fields['marked_at'])->toBe($markedAt->toIso8601String());
+
+    $this->travel(3)->days();
+    foreach (['reopen_control', 'request_correction'] as $action) {
+        $this->postJson(route('v2.dossiers.operations.post-visit', [$this->dossier, $this->operation]), [
+            'version' => $this->dossier->fresh()->version, 'action' => $action, 'comment' => 'Correction nécessaire',
+        ])->assertRedirect();
+    }
+    markDossierBilled($this)->assertUnprocessable()->assertJsonValidationErrors('billing');
+    expect(DossierBillingService::firstMarkedAt($this->dossier->fresh('operations.billing'))->equalTo($markedAt))->toBeTrue();
+    $response = $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('20/10/2026 09:17');
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="utf-8" ?>'.$response->getContent(), LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+    expect($xpath->query('//span[@data-billing-date]/time')->length)->toBe(2)
+        ->and($xpath->query('//span[@data-billing-date]/ancestor::details')->length)->toBe(0);
+});
+
+it('does not invent a marking date for undated Coffrac history or an unbilled dossier', function () {
+    expect(DossierBillingService::firstMarkedAt($this->dossier->fresh('operations.billing')))->toBeNull();
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertDontSee('data-billing-date', false);
+    DossierBilling::create(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $this->operation->id,
+        'marked_at' => null, 'source' => 'coffrac']);
+    expect(DossierBillingService::firstMarkedAt($this->dossier->fresh('operations.billing')))->toBeNull();
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Date de facturation non renseignée');
+});
+
+it('uses the first known date across historical operation marks without changing the original ledger', function () {
+    foreach (['2024-05-10 11:00:00', '2023-02-03 14:20:00', null] as $index => $date) {
+        $operation = $index === 0 ? $this->operation : $this->dossier->operations()->create(['service_id' => $this->service->id]);
+        DossierBilling::create(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $operation->id,
+            'marked_at' => $date, 'source' => 'coffrac']);
+    }
+    $dates = $this->dossier->billings()->orderBy('id')->pluck('marked_at')->all();
+    $dossier = $this->dossier->fresh('operations.billing');
+    expect(DossierBillingService::firstMarkedAt($dossier)->format('Y-m-d H:i:s'))->toBe('2023-02-03 14:20:00');
+    $this->get(route('v2.dossiers.show', $dossier))->assertOk()->assertSee('03/02/2023 14:20');
+    expect($this->dossier->billings()->orderBy('id')->pluck('marked_at')->all())->toEqual($dates);
+});
+
 it('can reopen a historically invoiced operation without losing billing', function () {
     markDossierBilled($this)->assertRedirect();
     $this->operation->forceFill(['legacy_status' => 'DOSSIERS FACTURER'])->save();

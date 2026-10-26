@@ -31,7 +31,7 @@
         </fieldset>
         <fieldset data-report-fields class="gc-report-fields grid gap-4 sm:grid-cols-2" disabled hidden>
             <legend class="sr-only">Avis du rapport</legend>
-            <div class="sm:col-span-2"><label class="gc-label" for="control-reference">Référence du contrôle *</label><input class="gc-input" id="control-reference" name="control_reference" maxlength="190" value="{{ old('control_reference') }}" required></div>
+            <div class="sm:col-span-2"><label class="gc-label" for="control-reference">Référence du contrôle *</label><input class="gc-input" id="control-reference" name="control_reference" maxlength="190" value="{{ old('control_reference') }}" required><p class="text-xs text-slate-500">Nom automatique : Rapport de contrôle - référence du contrôle.</p></div>
             <div><label class="gc-label" for="report-inspected">Date du rendez-vous réalisé *</label><input class="gc-input" id="report-inspected" name="inspected_on" type="date" max="{{ now()->toDateString() }}" value="{{ old('inspected_on') }}" required></div>
             <div><label class="gc-label" for="report-issued">Date d’émission *</label><input class="gc-input" id="report-issued" name="issued_on" type="date" max="{{ now()->toDateString() }}" value="{{ old('issued_on') }}" required></div>
             <div><label class="gc-label" for="report-outcome">Avis du rapport *</label><select class="gc-input" id="report-outcome" name="outcome" required><option value="">Choisir</option>@foreach (\App\Services\Crm\PostVisitWorkflow::OUTCOMES as $key => $label)<option value="{{ $key }}" @selected(old('outcome') === $key)>{{ $label }}</option>@endforeach</select></div>

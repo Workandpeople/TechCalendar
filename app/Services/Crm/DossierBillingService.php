@@ -6,6 +6,7 @@ use App\Models\Dossier;
 use App\Models\DossierBilling;
 use App\Models\DossierOperation;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +25,13 @@ class DossierBillingService
             $count === 0 => ['label' => 'Non facturé', 'tone' => 'slate'],
             default => ['label' => 'Facturé', 'tone' => 'green'],
         };
+    }
+
+    public static function firstMarkedAt(Dossier $dossier): ?CarbonInterface
+    {
+        // Several historical operations may carry marks; never substitute an import/update date.
+        return $dossier->operations->map(fn ($operation) => $operation->billing?->marked_at)
+            ->filter()->sort()->first();
     }
 
     public function mark(User $actor, Dossier $dossier, ?DossierOperation $operation, array $data): void
@@ -68,7 +76,8 @@ class DossierBillingService
                     .($billing->invoice_reference ? ' Référence : '.$billing->invoice_reference.'.' : '')
                     .' Le statut métier est conservé.',
                 'changed_fields' => ['billing_id' => $billing->id, 'operation_id' => $operation->id,
-                    'invoice_reference' => $billing->invoice_reference, 'action' => 'marked_invoiced', 'scope' => 'dossier'],
+                    'invoice_reference' => $billing->invoice_reference, 'marked_at' => $billing->marked_at->toIso8601String(),
+                    'action' => 'marked_invoiced', 'scope' => 'dossier'],
             ]);
             $dossier->increment('version');
         }, 3);

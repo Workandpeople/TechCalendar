@@ -42,7 +42,7 @@ final class DossierDocumentIntake
                 $metadata = ['description' => $data['description'] ?? null, 'document_type' => $type,
                     'dossier_operation_id' => $operation?->id];
                 if ($report) {
-                    $metadata += ['dossier_operation_id' => $operation->id, 'control_reference' => $data['control_reference'],
+                    $metadata += ['dossier_operation_id' => $operation->id, 'control_reference' => trim($data['control_reference']),
                         'inspected_on' => $data['inspected_on'], 'issued_on' => $data['issued_on'], 'control_outcome' => $data['outcome'],
                         'capcee_emmy_reference' => $data['capcee_emmy_reference'] ?? null,
                         'capcee_object_type' => $data['capcee_object_type'] ?? null,
@@ -52,7 +52,8 @@ final class DossierDocumentIntake
                     'visit' => 'Visite technique', 'report' => 'Rapport de contrôle', default => trim($data['name']),
                 };
                 $clientLabel = Str::limit($dossier->beneficiaryLabel(), 100, '');
-                $name = Str::limit($label, 187 - Str::length($clientLabel), '').' - '.$clientLabel;
+                $name = $report ? Str::limit($label.' - '.$metadata['control_reference'], 190, '')
+                    : Str::limit($label, 187 - Str::length($clientLabel), '').' - '.$clientLabel;
                 $document = app(DossierRegistry::class)->addDocument($actor, $dossier, $data['document'], $name,
                     $audience['client_visible'], $audience['delegataire_visible'], $metadata);
                 if ($operation) {

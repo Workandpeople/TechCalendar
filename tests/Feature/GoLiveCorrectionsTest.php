@@ -63,7 +63,7 @@ it('routes reports by audience and propagates opinion to the linked physical lot
     $this->post(route('v2.dossiers.documents.store', $this->dossier), goLiveReport($this, $audience, $outcome))
         ->assertSessionHasNoErrors()->assertRedirect();
     $document = $this->dossier->documents()->sole();
-    expect($document->name)->toBe('Rapport de contrôle - Bénéficiaire Test')
+    expect($document->name)->toBe('Rapport de contrôle - CONTROL-TEST')
         ->and($document->dossier_operation_id)->toBe($this->operation->id)
         ->and($this->operation->fresh()->legacy_status)->toBe($state)
         ->and($row->fresh()->physical_satisfaction)->toBe($satisfied);
@@ -86,6 +86,18 @@ it('preserves the client suffix even for a document name at its maximum length',
     $name = $this->dossier->documents()->sole()->name;
     expect(mb_strlen($name))->toBeLessThanOrEqual(190)->and($name)->toEndWith(' - Bénéficiaire Test');
 });
+
+it('names new reports from their control reference without changing old documents or general document naming', function (string $reference) {
+    $old = $this->dossier->documents()->create(['name' => 'Ancien rapport - Bénéficiaire Test', 'path' => 'crm/old.pdf',
+        'mime_type' => 'application/pdf', 'size' => 20, 'document_type' => 'report', 'control_reference' => 'OLD-REFERENCE']);
+    $data = [...goLiveReport($this, 'internal', 'satisfactory'), 'control_reference' => $reference, 'name' => 'IGNORED-NAME'];
+    $this->post(route('v2.dossiers.documents.store', $this->dossier), $data)->assertSessionHasNoErrors()->assertRedirect();
+    $document = $this->dossier->documents()->whereKeyNot($old->id)->sole();
+    expect($document->name)->toBe(mb_substr('Rapport de contrôle - '.trim($reference), 0, 190))
+        ->and($document->control_reference)->toBe(trim($reference))
+        ->and(mb_strlen($document->name))->toBeLessThanOrEqual(190)
+        ->and($old->fresh()->name)->toBe('Ancien rapport - Bénéficiaire Test');
+})->with(['CTRL-2026-123', '  RÉF-ÉTÉ-123  ', str_repeat('R', 190)]);
 
 it('offers report access by default for delegates and non deleted categories for clients without forcing custom choices', function (string $kind) {
     $organisation = ExternalDelegataire::create(['source' => 'native', 'external_id' => $kind, 'kind' => $kind,

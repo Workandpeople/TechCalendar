@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\Dossier;
+use App\Models\DossierBilling;
 use App\Models\User;
+use App\Services\Crm\DossierBillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -55,4 +57,51 @@ it('applies the same filter validation and internal permissions to exports', fun
     $this->actingAs(User::factory()->create(['role' => 0]))->getJson($url.'?sort=sql-injection')->assertUnprocessable();
     config(['crm.v2_enabled' => false]);
     $this->getJson($url)->assertNotFound();
+});
+
+it('exports the original marking date independently of the current status and leaves unknown dates empty', function () {
+    config(['crm.v2_enabled' => true]);
+    $actor = User::factory()->create(['role' => 0, 'admin' => false]);
+    $dossiers = [];
+    foreach (['A-NATIVE', 'B-UNDATED', 'C-UNBILLED', 'D-MULTIPLE'] as $name) {
+        $dossier = Dossier::create(['reference' => $name, 'company_name' => $name, 'address' => 'Rue test', 'city' => 'Paris']);
+        $dossier->operations()->create()->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+        $dossiers[$name] = $dossier;
+    }
+    $this->travelTo(now()->setDate(2026, 10, 20)->setTime(9, 17, 42));
+    app(DossierBillingService::class)->mark($actor, $dossiers['A-NATIVE'], null, ['version' => 1]);
+    $this->travel(4)->days();
+    $dossiers['A-NATIVE']->operations()->update(['legacy_status' => 'NON CONFORMITES']);
+    DossierBilling::create(['dossier_id' => $dossiers['B-UNDATED']->id,
+        'dossier_operation_id' => $dossiers['B-UNDATED']->operations()->sole()->id, 'source' => 'coffrac', 'marked_at' => null]);
+    $multiple = $dossiers['D-MULTIPLE'];
+    foreach (['2024-07-01 10:15:00', '2023-02-03 14:20:00'] as $index => $date) {
+        $operation = $index === 0 ? $multiple->operations()->sole() : $multiple->operations()->create();
+        $operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+        DossierBilling::create(['dossier_id' => $multiple->id, 'dossier_operation_id' => $operation->id,
+            'source' => 'coffrac', 'marked_at' => $date]);
+    }
+    $response = $this->actingAs($actor)->get(route('v2.dossiers.export', ['sort' => 'client', 'direction' => 'asc']))->assertOk();
+    $file = tempnam(sys_get_temp_dir(), 'xlsx-billing-test-');
+    try {
+        file_put_contents($file, $response->streamedContent());
+        $zip = new ZipArchive;
+        expect($zip->open($file))->toBeTrue();
+        $dom = new DOMDocument;
+        expect($dom->loadXML($zip->getFromName('xl/worksheets/sheet1.xml'), LIBXML_NONET))->toBeTrue();
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+        expect($xpath->query('//s:row[1]/s:c[17]')->item(0)->textContent)->toBe('Date du passage en facturé')
+            ->and($xpath->query('//s:autoFilter')->item(0)->getAttribute('ref'))->toBe('A1:Q5');
+        foreach (['A-NATIVE' => ['Facturé', '20/10/2026 09:17'], 'B-UNDATED' => ['Facturé', ''],
+            'C-UNBILLED' => ['Non facturé', ''], 'D-MULTIPLE' => ['Facturé', '03/02/2023 14:20']] as $name => [$label, $date]) {
+            $row = $xpath->query('//s:row[s:c[6]="'.$name.'"]')->item(0);
+            expect($row)->not->toBeNull()
+                ->and($xpath->query('s:c[16]', $row)->item(0)->textContent)->toBe($label)
+                ->and($xpath->query('s:c[17]', $row)->item(0)->textContent)->toBe($date);
+        }
+        $zip->close();
+    } finally {
+        unlink($file);
+    }
 });

@@ -22,7 +22,10 @@
         @endcan
         @include('crm.dossiers.notice')
         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
-        <a href="#facturation" class="inline-block"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="#facturation" class="inline-block"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>
+            @if ($billingSummary['tone'] !== 'slate')<x-billing-date :date="\App\Services\Crm\DossierBillingService::firstMarkedAt($dossier)" />@endif
+        </div>
         <nav class="gc-dossier-tabs" aria-label="Sections du dossier">
             @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'facturation' => ['Facturation', 'check'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
                 <a href="#{{ $id }}"><x-nav-icon :name="$icon" />{{ $label }}</a>
