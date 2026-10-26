@@ -87,14 +87,16 @@ it('preserves the client suffix even for a document name at its maximum length',
     expect(mb_strlen($name))->toBeLessThanOrEqual(190)->and($name)->toEndWith(' - Bénéficiaire Test');
 });
 
-it('keeps report access mandatory for delegates and all non deleted categories for clients', function (string $kind) {
+it('offers report access by default for delegates and non deleted categories for clients without forcing custom choices', function (string $kind) {
     $organisation = ExternalDelegataire::create(['source' => 'native', 'external_id' => $kind, 'kind' => $kind,
-        'name' => 'Organisation test', 'is_active' => true, 'portal_categories' => []]);
+        'name' => 'Organisation test', 'is_active' => true]);
     $keys = app(PortalCategoryAccess::class)->effective($organisation);
     expect($keys)->toContain('report');
     if ($kind === 'client') {
         expect($keys)->toContain('rt_control', 'recontrol', 'cancelled')->not->toContain('unknown');
     }
+    $organisation->update(['portal_categories' => []]);
+    expect(app(PortalCategoryAccess::class)->effective($organisation))->toBe([]);
 })->with(['client', 'delegataire']);
 
 it('enforces read only client access except correction uploads and comments in non conformity', function () {

@@ -1889,8 +1889,9 @@ valider les limites effectives (y compris un eventuel proxy intermediaire).
 
 Le meme parcours de release applique egalement les correctifs suivants :
 
-- Acces Rapport Genius impose aux delegataires ; les clients voient tous leurs
-  dossiers attribues sauf les dossiers supprimes. Les documents et commentaires
+- Acces Rapport Genius propose par defaut aux delegataires ; les clients voient
+  par defaut leurs dossiers attribues sauf les dossiers supprimes. Les categories
+  restent administrables par type et par organisation. Les documents et commentaires
   restent soumis a leur audience et aux permissions du compte. Les ajouts externes
   sont limites a la non-conformite, sans ouvrir les autres modifications.
 - Acces Planning pour les gerants, avec une seule entree Dossiers dans le menu.
@@ -1950,3 +1951,12 @@ existant. Les rapports natifs et archives affichent leur avis en lecture seule
 pres du nom (visage satisfait/non satisfait, tiret pour inaccessible). Les valeurs
 historiques inconnues ne sont pas interpretees comme un avis positif ou negatif.
 Ces changements ne modifient ni les audiences, ni les avis stockes, ni les lots.
+
+Les categories externes ne sont plus forcees apres lecture des reglages : une
+selection enregistree par type est respectee exactement ; la selection personnalisee
+d'une organisation remplace celle de son type. Une liste vide bloque tous les dossiers,
+y compris les liens directs, fichiers et commentaires. Sans reglage enregistre, les
+clients gardent toutes les categories sauf supprimees et les delegataires gardent le
+catalogue initial incluant Rapport Genius. Les reglages existants ne sont ni ecrases
+ni reinitialises par une migration. Les permissions par compte et les trois audiences
+restent independantes ; l'ecriture externe reste limitee a la non-conformite.

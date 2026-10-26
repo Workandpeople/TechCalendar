@@ -21,22 +21,21 @@ class PortalCategoryAccess
         }
         $record = DB::table('portal_category_defaults')->where('kind', $kind)->first();
 
-        return $this->businessRules($kind, $record ? $this->normalize(json_decode($record->categories, true)) : array_keys(self::catalogue()));
+        if ($record) {
+            return $this->normalize(json_decode($record->categories, true));
+        }
+
+        return array_keys($kind === 'client' ? array_diff_key(self::catalogue(), ['unknown' => true]) : self::catalogue());
     }
 
     public function effective(ExternalDelegataire $organisation): array
     {
-        return $this->businessRules($organisation->kind, $organisation->portal_categories === null
-            ? $this->defaults($organisation->kind) : $this->normalize($organisation->portal_categories));
-    }
-
-    private function businessRules(string $kind, array $categories): array
-    {
-        if ($kind === 'client') {
-            return array_values(array_diff(array_keys(self::catalogue()), ['unknown']));
+        if (! array_key_exists($organisation->kind, ExternalDelegataire::KINDS)) {
+            return [];
         }
 
-        return $kind === 'delegataire' ? array_values(array_unique([...$categories, 'report'])) : [];
+        return $organisation->portal_categories === null
+            ? $this->defaults($organisation->kind) : $this->normalize($organisation->portal_categories);
     }
 
     public function saveDefaults(User $actor, string $kind, array $categories): void
