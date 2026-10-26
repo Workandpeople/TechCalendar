@@ -12,6 +12,7 @@
                 @foreach ($documents as $document)
                     @include('client.detail.file', ['fileName' => $document->name, 'fileDescription' => $document->description,
                         'fileDate' => $document->created_at?->format('d/m/Y'), 'fileSize' => $document->size,
+                        'fileOutcome' => $document->document_type === 'report' ? $document->control_outcome : null,
                         'fileUrl' => route('client.documents.download', $document),
                         'filePreview' => \App\Services\Crm\DocumentResponseHeaders::previewable($document->mime_type),
                         'fileLabel' => match ($document->document_type) { 'report' => 'Rapport', 'visit' => 'Visite technique', default => 'Document' }])
@@ -24,7 +25,7 @@
             <ul class="gc-portal-files" aria-label="Documents historiques">
                 @foreach ($collected as $document)
                     @include('client.detail.file', ['fileName' => $document['name'], 'fileDescription' => $document['description'],
-                        'fileDate' => $document['display_date'], 'fileSize' => $document['size'], 'fileUrl' => $document['url'],
+                        'fileDate' => $document['display_date'], 'fileSize' => $document['size'], 'fileUrl' => $document['url'], 'fileOutcome' => $document['outcome'],
                         'filePreview' => $document['previewable'], 'fileLabel' => 'Document'])
                 @endforeach
             </ul>
@@ -35,7 +36,7 @@
             <ul class="gc-portal-files" aria-label="Documents du lot">
                 @foreach ($lotDocuments as $document)
                     @include('client.detail.file', ['fileName' => $document->name, 'fileDescription' => null,
-                        'fileDate' => $document->created_at?->format('d/m/Y'), 'fileSize' => $document->size,
+                        'fileDate' => $document->created_at?->format('d/m/Y'), 'fileSize' => $document->size, 'fileOutcome' => null,
                         'fileUrl' => route('client.dossiers.lot-documents.download', [$dossier, $document->id]),
                         'filePreview' => \App\Services\Crm\DocumentResponseHeaders::previewable($document->mime),
                         'fileLabel' => 'Document du lot'])

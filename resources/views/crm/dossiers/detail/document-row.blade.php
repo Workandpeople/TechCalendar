@@ -1,6 +1,6 @@
 <tr>
     <td>
-        <div class="gc-document-name"><span class="gc-document-file-icon"><x-nav-icon :name="$reportReference ? 'check' : 'document'" /></span><p class="font-semibold">{{ $name }}</p></div>
+        <div class="gc-document-name"><span class="gc-document-file-icon"><x-nav-icon :name="$reportReference ? 'check' : 'document'" /></span><p class="font-semibold">{{ $name }} <x-report-outcome :outcome="$outcome" /></p></div>
         @if ($description || $reportReference || $outcome)
         <details class="gc-document-more"><summary>{{ $detail }} · Détails<span class="sr-only"> de {{ $name }}</span></summary>
         @if ($description)<x-comment-body :body="$description" class="text-xs gc-document-description" />@endif

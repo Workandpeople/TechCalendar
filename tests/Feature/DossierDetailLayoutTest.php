@@ -60,7 +60,9 @@ it('keeps dense comments and documents accessible with protected sharing and del
     $dom = new DOMDocument;
     @$dom->loadHTML($response->getContent(), LIBXML_NONET);
     $xpath = new DOMXPath($dom);
-    expect($xpath->query('//li[contains(@class,"gc-comment-row")]/details/summary')->length)->toBe(1)
+    expect($xpath->query('//li[contains(@class,"gc-comment-row")]//*[@data-comment-excerpt]')->length)->toBe(1)
+        ->and($xpath->query('//li[contains(@class,"gc-comment-row")]//*[@data-excerpt-body]')->length)->toBe(1)
+        ->and($xpath->query('//li[contains(@class,"gc-comment-row")]//button[@data-excerpt-toggle and @hidden]')->length)->toBe(1)
         ->and($xpath->query('//li[contains(@class,"gc-comment-row")]/a[contains(@class,"gc-compact-action")][@aria-label]')->length)->toBe(1)
         ->and($xpath->query('//dialog[@id="supprimer-commentaire-'.$comment->id.'"]//input[@name="_method"][@value="DELETE"]')->length)->toBe(1)
         ->and($xpath->query('//table[contains(@class,"gc-dossier-documents-table")]//details/summary')->length)->toBe(1)

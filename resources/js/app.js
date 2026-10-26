@@ -17,9 +17,11 @@ import { initDossierAddress } from './dossier-address';
 import { initMultiSelects } from './multi-select';
 import { initDocumentUploadLimits } from './document-upload-limit';
 import { initBookingDossierSummary } from './booking-dossier-summary';
+import { initCommentExcerpts } from './comment-excerpts';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 initCommentMarkup();
+initCommentExcerpts();
 
 initSidebar();
 initSidebarSections();

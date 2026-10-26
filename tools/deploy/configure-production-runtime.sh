@@ -358,4 +358,4 @@ printf '{"url":"https://cofrac2.geniuscontrole.com","internal_only":true,"outbou
 success=1
 printf 'Cofrac 2 ouvert pour recette interne : https://cofrac2.geniuscontrole.com\n'
 printf 'PHP, worker et Reverb dedies verifies. Ancien Coffrac et services existants inchanges.\n'
-printf 'Envois reels et portails externes toujours bloques. Verifier maintenant la connexion et un document dans le navigateur.\n'
+printf 'Envois reels toujours bloques ; comptes externes deja actives et valides conserves. Verifier maintenant la connexion et un document dans le navigateur.\n'

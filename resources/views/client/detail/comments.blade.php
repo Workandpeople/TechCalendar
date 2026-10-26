@@ -8,10 +8,7 @@
             @forelse ($comments as $comment)
                 <li class="gc-portal-comment" data-own="{{ $comment->author_id === auth()->id() ? 'true' : 'false' }}">
                     <header><span><x-nav-icon name="comment" />{{ $comment->author_id === auth()->id() ? 'Vous' : 'Message partagé' }}</span><time datetime="{{ $comment->created_at?->toIso8601String() }}">{{ $comment->created_at?->format('d/m/Y à H:i') }}</time></header>
-                    <details class="gc-content-excerpt">
-                        <summary title="Déplier le commentaire"><x-comment-body :body="$comment->body" /><span class="sr-only">Lire le commentaire complet</span></summary>
-                        <x-comment-body :body="$comment->body" class="gc-content-expanded" />
-                    </details>
+                    <x-comment-excerpt :body="$comment->body" />
                 </li>
             @empty
                 <li class="gc-portal-empty"><span class="gc-portal-icon"><x-nav-icon name="comment" /></span><h3>Les échanges commencent ici</h3><p>Aucun commentaire partagé pour le moment.</p></li>

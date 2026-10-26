@@ -1,7 +1,7 @@
 <li class="gc-portal-file">
     <span class="gc-portal-file-icon"><x-nav-icon name="document" /></span>
     <div class="gc-portal-file-info">
-        <h4>{{ $fileName }}</h4>
+        <h4>{{ $fileName }} <x-report-outcome :outcome="$fileOutcome ?? null" /></h4>
         <p class="gc-portal-file-meta"><span>{{ $fileLabel }}</span>@if ($fileDate)<span>{{ $fileDate }}</span>@endif @if ($fileSize > 0)<span>{{ $fileSize >= 1048576 ? number_format($fileSize / 1048576, 1, ',', ' ').' Mo' : number_format(max(1, $fileSize / 1024), 0, ',', ' ').' Ko' }}</span>@endif</p>
         @if (filled($fileDescription))<details class="gc-document-more"><summary>Description</summary><x-comment-body :body="$fileDescription" class="gc-portal-file-description" /></details>@endif
     </div>

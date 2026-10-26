@@ -11,10 +11,7 @@
                         <p>{{ $comment->author?->full_name ?: ($comment->kind === 'legacy_comment' ? 'Auteur Coffrac #'.($comment->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
                         <time datetime="{{ $comment->created_at?->toIso8601String() }}">{{ $comment->created_at?->format('d/m/Y H:i') }}</time>
                     </div>
-                    <details class="gc-content-excerpt">
-                        <summary title="Déplier le commentaire"><x-comment-body :body="$comment->body" /><span class="sr-only">Lire le commentaire complet</span></summary>
-                        <x-comment-body :body="$comment->body" class="gc-content-expanded" />
-                    </details>
+                    <x-comment-excerpt :body="$comment->body" />
                     <div class="gc-dossier-comment-sharing">
                         <x-dossier-sharing :action="route('v2.dossiers.comments.sharing', [$dossier, $comment->id])"
                             :visible="app(\App\Services\Crm\ClientAccess::class)->commentVisibleToClient($comment, 'client')"

@@ -1942,3 +1942,11 @@ type client/delegataire. Le controle ne cree ni n'active aucun compte et ne chan
 aucune permission ; son rapport indique le nombre de comptes externes actifs.
 Ne pas desactiver les modeles,
 supprimer des historiques ou modifier les comptes pour contourner un controle.
+
+L'affichage detail des dossiers utilise un seul corps de commentaire : deux lignes
+visibles et un bouton Afficher plus uniquement si la hauteur reelle les depasse.
+Le texte reste lisible sans JavaScript ; le formatage passe par le meme nettoyage
+existant. Les rapports natifs et archives affichent leur avis en lecture seule
+pres du nom (visage satisfait/non satisfait, tiret pour inaccessible). Les valeurs
+historiques inconnues ne sont pas interpretees comme un avis positif ou negatif.
+Ces changements ne modifient ni les audiences, ni les avis stockes, ni les lots.
