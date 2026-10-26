@@ -112,7 +112,7 @@ it('runs the native post visit cycle and projects the uploaded report result ind
         ->and($this->dossier->operations()->count())->toBe(1)
         ->and($this->dossier->activities()->where('kind', 'post_visit')->count())->toBe(3)
         ->and($this->dossier->comments()->count())->toBe(3);
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Avis du dernier rapport')->assertSee('Rapport vérifié');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee(PostVisitWorkflow::OUTCOMES[$outcome])->assertSee('Rapport vérifié');
 })->with([['satisfactory', true], ['unsatisfactory', false], ['unverifiable', null]]);
 
 it('preserves satisfaction during correction and preserves the previous review in history', function () {

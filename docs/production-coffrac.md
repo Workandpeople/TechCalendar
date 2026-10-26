@@ -2015,3 +2015,11 @@ place est differe au survol/focus, annule a la sortie et mis en cache en memoire
 pour 15 minutes (128 trajets maximum), sans calcul supplementaire au chargement.
 Les donnees de propositions deja calculees restent reutilisees ; coordonnees ou
 distances absentes sont indiquees indisponibles, et les estimations sont libellees.
+
+Le changement manuel d'etat ne contient que le selecteur et le bouton d'enregistrement,
+sans texte d'aide ni choix de partage. Son audit reste dans l'historique interne,
+hors des commentaires, et continue d'alimenter la colonne Modifie le. Les anciens
+parametres de partage encore soumis par un onglet ouvert sont ignores. L'acces
+client/delegataire reste gere par les categories autorisees de l'organisation ;
+la confidentialite des documents/commentaires n'est pas modifiee. Aucun historique
+anterieur n'est requalifie et aucune migration n'est necessaire.

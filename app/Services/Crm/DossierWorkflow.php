@@ -42,11 +42,11 @@ class DossierWorkflow
             }
             // Status is independent of proof documents, technical validation, satisfaction and booking dates.
             $operation->forceFill(['legacy_status' => $status['values'][0]])->save();
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'post_visit',
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
                 'body' => 'État modifié manuellement : '.DossierStatusCatalog::describe($previous)['label'].' → '.$status['label'],
-                'client_visible' => (bool) ($data['client_visible'] ?? false),
-                'delegataire_visible' => (bool) (($data['client_visible'] ?? false) && ($data['delegataire_visible'] ?? false)),
+                'client_visible' => false, 'delegataire_visible' => false,
                 'changed_fields' => ['operation_id' => $operation->id, 'action' => 'manual_status',
+                    'previous_status' => $previous, 'status' => $operation->legacy_status,
                     'before' => ['legacy_status' => $previous], 'after' => ['legacy_status' => $operation->legacy_status]]]);
             $dossier->increment('version');
 

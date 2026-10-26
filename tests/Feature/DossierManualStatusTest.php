@@ -5,10 +5,12 @@ use App\Models\CapceeAutomaticSubmission;
 use App\Models\Dossier;
 use App\Models\DossierBilling;
 use App\Models\DossierOperation;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Crm\ClientAccess;
 use App\Services\Crm\DossierBillingService;
 use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\DossierTable;
@@ -43,7 +45,7 @@ beforeEach(function () {
     $this->row = $this->lot->appointments()->create(['customer_name' => 'Client', 'appointment_id' => $this->appointment->id,
         'processing_mode' => LotAppointment::PROCESSING_MODE_PHYSICAL, 'status' => LotAppointment::STATUS_PLACED]);
     $this->url = route('v2.dossiers.operations.status', [$this->dossier, $this->operation]);
-    $this->data = ['version' => 1, 'status' => 'visited', 'audience' => 'internal'];
+    $this->data = ['version' => 1, 'status' => 'visited'];
     $this->actingAs($this->actor);
 });
 
@@ -79,8 +81,10 @@ it('offers the complete state selector without a reason or proof fields even whi
         $values[] = $option->getAttribute('value');
     }
     expect($values)->toBe(array_keys(DossierStatusCatalog::manualStates()))
-        ->and($xpath->query($form.'//*[@name="comment" or @name="report_document_id" or @name="visit_document_id" or @name="appointment_id" or @name="outcome"]')->length)->toBe(0);
-    $response->assertSee('Changer l’état')->assertSee('sans document obligatoire');
+        ->and($xpath->query($form.'//*[@name="comment" or @name="report_document_id" or @name="visit_document_id" or @name="appointment_id" or @name="outcome" or @name="audience" or @name="client_visible" or @name="delegataire_visible"]')->length)->toBe(0)
+        ->and($xpath->query($form.'//p | '.$form.'//fieldset')->length)->toBe(0)
+        ->and($xpath->query($form.'//button[@type="submit"]')->length)->toBe(1);
+    $response->assertSee('Changer l’état')->assertDontSee('Choix manuel libre')->assertDontSee('Changer l’état ne crée pas');
 });
 
 it('preserves appointments documents technical validation satisfaction archived lots and billing', function () {
@@ -121,17 +125,37 @@ it('retains unresolved legacy billing evidence while allowing a manual status ch
         ->assertUnprocessable()->assertJsonValidationErrors('billing');
 });
 
-it('records the status change automatically and respects the chosen history audience', function (string $audience, bool $client, bool $delegate) {
-    $this->patch($this->url, [...$this->data, 'audience' => $audience])->assertSessionHasNoErrors();
+it('keeps status changes in internal history without accepting sharing settings from older forms', function (array $legacySharing) {
+    $this->patch($this->url, [...$this->data, ...$legacySharing])->assertSessionHasNoErrors()->assertSessionHas('status', 'État mis à jour.');
     $activity = $this->dossier->statusChanges()->sole();
     expect($activity->changed_fields['action'])->toBe('manual_status')
         ->and($activity->changed_fields['before']['legacy_status'])->toBe('RDV ATTENTE VISITE')
         ->and($activity->changed_fields['after']['legacy_status'])->toBe('RDV VISITE')
-        ->and($activity->client_visible)->toBe($client)->and($activity->delegataire_visible)->toBe($delegate)
+        ->and($activity->client_visible)->toBeFalse()->and($activity->delegataire_visible)->toBeFalse()
+        ->and($activity->kind)->toBe('status_changed')->and($this->dossier->comments()->count())->toBe(0)
         ->and($activity->author_id)->toBe($this->actor->id)
         ->and($activity->body)->toBe('État modifié manuellement : RDV en attente de visite → RDV visité')
         ->and(app(DossierTable::class)->modification($this->dossier->fresh())['label'])->toBe('RDV visité');
-})->with([['internal', false, false], ['client', true, false], ['shared', true, true]]);
+})->with([[[]], [['audience' => 'internal']], [['audience' => 'client']], [['audience' => 'shared']],
+    [['audience' => 'obsolete']], [['client_visible' => true, 'delegataire_visible' => true]]]);
+
+it('uses organisation status access independently of manual changes and preserves private contents', function (string $kind) {
+    $organisation = ExternalDelegataire::create(['kind' => $kind, 'source' => 'native', 'external_id' => 'STATUS-'.$kind,
+        'name' => 'Organisation test', 'is_active' => true, 'portal_categories' => ['awaiting_visit']]);
+    $external = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false, 'external_client_id' => $organisation->id,
+        'portal_enabled' => true, 'must_change_password' => false, 'portal_permissions' => [...ClientAccess::defaults($kind), 'comments' => true]]);
+    $this->dossier->update([$kind === 'client' ? 'client_id' : 'delegataire_id' => $organisation->id]);
+    $private = $this->dossier->documents()->create(['name' => 'KEEP-PRIVATE', 'path' => 'private.pdf', 'mime_type' => 'application/pdf', 'size' => 8]);
+    $this->dossier->activities()->create(['kind' => 'comment', 'body' => 'KEEP-PRIVATE-NOTE', 'client_visible' => false]);
+    $this->actingAs($external)->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertDontSee('KEEP-PRIVATE');
+    $this->actingAs($this->actor)->patch($this->url, [...$this->data, 'audience' => 'shared'])->assertSessionHasNoErrors();
+    $this->actingAs($external)->get(route('client.dossiers.show', $this->dossier))->assertForbidden();
+    $organisation->update(['portal_categories' => ['visited']]);
+    $this->actingAs($external->fresh())->get(route('client.dossiers.show', $this->dossier))->assertOk()
+        ->assertSee('RDV visité')->assertDontSee('KEEP-PRIVATE')->assertDontSee('KEEP-PRIVATE-NOTE')->assertDontSee('État modifié manuellement');
+    expect($private->fresh()->client_visible)->toBeFalse()->and($private->fresh()->delegataire_visible)->toBeFalse()
+        ->and($organisation->fresh()->portal_categories)->toBe(['visited']);
+})->with(['client', 'delegataire']);
 
 it('ignores a reason submitted by an older form when changing status', function (?string $comment) {
     $this->patch($this->url, [...$this->data, 'comment' => $comment])->assertSessionHasNoErrors()->assertRedirect();
