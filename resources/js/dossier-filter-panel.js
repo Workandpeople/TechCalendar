@@ -5,6 +5,17 @@ const selectedLabel = (form, name) => Array.from(field(form, name)?.options || [
     .find(option => String(option.value) === value(form, name))?.label || value(form, name);
 const dateLabel = date => /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.split('-').reverse().join('/') : date;
 
+export function syncDossierPlanningFilter(form, browser) {
+    const select = field(form, 'planning_user_ids[]');
+    if (!select) return;
+    const visited = value(form, 'status') === 'visited';
+    const container = form.querySelector('[data-dossier-planning-filter]');
+    if (container) container.hidden = !visited;
+    select.disabled = !visited;
+    if (!visited) for (const option of select.options) option.selected = false;
+    select.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
+}
+
 export function dossierFilterItems(form, statusLabels = {}) {
     const items = [];
     const add = (key, label, title = label) => items.push({ key, label, title, advanced: advancedKeys.includes(key) || key === 'dates' });
@@ -16,6 +27,11 @@ export function dossierFilterItems(form, statusLabels = {}) {
     const services = Array.from(field(form, 'service_ids[]')?.options || []).filter(option => option.selected);
     if (services.length) add('services', services.length === 1 ? `Fiche : ${services[0].label}` : `Fiches : ${services.length} sélectionnées`,
         `Fiches : ${services.map(option => option.label).join(', ')}`);
+    const planningUsers = Array.from(field(form, 'planning_user_ids[]')?.options || []).filter(option => option.selected);
+    if (value(form, 'status') === 'visited' && planningUsers.length) {
+        add('planning_users', planningUsers.length === 1 ? `Suivi planning : ${planningUsers[0].label}` : `Suivi planning : ${planningUsers.length} responsables`,
+            `Suivi planning : ${planningUsers.map(option => option.label).join(', ')}`);
+    }
     for (const [key, label] of [['department', 'Département'], ['section', 'Secteur'], ['planning', 'RDV'], ['billing', 'Facturation']]) {
         if (value(form, key)) add(key, `${label} : ${selectedLabel(form, key)}`);
     }
@@ -30,10 +46,10 @@ export function dossierFilterItems(form, statusLabels = {}) {
 }
 
 export function clearDossierFilter(form, key, browser) {
-    if (key === 'services') {
-        const select = field(form, 'service_ids[]');
+    if (key === 'services' || key === 'planning_users') {
+        const select = field(form, key === 'services' ? 'service_ids[]' : 'planning_user_ids[]');
         for (const option of select?.options || []) option.selected = false;
-        if (field(form, 'service_id')) field(form, 'service_id').value = '';
+        if (key === 'services' && field(form, 'service_id')) field(form, 'service_id').value = '';
         select?.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
         return true;
     }
@@ -44,6 +60,7 @@ export function clearDossierFilter(form, key, browser) {
     }
     if (!['q', 'status', 'delegataire_id', ...advancedKeys].includes(key)) return false;
     if (field(form, key)) field(form, key).value = '';
+    if (key === 'status') syncDossierPlanningFilter(form, browser);
     return true;
 }
 
@@ -55,6 +72,7 @@ export function initDossierFilterPanel(form, categories, root, browser, onChange
     if (!chips || !active || !details || !counter) return { sync() {} };
     let renderedSignature;
     const sync = ({ revealAdvanced = false } = {}) => {
+        syncDossierPlanningFilter(form, browser);
         const statusLabels = { invoiced: 'Dossiers facturés' };
         categories.querySelectorAll('[data-category]').forEach(link => {
             statusLabels[link.dataset.category] = link.querySelector('.gc-dossier-category-label')?.textContent.trim() || '';

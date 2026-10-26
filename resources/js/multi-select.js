@@ -3,7 +3,7 @@ import { filterSelectItems, selectMenuItems, selectMenuPosition } from './select
 export function multiSelectSummary(select) {
     const selected = Array.from(select.options).filter(option => option.selected);
     return { count: selected.length, title: selected.map(option => option.label).join(', '),
-        label: selected.length === 0 ? (select.dataset.emptyLabel || 'Tous') : selected.length === 1 ? selected[0].label : `${selected.length} fiches sélectionnées` };
+        label: selected.length === 0 ? (select.dataset.emptyLabel || 'Tous') : selected.length === 1 ? selected[0].label : `${selected.length} ${select.dataset.selectedLabel || 'fiches sélectionnées'}` };
 }
 
 export function initMultiSelects(root = document, browser = window) {
@@ -38,7 +38,7 @@ export function initMultiSelects(root = document, browser = window) {
             button.disabled = select.disabled;
             if (select.disabled) close();
             if (menu) {
-                count.textContent = summary.count ? `${summary.count} fiche(s) sélectionnée(s)` : 'Toutes les fiches';
+                count.textContent = summary.count ? `${summary.count} ${select.dataset.selectedLabel || 'fiche(s) sélectionnée(s)'}` : (select.dataset.emptyLabel || 'Toutes les fiches');
                 clear.disabled = summary.count === 0;
                 options.querySelectorAll('input').forEach(input => { input.checked = select.options[Number(input.dataset.index)].selected; });
             }
@@ -80,7 +80,7 @@ export function initMultiSelects(root = document, browser = window) {
                 const empty = root.createElement('p');
                 empty.className = 'gc-select-menu-empty';
                 empty.setAttribute('role', 'status');
-                empty.textContent = 'Aucune fiche ne correspond à la recherche.';
+                empty.textContent = select.dataset.noResultsLabel || 'Aucune fiche ne correspond à la recherche.';
                 options.append(empty);
             }
             sync(); place();
@@ -94,12 +94,12 @@ export function initMultiSelects(root = document, browser = window) {
             menu.setAttribute('aria-label', label);
             search = root.createElement('input');
             search.type = 'search'; search.className = 'gc-input gc-select-search';
-            search.placeholder = 'Rechercher une fiche…'; search.autocomplete = 'off';
-            search.setAttribute('aria-label', 'Rechercher une fiche technique');
+            search.placeholder = select.dataset.searchLabel || 'Rechercher une fiche…'; search.autocomplete = 'off';
+            search.setAttribute('aria-label', select.dataset.searchLabel || 'Rechercher une fiche technique');
             search.addEventListener('input', render);
             options = root.createElement('div');
             options.className = 'gc-multi-select-options';
-            options.setAttribute('role', 'group'); options.setAttribute('aria-label', 'Fiches disponibles');
+            options.setAttribute('role', 'group'); options.setAttribute('aria-label', select.dataset.optionsLabel || 'Fiches disponibles');
             const footer = root.createElement('div');
             footer.className = 'gc-multi-select-footer';
             count = root.createElement('span'); count.setAttribute('role', 'status'); count.setAttribute('aria-live', 'polite');

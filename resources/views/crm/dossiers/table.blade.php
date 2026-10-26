@@ -8,7 +8,6 @@
         <p class="mt-1 text-xs text-slate-500">{{ filled($filters['sort'] ?? null) ? 'Tri : '.\App\Services\Crm\DossierTable::COLUMNS[$filters['sort']].' · '.(($filters['direction'] ?? 'asc') === 'asc' ? 'croissant' : 'décroissant') : 'Tri par défaut : derniers dossiers ajoutés' }}</p></div>
         <div class="gc-dossier-results-options">
             <label><input type="checkbox" name="all_columns" form="dossier-filters" data-dossier-all-columns value="1" @checked($filters['all_columns'] ?? false)> Toutes les colonnes</label>
-            <label>Lignes par page <select class="gc-input w-auto" data-dossier-page-size aria-label="Nombre de dossiers par page">@foreach ([25, 50, 100] as $size)<option value="{{ $size }}" @selected(($filters['per_page'] ?? 25) == $size)>{{ $size }}</option>@endforeach</select></label>
         </div>
     </div>
     <div class="gc-dossier-table-scroll" tabindex="0" role="region" aria-label="Tableau des dossiers">

@@ -1,15 +1,19 @@
 import { initDossierAssignment } from './dossier-assignment.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
-import { initDossierFilterPanel } from './dossier-filter-panel.js';
+import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
-const serviceArrayName = name => /^service_ids(?:\[\d*\])?$/.test(name);
+const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const arrayFilterName = name => /^(service_ids|planning_user_ids)(?:\[\d*\])?$/.exec(name)?.[1];
+
+function dossierArrayIds(entries, key, fallback) {
+    const parameters = Array.from(entries);
+    const multiple = parameters.filter(([name]) => arrayFilterName(name) === key);
+    return [...new Set((multiple.length ? multiple : parameters.filter(([name]) => name === fallback))
+        .map(([, value]) => String(value).trim()).filter(Boolean))];
+}
 
 export function dossierServiceIds(entries) {
-    const parameters = Array.from(entries);
-    const multiple = parameters.filter(([name]) => serviceArrayName(name));
-    return [...new Set((multiple.length ? multiple : parameters.filter(([name]) => name === 'service_id'))
-        .map(([, value]) => String(value).trim()).filter(Boolean))];
+    return dossierArrayIds(entries, 'service_ids', 'service_id');
 }
 
 export function syncDossierFilters(form, url, browser) {
@@ -17,7 +21,7 @@ export function syncDossierFilters(form, url, browser) {
         const input = form.elements.namedItem(name);
         if (!input) continue;
         if (input.multiple) {
-            const selected = new Set(dossierServiceIds(url.searchParams));
+            const selected = new Set(name === 'service_ids[]' ? dossierServiceIds(url.searchParams) : dossierArrayIds(url.searchParams, 'planning_user_ids'));
             for (const option of input.options) option.selected = selected.has(option.value);
             input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
             continue;
@@ -26,32 +30,35 @@ export function syncDossierFilters(form, url, browser) {
         if (input.type === 'checkbox') input.checked = value === '1';
         else if (input.value !== value) input.value = value;
     }
+    syncDossierPlanningFilter(form, browser);
 }
 
 export function dossierListUrl(base, entries, changes = {}) {
     const url = new URL(base);
     url.search = '';
     url.hash = '';
-    const multiple = [];
-    let hasMultiple = false;
-    const setServices = values => {
-        url.searchParams.delete('service_id');
-        url.searchParams.delete('service_ids[]');
-        for (const value of new Set(values.map(value => String(value).trim()).filter(Boolean))) url.searchParams.append('service_ids[]', value);
+    const multiple = new Map();
+    const setMultiple = (key, values) => {
+        if (key === 'service_ids') url.searchParams.delete('service_id');
+        url.searchParams.delete(`${key}[]`);
+        for (const value of new Set(values.map(value => String(value).trim()).filter(Boolean))) url.searchParams.append(`${key}[]`, value);
     };
     for (const [name, value] of entries) {
-        if (serviceArrayName(name)) { hasMultiple = true; multiple.push(value); }
+        const key = arrayFilterName(name);
+        if (key) { if (!multiple.has(key)) multiple.set(key, []); multiple.get(key).push(value); }
         else if (filterNames.includes(name) && String(value).trim() !== '') url.searchParams.set(name, String(value).trim());
     }
-    if (hasMultiple) setServices(multiple);
+    for (const [key, values] of multiple) setMultiple(key, values);
     for (const [name, value] of Object.entries(changes)) {
-        if (serviceArrayName(name)) { setServices(value === null || value === '' ? [] : Array.isArray(value) ? value : [value]); continue; }
+        const key = arrayFilterName(name);
+        if (key) { setMultiple(key, value === null || value === '' ? [] : Array.isArray(value) ? value : [value]); continue; }
         if (!filterNames.includes(name) && name !== 'page') continue;
         if (name === 'service_id') url.searchParams.delete('service_ids[]');
         if (value === null || value === '') url.searchParams.delete(name);
         else url.searchParams.set(name, value);
     }
-    if (url.searchParams.has('service_id')) setServices([url.searchParams.get('service_id')]);
+    if (url.searchParams.has('service_id')) setMultiple('service_ids', [url.searchParams.get('service_id')]);
+    if (url.searchParams.get('status') !== 'visited') url.searchParams.delete('planning_user_ids[]');
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');
     if (url.searchParams.get('per_page') === '25') url.searchParams.delete('per_page');

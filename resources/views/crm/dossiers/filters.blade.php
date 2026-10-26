@@ -1,5 +1,7 @@
 @php
     $selectedServices = \App\Services\Crm\DossierServiceFilter::ids($filters);
+    $visited = ($filters['status'] ?? null) === 'visited';
+    $selectedPlanningUsers = $visited ? array_map('intval', $filters['planning_user_ids'] ?? []) : [];
     $advancedCount = collect(['department', 'section', 'planning', 'billing'])->filter(fn ($key) => filled($filters[$key] ?? null))->count()
         + (filled($filters['date_from'] ?? null) || filled($filters['date_to'] ?? null) ? 1 : 0);
 @endphp
@@ -30,6 +32,15 @@
                 @foreach ($services as $service)<option value="{{ $service->id }}" @selected(in_array($service->id, $selectedServices, true))>{{ $service->name }}</option>@endforeach
             </select>
         </div>
+    </div>
+    <div class="gc-dossier-filter-planning" data-dossier-planning-filter @if (! $visited) hidden @endif>
+        <label for="planning_user_ids" class="gc-label">Suivi planning</label>
+        <select id="planning_user_ids" name="planning_user_ids[]" class="gc-input" multiple size="4" data-multi-select
+            data-empty-label="Tous les responsables" data-selected-label="responsables sélectionnés"
+            data-search-label="Rechercher un responsable" data-options-label="Responsables disponibles"
+            data-no-results-label="Aucun responsable ne correspond à la recherche." @disabled(! $visited)>
+            @foreach ($planningUsers as $planningUser)<option value="{{ $planningUser->id }}" @selected(in_array($planningUser->id, $selectedPlanningUsers, true))>{{ $planningUser->full_name }}</option>@endforeach
+        </select>
     </div>
     <details class="gc-dossier-filter-advanced" data-dossier-advanced @if ($advancedCount) open @endif>
         <summary>

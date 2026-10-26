@@ -10,6 +10,8 @@ function fixture(values = {}) {
         fields[name].options = entries.map(([value, label]) => ({ value, label }));
     }
     const events = [];
+    fields['planning_user_ids[]'] = { options: ['Alice Martin', 'Bob Dupont'].map((label, index) => ({ label, value: String(index + 12), selected: false })),
+        dispatchEvent: event => events.push(event.type) };
     fields['service_ids[]'] = { options: ['Fiche A', 'Fiche B'].map((label, index) => ({ label, value: String(index + 1), selected: false })),
         dispatchEvent: event => events.push(event.type) };
     const node = tag => ({ tag, children: [], attributes: {}, dataset: {}, hidden: false,
@@ -82,6 +84,26 @@ test('clearing services synchronizes the widget without emitting duplicate chang
     assert.equal(ui.fields['service_ids[]'].options.some(option => option.selected), false);
     assert.deepEqual(ui.events, ['techcalendar:selection-sync']);
     assert.equal(ui.fields.q.value, 'Lyon');
+});
+
+test('summarizes planning users only in visited and removes their chip without clearing services', () => {
+    const ui = fixture({ status: 'visited', per_page: '50' });
+    ui.fields['planning_user_ids[]'].options.forEach(option => { option.selected = true; });
+    ui.fields['service_ids[]'].options[0].selected = true;
+    const item = dossierFilterItems(ui.form).find(item => item.key === 'planning_users');
+    assert.equal(item.label, 'Suivi planning : 2 responsables');
+    assert.equal(item.title, 'Suivi planning : Alice Martin, Bob Dupont');
+    assert.equal(item.advanced, false);
+    clearDossierFilter(ui.form, 'planning_users', ui.browser);
+    assert.equal(ui.fields['planning_user_ids[]'].options.some(option => option.selected), false);
+    assert.equal(ui.fields['service_ids[]'].options[0].selected, true);
+    assert.equal(ui.fields.per_page.value, '50');
+    ui.fields['planning_user_ids[]'].options[0].selected = true;
+    assert.equal(dossierFilterItems(ui.form).find(item => item.key === 'planning_users').label, 'Suivi planning : Alice Martin');
+    clearDossierFilter(ui.form, 'status', ui.browser);
+    assert.equal(ui.fields['planning_user_ids[]'].disabled, true);
+    assert.equal(ui.fields['planning_user_ids[]'].options.some(option => option.selected), false);
+    assert.equal(dossierFilterItems(ui.form).some(item => item.key === 'planning_users'), false);
 });
 
 test('clearing the period removes both boundaries as a single criterion', () => {

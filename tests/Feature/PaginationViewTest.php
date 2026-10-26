@@ -64,6 +64,15 @@ it('omits pagination when the list fits on one page', function (int $count) {
     expect(trim((string) $paginator->links()))->toBe('');
 })->with([0, 1, 25]);
 
+it('keeps the dossier page size control available even with an empty or single page', function (int $count) {
+    $paginator = new LengthAwarePaginator($count ? range(1, $count) : [], $count, 50);
+    $html = (string) $paginator->links('pagination::tailwind', ['pageSizeControl' => 'crm.dossiers.page-size']);
+    $xpath = ($this->paginationDocument)($html);
+    expect($xpath->query('//nav[@class="gc-pagination"]//*[@data-dossier-page-size]')->length)->toBe(1)
+        ->and($xpath->query('//select[@data-dossier-page-size]/option[@selected and @value="50"]')->length)->toBe(1)
+        ->and($xpath->query('//a[@rel="prev" or @rel="next"]')->length)->toBe(0);
+})->with([0, 1, 25]);
+
 it('handles a page that became empty after deleting its last result', function () {
     $paginator = new LengthAwarePaginator([], 30, 25, 3, ['path' => '/manager/lots']);
     $html = (string) $paginator->links();

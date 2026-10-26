@@ -3,6 +3,7 @@
         @php
             $selected = ($filters['status'] ?? 'all') === $key || ($key === 'all' && empty($filters['status']));
             $categoryFilters = \Illuminate\Support\Arr::except($filters, ['status', 'page']);
+            if ($key !== 'visited') unset($categoryFilters['planning_user_ids']);
             if ($key !== 'all') $categoryFilters['status'] = $key;
             [$categoryIcon, $categoryHint] = \App\Support\WorkspaceUi::status($key);
         @endphp

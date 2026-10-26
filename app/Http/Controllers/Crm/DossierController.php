@@ -46,8 +46,7 @@ class DossierController extends Controller
             'dossiers' => $registry->search($request->user(), $filters),
             'categories' => $registry->categories($request->user(), $filters),
             'table' => app(DossierTable::class),
-            'planningUsers' => array_key_exists('planning_user', app(DossierTable::class)->columns($filters))
-                ? app(DossierPlanningAssignment::class)->users() : collect(),
+            'planningUsers' => app(DossierPlanningAssignment::class)->users(),
         ];
 
         if ($request->expectsJson()) {

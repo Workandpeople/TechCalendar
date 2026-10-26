@@ -39,6 +39,8 @@ it('separates primary criteria complementary filters and table preferences witho
     }
     expect($xpath->query('//input[@name="all_columns" and @form="dossier-filters" and not(ancestor::form)]')->length)->toBe(1)
         ->and($xpath->query('//*[@data-dossier-page-size]')->length)->toBe(1)
+        ->and($xpath->query('//nav[contains(@class,"gc-pagination")]//*[@data-dossier-page-size]')->length)->toBe(1)
+        ->and($xpath->query('//section[@aria-label="Résultats de recherche"]//*[@data-dossier-page-size]')->length)->toBe(0)
         ->and($xpath->query($form.'//input[@name="per_page" and @type="hidden"]')->length)->toBe(1)
         ->and($xpath->query($form.'//noscript//button[@type="submit"]')->length)->toBe(1);
     Http::assertNothingSent();

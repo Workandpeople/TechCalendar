@@ -2023,3 +2023,13 @@ parametres de partage encore soumis par un onglet ouvert sont ignores. L'acces
 client/delegataire reste gere par les categories autorisees de l'organisation ;
 la confidentialite des documents/commentaires n'est pas modifiee. Aucun historique
 anterieur n'est requalifie et aucune migration n'est necessaire.
+
+La pagination des dossiers occupe toute la largeur du pied de tableau. Le choix
+25/50/100 dossiers par page y est unique, y compris sans resultat ou sur une seule
+page ; il conserve la preference locale existante et les filtres en AJAX.
+Le filtre multiple Suivi planning est reserve a RDV visite et propose les gerants
+internes actifs eligibles a l'affectation. Il s'applique aussi au tri, a la pagination
+et a l'export Excel, sans melanger les fiches techniques selectionnees. Quitter cette
+categorie retire le critere, meme sur un lien direct sans JavaScript ; le retour
+arriere restaure les choix. Les autres compteurs correspondent a leurs liens sans
+ce filtre specifique. Aucun droit, dossier, utilisateur ou reglage d'envoi ne change.

@@ -80,7 +80,8 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
-        $query = $this->filteredQuery($filters)->withTrashed();
+        // Other categories drop the visited-only assignment filter when opened.
+        $query = $this->filteredQuery(Arr::except($filters, ['planning_user_ids']))->withTrashed();
         $serviceIds = DossierServiceFilter::ids($filters);
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
         $categorySql = "CASE WHEN matching_dossiers.deleted_at IS NOT NULL THEN 'unknown' ELSE $categorySql END";
@@ -99,6 +100,10 @@ class DossierRegistry
             $categories[$key] = [...$status, 'count' => (int) ($counts[$key] ?? 0)];
         }
 
+        if (($filters['status'] ?? null) === 'visited' && ! empty($filters['planning_user_ids'])) {
+            $categories['visited']['count'] = $this->matchingQuery($actor, $filters)->count();
+        }
+
         return $categories;
     }
 
@@ -107,6 +112,8 @@ class DossierRegistry
         $serviceIds = DossierServiceFilter::ids($filters);
 
         return Dossier::query()
+            ->when(($filters['status'] ?? null) === 'visited' && ! empty($filters['planning_user_ids']),
+                fn ($query) => $query->whereIn('dossiers.planning_user_id', $filters['planning_user_ids']))
             ->when($filters['department'] ?? null, fn ($query, $code) => DossierSections::department($query, $code))
             ->when($filters['section'] ?? null, fn ($query, $section) => DossierSections::filter($query, $section))
             ->when(filled($filters['date_from'] ?? null) || filled($filters['date_to'] ?? null), function ($query) use ($filters, $serviceIds): void {

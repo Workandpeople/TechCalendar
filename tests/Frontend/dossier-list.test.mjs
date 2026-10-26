@@ -65,6 +65,44 @@ test('restores every selected service on history navigation and clears the visib
     assert.deepEqual(events, ['techcalendar:selection-sync', 'techcalendar:selection-sync', 'techcalendar:selection-sync']);
 });
 
+test('keeps planning users independent of services through sorting pagination and export URLs in visited only', () => {
+    const entries = new URLSearchParams('status=visited&service_ids[0]=3&service_ids[1]=7&planning_user_ids[0]=12&planning_user_ids[1]=15&page=8');
+    const url = dossierListUrl(base, entries, { sort: 'planning_user', page: '2' });
+    assert.deepEqual(url.searchParams.getAll('planning_user_ids[]'), ['12', '15']);
+    assert.deepEqual(url.searchParams.getAll('service_ids[]'), ['3', '7']);
+    assert.equal(url.searchParams.get('page'), '2');
+    const resized = dossierListUrl(base, url.searchParams, { per_page: '100' });
+    assert.equal(resized.searchParams.has('page'), false);
+    assert.equal(resized.searchParams.get('per_page'), '100');
+    assert.deepEqual(resized.searchParams.getAll('planning_user_ids[]'), ['12', '15']);
+    assert.equal(dossierListUrl(base, entries, { planning_user_ids: [] }).searchParams.has('planning_user_ids[]'), false);
+    for (const status of ['pending', '', null, 'all', 'report']) {
+        const changed = dossierListUrl(base, entries, { status });
+        assert.equal(changed.searchParams.has('planning_user_ids[]'), false);
+        assert.deepEqual(changed.searchParams.getAll('service_ids[]'), ['3', '7']);
+    }
+});
+
+test('restores both multi selections on history navigation and disables planning outside visited', () => {
+    const events = [];
+    const select = values => ({ multiple: true, options: values.map(value => ({ value, selected: false })),
+        dispatchEvent: event => events.push(event.type) });
+    const fields = { status: { value: '' }, 'service_ids[]': select(['3', '7']), 'planning_user_ids[]': select(['12', '15', '18']) };
+    const container = { hidden: true };
+    const form = { elements: { namedItem: name => fields[name] }, querySelector: () => container };
+    const browser = { CustomEvent: class { constructor(type) { this.type = type; } } };
+    syncDossierFilters(form, new URL(`${base}?status=visited&service_ids[]=7&planning_user_ids[0]=12&planning_user_ids[1]=18`), browser);
+    assert.equal(container.hidden, false);
+    assert.equal(fields['planning_user_ids[]'].disabled, false);
+    assert.deepEqual(fields['planning_user_ids[]'].options.map(option => option.selected), [true, false, true]);
+    assert.deepEqual(fields['service_ids[]'].options.map(option => option.selected), [false, true]);
+    syncDossierFilters(form, new URL(`${base}?status=pending&service_ids[]=3&planning_user_ids[]=12`), browser);
+    assert.equal(container.hidden, true);
+    assert.equal(fields['planning_user_ids[]'].disabled, true);
+    assert.deepEqual(fields['planning_user_ids[]'].options.map(option => option.selected), [false, false, false]);
+    assert.deepEqual(fields['service_ids[]'].options.map(option => option.selected), [true, false]);
+});
+
 function fixture() {
     let id = 0;
     const timers = new Map();

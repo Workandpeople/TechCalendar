@@ -14,3 +14,14 @@ test('summarizes all single and multiple selections using the native options onl
     select.options.forEach(option => { option.selected = false; });
     assert.equal(multiSelectSummary(select).count, 0);
 });
+
+test('uses responsible-user wording without changing the service selector defaults', () => {
+    const select = { dataset: { emptyLabel: 'Tous les responsables', selectedLabel: 'responsables sélectionnés' }, options: [
+        { label: 'Alice Martin', selected: false }, { label: 'Bob Dupont', selected: false },
+    ] };
+    assert.equal(multiSelectSummary(select).label, 'Tous les responsables');
+    select.options.forEach(option => { option.selected = true; });
+    assert.equal(multiSelectSummary(select).label, '2 responsables sélectionnés');
+    select.options[1].selected = false;
+    assert.equal(multiSelectSummary(select).label, 'Alice Martin');
+});

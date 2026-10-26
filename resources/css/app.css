@@ -371,6 +371,7 @@ html.sidebar-hidden .app-sidebar {
     }
 
     .gc-pagination {
+        width: 100%;
         container: pagination / inline-size;
         display: flex;
         flex-wrap: wrap;
@@ -379,6 +380,30 @@ html.sidebar-hidden .app-sidebar {
         gap: 0.75rem 1.5rem;
         min-width: 0;
         font-size: 0.8125rem;
+    }
+
+    .gc-pagination-summary-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .75rem 1.25rem;
+    }
+
+    .gc-pagination-page-size {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        white-space: nowrap;
+        color: var(--gc-text-soft);
+    }
+
+    .gc-pagination-page-size select {
+        width: auto;
+        min-width: 5rem;
+        min-height: 2.5rem;
+        padding-top: .375rem;
+        padding-bottom: .375rem;
+        font-size: inherit;
     }
 
     .gc-pagination-summary {

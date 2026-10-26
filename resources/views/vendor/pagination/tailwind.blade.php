@@ -1,5 +1,6 @@
-@if ($paginator->hasPages())
+@if ($paginator->hasPages() || isset($pageSizeControl))
     <nav class="gc-pagination" aria-label="{{ __('pagination.navigation') }}">
+        <div class="gc-pagination-summary-group">
         <p class="gc-pagination-summary">
             @if ($paginator->firstItem())
                 {{ __('pagination.results', ['first' => $paginator->firstItem(), 'last' => $paginator->lastItem(), 'total' => $paginator->total()]) }}
@@ -7,7 +8,10 @@
                 {{ __('pagination.empty') }}
             @endif
         </p>
+        @isset($pageSizeControl) @include($pageSizeControl) @endisset
+        </div>
 
+        @if ($paginator->hasPages())
         <div class="gc-pagination-controls">
             @include('pagination::step', ['direction' => 'previous'])
 
@@ -33,5 +37,6 @@
 
             @include('pagination::step', ['direction' => 'next'])
         </div>
+        @endif
     </nav>
 @endif
