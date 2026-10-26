@@ -1981,3 +1981,14 @@ reference du controle, sans suffixe beneficiaire. Le nom est borne a 190 caracte
 mais la reference complete reste conservee dans control_reference. Les documents
 libres et visites techniques gardent leur suffixe beneficiaire. Aucun ancien
 document n'est renomme, et ni les audiences ni les transitions ne sont modifiees.
+
+La liste des dossiers distingue les criteres principaux (recherche, organisation,
+fiches multiples), les filtres complementaires groupes par lieu/periode/suivi,
+et les options du tableau. Le panneau complementaire s'ouvre sur un lien deja
+filtre ; les pastilles permettent de retirer un seul critere, sans perdre les
+autres ni le tri. Les parametres et contrats GET/JSON/Excel restent inchanges.
+Le champ all_columns est associe au formulaire par son attribut form depuis la
+barre du tableau ; les mises a jour AJAX remplacent aussi ses options de lecture.
+Les preferences locales restent limitees a la categorie et a la pagination,
+sans stocker de recherche ou d'identite client. Les filtres fonctionnent aussi
+sans JavaScript avec le bouton de soumission de secours.

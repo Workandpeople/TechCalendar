@@ -1,5 +1,6 @@
 import { initDossierAssignment } from './dossier-assignment.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
+import { initDossierFilterPanel } from './dossier-filter-panel.js';
 
 const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
 const serviceArrayName = name => /^service_ids(?:\[\d*\])?$/.test(name);
@@ -135,7 +136,10 @@ export function initDossierList(root = document, browser = window) {
         // Export the current inputs, including a search whose debounced request is still pending.
         exportLink.href = dossierListUrl(exportLink.dataset.exportUrl, new browser.FormData(form)).href;
     });
-    const syncForm = url => syncDossierFilters(form, url, browser);
+    const syncForm = (url, revealAdvanced = false) => {
+        syncDossierFilters(form, url, browser);
+        filterPanel.sync({ revealAdvanced });
+    };
     const busy = (value) => {
         feedback.hidden = false;
         spinner.hidden = !value;
@@ -144,6 +148,7 @@ export function initDossierList(root = document, browser = window) {
     };
     const loader = createDossierLoader(browser, {
         pending() {
+            filterPanel.sync();
             busy(true);
             errorBox.hidden = true;
             status.textContent = 'Mise à jour des dossiers…';
@@ -154,6 +159,7 @@ export function initDossierList(root = document, browser = window) {
             // These fragments come exclusively from the authenticated, same-origin Blade endpoint.
             categories.innerHTML = payload.categories;
             results.innerHTML = payload.results;
+            filterPanel.sync();
             listing.querySelectorAll('[data-dossier-section]').forEach(link => {
                 const active = link.dataset.dossierSection === (url.searchParams.get('section') || '');
                 link.href = dossierListUrl(form.action, url.searchParams, { section: link.dataset.dossierSection }).href;
@@ -191,6 +197,7 @@ export function initDossierList(root = document, browser = window) {
             retry = () => loader.load(url, options);
         },
     });
+    const filterPanel = initDossierFilterPanel(form, categories, root, browser, () => loader.load(formUrl()));
     initDossierAssignment(listing, root, browser, () => loader.refresh(renderedUrl));
     form.addEventListener('submit', event => {
         event.preventDefault();
@@ -204,9 +211,12 @@ export function initDossierList(root = document, browser = window) {
         if (event.target !== search) loader.load(formUrl());
     });
     listing.addEventListener('change', event => {
-        if (!event.target.matches('[data-dossier-page-size]')) return;
-        form.elements.namedItem('per_page').value = event.target.value;
-        loader.load(formUrl());
+        if (event.target.matches('[data-dossier-page-size]')) {
+            form.elements.namedItem('per_page').value = event.target.value;
+            loader.load(formUrl(), { focus: '[data-dossier-page-size]' });
+        } else if (event.target.matches('[data-dossier-all-columns]')) {
+            loader.load(formUrl(), { focus: '[data-dossier-all-columns]' });
+        }
     });
     listing.addEventListener('click', event => {
         const link = event.target.closest('a[href]');
@@ -243,7 +253,7 @@ export function initDossierList(root = document, browser = window) {
     const restoreLocation = () => {
         const url = new URL(browser.location.href);
         if (url.pathname !== new URL(form.action).pathname) return;
-        syncForm(url);
+        syncForm(url, true);
         loader.load(url, { history: false });
     };
     browser.addEventListener('popstate', restoreLocation);
