@@ -211,9 +211,18 @@ try {
             throw new RuntimeException('Donnees natives absentes : '.$table);
         }
     }
-    if (DB::table('users')->where('admin', true)->count() !== 1 || DB::table('users')->where('portal_enabled', true)->exists()
-        || DB::table('mail_templates')->where('is_active', true)->exists() || DB::table('capcee_deliveries')->exists() || DB::table('dossier_sms')->exists()) {
-        throw new RuntimeException('Administrateurs, portails ou envois non conformes a la recette interne.');
+    if (DB::table('users')->where('admin', true)->count() !== 1) {
+        throw new RuntimeException('Un seul super-admin est attendu pour la recette interne.');
+    }
+    if (DB::table('users')->where('portal_enabled', true)->exists()) {
+        throw new RuntimeException('Des portails externes sont actifs : validation des acces requise avant cette recette interne.');
+    }
+    // Active templates are editable content, not delivery permission. Delivery is gated above.
+    if (DB::table('capcee_deliveries')->exists()) {
+        throw new RuntimeException('Historique de transmissions CAPCEE present : verifier le perimetre de recette.');
+    }
+    if (DB::table('dossier_sms')->exists()) {
+        throw new RuntimeException('Historique SMS present : verifier le perimetre de recette.');
     }
     foreach ([$root, $root.'/.env', $root.'/artisan', $root.'/public/build/manifest.json'] as $path) {
         if (! is_readable($path) || is_writable($path)) {

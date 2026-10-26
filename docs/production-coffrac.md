@@ -1930,3 +1930,10 @@ verifier les empreintes et les revisions avant de fermer la V2. L'updater refuse
 tout changement de dependances ; seules les quatre migrations autorisees peuvent
 etre appliquees. Le favicon et les trois outils de collecte font partie du perimetre
 autorise, sans droit d'execution automatique des collecteurs.
+
+Les modeles de mails actifs sont du contenu editable, pas une autorisation de
+livraison. Le controle runtime les accepte avant et apres la migration
+d'activation. Il conserve les verrous `MAIL_MAILER=log` et
+`MAIL_DELIVERY_ENABLED=false`, ainsi que les controles distincts du super-admin,
+des portails externes et des historiques SMS/CAPCEE. Ne pas desactiver les modeles,
+supprimer des historiques ou modifier les comptes pour contourner un controle.
