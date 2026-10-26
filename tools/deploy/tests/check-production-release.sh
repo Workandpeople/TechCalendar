@@ -46,6 +46,9 @@ sql "INSERT INTO cofrac2production.dossiers (id,reference,address,city,created_a
 sql "INSERT INTO cofrac2production.mail_templates (name,slug,subject,markdown_body,is_active,created_at,updated_at) VALUES
     ('Active content','runtime-active-content','Fixture','Fixture',1,NOW(),NOW()),
     ('Inactive content','runtime-inactive-content','Fixture','Fixture',0,NOW(),NOW());"
+PORTAL_ID=$(sql 'SELECT u.id FROM cofrac2production.users u JOIN cofrac2production.external_delegataires o ON o.id=u.external_client_id WHERE u.role=3 AND u.admin=0 AND u.deleted_at IS NULL AND o.is_active=1 ORDER BY u.id LIMIT 1;')
+test -n "$PORTAL_ID"
+sql "UPDATE cofrac2production.users SET portal_enabled=1 WHERE id=$PORTAL_ID;"
 sql 'SELECT id,email,password,role,admin,deleted_at,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/release-users.before.tsv
 if bash "$SCRIPT" --apply "$BUNDLE" "$(printf '0%.0s' {1..64})" > /tmp/release-bad-sha.log 2>&1; then exit 1; fi
 cmp -s "$STATE/RUNTIME-PREPARED.json" /tmp/release-prepared.before.json

@@ -1935,5 +1935,10 @@ Les modeles de mails actifs sont du contenu editable, pas une autorisation de
 livraison. Le controle runtime les accepte avant et apres la migration
 d'activation. Il conserve les verrous `MAIL_MAILER=log` et
 `MAIL_DELIVERY_ENABLED=false`, ainsi que les controles distincts du super-admin,
-des portails externes et des historiques SMS/CAPCEE. Ne pas desactiver les modeles,
+des portails externes et des historiques SMS/CAPCEE. Les comptes externes deja
+actives sont conserves et controles avec les memes regles que l'application :
+role externe sans administration, compte non supprime et organisation active de
+type client/delegataire. Le controle ne cree ni n'active aucun compte et ne change
+aucune permission ; son rapport indique le nombre de comptes externes actifs.
+Ne pas desactiver les modeles,
 supprimer des historiques ou modifier les comptes pour contourner un controle.

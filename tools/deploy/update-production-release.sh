@@ -144,6 +144,9 @@ php8.4 -r '
     $p=json_decode(file_get_contents($argv[1]."/preflight.json"),true,32,JSON_THROW_ON_ERROR);
     $r["runtime_updates"][]=["kind"=>"meeting_workflow_assets_schema","from_revision"=>$r["revision"],"to_revision"=>$p["revision"],"at_utc"=>gmdate(DATE_ATOM),"work_directory"=>$argv[1]];
     $r["revision"]=$p["revision"];$r["asset_probe"]=$p["asset_probe"];
+    $check=json_decode(file_get_contents($argv[1]."/application.after.json"),true,32,JSON_THROW_ON_ERROR);
+    $r["external_portals_enabled"]=$check["external_portals_enabled"];
+    $r["enabled_external_accounts"]=$check["enabled_external_accounts"];
     file_put_contents($argv[1]."/prepared.updated.json",json_encode($r,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");
 ' "$WORK"
 mv -- "$WORK/prepared.updated.json" "$STATE/RUNTIME-PREPARED.json"

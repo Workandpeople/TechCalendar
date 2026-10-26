@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Jobs\ProductionRuntimeProbe;
+use App\Models\ExternalDelegataire;
+use App\Models\User;
+use App\Services\Crm\ClientAccess;
 use Cofrac2\Deploy\CoffracDocumentArchive;
 use Cofrac2\Deploy\ProductionRuntimeBundle;
 use Illuminate\Contracts\Console\Kernel;
@@ -214,8 +217,13 @@ try {
     if (DB::table('users')->where('admin', true)->count() !== 1) {
         throw new RuntimeException('Un seul super-admin est attendu pour la recette interne.');
     }
-    if (DB::table('users')->where('portal_enabled', true)->exists()) {
-        throw new RuntimeException('Des portails externes sont actifs : validation des acces requise avant cette recette interne.');
+    $portalAccounts = 0;
+    $clientAccess = app(ClientAccess::class);
+    foreach (User::query()->where('portal_enabled', true)->with('externalClient')->lazyById(100) as $user) {
+        if (! $clientAccess->active($user) || ! array_key_exists($user->externalClient->kind, ExternalDelegataire::KINDS)) {
+            throw new RuntimeException('Compte de portail actif sans role externe ou organisation valide. Aucun acces modifie.');
+        }
+        $portalAccounts++;
     }
     // Active templates are editable content, not delivery permission. Delivery is gated above.
     if (DB::table('capcee_deliveries')->exists()) {
@@ -258,7 +266,8 @@ try {
     }
     echo json_encode(['database' => 'cofrac2production', 'document_files_readable' => $count,
         'single_super_admin' => true, 'code_read_only' => true, 'outbound_delivery_enabled' => false,
-        'external_portals_enabled' => false, 'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
+        'external_portals_enabled' => $portalAccounts > 0, 'enabled_external_accounts' => $portalAccounts,
+        'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {
     $detail = get_class($exception) === RuntimeException::class ? ' '.$exception->getMessage() : '';
     fwrite(STDERR, 'STOP : runtime V2 ('.get_class($exception).', '.basename($exception->getFile()).':'.$exception->getLine().').'.$detail." Aucun secret affiche.\n");
