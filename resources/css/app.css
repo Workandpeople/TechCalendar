@@ -342,6 +342,17 @@ html.sidebar-hidden .app-sidebar {
         border-color: #f43f5e;
     }
 
+    .gc-user-row--inactive { background-color: #f1f5f9; color: #475569; }
+    .gc-user-row--inactive > td:first-child { box-shadow: inset 3px 0 #94a3b8; }
+    .gc-user-row--inactive .gc-user-name { text-decoration: line-through; text-decoration-color: #94a3b8; }
+    .gc-user-status {
+        display: inline-flex; align-items: center; gap: .3rem; border: 1px solid #a7f3d0; border-radius: .375rem;
+        padding: .2rem .45rem; background: #ecfdf5; color: #065f46; font-size: .75rem; font-weight: 600;
+        line-height: 1.25; white-space: nowrap;
+    }
+    .gc-user-status[data-user-status="inactive"] { border-color: #cbd5e1; background: #e2e8f0; color: #334155; }
+    .gc-user-status svg { width: .95rem; height: .95rem; flex: 0 0 auto; }
+
     .gc-user-actions { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: .375rem; white-space: nowrap; }
     .gc-user-actions > * { flex: 0 0 auto; }
     .gc-user-actions > form { display: inline-flex; margin: 0; }

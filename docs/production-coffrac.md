@@ -1960,3 +1960,10 @@ clients gardent toutes les categories sauf supprimees et les delegataires garden
 catalogue initial incluant Rapport Genius. Les reglages existants ne sont ni ecrases
 ni reinitialises par une migration. Les permissions par compte et les trois audiences
 restent independantes ; l'ecriture externe reste limitee a la non-conformite.
+
+La selection des techniciens dans Les RDV ne contient que les comptes internes
+actifs, pour les gerants comme pour le planning. Les affectations historiques et
+les noms des techniciens desactives sur les anciens rendez-vous sont conserves.
+Les listes de gestion des utilisateurs affichent les comptes desactives avec
+une ligne grisee, un nom barre et un badge distinct, y compris apres filtrage AJAX.
+Les actions de restauration/suppression et les filtres de statut restent inchanges.

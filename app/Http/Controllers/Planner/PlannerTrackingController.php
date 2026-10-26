@@ -14,6 +14,7 @@ use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\AppointmentEditor;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -32,11 +33,10 @@ class PlannerTrackingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $technicians = User::query()
-            ->when(config('crm.v2_enabled'), fn ($query) => $query->withTrashed())
+            ->internal()
             ->with(['services:id', 'departments:code'])
             ->where('role', 2)
             ->where('admin', false)
-            ->when(! config('crm.v2_enabled'), fn ($query) => $query->whereNull('deleted_at'))
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'phone', 'address', 'department_code', 'role', 'deleted_at']);
@@ -320,7 +320,7 @@ class PlannerTrackingController extends Controller
             ->map(fn ($technicianAppointments) => $technicianAppointments->sortBy('starts_at')->values());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
         $commentsByAppointment = config('crm.v2_enabled')
-            ? app(\App\Services\Crm\AppointmentComments::class)->forAppointments($appointments) : [];
+            ? app(AppointmentComments::class)->forAppointments($appointments) : [];
 
         return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment, $commentsByAppointment, $appointmentMailData): array {
             $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';

@@ -65,13 +65,13 @@
                     </thead>
                     <tbody>
                         @forelse ($users as $user)
-                            <tr class="border-b last:border-b-0" style="border-color:var(--gc-border);">
-                                <td class="px-4 py-3">{{ $user->full_name_with_departments }}</td>
+                            <tr @class(['gc-user-row border-b last:border-b-0', 'gc-user-row--inactive' => $user->trashed()]) style="border-color:var(--gc-border);">
+                                <td class="gc-user-name px-4 py-3">{{ $user->full_name_with_departments }}</td>
                                 <td class="px-4 py-3">{{ $user->email }}</td>
                                 <td class="px-4 py-3">
                                     @if ($user->role === 0) Gérant @elseif ($user->role === 1) Planning @else Tech @endif
                                 </td>
-                                <td class="px-4 py-3">{{ $user->trashed() ? 'Désactivé' : 'Actif' }}</td>
+                                <td class="px-4 py-3"><x-user-account-status :inactive="$user->trashed()" /></td>
                                 <td class="w-px whitespace-nowrap px-4 py-3">
                                     <div class="gc-user-actions">
                                         @if (! $user->trashed())
