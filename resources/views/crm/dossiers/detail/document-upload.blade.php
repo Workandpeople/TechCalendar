@@ -9,14 +9,14 @@
             <label><input type="radio" name="document_type" value="visit" @checked(old('document_type') === 'visit')><x-nav-icon name="planning" />Visite technique</label>
             <label><input type="radio" name="document_type" value="report" @checked(old('document_type') === 'report')><x-nav-icon name="check" />Rapport de contrôle</label>
         </fieldset>
-        <div><label for="document_name" class="gc-label">Nom du document *</label><input id="document_name" name="name" maxlength="190" class="gc-input" required value="{{ old('name') }}" placeholder="Ex. Facture travaux, rapport de visite…"></div>
+        <div data-document-name><label for="document_name" class="gc-label">Nom du document *</label><input id="document_name" name="name" maxlength="190" class="gc-input" required value="{{ old('name') }}" placeholder="Ex. Facture travaux, plan…"><p class="text-xs text-slate-500">Le nom du bénéficiaire sera ajouté automatiquement.</p></div>
         <fieldset data-operation-fields class="gc-report-fields grid gap-4 sm:grid-cols-2" @disabled(old('document_type', 'free') === 'free') @if (old('document_type', 'free') === 'free') hidden @endif>
             <legend class="sr-only">Informations du rapport</legend>
-            <div class="sm:col-span-2"><label class="gc-label" for="report-operation">Fiche / prestation *</label>
+            <div class="sm:col-span-2" @if ($dossier->operations->count() === 1) hidden @endif><label class="gc-label" for="report-operation">Prestation concernée *</label>
                 <select class="gc-input" id="report-operation" name="operation_id" required data-report-operation><option value="">Choisir une fiche</option>
                     @foreach ($dossier->operations as $operation)
                         @php($state = \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'])
-                        <option value="{{ $operation->id }}" data-state="{{ $state }}" @selected(old('operation_id') == $operation->id)>#{{ $operation->id }} · {{ $operation->service?->name ?: $operation->legacy_service_name }} · {{ \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['label'] }}</option>
+                        <option value="{{ $operation->id }}" data-state="{{ $state }}" @selected(old('operation_id', $dossier->operations->count() === 1 ? $operation->id : null) == $operation->id)>{{ $operation->service?->name ?: $operation->legacy_service_name }} · {{ \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['label'] }}</option>
                     @endforeach
                 </select>
             </div>
@@ -48,8 +48,8 @@
         </fieldset>
         <p class="text-sm font-medium" role="status" data-document-effect></p>
         <div><label class="gc-label" for="document-description">Description / observations</label><textarea id="document-description" name="description" class="gc-input" rows="3" maxlength="10000">{{ old('description') }}</textarea></div>
-        <label class="gc-file-drop" for="document"><x-nav-icon name="upload" /><span><strong>Choisir ou déposer un fichier</strong><small>10 Mo maximum · PDF pour les rapports, images ou documents Office pour les pièces libres.</small></span>
-            <input id="document" name="document" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" class="block w-full min-w-0 text-sm">
+        <label class="gc-file-drop" for="document"><x-nav-icon name="upload" /><span><strong>Choisir ou déposer un fichier</strong><small>{{ \App\Services\DocumentUpload::LIMIT_LABEL }} maximum par fichier · PDF pour les rapports, images ou documents Office pour les pièces libres.</small></span>
+            <input id="document" name="document" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" class="block w-full min-w-0 text-sm" data-document-max-bytes="{{ \App\Services\DocumentUpload::MAX_BYTES }}">
         </label>
         <x-content-audience :value="old('audience', 'client')" />
         <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-primary"><x-nav-icon name="upload" />Enregistrer le document</button></footer>

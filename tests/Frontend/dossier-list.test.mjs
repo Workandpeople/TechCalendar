@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dossierListUrl, createDossierLoader, initDossierList } from '../../resources/js/dossier-list.js';
+import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList } from '../../resources/js/dossier-list.js';
 
 const base = 'https://example.test/v2/dossiers';
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -19,7 +19,7 @@ test('builds a canonical filtered URL and resets pagination without carrying unr
     const url = dossierListUrl(`${base}?page=8#table`, new URLSearchParams({
         q: ' Lyon ', per_page: '25', service_id: '3', status: '', all_columns: '0', page: '8', ignored: 'yes', direction: 'asc',
     }));
-    assert.equal(url.href, `${base}?q=Lyon&service_id=3`);
+    assert.equal(url.href, `${base}?q=Lyon&service_ids%5B%5D=3`);
     assert.equal(dossierListUrl(base, new URLSearchParams('service_id=3&q=Lyon')).href, url.href);
 });
 
@@ -34,6 +34,35 @@ test('keeps current input while applying categories sort or pagination and suppo
     assert.equal(url.searchParams.has('sort'), false);
     assert.equal(url.searchParams.has('direction'), false);
     assert.equal(dossierListUrl(base, new URLSearchParams('sort=client')).searchParams.get('direction'), 'asc');
+});
+
+test('retains multiple services from forms PHP indexed links sorting pagination and exports', () => {
+    const forms = new URLSearchParams('service_ids[]=3&service_ids[]=7&q=Lyon');
+    const indexed = new URLSearchParams('service_ids[0]=3&service_ids[1]=7&q=Lyon');
+    const url = dossierListUrl(base, forms, { status: 'visited', page: '2' });
+    assert.deepEqual(url.searchParams.getAll('service_ids[]'), ['3', '7']);
+    assert.equal(dossierListUrl(base, indexed, { status: 'visited', page: '2' }).href, url.href);
+    assert.deepEqual(dossierServiceIds(url.searchParams), ['3', '7']);
+    assert.deepEqual(dossierServiceIds(new URLSearchParams('service_id=3')), ['3']);
+    assert.deepEqual(dossierServiceIds(new URLSearchParams('service_id=99&service_ids[]=3&service_ids[]=7')), ['3', '7']);
+    assert.equal(dossierListUrl(base, forms, { service_ids: [] }).searchParams.has('service_ids[]'), false);
+    assert.deepEqual(dossierListUrl(base, forms, { service_id: '8' }).searchParams.getAll('service_ids[]'), ['8']);
+    assert.equal(dossierListUrl(base, new URLSearchParams('service_id=3')).href,
+        dossierListUrl(base, new URLSearchParams('service_ids[]=3')).href);
+});
+
+test('restores every selected service on history navigation and clears the visible widget without another request', () => {
+    const events = [];
+    const services = { multiple: true, options: ['3', '7', '8'].map(value => ({ value, selected: false })), dispatchEvent: event => events.push(event.type) };
+    const form = { elements: { namedItem: name => name === 'service_ids[]' ? services : null } };
+    const browser = { CustomEvent: class { constructor(type) { this.type = type; } } };
+    syncDossierFilters(form, new URL(`${base}?service_ids[0]=3&service_ids[1]=7`), browser);
+    assert.deepEqual(services.options.map(option => option.selected), [true, true, false]);
+    syncDossierFilters(form, new URL(`${base}?service_id=8`), browser);
+    assert.deepEqual(services.options.map(option => option.selected), [false, false, true]);
+    syncDossierFilters(form, new URL(base), browser);
+    assert.deepEqual(services.options.map(option => option.selected), [false, false, false]);
+    assert.deepEqual(events, ['techcalendar:selection-sync', 'techcalendar:selection-sync', 'techcalendar:selection-sync']);
 });
 
 function fixture() {

@@ -198,3 +198,40 @@ it('rejects untrusted sorting fields and directions', function (array $filters) 
 })->with([
     [['sort' => 'id desc; DROP TABLE dossiers']], [['sort' => 'client', 'direction' => 'anything']], [['all_columns' => 'yes']],
 ]);
+
+it('renders readable postal addresses and phone contacts without changing source data or the map endpoint', function () {
+    [$dossier, $operation] = ($this->makeRow)('A', 1);
+    $raw = '1 IMPASSE BORDE DU BOSC - 000 OA 0647 - 000 OA 0659';
+    $dossier->update(['address' => $raw, 'postal_code' => '31370', 'city' => 'MONTGRAS', 'phone' => '609285333 / +32 470 12 34 56']);
+    $operation->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $response = $this->get(route('v2.dossiers.index', ['status' => 'pending']))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="utf-8" ?>'.$response->getContent());
+    $xpath = new DOMXPath($dom);
+    $address = $xpath->query('//td[@data-column="address"]/button')->item(0);
+    expect(trim($xpath->evaluate('string(strong)', $address)))->toBe('1 IMPASSE BORDE DU BOSC')
+        ->and(trim($xpath->evaluate('string(span)', $address)))->toBe('31370 MONTGRAS')
+        ->and($address->getAttribute('title'))->toContain($raw)
+        ->and($address->getAttribute('data-dossier-map-url'))->toBe(route('v2.dossiers.map', $dossier))
+        ->and($address->getAttribute('data-dossier-map-address'))->toBe('1 IMPASSE BORDE DU BOSC, 31370 MONTGRAS');
+    $phones = $xpath->query('//td[@data-column="phone"]//a');
+    expect($phones->length)->toBe(2)->and($phones->item(0)->textContent)->toBe('06 09 28 53 33')
+        ->and($phones->item(0)->getAttribute('href'))->toBe('tel:+33609285333')
+        ->and($phones->item(1)->textContent)->toBe('+32 470 12 34 56')
+        ->and($dossier->fresh()->address)->toBe($raw)->and($dossier->fresh()->phone)->toBe('609285333 / +32 470 12 34 56');
+    Http::assertNothingSent();
+});
+
+it('keeps list display formatting query-free and escapes untrusted contact data', function () {
+    [$dossier] = ($this->makeRow)('A', 1);
+    $dossier->update(['address' => '<img src=x onerror=alert(1)>', 'phone' => '<script>alert(2)</script>']);
+    $table = app(DossierTable::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $table->address($dossier);
+    $table->phoneNumbers($dossier);
+    expect(DB::getQueryLog())->toBeEmpty();
+    DB::disableQueryLog();
+    $this->get(route('v2.dossiers.index'))->assertOk()->assertSee('&lt;img src=x onerror=alert(1)&gt;', false)
+        ->assertDontSee('<img src=x onerror=alert(1)>', false)->assertDontSee('<script>alert(2)</script>', false);
+});

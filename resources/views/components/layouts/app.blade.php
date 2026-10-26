@@ -15,6 +15,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ $workspace['label'] }} · {{ config('app.name') }}</title>
+        <x-favicon />
         <script>
             window.TechCalendarReverbConfig = @json($reverbClientConfig);
             try {
@@ -77,21 +78,20 @@
                                 ['route' => 'manager.services', 'active' => 'manager.services*', 'label' => 'Prestations', 'icon' => 'services'],
                             ],
                         ],
-                        ...$dossierItems,
+                        ...($user->admin ? [] : $dossierItems),
                         ['route' => 'manager.lots', 'active' => 'manager.lots*', 'label' => 'Les lots', 'icon' => 'lots'],
-                        ['route' => 'manager.appointments', 'active' => 'manager.appointments*', 'label' => 'Les RDV', 'icon' => 'appointments'],
                     ],
                 ];
             }
 
-            if ($user->admin || $user->role === 1) {
+            if ($user->admin || in_array($user->role, [0, 1], true)) {
                 $sections[] = [
                     'id' => 'planner',
                     'label' => 'Planning',
                     'collapsible' => true,
                     'items' => [
-                        ['route' => 'planner.dashboard', 'label' => 'Tableau de bord', 'icon' => 'dashboard'],
-                        ...$dossierItems,
+                        ['route' => 'planner.dashboard', 'label' => $user->admin || $user->role === 0 ? 'Vue planning' : 'Tableau de bord', 'icon' => 'dashboard'],
+                        ...($user->role === 0 && ! $user->admin ? [] : $dossierItems),
                         ['route' => 'planner.book', 'active' => 'planner.book*', 'label' => 'Prendre un RDV', 'icon' => 'book', 'badge' => $notifications['pending'], 'badge_label' => 'RDV à placer'],
                         ['route' => 'planner.tracking', 'active' => ['planner.tracking*', 'planner.appointments.modify'], 'label' => 'Les RDV', 'icon' => 'tracking'],
                     ],

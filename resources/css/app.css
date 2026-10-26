@@ -67,6 +67,28 @@ html.sidebar-hidden .app-sidebar {
     .gc-booking-request-row { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 3.375rem; }
     .gc-booking-request-row > * { min-width: 0; }
     .gc-booking-request-client, .gc-booking-request-address, .gc-booking-request-actions { grid-column: 1 / -1; }
+    .gc-booking-summary { padding: 0; overflow: hidden; border-top: 3px solid #2459a8; }
+    .gc-booking-summary[hidden] { display: none; }
+    .gc-booking-summary [hidden] { display: none; }
+    .gc-booking-summary-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .8rem; padding: .9rem 1.1rem; border-bottom: 1px solid #dce6f0; background: #edf5ff; }
+    .gc-booking-summary-heading, .gc-booking-summary-actions { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
+    .gc-booking-summary-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: .6rem; background: #dbeafe; color: #2459a8; }
+    .gc-booking-summary-heading p { font-size: .7rem; color: #526779; }
+    .gc-booking-summary-heading h2 { font-weight: 700; font-size: 1rem; color: #233f55; }
+    .gc-workspace .gc-booking-summary-actions .gc-btn-secondary { min-height: 32px; padding: .35rem .6rem; font-size: .75rem; box-shadow: none; }
+    .gc-booking-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.5rem; padding: 1.1rem; }
+    .gc-booking-summary-grid > div { min-width: 0; }
+    .gc-booking-summary-grid > [hidden] { display: none; }
+    .gc-booking-summary-grid dt { color: #526779; font-size: .75rem; margin-bottom: .25rem; }
+    .gc-booking-summary-grid dd { font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; color: #233f55; }
+    .gc-booking-summary-address { grid-column: span 2; }
+    [data-booking-summary-phones] { display: flex; gap: .3rem .8rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+    [data-booking-summary-phones] a { text-decoration: underline dotted; text-underline-offset: 3px; }
+    @media (max-width: 700px) {
+        .gc-booking-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+        .gc-booking-summary-address { grid-column: 1 / -1; }
+    }
+    @media (max-width: 430px) { .gc-booking-summary-grid { grid-template-columns: minmax(0, 1fr); } }
 
     @container (min-width: 56rem) {
         .gc-booking-request-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, .95fr) minmax(0, 1.45fr) minmax(0, 1.6fr); }
@@ -74,14 +96,14 @@ html.sidebar-hidden .app-sidebar {
     }
 
     .gc-dossier-table-scroll { position: relative; overflow-x: auto; }
-    .gc-dossier-table { --gc-dossier-action-width: 44px; width: 100%; min-width: 1000px; table-layout: fixed; text-align: left; font-size: .75rem; }
-    .gc-dossier-table-compact { min-width: 760px; }
-    .gc-dossier-table-assignment { min-width: 1200px; }
+    .gc-dossier-table { --gc-dossier-action-width: 44px; width: 100%; min-width: 1280px; table-layout: fixed; text-align: left; font-size: .875rem; line-height: 1.5; }
+    .gc-dossier-table-compact { min-width: 1080px; }
+    .gc-dossier-table-assignment { min-width: 1440px; }
     .gc-dossier-table .gc-planning-assignment { width: 100%; min-width: 0; padding: .45rem .3rem; font-size: .75rem; background: white; }
     .gc-planning-assignment:disabled { cursor: wait; opacity: .6; }
     [data-assignment-feedback][data-error="true"] { color: #b91c1c; }
-    .gc-dossier-table th { padding: .7rem .5rem; background: var(--gc-panel-muted); font-size: .7rem; color: var(--gc-text-soft); }
-    .gc-dossier-table td { padding: .75rem .5rem; vertical-align: top; overflow-wrap: anywhere; border-top: 1px solid #edf0f2; }
+    .gc-dossier-table th { padding: .75rem .65rem; background: var(--gc-panel-muted); font-size: .75rem; color: var(--gc-text-soft); }
+    .gc-dossier-table td { padding: .75rem .65rem; vertical-align: top; overflow-wrap: anywhere; border-top: 1px solid #e2e8f0; }
     .gc-dossier-table tr:hover { background: #f8fafc; }
     .gc-dossier-table time { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .gc-dossier-col-action { width: var(--gc-dossier-action-width); }
@@ -89,19 +111,25 @@ html.sidebar-hidden .app-sidebar {
     .gc-dossier-table th.gc-dossier-action { background: var(--gc-panel-muted); }
     .gc-dossier-table tr:hover td.gc-dossier-action { background: #f8fafc; }
     .gc-dossier-cell-lines { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
-    .gc-dossier-cell-muted { display: block; color: var(--gc-text-soft); font-size: .68rem; margin-top: .15rem; }
+    .gc-dossier-cell-muted { display: block; color: #596c7a; font-size: .75rem; margin-top: .2rem; }
     .gc-dossier-client { font-weight: 650; }
     .gc-dossier-client:hover { text-decoration: underline; }
-    .gc-dossier-change { margin-top: .35rem; font-size: .68rem; }
+    .gc-dossier-change { margin-top: .35rem; font-size: .75rem; }
     .gc-dossier-sort { display: flex; align-items: center; justify-content: space-between; gap: .25rem; min-height: 2rem; }
     .gc-dossier-sort:hover { color: var(--gc-primary); }
     .gc-dossier-table th[aria-sort="ascending"], .gc-dossier-table th[aria-sort="descending"] { color: var(--gc-primary); background: var(--gc-accent-soft); }
-    .gc-dossier-table .gc-dossier-status { font-size: .62rem; padding: .15rem .35rem; margin-top: .3rem; }
-    .gc-dossier-map-trigger { width: 100%; text-align: left; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .gc-dossier-table .gc-dossier-status { font-size: .6875rem; padding: .15rem .35rem; margin-top: .3rem; }
+    .gc-dossier-map-trigger { width: 100%; text-align: left; cursor: help; }
+    .gc-dossier-address-street { display: block; color: #233f55; font-weight: 750; font-size: .9rem; line-height: 1.5; overflow-wrap: break-word; }
+    .gc-dossier-address-locality { display: block; margin-top: .25rem; color: #526779; font-size: .8125rem; font-weight: 550; }
+    .gc-dossier-map-trigger:hover .gc-dossier-address-street { color: #0369a1; text-decoration: underline; text-underline-offset: 3px; }
     .gc-dossier-map-trigger:hover { color: #0369a1; }
+    .gc-dossier-phones { display: grid; gap: .35rem; font-size: .8125rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .gc-dossier-phones a { display: inline-block; max-width: 100%; white-space: normal; color: #233f55; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .gc-dossier-phones a:hover { color: #0369a1; text-decoration-style: solid; }
     .gc-dossier-open { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: .5rem; background: var(--gc-panel-muted); }
     .gc-dossier-open:hover { background: var(--gc-accent-soft); }
-    .gc-dossier-sort:focus-visible, .gc-dossier-open:focus-visible, .gc-dossier-map-trigger:focus-visible { outline: 2px solid var(--gc-primary); outline-offset: 2px; border-radius: .25rem; }
+    .gc-dossier-sort:focus-visible, .gc-dossier-open:focus-visible, .gc-dossier-map-trigger:focus-visible, .gc-dossier-phones a:focus-visible { outline: 2px solid var(--gc-primary); outline-offset: 2px; border-radius: .25rem; }
     .gc-dossier-map-tooltip { position: fixed; z-index: 80; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; overscroll-behavior: contain; padding: .75rem; border: 1px solid var(--gc-border); border-radius: .8rem; background: #fff; box-shadow: 0 12px 36px #0003; }
     .gc-dossier-map-heading { display: flex; align-items: start; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; font-size: .8rem; }
     .gc-dossier-map-canvas { height: 210px; border-radius: .4rem; overflow: hidden; background: #f1f5f9; }

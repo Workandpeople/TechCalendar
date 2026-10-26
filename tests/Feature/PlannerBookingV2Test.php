@@ -4,6 +4,7 @@ use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
+use App\Models\ExternalDelegataire;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierBooking;
@@ -239,4 +240,61 @@ it('keeps the legacy booking connectors available outside v2', function () {
         ->assertSee('Actualiser connecteur 2')
         ->assertSee('Actualiser connecteur 3')
         ->assertSee('const bookingConnectorsEnabled = true;', false);
+});
+
+it('provides a separate read-only dossier recap with the selected operation and both organisations', function () {
+    extract(nativeBookingFixture());
+    $client = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'BOOKING-CLIENT', 'kind' => 'client', 'name' => 'Client distinct']);
+    $delegate = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'BOOKING-DELEGATE', 'kind' => 'delegataire', 'name' => 'Délégataire distinct']);
+    $dossier->update(['client_id' => $client->id, 'delegataire_id' => $delegate->id,
+        'email' => 'beneficiaire@example.invalid', 'phone' => '609285333', 'site_name' => 'Site de test', 'installer_name' => 'Installateur test']);
+    $dossier->forceFill(['legacy_lot_name' => 'LOT TEST'])->save();
+    $this->actingAs($actor)->getJson(route('planner.book.crm-appointments.index'))->assertOk()
+        ->assertJsonPath('appointments.0.dossier_summary.beneficiary', 'Camille TEST')
+        ->assertJsonPath('appointments.0.dossier_summary.phone_numbers.0.label', '06 09 28 53 33')
+        ->assertJsonPath('appointments.0.dossier_summary.client', 'Client distinct')
+        ->assertJsonPath('appointments.0.dossier_summary.delegataire', 'Délégataire distinct')
+        ->assertJsonPath('appointments.0.dossier_summary.service', 'Prestation native')
+        ->assertJsonPath('appointments.0.dossier_summary.address', '1 rue du Test, 75001 Paris')
+        ->assertJsonPath('appointments.0.dossier_summary.dossier_url', route('v2.dossiers.show', $dossier, absolute: false));
+    $response = $this->get(route('planner.book'))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML($response->getContent());
+    $xpath = new DOMXPath($dom);
+    expect($xpath->query('//*[@id="booking-results-anchor"]//section[@id="booking-dossier-summary"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="booking-dossier-summary"]//form')->length)->toBe(0)
+        ->and($dossier->fresh()->version)->toBe(1);
+    Http::assertNothingSent();
+});
+
+it('uses manually entered contacts in the recap and performs no queries for already loaded dossiers', function () {
+    extract(nativeBookingFixture());
+    $dossier->update(['client_contact' => ['name' => 'Client saisi à la main'],
+        'delegataire_contact' => ['company_name' => 'Délégataire saisi à la main']]);
+    $operation->load(['service', 'dossier.client', 'dossier.delegataire']);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $summary = app(DossierBooking::class)->summary($operation);
+    expect($summary['client'])->toBe('Client saisi à la main')->and($summary['delegataire'])->toBe('Délégataire saisi à la main')
+        ->and(DB::getQueryLog())->toBeEmpty();
+    DB::disableQueryLog();
+    Http::assertNothingSent();
+});
+
+it('keeps the native dossier recap available when replacing an existing booking', function () {
+    extract(nativeBookingFixture());
+    $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertCreated();
+    $appointment = Appointment::sole();
+    $this->postJson(route('planner.book.analyze'), ['replace_appointment_id' => $appointment->id])->assertOk()
+        ->assertJsonPath('crm_appointment.dossier_summary.beneficiary', 'Camille TEST')
+        ->assertJsonPath('crm_appointment.dossier_summary.status', 'RDV en attente de visite')
+        ->assertJsonPath('crm_appointment.dossier_summary.dossier_url', route('v2.dossiers.show', $dossier, absolute: false));
+    expect(Appointment::count())->toBe(1);
+    Http::assertNothingSent();
+});
+
+it('does not expose the booking recap to a technician without planning access', function () {
+    extract(nativeBookingFixture());
+    $this->actingAs($technician)->getJson(route('planner.book.crm-appointments.index'))->assertForbidden();
+    Http::assertNothingSent();
 });

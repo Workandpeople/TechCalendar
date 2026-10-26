@@ -19,6 +19,8 @@ return [
     // Also gates dynamically configured SMTP senders during an internal production rehearsal.
     'delivery_enabled' => (bool) env('MAIL_DELIVERY_ENABLED', true),
 
+    'contact_address' => env('MAIL_CONTACT_ADDRESS', 'contact@geniuscontrole.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

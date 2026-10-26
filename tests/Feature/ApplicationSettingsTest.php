@@ -7,12 +7,118 @@ use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
 use App\Models\Service;
 use App\Models\User;
-use App\Services\CoffracAppointmentService;
 use App\Services\ApplicationSettings;
+use App\Services\CoffracAppointmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 
 uses(RefreshDatabase::class);
+
+describe('settings form persistence', function () {
+    beforeEach(function () {
+        Cache::forget(ApplicationSettings::CACHE_KEY);
+        config(['application_settings.definitions' => [
+            'mail.host' => ['group' => 'Mail', 'label' => 'SMTP host', 'config' => 'mail.mailers.smtp.host',
+                'rules' => ['nullable', 'string', 'max:255']],
+            'test.retry_delay' => ['group' => 'Test', 'label' => 'Retry delay', 'type' => 'integer', 'fallback' => 15,
+                'config' => 'services.settings_form.retry_delay', 'rules' => ['nullable', 'integer', 'min:1', 'max:300']],
+            'test.transport' => ['group' => 'Test', 'label' => 'Transport', 'type' => 'select', 'fallback' => 'log',
+                'config' => 'services.settings_form.transport', 'options' => ['log' => 'Log', 'smtp' => 'SMTP'],
+                'rules' => ['nullable', 'string', 'in:log,smtp']],
+            'test.api_key' => ['group' => 'Test', 'label' => 'API key', 'type' => 'password', 'secret' => true,
+                'config' => 'services.settings_form.api_key', 'rules' => ['nullable', 'string', 'max:255']],
+        ]]);
+        $this->admin = User::factory()->create(['admin' => true, 'role' => 0]);
+        $this->actingAs($this->admin);
+    });
+
+    it('saves literal dotted field names and displays the saved values on reload', function () {
+        app(ApplicationSettings::class)->get('test.retry_delay');
+        $this->put(route('admin.settings.update'), ['settings' => [
+            'mail.host' => 'smtp.example.test', 'test.retry_delay' => '37', 'test.transport' => 'smtp', 'test.api_key' => 'fixture-private-token',
+        ]])->assertRedirect(route('admin.settings'))->assertSessionHasNoErrors();
+
+        expect(ApplicationSetting::where('key', 'mail.host')->value('value'))->toBe('smtp.example.test')
+            ->and(app(ApplicationSettings::class)->get('test.retry_delay'))->toBe(37)
+            ->and(config('services.settings_form.transport'))->toBe('smtp')
+            ->and(ApplicationSetting::where('key', 'test.api_key')->first()->getRawOriginal('value'))->not->toContain('fixture-private-token')
+            ->and(ApplicationSettingAudit::count())->toBe(4);
+        $this->get(route('admin.settings'))->assertOk()->assertSee('value="smtp.example.test"', false)
+            ->assertSee('value="37"', false)->assertSee('value="smtp" selected', false)
+            ->assertSee('BDD active')->assertDontSee('fixture-private-token');
+    });
+
+    it('validates dotted fields without discarding the input or flashing secrets', function () {
+        $this->from(route('admin.settings'))->put(route('admin.settings.update'), ['settings' => [
+            'mail.host' => 'smtp.pending.test', 'test.retry_delay' => 'invalid', 'test.transport' => 'smtp', 'test.api_key' => 'fixture-do-not-flash',
+        ]])->assertRedirect(route('admin.settings'))->assertSessionHasErrors('settings.test.retry_delay');
+
+        expect(ApplicationSetting::count())->toBe(0)->and(ApplicationSettingAudit::count())->toBe(0)
+            ->and(session()->getOldInput('settings')['test.api_key'] ?? null)->toBeNull();
+        $this->get(route('admin.settings'))->assertOk()->assertSee('value="smtp.pending.test"', false)
+            ->assertSee('value="invalid"', false)->assertSee('value="smtp" selected', false)
+            ->assertDontSee('fixture-do-not-flash');
+    });
+
+    it('preserves omitted settings and blank secrets while allowing an explicit fallback reset', function () {
+        $settings = app(ApplicationSettings::class);
+        $settings->update(['mail.host' => 'smtp.original.test', 'test.retry_delay' => '37', 'test.api_key' => 'fixture-kept-token'], $this->admin->id);
+        $this->put(route('admin.settings.update'), ['settings' => ['mail.host' => 'smtp.new.test', 'test.api_key' => '']])
+            ->assertSessionHasNoErrors();
+        expect($settings->get('mail.host'))->toBe('smtp.new.test')->and($settings->get('test.retry_delay'))->toBe(37)
+            ->and($settings->get('test.api_key'))->toBe('fixture-kept-token');
+        $this->put(route('admin.settings.update'), ['settings' => ['test.retry_delay' => '']])->assertSessionHasNoErrors();
+        expect($settings->get('test.retry_delay'))->toBe(15);
+    });
+
+    it('clears the active secret when reset to an absent server configuration', function () {
+        $settings = app(ApplicationSettings::class);
+        $settings->update(['test.api_key' => 'fixture-reset-token'], $this->admin->id);
+        expect(config('services.settings_form.api_key'))->toBe('fixture-reset-token');
+        $this->delete(route('admin.settings.destroy'), ['key' => 'test.api_key'])->assertRedirect(route('admin.settings'));
+        expect($settings->get('test.api_key'))->toBeNull()->and(config('services.settings_form.api_key'))->toBeNull()
+            ->and(ApplicationSetting::where('key', 'test.api_key')->first()->is_active)->toBeFalse();
+    });
+
+    it('rolls back the entire update when audit persistence fails', function () {
+        $settings = app(ApplicationSettings::class);
+        $settings->update(['mail.host' => 'smtp.original.test'], $this->admin->id);
+        $event = 'eloquent.creating: '.ApplicationSettingAudit::class;
+        Event::listen($event, static function (ApplicationSettingAudit $audit): void {
+            if ($audit->key === 'test.transport') {
+                throw new RuntimeException('fixture audit failure');
+            }
+        });
+        try {
+            expect(fn () => $settings->update(['mail.host' => 'smtp.changed.test', 'test.transport' => 'smtp'], $this->admin->id))
+                ->toThrow(RuntimeException::class, 'fixture audit failure');
+        } finally {
+            Event::forget($event);
+        }
+        expect(ApplicationSetting::count())->toBe(1)->and(ApplicationSettingAudit::count())->toBe(1)
+            ->and(ApplicationSetting::where('key', 'mail.host')->value('value'))->toBe('smtp.original.test')
+            ->and($settings->get('mail.host'))->toBe('smtp.original.test')
+            ->and(config('mail.mailers.smtp.host'))->toBe('smtp.original.test');
+    });
+
+    it('refuses unknown malformed or empty settings without any update', function (array $payload) {
+        $this->putJson(route('admin.settings.update'), $payload)->assertUnprocessable();
+        expect(ApplicationSetting::count())->toBe(0)->and(ApplicationSettingAudit::count())->toBe(0);
+    })->with([
+        'missing' => [[]], 'empty' => [['settings' => []]], 'scalar' => [['settings' => 'bad']],
+        'unknown' => [['settings' => ['unregistered.setting' => 'bad']]],
+        'nested' => [['settings' => ['mail' => ['host' => 'bad']]]],
+        'array value' => [['settings' => ['mail.host' => ['bad']]]],
+    ]);
+
+    it('forbids saving or resetting settings as a non administrator', function () {
+        $this->actingAs(User::factory()->create(['admin' => false, 'role' => 0]));
+        $this->putJson(route('admin.settings.update'), ['settings' => ['mail.host' => 'bad']])->assertForbidden();
+        $this->deleteJson(route('admin.settings.destroy'), ['key' => 'mail.host'])->assertForbidden();
+        expect(ApplicationSetting::count())->toBe(0);
+    });
+});
 
 it('falls back to env or configured fallback when no database value exists', function () {
     config(['application_settings.definitions' => [

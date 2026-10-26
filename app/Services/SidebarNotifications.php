@@ -15,12 +15,13 @@ class SidebarNotifications
         if ($user->isExternal()) {
             return ['settings' => 0, 'today' => 0, 'pending' => 0];
         }
+
         return [
             'settings' => $user->admin ? app(ApplicationSettings::class)->missingCount() : 0,
             'today' => Appointment::query()->where('technician_id', $user->id)
                 ->where('status', Appointment::STATUS_SCHEDULED)
                 ->where('starts_at', '>=', today())->where('starts_at', '<', today()->addDay())->count(),
-            'pending' => $user->admin || $user->role === 1 ? $this->pendingAppointmentsCount() : 0,
+            'pending' => $user->admin || in_array($user->role, [0, 1], true) ? $this->pendingAppointmentsCount() : 0,
         ];
     }
 

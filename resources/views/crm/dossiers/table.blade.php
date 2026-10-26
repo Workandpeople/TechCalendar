@@ -24,7 +24,7 @@
                     @php
                         $appointment = $dossier->listingAppointment;
                         $modification = $table->modification($dossier);
-                        $fullAddress = trim($dossier->address.' '.$dossier->postal_code.' '.$dossier->city);
+                        $address = $table->address($dossier);
                     @endphp
                     <tr data-dossier-comments>
                         <td class="gc-dossier-action"><a class="gc-dossier-open" aria-label="Ouvrir le dossier {{ $dossier->beneficiaryLabel() }}" title="Ouvrir le dossier" href="{{ route('v2.dossiers.show', $dossier) }}">
@@ -53,6 +53,7 @@
                                         @break
                                     @case('client')
                                         <a class="gc-dossier-client gc-dossier-cell-lines" data-dossier-comments-trigger href="{{ route('v2.dossiers.show', $dossier) }}">{{ $dossier->beneficiaryLabel() }}</a>
+                                        @foreach (\App\Services\Crm\DossierSections::badges($dossier) as $badge)<span class="gc-dossier-status" data-tone="blue">{{ $badge }}</span>@endforeach
                                         @php($billingSummary = \App\Services\Crm\DossierBillingService::summary($dossier))
                                         @if ($billingSummary['tone'] !== 'slate')<a href="{{ route('v2.dossiers.show', $dossier) }}#facturation"><x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" /></a>@endif
                                         <a href="{{ route('v2.dossiers.show', $dossier) }}#commentaires" class="gc-dossier-comments-link"
@@ -63,10 +64,10 @@
                                         @include('crm.dossiers.comments-preview', ['dossier' => $dossier])
                                         @break
                                     @case('address')
-                                        <button type="button" class="gc-dossier-map-trigger" data-dossier-map-url="{{ route('v2.dossiers.map', $dossier) }}" data-dossier-map-address="{{ $fullAddress }}"
-                                            aria-label="Voir la carte : {{ $fullAddress ?: 'Adresse non renseignée' }}">
-                                            <span class="gc-dossier-cell-lines">{{ $dossier->address ?: 'Adresse non renseignée' }}</span>
-                                            <span class="gc-dossier-cell-muted">{{ $dossier->postal_code }} {{ $dossier->city }}</span>
+                                        <button type="button" class="gc-dossier-map-trigger" data-dossier-map-url="{{ route('v2.dossiers.map', $dossier) }}" data-dossier-map-address="{{ $address['full'] }}"
+                                            title="{{ $address['original'] }}" aria-label="Voir la carte : {{ $address['full'] ?: 'Adresse non renseignée' }}">
+                                            <strong class="gc-dossier-address-street">{{ $address['street'] ?: 'Adresse non renseignée' }}</strong>
+                                            @if ($address['locality'] !== '')<span class="gc-dossier-address-locality">{{ $address['locality'] }}</span>@endif
                                         </button>
                                         @break
                                     @case('company')
@@ -74,7 +75,11 @@
                                         <span class="gc-dossier-cell-lines" title="{{ $company?->company_name ?: $company?->name }}">{{ $company?->company_name ?: $company?->name ?: '—' }}</span>
                                         @break
                                     @case('phone')
-                                        <span class="gc-dossier-cell-lines" title="{{ $dossier->phone }}">{{ $dossier->phone ?: '—' }}</span>
+                                        <ul class="gc-dossier-phones" aria-label="Numéros de téléphone">
+                                            @forelse ($table->phoneNumbers($dossier) as $phone)
+                                                <li>@if ($phone['href'])<a href="{{ $phone['href'] }}" aria-label="Appeler le {{ $phone['label'] }}">{{ $phone['label'] }}</a>@else<span>{{ $phone['label'] }}</span>@endif</li>
+                                            @empty<li>—</li>@endforelse
+                                        </ul>
                                         @break
                                     @case('service')
                                         @if ($dossier->trashed())<span class="gc-dossier-status" data-tone="slate">Dossier supprimé</span>@endif

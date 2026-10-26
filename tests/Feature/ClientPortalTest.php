@@ -40,6 +40,7 @@ beforeEach(function () {
         'portal_permissions' => ClientAccess::defaults('client'), 'must_change_password' => false]);
     $this->dossier = Dossier::create(['reference' => 'ALPHA-DOSSIER', 'company_name' => 'Beneficiaire Alpha',
         'address' => 'Rue Alpha', 'city' => 'Paris', 'delegataire_id' => $this->client->id]);
+    $this->dossier->operations()->create()->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->privateDossier = Dossier::create(['reference' => 'BRAVO-SECRET', 'company_name' => 'Beneficiaire Bravo',
         'address' => 'Rue Bravo', 'city' => 'Paris', 'delegataire_id' => $this->other->id]);
     $this->lot = Lot::create(['name' => 'Lot Alpha', 'type' => Lot::TYPE_FULL_CONTACT_CONTROL,
@@ -63,7 +64,7 @@ it('limits dossier and lot lists, detail links and counts to the assigned client
     $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertSee('Beneficiaire Alpha');
     $this->get(route('client.dossiers.show', $this->privateDossier))->assertForbidden();
     $this->get(route('client.lots'))->assertOk()->assertSee('Lot Alpha')->assertDontSee('Lot Bravo');
-    $this->get(route('client.lots.show', $this->lot))->assertOk()->assertSee('Test beneficiaire')->assertDontSee('INTERNAL LOT NOTE');
+    $this->get(route('client.lots.show', $this->lot))->assertOk()->assertDontSee('INTERNAL LOT NOTE');
     $this->get(route('client.lots.show', $this->privateLot))->assertNotFound();
     $this->get(route('dashboard'))->assertRedirect(route('client.dossiers'));
 });
@@ -135,7 +136,7 @@ it('applies delegataire defaults and private priority to collected documents', f
         $this->get(route('client.dossiers.archive', [$this->dossier, 3]))->assertNotFound();
         $this->get(route('client.dossiers.archive', [$this->privateDossier, 1]))->assertForbidden();
         $this->post(route('client.dossiers.comments', $this->dossier), ['body' => 'Not allowed'])->assertForbidden();
-        $this->post(route('client.dossiers.upload', $this->dossier), ['name' => 'No', 'document' => UploadedFile::fake()->image('x.jpg')])->assertForbidden();
+        $this->post(route('client.dossiers.upload', $this->dossier), ['name' => 'Correction', 'document' => UploadedFile::fake()->image('x.jpg')])->assertRedirect();
     } finally {
         File::deleteDirectory($root);
     }
@@ -189,8 +190,7 @@ it('refuses mobile tokens and inconsistent read write permissions for an externa
 
 it('scopes unknown states and escapes literal search wildcards', function () {
     $this->dossier->update(['reference' => 'ALPHA-100%']);
-    $this->actingAs($this->external)->get(route('client.dossiers', ['status' => 'unknown']))
-        ->assertOk()->assertSee('Beneficiaire Alpha')->assertDontSee('Beneficiaire Bravo');
+    $this->actingAs($this->external)->get(route('client.dossiers', ['status' => 'unknown']))->assertForbidden();
     $this->get(route('client.dossiers', ['q' => '100%']))->assertOk()->assertSee('Beneficiaire Alpha');
     $this->get(route('client.dossiers', ['q' => '_']))->assertOk()->assertDontSee('Beneficiaire Alpha');
 });

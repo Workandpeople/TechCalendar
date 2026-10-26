@@ -346,7 +346,7 @@ vérifier : statuts personnalisés, tarifs, habilitations et formulaires.
   ouverte avant une modification concurrente ne peut pas écraser celle-ci.
 - Recherche bornée et paginée, filtres délégataire/prestation, relations chargées
   en avance, pagination indépendante des documents et de l'historique.
-- Documents limités à 10 Mo, formats autorisés et contrôle MIME/extension,
+- Documents limités à 1 Go (1 024 Mio) par fichier, formats autorisés et contrôle MIME/extension,
   noms de stockage aléatoires, téléchargement authentifié, nettoyage si l'écriture
   en base échoue. Toutes les pièces du socle sont internes, sans accès partenaire.
 - Accès réservé aux gérants, planificateurs et administrateurs avec mot de passe initial

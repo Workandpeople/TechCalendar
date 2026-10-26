@@ -33,6 +33,11 @@ final class DossierStatusCatalog
         return ['key' => 'unknown', ...self::STATUSES['unknown']];
     }
 
+    public static function manualStates(): array
+    {
+        return array_diff_key(self::STATUSES, array_flip(['invoiced', 'unknown']));
+    }
+
     public static function filter(Builder $query, string $status): void
     {
         if ($status !== 'unknown') {

@@ -19,7 +19,7 @@ class ClientAccess
         'documents' => 'Consulter les documents partagés',
         'comments' => 'Lire les commentaires partagés',
         'add_comments' => 'Ajouter des commentaires',
-        'upload_documents' => 'Ajouter des documents dans tous les états',
+        'upload_documents' => 'Ajouter des documents en non-conformité',
         'upload_corrections' => 'Ajouter des justificatifs en non-conformité',
         'lots' => 'Consulter les lots attribués',
     ];
@@ -27,7 +27,7 @@ class ClientAccess
     public static function defaults(string $kind): array
     {
         return ['documents' => true, 'comments' => $kind === 'client',
-            'add_comments' => $kind === 'client', 'upload_documents' => $kind === 'client',
+            'add_comments' => $kind === 'client', 'upload_documents' => false,
             'upload_corrections' => true, 'lots' => true];
     }
 
@@ -60,13 +60,21 @@ class ClientAccess
         if (! $this->viewDossier($user, $dossier)) {
             return false;
         }
-        if ($this->allows($user, 'upload_documents')) {
-            return true;
-        }
-        if (! $this->allows($user, 'upload_corrections')) {
+        if (! $this->allows($user, 'upload_corrections') && ! $this->allows($user, 'upload_documents')) {
             return false;
         }
 
+        return $this->isNonCompliant($dossier);
+    }
+
+    public function addComment(User $user, Dossier $dossier): bool
+    {
+        return $this->viewDossier($user, $dossier) && $this->allows($user, 'add_comments')
+            && $this->isNonCompliant($dossier);
+    }
+
+    private function isNonCompliant(Dossier $dossier): bool
+    {
         $statuses = DossierStatusCatalog::STATUSES['non_compliant']['values'];
 
         return $dossier->relationLoaded('operations')

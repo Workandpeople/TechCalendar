@@ -17,19 +17,23 @@ use App\Services\AppointmentDocumentSerializer;
 use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\DossierBooking;
+use App\Services\Crm\DossierLocation;
 use App\Services\Crm\NativeAppointmentPlacement;
 use App\Services\ExternalAppointmentSourceRegistry;
 use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotStatusService;
+use App\Services\MapboxAddressGeocoder;
 use App\Services\MapboxDrivingRouteService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -52,7 +56,8 @@ class PlannerBookingController extends Controller
     ): View {
         abort_unless($this->canAccess($request), 403);
 
-        $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify');
+        $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify')
+            || $request->filled('replace_appointment_id');
         $isManagerRoute = $request->routeIs('manager.*');
         $services = Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
@@ -78,10 +83,10 @@ class PlannerBookingController extends Controller
                 'logo_url' => $template->logo_url,
             ])
             ->values();
-        $bookingConnectorsEnabled = ! config('crm.v2_enabled');
-        $coffracPending = $bookingConnectorsEnabled
+        $bookingConnectorsEnabled = ! config('crm.v2_enabled') && ! $isReplacementMode;
+        $coffracPending = $isReplacementMode ? ['appointments' => collect(), 'status' => null] : ($bookingConnectorsEnabled
             ? $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT)
-            : ['appointments' => app(DossierBooking::class)->pending($request->user()), 'status' => null];
+            : ['appointments' => app(DossierBooking::class)->pending($request->user()), 'status' => null]);
         $externalAppointmentSources = $bookingConnectorsEnabled
             ? $this->externalAppointmentSources($coffracPending['status'])
             : [];
@@ -91,7 +96,7 @@ class PlannerBookingController extends Controller
             'coffracApiStatus' => $coffracPending['status'],
             'externalAppointmentSources' => $externalAppointmentSources,
             'bookingConnectorsEnabled' => $bookingConnectorsEnabled,
-            'lotRequests' => $this->lotAppointmentRequests($autoCompletion),
+            'lotRequests' => $isReplacementMode ? collect() : $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'initialReplaceAppointmentId' => $request->query('replace_appointment_id') ?: $request->query('appointment_id'),
             'bookingMode' => $isReplacementMode ? 'replace' : 'create',
@@ -1685,12 +1690,31 @@ class PlannerBookingController extends Controller
             ->whereKey($id)
             ->first();
 
-        if (! $appointment || ! filled($appointment->address)) {
+        if (! $appointment) {
             return null;
         }
 
+        if (config('crm.v2_enabled')) {
+            $appointment->loadMissing('dossierOperation.dossier');
+            if ($dossier = $appointment->dossierOperation?->dossier) {
+                Gate::authorize('update', $dossier);
+                if ($point = DossierLocation::coordinates($dossier)) {
+                    $appointment->address = DossierLocation::address($dossier);
+                    $appointment->latitude = $point['latitude'];
+                    $appointment->longitude = $point['longitude'];
+                }
+                if (blank($appointment->address)) {
+                    $appointment->address = trim($dossier->address.' '.$dossier->postal_code.' '.$dossier->city);
+                }
+            }
+        }
+        if (blank($appointment->address)) {
+            throw ValidationException::withMessages(['replace_appointment_id' => 'Adresse absente du RDV. Complétez les coordonnées du dossier avant de le replacer.']);
+        }
         if ($appointment->latitude === null || $appointment->longitude === null) {
-            return null;
+            $point = app(MapboxAddressGeocoder::class)->geocode($appointment->address);
+            $appointment->latitude = $point['latitude'] ?? null;
+            $appointment->longitude = $point['longitude'] ?? null;
         }
 
         $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
@@ -1712,12 +1736,14 @@ class PlannerBookingController extends Controller
             'phone' => $appointment->customer_phone,
             'address' => $appointment->address,
             'department_code' => $departmentCode,
-            'latitude' => (float) $appointment->latitude,
-            'longitude' => (float) $appointment->longitude,
+            'latitude' => $appointment->latitude === null ? null : (float) $appointment->latitude,
+            'longitude' => $appointment->longitude === null ? null : (float) $appointment->longitude,
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => false,
             'is_replacement' => true,
+            'dossier_summary' => config('crm.v2_enabled') && $appointment->dossierOperation?->dossier
+                ? app(DossierBooking::class)->summary($appointment->dossierOperation) : null,
             'comment' => $appointment->comment,
             'external_source' => $appointment->external_source,
             'external_reference' => $appointment->external_reference,
@@ -2041,7 +2067,7 @@ class PlannerBookingController extends Controller
             ->groupBy(fn (Appointment $appointment): string => $appointment->technician_id.'|'.$appointment->starts_at?->toDateString());
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
         $commentsByAppointment = config('crm.v2_enabled')
-            ? app(\App\Services\Crm\AppointmentComments::class)->forAppointments($appointments) : [];
+            ? app(AppointmentComments::class)->forAppointments($appointments) : [];
 
         return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment, $commentsByAppointment, $replacementAppointmentId): array {
             $serviceLabel = $appointment->service
@@ -2112,7 +2138,7 @@ class PlannerBookingController extends Controller
     private function externalComments(Appointment $appointment): array
     {
         if (config('crm.v2_enabled')) {
-            return app(\App\Services\Crm\AppointmentComments::class)->forAppointments(collect([$appointment]))[$appointment->id] ?? [];
+            return app(AppointmentComments::class)->forAppointments(collect([$appointment]))[$appointment->id] ?? [];
         }
 
         $comments = data_get($appointment->external_payload, 'comments', []);

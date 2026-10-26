@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ApplicationSettingsRequest;
 use App\Services\ApplicationSettings;
 use App\Services\ExternalAppointmentSourceRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -24,25 +24,9 @@ class AdminSettingController extends Controller
         ]);
     }
 
-    public function update(Request $request, ApplicationSettings $settings): RedirectResponse
+    public function update(ApplicationSettingsRequest $request, ApplicationSettings $settings): RedirectResponse
     {
-        abort_unless((bool) $request->user()?->admin, 403);
-
-        $definitions = $settings->definitions();
-        $payload = collect($definitions)
-            ->mapWithKeys(fn (array $definition, string $key): array => [
-                $key => $request->input("settings.{$key}"),
-            ])
-            ->all();
-
-        $rules = collect($definitions)
-            ->mapWithKeys(fn (array $definition, string $key): array => [
-                $key => $definition['rules'] ?? ['nullable', 'string'],
-            ])
-            ->all();
-
-        $values = Validator::make($payload, $rules)->validate();
-        $settings->update($values, $request->user()->id);
+        $settings->update($request->validated('settings'), $request->user()->id);
 
         return redirect()->route('admin.settings')->with('status', 'Paramètres mis à jour.');
     }

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Crm\ClientAccess;
 use App\Services\Crm\DossierRegistry;
 use App\Services\Crm\PostVisitWorkflow;
+use App\Services\DocumentUpload;
 use App\Services\LotAutoCompletionCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -260,7 +261,7 @@ it('does not transition on a generic upload or a comment and requires an explici
     expect($this->operation->fresh()->legacy_status)->toBe('NON CONFORMITES');
     $this->postJson($this->responseUrl, ['version' => 999, 'comment' => ' '])->assertUnprocessable();
     $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->create('bad.php', 1, 'text/plain')])->assertUnprocessable();
-    $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->create('large.pdf', 10241, 'application/pdf')])->assertUnprocessable();
+    $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->create('large.pdf', DocumentUpload::MAX_KILOBYTES + 1, 'application/pdf')])->assertUnprocessable();
     expect($this->operation->fresh()->legacy_status)->toBe('NON CONFORMITES')
         ->and($this->dossier->documents()->count())->toBe(3);
 });
@@ -336,7 +337,7 @@ it('removes the uploaded file too if the response transaction fails after storin
 
 it('rejects responses outside non conformity and on archived lots', function (string $state) {
     $this->operation->forceFill(['legacy_status' => $state])->save();
-    $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Réponse'])->assertUnprocessable();
+    $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Réponse'])->assertForbidden();
     $this->operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->lot->update(['status' => Lot::STATUS_ARCHIVED]);
     $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('archived.jpg')])->assertUnprocessable();
@@ -440,7 +441,7 @@ it('records a technical visit only after its document upload and blocks its remo
     $this->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('document');
     postVisitAction($this, 'record_visit', ['appointment_id' => $this->appointment->id, 'visit_document_id' => $this->document->id])->assertUnprocessable();
     $this->postJson($url, [...$payload, 'document' => UploadedFile::fake()->image('visit.png')])->assertRedirect();
-    $visit = $this->dossier->documents()->where('name', 'Compte rendu visite')->sole();
+    $visit = $this->dossier->documents()->where('document_type', 'visit')->latest('id')->firstOrFail();
     expect($this->operation->fresh()->legacy_status)->toBe('RDV VISITE')->and($visit->document_type)->toBe('visit')
         ->and($this->operation->fresh()->visit_appointment_id)->toBe($this->appointment->id)
         ->and($this->row->fresh()->physical_satisfaction)->toBeNull();
@@ -453,7 +454,7 @@ it('projects uploaded opinions immediately into linked lot results without touch
     $this->operation->forceFill(['legacy_status' => 'RDV VISITE'])->save();
     $this->row->forceFill(['contact_satisfaction' => true])->save();
     $data = ['document_type' => 'report', 'operation_id' => $this->operation->id, 'version' => 1,
-        'name' => 'Rapport', 'control_reference' => 'CONTROL', 'inspected_on' => now()->subDay()->toDateString(),
+        'name' => 'Rapport', 'audience' => 'internal', 'control_reference' => 'CONTROL', 'inspected_on' => now()->subDay()->toDateString(),
         'issued_on' => now()->toDateString(), 'outcome' => $outcome,
         'document' => UploadedFile::fake()->createWithContent('report.pdf', "%PDF-1.4\n%%EOF")];
     $this->postJson(route('v2.dossiers.documents.store', $this->dossier), $data)->assertRedirect();

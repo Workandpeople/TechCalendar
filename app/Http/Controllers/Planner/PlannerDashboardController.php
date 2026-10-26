@@ -161,6 +161,6 @@ class PlannerDashboardController extends Controller
     {
         $user = $request->user();
 
-        return (bool) $user && ($user->admin || $user->role === 1);
+        return (bool) $user && ($user->admin || in_array($user->role, [0, 1], true));
     }
 }

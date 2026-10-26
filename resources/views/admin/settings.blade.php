@@ -29,6 +29,10 @@
                     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
                         @foreach ($settings as $setting)
                             @php
+                                $oldSettings = old('settings', []);
+                                $inputValue = is_array($oldSettings) && array_key_exists($setting['key'], $oldSettings)
+                                    && (is_scalar($oldSettings[$setting['key']]) || $oldSettings[$setting['key']] === null)
+                                    ? $oldSettings[$setting['key']] : $setting['value'];
                                 $sourceMeta = match ($setting['source']) {
                                     'bdd' => [
                                         'label' => 'BDD active',
@@ -73,7 +77,7 @@
                                     <select id="setting_{{ str_replace('.', '_', $setting['key']) }}" name="settings[{{ $setting['key'] }}]" class="gc-input">
                                         <option value="">Utiliser .env / fallback</option>
                                         @foreach ($setting['options'] as $value => $label)
-                                            <option value="{{ $value }}" @selected((string) old("settings.{$setting['key']}", $setting['value']) === (string) $value)>{{ $label }}</option>
+                                            <option value="{{ $value }}" @selected((string) $inputValue === (string) $value)>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                 @else
@@ -82,7 +86,7 @@
                                         name="settings[{{ $setting['key'] }}]"
                                         type="{{ $setting['type'] === 'password' ? 'password' : ($setting['type'] === 'email' ? 'email' : 'text') }}"
                                         class="gc-input"
-                                        value="{{ $setting['is_secret'] ? '' : old("settings.{$setting['key']}", $setting['value']) }}"
+                                        value="{{ $setting['is_secret'] ? '' : $inputValue }}"
                                         placeholder="{{ $setting['is_secret'] && $setting['has_database_value'] ? 'Valeur BDD définie - laisser vide pour conserver' : 'Laisser vide pour utiliser .env / fallback' }}"
                                         autocomplete="off"
                                     />

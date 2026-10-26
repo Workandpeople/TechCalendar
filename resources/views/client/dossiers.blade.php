@@ -4,7 +4,7 @@
         @include('client.notice')
         <div data-ajax-results="categories">@include('crm.dossiers.categories', ['categoryRoute' => 'client.dossiers'])</div>
         <form data-ajax-filters method="GET" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
-            <div><label class="gc-label" for="q">Recherche</label><input class="gc-input" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Référence, bénéficiaire, lot"></div>
+            <div><label class="gc-label" for="q">Recherche</label><input class="gc-input" id="q" name="q" value="{{ $filters['q'] ?? '' }}" maxlength="255" placeholder="Référence, bénéficiaire, lot, adresse complète"></div>
             <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états autorisés</option>@foreach (collect($categories)->except('all') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
             <div class="flex items-end gap-3"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
         </form>

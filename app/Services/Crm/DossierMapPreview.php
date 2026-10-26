@@ -16,9 +16,12 @@ class DossierMapPreview
     public function coordinates(User $actor, Dossier $dossier): array
     {
         Gate::forUser($actor)->authorize('view', $dossier);
-        $address = trim(implode(', ', array_filter([$dossier->address, trim($dossier->postal_code.' '.$dossier->city)])));
+        $address = DossierLocation::address($dossier);
         if (blank($dossier->address)) {
             return ['coordinates' => null, 'message' => 'Adresse non renseignée.'];
+        }
+        if ($point = DossierLocation::coordinates($dossier)) {
+            return ['coordinates' => $point, 'message' => 'Position corrigée et vérifiée avec Mapbox.'];
         }
 
         $appointment = $dossier->appointments()->withTrashed()->whereNotNull('latitude')->whereNotNull('longitude')

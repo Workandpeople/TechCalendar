@@ -18,6 +18,7 @@ use App\Services\CoffracAppointmentService;
 use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\LotClientAssignment;
 use App\Services\Crm\PostVisitWorkflow;
+use App\Services\DocumentUpload;
 use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAppointmentUpdateService;
@@ -577,9 +578,10 @@ class ManagerLotController extends Controller
 
         $payload = $request->validate([
             'document' => [
+                'bail',
                 'required',
                 'file',
-                'max:30720',
+                DocumentUpload::SIZE_RULE,
                 'mimes:jpg,jpeg,png,webp,heic,heif,pdf,doc,docx,xls,xlsx,csv,txt',
             ],
             'name' => ['nullable', 'string', 'max:255'],
@@ -587,7 +589,7 @@ class ManagerLotController extends Controller
         ], [
             'document.required' => 'Ajoute un fichier avant de valider.',
             'document.file' => 'Le document envoyé est invalide.',
-            'document.max' => 'Le document ne doit pas dépasser 30 Mo.',
+            'document.max' => DocumentUpload::TOO_LARGE,
             'document.mimes' => 'Format non accepté. Utilise une image, un PDF, un document Office, CSV ou TXT.',
             'name.max' => 'Le nom du document est trop long.',
             'is_private.boolean' => 'Le choix privé/public du document est invalide.',

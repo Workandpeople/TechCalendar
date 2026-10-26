@@ -20,12 +20,7 @@ class ClientPortal
         abort_if(filled($filters['status'] ?? null) && ! in_array($filters['status'], $allowed, true), 403);
         $query = $this->access->dossiers($actor);
         if (filled($filters['q'] ?? null)) {
-            $search = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim($filters['q'])).'%';
-            $query->where(function ($query) use ($search): void {
-                foreach (['reference', 'company_name', 'last_name', 'first_name', 'legacy_lot_name'] as $field) {
-                    $query->orWhereRaw("{$field} LIKE ? ESCAPE '!'", [$search]);
-                }
-            });
+            DossierSearch::apply($query, $filters['q'], ['reference', 'company_name', 'last_name', 'first_name', 'legacy_lot_name', 'address', 'postal_code', 'city']);
         }
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
         $counts = DB::query()->fromSub((clone $query)->select('dossiers.id'), 'visible_dossiers')

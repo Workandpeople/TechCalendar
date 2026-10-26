@@ -46,8 +46,8 @@ class PostVisitWorkflow
         Gate::forUser($actor)->authorize($review ? 'reviewControl' : 'update', $dossier);
         $this->transition($actor, $dossier, $operation, [
             ...$data, 'action' => 'record_report', 'report_document_id' => $document->id,
-        ], ['from' => [$review ? $state : 'visited'], 'to' => $review ? 'report' : 'rt_control',
-            'review' => $review, 'label' => $review ? 'Rapport Genius enregistré' : 'Rapport transmis au contrôle RT']);
+        ], ['from' => [$review ? $state : 'visited'], 'to' => $document->client_visible ? 'report' : 'rt_control',
+            'review' => $review, 'label' => $document->client_visible ? 'Rapport Genius enregistré' : 'Rapport privé transmis au contrôle RT']);
     }
 
     public function apply(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void

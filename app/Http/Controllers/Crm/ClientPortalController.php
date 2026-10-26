@@ -14,6 +14,7 @@ use App\Services\Crm\DossierLinkedDocuments;
 use App\Services\Crm\DossierRegistry;
 use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\PostVisitWorkflow;
+use App\Services\DocumentUpload;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +22,7 @@ class ClientPortalController extends Controller
 {
     public function index(Request $request, ClientPortal $portal)
     {
-        $filters = $request->validate(['q' => ['nullable', 'string', 'max:120'],
+        $filters = $request->validate(['q' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))]]);
 
         return view('client.dossiers', $portal->dossiers($request->user(), $filters));
@@ -54,7 +55,8 @@ class ClientPortalController extends Controller
     public function upload(Request $request, Dossier $dossier, DossierRegistry $registry)
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:190'],
-            'document' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx']]);
+            'document' => ['bail', 'required', 'file', DocumentUpload::SIZE_RULE, 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx']],
+            ['document.max' => DocumentUpload::TOO_LARGE]);
         $registry->addDocument($request->user(), $dossier, $data['document'], $data['name']);
 
         return redirect()->route('client.dossiers.show', $dossier)->with('status', 'Document transmis à notre équipe.');

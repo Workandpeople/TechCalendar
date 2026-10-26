@@ -2,6 +2,7 @@
 # Do not add a second server_name, change TLS or replace the entire current vhost.
 # Preserve the existing security headers, HTTPS proxy settings and access logs.
 root /var/www/TechCalendar-v2/public;
+client_max_body_size 1100m;
 
 location / {
     try_files $uri $uri/ /index.php?$query_string;
@@ -23,6 +24,8 @@ location ^~ /app/ {
 location = /index.php {
     include snippets/fastcgi-php.conf;
     fastcgi_pass unix:/run/php/techcalendar-v2-demo.sock;
+    fastcgi_read_timeout 3900s;
+    fastcgi_send_timeout 3900s;
     fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;
     include fastcgi_params;
 }

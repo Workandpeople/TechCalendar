@@ -18,9 +18,16 @@ class DossierListRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'q' => ['nullable', 'string', 'max:120'],
+            'q' => ['nullable', 'string', 'max:255'],
             'delegataire_id' => ['nullable', 'integer', 'exists:external_delegataires,id'],
             'service_id' => ['nullable', 'integer', 'exists:services,id'],
+            'service_ids' => ['nullable', 'array', 'list', 'max:250'],
+            'service_ids.*' => ['required', 'integer', 'min:1', 'distinct', 'exists:services,id'],
+            'department' => ['nullable', 'string', 'exists:departments,code'],
+            'section' => ['nullable', Rule::in(['corse', 'domtom', 'sav'])],
+            'date_field' => ['nullable', Rule::in(['created', 'appointment'])],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', Rule::when($this->filled('date_from'), 'after_or_equal:date_from')],
             'per_page' => ['nullable', Rule::in([25, 50, 100])],
             'planning' => ['nullable', Rule::in(['unlinked', 'upcoming', 'problem'])],
             'billing' => ['nullable', Rule::in(['unbilled', 'partial', 'invoiced', 'review'])],

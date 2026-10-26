@@ -11,6 +11,12 @@ import { initDossierSms } from './dossier-sms';
 import { commentHtml, commentText, initCommentMarkup } from './comment-markup';
 import { initCapceeReports } from './capcee-reports';
 import { initSelectMenus } from './select-menu';
+import { initDossierService } from './dossier-service';
+import { initDossierMail } from './dossier-mail';
+import { initDossierAddress } from './dossier-address';
+import { initMultiSelects } from './multi-select';
+import { initDocumentUploadLimits } from './document-upload-limit';
+import { initBookingDossierSummary } from './booking-dossier-summary';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 initCommentMarkup();
@@ -19,14 +25,20 @@ initSidebar();
 initSidebarSections();
 initDossierComments();
 initDossierMapPreview();
+initMultiSelects();
 initDossierList();
 initCapceeOrganisation();
 initFilterLists();
 initDossierDetail();
 initDossierDocuments();
+initDocumentUploadLimits();
+initBookingDossierSummary();
 initDossierSms();
 initCapceeReports();
 initSelectMenus();
+initDossierService();
+initDossierMail();
+initDossierAddress();
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,

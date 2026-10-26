@@ -24,7 +24,7 @@ class DossierPolicy
     public function comment(User $user, Dossier $dossier): bool
     {
         return ! $dossier->trashed() && $this->view($user, $dossier) && (! $user->isExternal()
-            || app(ClientAccess::class)->allows($user, 'add_comments'));
+            || app(ClientAccess::class)->addComment($user, $dossier));
     }
 
     public function uploadDocument(User $user, Dossier $dossier): bool

@@ -28,6 +28,7 @@ beforeEach(function () {
     $this->dossier = Dossier::create(['reference' => 'PREVIEW', 'address' => 'Rue de test', 'city' => 'Paris']);
     $service = Service::create(['name' => 'Preview', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     $operation = $this->dossier->operations()->create(['service_id' => $service->id]);
+    $operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
     $appointment = Appointment::create(['service_id' => $service->id, 'technician_id' => $this->staff->id,
         'created_by' => $this->staff->id, 'customer_first_name' => 'Test', 'customer_last_name' => 'Preview',
         'customer_phone' => '0600000000', 'address' => 'Rue de test', 'starts_at' => now(),

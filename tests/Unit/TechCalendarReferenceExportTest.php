@@ -26,6 +26,35 @@ function techCalendarReferenceConnection(): PDO
     return $pdo;
 }
 
+test('internal user collection is limited to staff and their settings without passwords or external accounts', function () {
+    $pdo = techCalendarReferenceConnection();
+    foreach (['external_delegataires', 'mail_senders', 'mail_templates', 'technician_absences'] as $table) {
+        $pdo->exec('DROP TABLE '.$table);
+    }
+    $pdo->exec("INSERT INTO users (id, email, role, password, remember_token, deleted_at) VALUES
+        (1, 'manager@example.test', 0, 'SECRET_MANAGER', 'SECRET_TOKEN', NULL),
+        (2, 'planner@example.test', 1, 'SECRET_PLANNER', NULL, NULL),
+        (3, 'tech@example.test', 2, 'SECRET_TECH', NULL, '2026-10-20'),
+        (4, 'external@example.test', 3, 'SECRET_EXTERNAL', NULL, NULL)");
+    $pdo->exec("INSERT INTO departments (code, name) VALUES ('01', 'Ain')");
+    $pdo->exec("INSERT INTO services (id, type, name) VALUES (100, 'COFFRAC', 'Controle')");
+    $pdo->exec("INSERT INTO department_user (id, user_id, department_code) VALUES (1, 3, '01'), (2, 4, '01')");
+    $pdo->exec('INSERT INTO service_user (id, user_id, service_id) VALUES (1, 3, 100), (2, 4, 100)');
+    $collect = require __DIR__.'/../../tools/fixtures/collect-techcalendar-references.php';
+    $result = $collect($pdo, false, true);
+
+    expect($result['format'])->toBe('techcalendar.internal-users-snapshot')
+        ->and($result['tables'])->toHaveCount(6)
+        ->and(array_column($result['tables']['users']['rows'], 'id'))->toBe([1, 2, 3])
+        ->and($result['tables']['department_user']['count'])->toBe(1)
+        ->and($result['tables']['service_user']['count'])->toBe(1)
+        ->and($result['tables']['users']['rows'][2]['deleted_at'])->toBe('2026-10-20')
+        ->and(json_encode($result))->not->toContain('SECRET_', 'external@example.test', 'password', 'remember_token')
+        ->and($pdo->inTransaction())->toBeFalse();
+    expect($result['tables']['users']['columns'])->not->toContain('password');
+    expect(array_keys($result['tables']['users']['rows'][0]))->not->toContain('remember_token');
+});
+
 test('reference collector includes empty tables explicitly', function () {
     $collect = require __DIR__.'/../../tools/fixtures/collect-techcalendar-references.php';
     $pdo = techCalendarReferenceConnection();

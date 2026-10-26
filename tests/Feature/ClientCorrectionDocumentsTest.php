@@ -5,6 +5,7 @@ use App\Models\ExternalDelegataire;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
 use App\Services\Crm\DossierRegistry;
+use App\Services\DocumentUpload;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -56,7 +57,7 @@ it('lets both assigned organisations upload corrections with existing or new per
         'mime_type' => 'application/pdf', 'size' => 12, 'client_visible' => false, 'delegataire_visible' => false]);
     $this->actingAs($account)->get(route('client.dossiers.show', $this->dossier))->assertOk()
         ->assertSee('id="client-document-upload"', false)->assertSee('href="#client-document-upload"', false)
-        ->assertSee('Justificatif (10 Mo maximum)')->assertDontSee('PRIVATE-SECRET');
+        ->assertSee('Justificatif (1 Go maximum)')->assertDontSee('PRIVATE-SECRET');
     $this->get(route('client.documents.download', $private))->assertNotFound();
     foreach (['Photo corrigée', 'Justificatif complémentaire'] as $name) {
         $this->postJson($this->uploadUrl, ['name' => $name, 'document' => UploadedFile::fake()->image('preuve.jpg'),
@@ -100,7 +101,7 @@ it('honors explicit correction revocation and requires document read access', fu
     $account = $this->accounts['delegataire'];
     $account->forceFill(['portal_permissions' => [...$account->portal_permissions, ...$permissions]])->save();
     $this->actingAs($account)->get(route('client.dossiers.show', $this->dossier))->assertOk()
-        ->assertDontSee('id="client-document-upload"', false)->assertDontSee('Justificatif (10 Mo maximum)');
+        ->assertDontSee('id="client-document-upload"', false)->assertDontSee('Justificatif (1 Go maximum)');
     $file = ['name' => 'Interdit', 'document' => UploadedFile::fake()->image('denied.jpg')];
     $this->postJson($this->uploadUrl, $file)->assertForbidden();
     $this->postJson($this->responseUrl, ['version' => 1, ...$file])->assertForbidden();
@@ -115,7 +116,7 @@ it('refuses foreign dossiers and invalid uploads', function (string $kind) {
         'name' => 'Interdit', 'document' => UploadedFile::fake()->image('denied.jpg'),
     ])->assertForbidden();
     $this->postJson($this->uploadUrl, ['name' => 'Script', 'document' => UploadedFile::fake()->create('bad.php', 1, 'text/plain')])->assertUnprocessable();
-    $this->postJson($this->uploadUrl, ['name' => 'Trop gros', 'document' => UploadedFile::fake()->create('big.pdf', 10241, 'application/pdf')])->assertUnprocessable();
+    $this->postJson($this->uploadUrl, ['name' => 'Trop gros', 'document' => UploadedFile::fake()->create('big.pdf', DocumentUpload::MAX_KILOBYTES + 1, 'application/pdf')])->assertUnprocessable();
     expect($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
 })->with(['client', 'delegataire']);
 

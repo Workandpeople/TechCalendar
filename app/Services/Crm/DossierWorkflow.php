@@ -13,6 +13,47 @@ use Illuminate\Validation\ValidationException;
 
 class DossierWorkflow
 {
+    public function changeStatus(User $actor, Dossier $dossier, DossierOperation $operation, array $data): bool
+    {
+        Gate::forUser($actor)->authorize('update', $dossier);
+        abort_unless($operation->dossier_id === $dossier->id, 404);
+        $status = DossierStatusCatalog::manualStates()[$data['status'] ?? ''] ?? null;
+        if (! $status) {
+            throw ValidationException::withMessages(['status' => 'Choisissez un état métier valide. La facturation et la suppression ont leurs actions dédiées.']);
+        }
+
+        return DB::transaction(function () use ($actor, $dossier, $operation, $data, $status): bool {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+            Gate::forUser($actor)->authorize('update', $dossier);
+            $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
+            if ($dossier->version !== (int) $data['version']) {
+                throw ValidationException::withMessages(['version' => 'Le dossier a changé. Rechargez la fiche avant de modifier son état.']);
+            }
+            $previous = $operation->legacy_status;
+            if (DossierStatusCatalog::describe($previous)['key'] === $data['status']) {
+                return false;
+            }
+            if (in_array($previous, DossierStatusCatalog::STATUSES['invoiced']['values'], true) && ! $dossier->billings()->exists()) {
+                // Never erase the last billing evidence when a legacy ledger still needs reconciliation.
+                $dossier->forceFill(['billing_review_required' => true,
+                    'billing_review_evidence' => [...($dossier->billing_review_evidence ?? []),
+                        'manual_status_changes' => [...($dossier->billing_review_evidence['manual_status_changes'] ?? []),
+                            ['operation_id' => $operation->id, 'legacy_status' => $previous]]]])->save();
+            }
+            // Status is independent of proof documents, technical validation, satisfaction and booking dates.
+            $operation->forceFill(['legacy_status' => $status['values'][0]])->save();
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'post_visit',
+                'body' => 'État modifié manuellement : '.DossierStatusCatalog::describe($previous)['label'].' → '.$status['label'],
+                'client_visible' => (bool) ($data['client_visible'] ?? false),
+                'delegataire_visible' => (bool) (($data['client_visible'] ?? false) && ($data['delegataire_visible'] ?? false)),
+                'changed_fields' => ['operation_id' => $operation->id, 'action' => 'manual_status',
+                    'before' => ['legacy_status' => $previous], 'after' => ['legacy_status' => $operation->legacy_status]]]);
+            $dossier->increment('version');
+
+            return true;
+        }, 3);
+    }
+
     public function reportProblem(User $actor, Dossier $dossier, DossierOperation $operation, array $data): void
     {
         Gate::forUser($actor)->authorize('update', $dossier);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initSelectMenus, nextSelectOption, searchSelectOption, selectMenuItems, selectMenuPosition } from '../../resources/js/select-menu.js';
+import { filterSelectItems, initSelectMenus, nextSelectOption, searchSelectOption, selectMenuItems, selectMenuPosition } from '../../resources/js/select-menu.js';
 
 const items = [
     { index: 0, label: 'Tous', disabled: false },
@@ -58,15 +58,17 @@ function fixture() {
     class Node {
         constructor(tag = 'DIV') {
             this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = new Map();
+            this.handlers = {};
             this.style = { setProperty() {} }; this.size = 0; this.selectedIndex = 0;
         }
         get isConnected() { return this === root.body || Boolean(this.parentElement?.isConnected); }
         get labels() { return [{ textContent: 'Type de lot' }]; }
         get options() { return this.children; }
-        get value() { return this.options[this.selectedIndex]?.value || ''; }
+        get value() { return this.tagName === 'INPUT' ? (this._value || '') : this.options[this.selectedIndex]?.value || ''; }
         set value(value) { this._value = value; }
         setAttribute(key, value) { this.attrs.set(key, String(value)); }
         getAttribute(key) { return this.attrs.get(key) ?? null; }
+        hasAttribute(key) { return this.attrs.has(key); }
         removeAttribute(key) { this.attrs.delete(key); }
         append(node) { this.children.push(node); node.parentElement = this; }
         replaceChildren() { this.children.forEach(node => { node.parentElement = null; }); this.children = []; }
@@ -83,6 +85,7 @@ function fixture() {
         getBoundingClientRect() { return { left: 200, top: 100, bottom: 142, width: this.hidden ? 0 : 280, height: this.hidden ? 0 : 42 }; }
         getClientRects() { return this.hidden ? [] : [this.getBoundingClientRect()]; }
         scrollIntoView() {}
+        addEventListener(name, callback) { this.handlers[name] = callback; }
         focus() { root.activeElement = this; }
         dispatchEvent(event) { emitted.push(event.type); fire(event.type, this); }
     }
@@ -135,6 +138,29 @@ test('renders a select popup inside the active native dialog and removes it on m
     ui.fire('pointerdown');
     ui.fire('close', dialog);
     assert.equal(dialog.children.some(node => node.getAttribute('role') === 'listbox'), false);
+});
+
+test('search filters labels and groups without changing native indexes or selecting disabled options', () => {
+    assert.deepEqual(filterSelectItems(items, 'LECTRIC'), [items[2]]);
+    assert.deepEqual(filterSelectItems([{ index: 7, label: 'Paris', group: 'Île de France' }], 'ile de'), [{ index: 7, label: 'Paris', group: 'Île de France' }]);
+    assert.deepEqual(filterSelectItems(items, 'missing'), []);
+});
+
+test('searchable menus keep focus in a text input and only commit on explicit choice', () => {
+    const ui = fixture();
+    ui.select.setAttribute('data-searchable', '');
+    ui.fire('pointerdown');
+    const popup = ui.root.body.children.find(node => node.getAttribute('role') === 'dialog');
+    const input = popup.children[0];
+    assert.equal(ui.root.activeElement, input);
+    assert.deepEqual(ui.emitted, []);
+    input.value = 'electric';
+    input.handlers.input();
+    assert.equal(popup.querySelectorAll('[role="option"]').length, 1);
+    ui.fire('keydown', input, { key: 'Enter' });
+    assert.equal(ui.select.selectedIndex, 2);
+    assert.deepEqual(ui.emitted, ['input', 'change']);
+    assert.equal(ui.root.activeElement, ui.select);
 });
 
 test('selection uses the original field and emits native input/change exactly once', () => {

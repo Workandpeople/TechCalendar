@@ -1,6 +1,8 @@
 const selector = 'select.gc-input:not([multiple]):not([data-native-select])';
 const fold = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr');
 
+export const filterSelectItems = (items, query) => items.filter(item => fold(`${item.group} ${item.label}`).includes(fold(query).trim()));
+
 export function selectMenuItems(select) {
     return Array.from(select.options).flatMap((option, index) => {
         const group = option.parentElement?.tagName === 'OPTGROUP' ? option.parentElement : null;
@@ -45,7 +47,7 @@ export function selectMenuPosition(anchor, viewport) {
 export function initSelectMenus(root = document, browser = window) {
     if (!root.body || root.body.dataset.selectMenusReady) return;
     root.body.dataset.selectMenusReady = 'true';
-    let active = null, menu = null, highlighted = -1, previousAttributes = null;
+    let active = null, menu = null, highlighted = -1, previousAttributes = null, searchInput = null;
     let items = [], search = '', searchAt = 0, sequence = 0, observer = null;
 
     const eligible = node => node?.matches?.(selector) && node.size <= 1 && !node.matches(':disabled');
@@ -57,6 +59,7 @@ export function initSelectMenus(root = document, browser = window) {
             else active.setAttribute(name, value);
         }
         menu.remove();
+        searchInput = null;
         active = menu = observer = null;
         items = [];
         search = '';
@@ -86,12 +89,22 @@ export function initSelectMenus(root = document, browser = window) {
     };
     const render = () => {
         if (!active || !eligible(active) || !active.isConnected) return close();
-        items = selectMenuItems(active);
+        items = filterSelectItems(selectMenuItems(active), searchInput?.value || '');
         menu.replaceChildren();
-        let previousGroup = null, groupContainer = menu;
+        let options = menu;
+        if (searchInput) {
+            menu.append(searchInput);
+            options = root.createElement('div');
+            options.id = `${menu.id}-options`;
+            options.setAttribute('role', 'listbox');
+            options.setAttribute('aria-label', menu.getAttribute('aria-label'));
+            menu.append(options);
+            active.setAttribute('aria-controls', options.id);
+        }
+        let previousGroup = null, groupContainer = options;
         for (const item of items) {
             if (item.group !== previousGroup) {
-                groupContainer = menu;
+                groupContainer = options;
                 if (item.group) {
                     groupContainer = root.createElement('div');
                     groupContainer.setAttribute('role', 'group');
@@ -101,7 +114,7 @@ export function initSelectMenus(root = document, browser = window) {
                     title.setAttribute('aria-hidden', 'true');
                     title.textContent = item.group;
                     groupContainer.append(title);
-                    menu.append(groupContainer);
+                    options.append(groupContainer);
                 }
                 previousGroup = item.group;
             }
@@ -119,7 +132,7 @@ export function initSelectMenus(root = document, browser = window) {
             const empty = root.createElement('div');
             empty.className = 'gc-select-menu-empty';
             empty.textContent = 'Aucune option disponible';
-            menu.append(empty);
+            options.append(empty);
         }
         place();
         if (active) highlight(items.some(item => item.index === highlighted && !item.disabled)
@@ -136,6 +149,16 @@ export function initSelectMenus(root = document, browser = window) {
         menu.setAttribute('role', 'listbox');
         const label = select.getAttribute('aria-label') || Array.from(select.labels || []).map(item => item.textContent.trim()).join(' ');
         menu.setAttribute('aria-label', label || 'Options');
+        if (select.hasAttribute('data-searchable')) {
+            menu.setAttribute('role', 'dialog');
+            searchInput = root.createElement('input');
+            searchInput.type = 'search';
+            searchInput.className = 'gc-input gc-select-search';
+            searchInput.placeholder = 'Rechercher dans la liste…';
+            searchInput.setAttribute('aria-label', 'Rechercher dans les options');
+            searchInput.autocomplete = 'off';
+            searchInput.addEventListener('input', () => { render(); searchInput?.focus({ preventScroll: true }); });
+        }
         const style = browser.getComputedStyle(select);
         menu.style.setProperty('--select-accent', style.getPropertyValue('--workspace-ink').trim() || '#2459a8');
         menu.style.setProperty('--select-soft', style.getPropertyValue('--workspace-soft').trim() || '#edf4ff');
@@ -146,7 +169,7 @@ export function initSelectMenus(root = document, browser = window) {
         highlighted = select.selectedIndex;
         render();
         if (!active) return;
-        select.focus({ preventScroll: true });
+        (searchInput || select).focus({ preventScroll: true });
         // AJAX can replace an option list, disable the field or remove its modal/table.
         observer = new browser.MutationObserver(records => {
             if (!active) return;
@@ -173,7 +196,7 @@ export function initSelectMenus(root = document, browser = window) {
         if (event.button !== 0) return;
         if (menu?.contains(event.target)) {
             // Leave touch scrolling available, but keep mouse focus on the combobox.
-            if (event.pointerType !== 'touch') event.preventDefault();
+            if (event.pointerType !== 'touch' && event.target !== searchInput) event.preventDefault();
             return;
         }
         const select = event.target.closest?.(selector);
@@ -186,8 +209,7 @@ export function initSelectMenus(root = document, browser = window) {
     root.addEventListener('click', event => {
         if (menu?.contains(event.target)) {
             const option = event.target.closest('[role="option"]');
-            event.preventDefault();
-            if (option) choose(Number(option.dataset.index));
+            if (option) { event.preventDefault(); const select = active; choose(Number(option.dataset.index)); select?.focus({ preventScroll: true }); }
             return;
         }
         const select = event.target.closest?.(selector);
@@ -198,6 +220,19 @@ export function initSelectMenus(root = document, browser = window) {
         }
     }, true);
     root.addEventListener('keydown', event => {
+        if (searchInput && event.target === searchInput) {
+            if (event.isComposing) return;
+            if (event.key === 'Escape') {
+                event.preventDefault(); event.stopImmediatePropagation(); const select = active; close(); select?.focus();
+            } else if (event.key === 'Tab') {
+                const select = active; close(); select?.focus({ preventScroll: true });
+            } else if (['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+                event.preventDefault();
+                if (event.key === 'Enter') { const select = active; choose(highlighted); select?.focus(); }
+                else highlight(nextSelectOption(items, highlighted, event.key === 'ArrowDown' ? 1 : -1));
+            }
+            return;
+        }
         const select = event.target;
         if (!eligible(select) || event.isComposing || event.ctrlKey || event.metaKey) return;
         if (event.key === 'Escape' && active === select) {

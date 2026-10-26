@@ -18,6 +18,7 @@ use App\Services\Crm\CollectedDossierDocuments;
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierDocumentIntake;
 use App\Services\Crm\DossierLinkedDocuments;
+use App\Services\Crm\DossierMail;
 use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\DossierPlanningAssignment;
 use App\Services\Crm\DossierRegistry;
@@ -107,16 +108,18 @@ class DossierController extends Controller
             ->paginate(20, ['*'], 'legacy_documents_page')->withQueryString()->fragment('documents');
         $authors = $collectedDocuments->authors($legacyDocuments->getCollection());
         $legacyDocuments->through(fn ($record) => $collectedDocuments->describe($record, $authors));
+        $smsUnavailable = app(SmsConfiguration::class)->unavailable();
 
         return view('crm.dossiers.show', [
             ...app(DossierRegistry::class)->references(),
             'dossier' => $dossier,
+            'mailTemplates' => app(DossierMail::class)->templates(),
             'technicians' => User::query()->where('role', 2)->where('admin', false)->with('services:id')->orderBy('last_name')->get(['id', 'first_name', 'last_name']),
-            'smsUnavailable' => app(SmsConfiguration::class)->unavailable(),
+            'smsUnavailable' => $smsUnavailable,
             'smsMode' => app(SmsConfiguration::class)->mode(),
-            'smsTemplates' => app(DossierSmsService::class)->templates(),
-            'smsMessages' => DossierSms::where('dossier_id', $dossier->id)->latest('id')->limit(10)->get(),
-            'smsAppointments' => $dossier->appointments()->with(['technician', 'service'])->orderByDesc('starts_at')->limit(100)->get(),
+            'smsTemplates' => $smsUnavailable === null ? app(DossierSmsService::class)->templates() : collect(),
+            'smsMessages' => $smsUnavailable === null ? DossierSms::where('dossier_id', $dossier->id)->latest('id')->limit(10)->get() : collect(),
+            'smsAppointments' => $smsUnavailable === null ? $dossier->appointments()->with(['technician', 'service'])->orderByDesc('starts_at')->limit(100)->get() : collect(),
             'visitCandidates' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
                 ->where('ends_at', '<=', now())->orderByDesc('starts_at')
                 ->get(['appointments.id', 'dossier_operation_id', 'starts_at'])->groupBy('dossier_operation_id'),

@@ -298,7 +298,7 @@
             </div>
         </section>
 
-        @if ($isReplacementMode)
+        @if ($isReplacementMode && empty($initialReplaceAppointmentId))
             <section id="booking-replacement-search-section" class="gc-card p-5">
                 <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                     <div>
@@ -888,7 +888,9 @@
                 </div>
             </div>
 
-            <div id="booking-results-anchor" class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div id="booking-results-anchor" class="space-y-5">
+                @include('planner.booking-dossier-summary')
+                <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
                 <section class="gc-card flex h-[560px] flex-col p-5 xl:h-[640px]">
                     <div class="mb-4 shrink-0 space-y-4">
                         <p class="text-sm" style="color:var(--gc-text-soft);">Techniciens éligibles</p>
@@ -919,6 +921,7 @@
                     </div>
                     <div id="booking-map" class="min-h-0 flex-1 overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
                 </section>
+                </div>
             </div>
 
             <section class="gc-card p-5">
@@ -1470,6 +1473,7 @@
         let currentCrmAppointmentId = null;
         let currentAnalysisPayload = null;
         let currentAppointmentRequest = null;
+        let bookingAnalysisGeneration = 0;
         let currentTechnicians = [];
         let selectedTechnicianIds = new Set();
         let currentFilters = null;
@@ -1536,6 +1540,22 @@
         const placementConfirmationSection = document.getElementById('booking-placement-confirmation');
         const bookingFeedback = document.getElementById('booking-feedback');
         const bookingResultsAnchor = document.getElementById('booking-results-anchor');
+        const bookingDossierSummary = document.getElementById('booking-dossier-summary');
+        const updateBookingDossierSummary = (appointment) => {
+            if (!bookingDossierSummary) return;
+            const summary = appointment ? {
+                beneficiary: appointment.beneficiary_name || appointment.customer_name || `${appointment.first_name || ''} ${appointment.last_name || ''}`.trim(),
+                phone_numbers: appointment.phone ? [{ label: appointment.phone }] : [],
+                email: appointment.customer_email || appointment.email, address: appointment.address,
+                service: appointment.service?.name || appointment.service_display_name || appointment.service_name,
+                site: appointment.site_name, installer: appointment.installer_name,
+                lot: appointment.external_payload?.lot_name,
+                delegataire: appointment.external_payload?.lot_delegataire,
+                ...appointment.dossier_summary,
+            } : null;
+            bookingDossierSummary.dataset.bookingSummary = JSON.stringify(summary);
+            bookingDossierSummary.dispatchEvent(new CustomEvent('techcalendar:booking-summary-updated'));
+        };
         const bookingCrmSearch = document.getElementById('booking_crm_search');
         const bookingCrmGrid = document.getElementById('booking-crm-grid');
         let bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
@@ -2403,10 +2423,10 @@
             }, 360);
         };
 
-        const finishBookingAnalysisLoader = (message = 'Analyse terminée.') => finishProgress(
-            setBookingAnalysisProgress,
-            stopBookingAnalysisLoader,
-            () => bookingAnalysisLoader.classList.add('hidden'),
+        const finishBookingAnalysisLoader = (message = 'Analyse terminée.', generation = bookingAnalysisGeneration) => finishProgress(
+            (progress, detail) => generation === bookingAnalysisGeneration ? setBookingAnalysisProgress(progress, detail) : 100,
+            () => { if (generation === bookingAnalysisGeneration) stopBookingAnalysisLoader(); },
+            () => { if (generation === bookingAnalysisGeneration) bookingAnalysisLoader.classList.add('hidden'); },
             message,
         );
 
@@ -3369,12 +3389,14 @@
             bookingMapMarkers = [];
 
             if (!bookingMap) return;
+            const style = bookingMap.getStyle();
+            if (!style) return;
 
-            [...bookingMap.getStyle().layers]
+            [...(style.layers || [])]
                 .filter((layer) => layer.id.startsWith('tech-route-'))
                 .forEach((layer) => bookingMap.removeLayer(layer.id));
 
-            Object.keys(bookingMap.getStyle().sources)
+            Object.keys(style.sources || {})
                 .filter((source) => source.startsWith('tech-route-'))
                 .forEach((source) => bookingMap.removeSource(source));
         };
@@ -5165,6 +5187,9 @@
         };
 
         const clearBookingAnalysisContext = () => {
+            bookingAnalysisGeneration++;
+            mapRenderRequestId++;
+            updateBookingDossierSummary(null);
             calendarWindowAbortController?.abort();
             technicianSearchAbortController?.abort();
             shouldFetchCalendarWindow = false;
@@ -5696,6 +5721,9 @@
         };
 
         const analyzeAppointment = async (payload, sourceLabel = 'RDV', { scrollToResults = true } = {}) => {
+            clearBookingAnalysisContext();
+            const generation = bookingAnalysisGeneration;
+            updateBookingDossierSummary(bookingCrmAppointments.find(row => row.id === payload.crm_appointment_id) || null);
             currentAnalysisPayload = payload;
             currentCrmAppointmentId = payload.crm_appointment_id || null;
             analysisSection.classList.remove('hidden');
@@ -5719,12 +5747,15 @@
 
                 const data = await response.json();
 
+                if (generation !== bookingAnalysisGeneration) return false;
+
                 if (!response.ok) {
                     throw new Error(data.message || 'Analyse impossible.');
                 }
 
                 const suggestions = data.suggestions || [];
                 currentAppointmentRequest = data.crm_appointment;
+                updateBookingDossierSummary(currentAppointmentRequest);
                 if (!bookingConnectorsEnabled && payload.crm_appointment_id) {
                     renderBookingCrmAppointments(bookingCrmAppointments.map((row) => row.id === data.crm_appointment.id ? data.crm_appointment : row), null, { preserveUi: true });
                 }
@@ -5742,10 +5773,12 @@
 
                 renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
                 await renderMap(currentAppointmentRequest, selectedTechnicians());
+                if (generation !== bookingAnalysisGeneration) return false;
                 renderCalendar(currentCalendarEvents, currentCalendarSuggestions, currentFilters?.preferred_starts_at || null);
-                await finishBookingAnalysisLoader('Analyse terminée, affichage des résultats.');
+                await finishBookingAnalysisLoader('Analyse terminée, affichage des résultats.', generation);
+                if (generation !== bookingAnalysisGeneration) return false;
                 window.setTimeout(() => {
-                    shouldFetchCalendarWindow = true;
+                    if (generation === bookingAnalysisGeneration) shouldFetchCalendarWindow = true;
                 }, 250);
 
                 if (data.technicians.length === 0) {
@@ -5758,7 +5791,9 @@
 
                 return true;
             } catch (error) {
-                await finishBookingAnalysisLoader('Analyse interrompue.');
+                if (generation !== bookingAnalysisGeneration) return false;
+                await finishBookingAnalysisLoader('Analyse interrompue.', generation);
+                if (generation !== bookingAnalysisGeneration) return false;
                 showFeedback(error.message || 'Erreur pendant l’analyse du RDV.', 'error');
                 return false;
             }

@@ -32,7 +32,9 @@
     SSLCertificateKeyFile /var/lib/cofrac2-letsencrypt/live/cofrac2.geniuscontrole.com/privkey.pem
     ProxyRequests Off
     ProxyPreserveHost On
-    ProxyTimeout 180
+    # 1 GiB per file, with room for multipart fields. Only this V2 virtual host.
+    LimitRequestBody 1153433600
+    ProxyTimeout 3900
     ProxyPass /app/ http://127.0.0.1:8091/app/ upgrade=websocket retry=0 timeout=120
     ProxyPassReverse /app/ http://127.0.0.1:8091/app/
 

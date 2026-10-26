@@ -4,7 +4,9 @@ namespace App\Services\Crm;
 
 use App\Models\Appointment;
 use App\Models\Dossier;
+use App\Services\ImportedAddressCleaner;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DossierTable
@@ -18,9 +20,44 @@ class DossierTable
     ];
 
     private const COLUMN_WEIGHTS = [
-        'lot' => 8, 'created_at' => 8.5, 'modified_at' => 12, 'appointment_at' => 8,
-        'client' => 12, 'planning_user' => 13, 'address' => 14, 'company' => 8, 'phone' => 8, 'service' => 11, 'technician' => 8,
+        'lot' => 9, 'created_at' => 8.5, 'modified_at' => 10, 'appointment_at' => 8,
+        'client' => 14, 'planning_user' => 13, 'address' => 23, 'company' => 9, 'phone' => 12, 'service' => 13, 'technician' => 8,
     ];
+
+    public function __construct(private readonly ImportedAddressCleaner $addressCleaner) {}
+
+    public function address(Dossier $dossier): array
+    {
+        $rawAddress = trim(preg_replace('/\s+/u', ' ', $dossier->address ?? ''));
+        $street = $this->addressCleaner->clean($rawAddress) ?: $rawAddress;
+        $locality = trim(preg_replace('/\s+/u', ' ', $dossier->postal_code.' '.$dossier->city));
+
+        return ['street' => $street, 'locality' => $locality,
+            'full' => implode(', ', array_filter([$street, $locality], fn ($value) => $value !== '')),
+            'original' => DossierLocation::address($dossier)];
+    }
+
+    public function phoneNumbers(Dossier $dossier): array
+    {
+        $numbers = preg_split('~[\r\n;,/|]+~u', $dossier->phone ?? '', -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_values(array_filter(array_map(function (string $number): array {
+            $label = trim(preg_replace('/\s+/u', ' ', $number));
+            $compact = preg_replace('/[\s.()\-]+/u', '', $label);
+            if (preg_match('/^[1-9][0-9]{8}$/D', $compact)) {
+                $compact = '0'.$compact;
+            } elseif (preg_match('/^(?:\+33|0033)0?([1-9][0-9]{8})$/D', $compact, $match)) {
+                $compact = '0'.$match[1];
+            }
+            if (preg_match('/^0[1-9][0-9]{8}$/D', $compact)) {
+                return ['label' => implode(' ', str_split($compact, 2)), 'href' => 'tel:+33'.substr($compact, 1)];
+            }
+            // Keep foreign numbers and annotations intact; never concatenate two contacts.
+            $international = str_starts_with($compact, '00') ? '+'.substr($compact, 2) : $compact;
+
+            return ['label' => $label, 'href' => preg_match('/^\+[1-9][0-9]{7,14}$/D', $international) ? 'tel:'.$international : null];
+        }, $numbers), fn (array $number) => $number['label'] !== ''));
+    }
 
     public function columns(array $filters): array
     {
@@ -53,8 +90,17 @@ class DossierTable
         $appointment = DB::table('appointments')->join('dossier_operations', 'dossier_operations.id', '=', 'appointments.dossier_operation_id')
             ->whereColumn('dossier_operations.dossier_id', 'dossiers.id')
             ->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive'));
-        if (filled($filters['service_id'] ?? null)) {
-            $appointment->where('dossier_operations.service_id', $filters['service_id']);
+        $serviceIds = DossierServiceFilter::ids($filters);
+        if ($serviceIds !== []) {
+            $appointment->whereIn('dossier_operations.service_id', $serviceIds);
+        }
+        if (($filters['date_field'] ?? null) === 'appointment') {
+            if (filled($filters['date_from'] ?? null)) {
+                $appointment->where('appointments.starts_at', '>=', $filters['date_from'].' 00:00:00');
+            }
+            if (filled($filters['date_to'] ?? null)) {
+                $appointment->where('appointments.starts_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
+            }
         }
         if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
             $appointment->where(function ($query) use ($filters): void {

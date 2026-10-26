@@ -4,6 +4,7 @@ namespace App\Http\Requests\Crm;
 
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\PostVisitWorkflow;
+use App\Services\DocumentUpload;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,13 +22,13 @@ class DossierDocumentRequest extends FormRequest
 
         return [
             ...ContentAudience::rules(),
-            'name' => ['required', 'string', 'max:190'],
+            'name' => [Rule::requiredIf(! $report && ! $visit), 'nullable', 'string', 'max:190'],
             'description' => ['nullable', 'string', 'max:10000'],
             'document_type' => ['sometimes', Rule::in(['free', 'visit', 'report'])],
-            'document' => ['required', 'file', 'max:10240',
+            'document' => ['bail', 'required', 'file', DocumentUpload::SIZE_RULE,
                 $report ? 'mimes:pdf' : 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx',
                 $report ? 'extensions:pdf' : 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx'],
-            'operation_id' => [Rule::requiredIf($report || $visit), 'nullable', 'integer'],
+            'operation_id' => ['nullable', 'integer'],
             'appointment_id' => [Rule::requiredIf($visit), 'nullable', 'integer'],
             'control_reference' => [Rule::requiredIf($report), 'nullable', 'string', 'max:190'],
             'inspected_on' => [Rule::requiredIf($report), 'nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
@@ -39,5 +40,10 @@ class DossierDocumentRequest extends FormRequest
             'workflow_action' => ['sometimes', Rule::in(['store', 'submit_control', 'revise_control', 'validate_report'])],
             'version' => [Rule::requiredIf($report || $visit), 'nullable', 'integer', 'min:1'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['document.max' => DocumentUpload::TOO_LARGE];
     }
 }

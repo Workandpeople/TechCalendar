@@ -1,20 +1,56 @@
 import { initDossierAssignment } from './dossier-assignment.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns'];
+const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const serviceArrayName = name => /^service_ids(?:\[\d*\])?$/.test(name);
+
+export function dossierServiceIds(entries) {
+    const parameters = Array.from(entries);
+    const multiple = parameters.filter(([name]) => serviceArrayName(name));
+    return [...new Set((multiple.length ? multiple : parameters.filter(([name]) => name === 'service_id'))
+        .map(([, value]) => String(value).trim()).filter(Boolean))];
+}
+
+export function syncDossierFilters(form, url, browser) {
+    for (const name of filterNames) {
+        const input = form.elements.namedItem(name);
+        if (!input) continue;
+        if (input.multiple) {
+            const selected = new Set(dossierServiceIds(url.searchParams));
+            for (const option of input.options) option.selected = selected.has(option.value);
+            input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
+            continue;
+        }
+        const value = url.searchParams.get(name) ?? (name === 'per_page' ? '25' : name === 'date_field' ? 'created' : '');
+        if (input.type === 'checkbox') input.checked = value === '1';
+        else if (input.value !== value) input.value = value;
+    }
+}
 
 export function dossierListUrl(base, entries, changes = {}) {
     const url = new URL(base);
     url.search = '';
     url.hash = '';
+    const multiple = [];
+    let hasMultiple = false;
+    const setServices = values => {
+        url.searchParams.delete('service_id');
+        url.searchParams.delete('service_ids[]');
+        for (const value of new Set(values.map(value => String(value).trim()).filter(Boolean))) url.searchParams.append('service_ids[]', value);
+    };
     for (const [name, value] of entries) {
-        if (filterNames.includes(name) && String(value).trim() !== '') url.searchParams.set(name, String(value).trim());
+        if (serviceArrayName(name)) { hasMultiple = true; multiple.push(value); }
+        else if (filterNames.includes(name) && String(value).trim() !== '') url.searchParams.set(name, String(value).trim());
     }
+    if (hasMultiple) setServices(multiple);
     for (const [name, value] of Object.entries(changes)) {
+        if (serviceArrayName(name)) { setServices(value === null || value === '' ? [] : Array.isArray(value) ? value : [value]); continue; }
         if (!filterNames.includes(name) && name !== 'page') continue;
+        if (name === 'service_id') url.searchParams.delete('service_ids[]');
         if (value === null || value === '') url.searchParams.delete(name);
         else url.searchParams.set(name, value);
     }
+    if (url.searchParams.has('service_id')) setServices([url.searchParams.get('service_id')]);
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');
     if (url.searchParams.get('per_page') === '25') url.searchParams.delete('per_page');
@@ -99,15 +135,7 @@ export function initDossierList(root = document, browser = window) {
         // Export the current inputs, including a search whose debounced request is still pending.
         exportLink.href = dossierListUrl(exportLink.dataset.exportUrl, new browser.FormData(form)).href;
     });
-    const syncForm = (url) => {
-        for (const name of filterNames) {
-            const input = form.elements.namedItem(name);
-            if (!input) continue;
-            const value = url.searchParams.get(name) ?? (name === 'per_page' ? '25' : '');
-            if (input.type === 'checkbox') input.checked = value === '1';
-            else if (input.value !== value) input.value = value;
-        }
-    };
+    const syncForm = url => syncDossierFilters(form, url, browser);
     const busy = (value) => {
         feedback.hidden = false;
         spinner.hidden = !value;
@@ -126,6 +154,13 @@ export function initDossierList(root = document, browser = window) {
             // These fragments come exclusively from the authenticated, same-origin Blade endpoint.
             categories.innerHTML = payload.categories;
             results.innerHTML = payload.results;
+            listing.querySelectorAll('[data-dossier-section]').forEach(link => {
+                const active = link.dataset.dossierSection === (url.searchParams.get('section') || '');
+                link.href = dossierListUrl(form.action, url.searchParams, { section: link.dataset.dossierSection }).href;
+                link.classList.toggle('gc-btn-primary', active);
+                link.classList.toggle('gc-btn-secondary', !active);
+                if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+            });
             root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-updated'));
             renderedUrl = url;
             storePreferences(url);
@@ -184,6 +219,8 @@ export function initDossierList(root = document, browser = window) {
         const options = {};
         if (link.matches('[data-dossier-clear]')) {
             url = new URL(form.action);
+        } else if (link.matches('[data-dossier-section]')) {
+            url = formUrl({ section: link.dataset.dossierSection });
         } else if (link.matches('[data-category]')) {
             url = formUrl({ status: destination.searchParams.get('status') });
             options.focus = `[data-category="${browser.CSS.escape(link.dataset.category)}"]`;

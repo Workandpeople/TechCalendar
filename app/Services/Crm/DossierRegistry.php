@@ -4,6 +4,7 @@ namespace App\Services\Crm;
 
 use App\Models\Appointment;
 use App\Models\CapceeAutomaticSubmission;
+use App\Models\Department;
 use App\Models\Dossier;
 use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -44,25 +46,29 @@ class DossierRegistry
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
         $query = $this->filteredQuery($filters);
+        $serviceIds = DossierServiceFilter::ids($filters);
         if (($filters['status'] ?? null) === 'unknown') {
-            return $query->withTrashed()->where(function ($deleted): void {
-                $deleted->whereNotNull('dossiers.deleted_at')->orWhere(function ($legacy): void {
-                    $legacy->whereDoesntHave('operations')->orWhereHas('operations', fn ($operations) => DossierStatusCatalog::filter($operations, 'unknown'));
+            return $query->withTrashed()->where(function ($deleted) use ($serviceIds): void {
+                $deleted->whereNotNull('dossiers.deleted_at')->orWhere(function ($legacy) use ($serviceIds): void {
+                    $legacy->whereHas('operations', function ($operations) use ($serviceIds): void {
+                        $operations->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
+                        DossierStatusCatalog::filter($operations, 'unknown');
+                    });
+                    if ($serviceIds === []) {
+                        $legacy->orWhereDoesntHave('operations');
+                    }
                 });
             });
         }
         if (filled($filters['status'] ?? null)) {
-            $query->where(function ($query) use ($filters): void {
-                $query->whereHas('operations', function ($operations) use ($filters): void {
-                    $operations->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id));
+            $query->where(function ($query) use ($filters, $serviceIds): void {
+                $query->whereHas('operations', function ($operations) use ($filters, $serviceIds): void {
+                    $operations->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
                     DossierStatusCatalog::filter($operations, $filters['status']);
                 });
                 if ($filters['status'] === 'invoiced') {
                     $query->orWhereHas('operations', fn ($operations) => $operations
-                        ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('service_id', $id))->whereHas('billing'));
-                }
-                if ($filters['status'] === 'unknown' && empty($filters['service_id'])) {
-                    $query->orWhereDoesntHave('operations');
+                        ->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds))->whereHas('billing'));
                 }
             });
         }
@@ -75,11 +81,12 @@ class DossierRegistry
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
 
         $query = $this->filteredQuery($filters)->withTrashed();
+        $serviceIds = DossierServiceFilter::ids($filters);
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
         $categorySql = "CASE WHEN matching_dossiers.deleted_at IS NOT NULL THEN 'unknown' ELSE $categorySql END";
         $counts = DB::query()->fromSub((clone $query)->select('dossiers.id', 'dossiers.deleted_at'), 'matching_dossiers')
             ->leftJoin('dossier_operations', 'dossier_operations.dossier_id', '=', 'matching_dossiers.id')
-            ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->where('dossier_operations.service_id', $id))
+            ->when($serviceIds !== [], fn ($query) => $query->whereIn('dossier_operations.service_id', $serviceIds))
             ->selectRaw($categorySql.' AS category', $bindings)
             ->selectRaw('COUNT(DISTINCT matching_dossiers.id) AS total')
             ->groupBy('category')->pluck('total', 'category');
@@ -97,7 +104,40 @@ class DossierRegistry
 
     private function filteredQuery(array $filters): Builder
     {
+        $serviceIds = DossierServiceFilter::ids($filters);
+
         return Dossier::query()
+            ->when($filters['department'] ?? null, fn ($query, $code) => DossierSections::department($query, $code))
+            ->when($filters['section'] ?? null, fn ($query, $section) => DossierSections::filter($query, $section))
+            ->when(filled($filters['date_from'] ?? null) || filled($filters['date_to'] ?? null), function ($query) use ($filters, $serviceIds): void {
+                $range = function ($query, string $column) use ($filters): void {
+                    if (filled($filters['date_from'] ?? null)) {
+                        $query->where($column, '>=', $filters['date_from'].' 00:00:00');
+                    }
+                    if (filled($filters['date_to'] ?? null)) {
+                        $query->where($column, '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
+                    }
+                };
+                if (($filters['date_field'] ?? 'created') === 'appointment') {
+                    $query->whereHas('appointments', function ($appointments) use ($range, $filters, $serviceIds): void {
+                        $appointments->withTrashed()->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive'));
+                        $range($appointments, 'appointments.starts_at');
+                        $appointments->whereHas('dossierOperation', function ($operation) use ($filters, $serviceIds): void {
+                            $operation->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
+                            if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
+                                $operation->where(function ($q) use ($filters): void {
+                                    DossierStatusCatalog::filter($q, $filters['status']);
+                                    if ($filters['status'] === 'invoiced') {
+                                        $q->orWhereHas('billing');
+                                    }
+                                });
+                            }
+                        });
+                    });
+                } else {
+                    $range($query, 'dossiers.created_at');
+                }
+            })
             ->when($filters['billing'] ?? null, function ($query, $billing): void {
                 if ($billing === 'review') {
                     $query->where('billing_review_required', true);
@@ -113,16 +153,10 @@ class DossierRegistry
                 };
             })
             ->when(filled($filters['q'] ?? null), function ($query) use ($filters): void {
-                // Escape LIKE wildcards so a reference is searched literally.
-                $search = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $filters['q']).'%';
-                $query->where(function ($query) use ($search): void {
-                    foreach (['reference', 'legacy_reference', 'legacy_label', 'legacy_lot_name', 'company_name', 'first_name', 'last_name', 'site_name', 'email', 'phone', 'address', 'postal_code', 'city', 'installer_name', 'installer_siren'] as $field) {
-                        $query->orWhereRaw("{$field} LIKE ? ESCAPE '!'", [$search]);
-                    }
-                });
+                DossierSearch::apply($query, $filters['q']);
             })
             ->when($filters['delegataire_id'] ?? null, fn ($query, $id) => $query->where(fn ($party) => $party->where('delegataire_id', $id)->orWhere('client_id', $id)))
-            ->when($filters['service_id'] ?? null, fn ($query, $id) => $query->whereHas('operations', fn ($operations) => $operations->where('service_id', $id)))
+            ->when($serviceIds !== [], fn ($query) => $query->whereHas('operations', fn ($operations) => $operations->whereIn('service_id', $serviceIds)))
             ->when(($filters['planning'] ?? null) === 'unlinked', fn ($query) => $query->whereDoesntHave('appointments'))
             ->when(($filters['planning'] ?? null) === 'upcoming', fn ($query) => $query->whereHas('appointments', fn ($rdv) => $rdv->where('status', Appointment::STATUS_SCHEDULED)->where('ends_at', '>', now())))
             ->when(($filters['planning'] ?? null) === 'problem', fn ($query) => $query->whereHas('appointments', fn ($rdv) => $rdv->where('status', Appointment::STATUS_PROBLEM)));
@@ -133,6 +167,7 @@ class DossierRegistry
         return [
             'delegataires' => ExternalDelegataire::query()->orderBy('name')->get(),
             'services' => Service::query()->catalog()->orderBy('name')->get(['id', 'name', 'type']),
+            'departments' => Department::query()->orderBy('code')->get(['code', 'name']),
         ];
     }
 

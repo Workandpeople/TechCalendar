@@ -63,8 +63,8 @@ it('preserves access by default and counts distinct assigned dossiers per catego
     $this->actingAs($this->accounts['client'])->get(route('client.dossiers'))->assertOk()
         ->assertSee('data-category="rt_control"', false)->assertDontSee('data-category="invoiced"', false)
         ->assertDontSee('FOREIGN-SECRET')->assertViewHas('categories', function ($categories) {
-            return $categories['all']['count'] === 6 && $categories['non_compliant']['count'] === 2
-                && $categories['rt_control']['count'] === 2 && $categories['unknown']['count'] === 2
+            return $categories['all']['count'] === 4 && $categories['non_compliant']['count'] === 2
+                && $categories['rt_control']['count'] === 2 && ! isset($categories['unknown'])
                 && $categories['report']['count'] === 1;
         });
 });
@@ -98,12 +98,12 @@ it('keeps assigned reports accessible after billing without widening ownership c
     }
     $this->get(route('client.dossiers', ['status' => 'report']))->assertOk()
         ->assertViewHas('dossiers', fn ($rows) => $rows->total() === 1);
-    $this->get(route('client.dossiers.show', $this->blocked))->assertForbidden();
+    $this->get(route('client.dossiers.show', $this->blocked))->assertStatus($kind === 'client' ? 200 : 403);
     $foreign = ($this->makeDossier)('FOREIGN-REPORT', [$status]);
     $foreign->forceFill(['client_id' => null, 'delegataire_id' => null])->save();
     $this->get(route('client.dossiers.show', $foreign))->assertForbidden();
     $this->organisations[$kind]->update(['portal_categories' => []]);
-    $this->actingAs($this->accounts[$kind]->fresh())->get(route('client.dossiers.show', $dossier))->assertForbidden();
+    $this->actingAs($this->accounts[$kind]->fresh())->get(route('client.dossiers.show', $dossier))->assertOk();
 })->with(['client', 'delegataire'])->with(['RAPPORT GENIUS', 'DOSSIERS FACTURER']);
 
 it('enforces defaults on lists counters direct links searches and filters for each kind', function (string $kind) {
@@ -120,40 +120,40 @@ it('enforces defaults on lists counters direct links searches and filters for ea
     }
     $this->actingAs($this->accounts[$kind === 'client' ? 'delegataire' : 'client'])
         ->get(route('client.dossiers.show', $this->blocked))->assertOk();
-})->with(['client', 'delegataire']);
+})->with(['delegataire']);
 
 it('allows unknown dossiers only with the explicit unknown category', function () {
-    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'client', ['unknown']);
-    $this->actingAs($this->accounts['client'])->get(route('client.dossiers', ['status' => 'unknown']))->assertOk()
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', ['unknown']);
+    $this->actingAs($this->accounts['delegataire'])->get(route('client.dossiers', ['status' => 'unknown']))->assertOk()
         ->assertViewHas('dossiers', fn ($d) => $d->total() === 2)->assertSee('NO-OPERATIONS')->assertSee('UNMAPPED')->assertDontSee('VISIBLE');
 });
 
 it('keeps overrides independent and supports empty and inherited selections through management', function () {
-    $org = $this->organisations['client'];
-    $data = ['kind' => 'client', 'name' => $org->name, 'is_active' => true];
-    $this->actingAs($this->staff)->put(route('manager.clients.categories.update', 'client'), ['categories' => ['non_compliant']])->assertRedirect();
+    $org = $this->organisations['delegataire'];
+    $data = ['kind' => 'delegataire', 'name' => $org->name, 'is_active' => true];
+    $this->actingAs($this->staff)->put(route('manager.clients.categories.update', 'delegataire'), ['categories' => ['non_compliant']])->assertRedirect();
     $this->put(route('manager.clients.update', $org), [...$data, 'category_mode' => 'custom', 'categories' => ['rt_control']])->assertRedirect();
     expect($org->fresh()->portal_categories)->toBe(['rt_control']);
-    $this->actingAs($this->accounts['client']->fresh())->get(route('client.dossiers.show', $this->blocked))->assertOk();
+    $this->actingAs($this->accounts['delegataire']->fresh())->get(route('client.dossiers.show', $this->blocked))->assertOk();
     $this->get(route('client.dossiers.show', $this->allowed))->assertForbidden();
     $this->actingAs($this->staff)->put(route('manager.clients.update', $org), [...$data, 'category_mode' => 'custom'])->assertRedirect();
     expect($org->fresh()->portal_categories)->toBe([]);
-    $this->actingAs($this->accounts['client']->fresh())->get(route('client.dossiers'))->assertOk()->assertViewHas('dossiers', fn ($d) => $d->total() === 0);
+    $this->actingAs($this->accounts['delegataire']->fresh())->get(route('client.dossiers'))->assertOk()->assertViewHas('dossiers', fn ($d) => $d->total() === 0);
     $this->actingAs($this->staff)->put(route('manager.clients.update', $org), [...$data, 'category_mode' => 'inherit', 'categories' => ['rt_control']])->assertRedirect();
     expect($org->fresh()->portal_categories)->toBeNull();
-    $this->actingAs($this->accounts['client']->fresh())->get(route('client.dossiers.show', $this->allowed))->assertOk();
+    $this->actingAs($this->accounts['delegataire']->fresh())->get(route('client.dossiers.show', $this->allowed))->assertOk();
     $this->get(route('client.dossiers.show', $this->blocked))->assertForbidden();
 });
 
 it('revokes existing sessions and stale dossier objects after a default or workflow change', function () {
     $access = app(ClientAccess::class);
-    $user = $this->accounts['client'];
+    $user = $this->accounts['delegataire'];
     $stale = $this->allowed->load('operations');
     expect($access->viewDossier($user, $stale))->toBeTrue();
-    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'client', ['non_compliant']);
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', ['non_compliant']);
     $this->allowed->operations()->update(['legacy_status' => 'CONTROLE RT']);
     expect($access->viewDossier($user, $stale))->toBeFalse();
-    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'client', []);
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', []);
     $this->actingAs($user)->get(route('client.dossiers'))->assertOk()->assertViewHas('dossiers', fn ($d) => $d->total() === 0);
 });
 
@@ -164,16 +164,16 @@ it('preserves custom settings on unrelated edits and inherits the new type when 
     expect($org->fresh()->portal_categories)->toBe(['report']);
     app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', ['pending']);
     $this->put(route('manager.clients.update', $org), ['kind' => 'delegataire', 'name' => 'Renamed', 'is_active' => true, 'category_mode' => 'inherit'])->assertRedirect();
-    expect(app(PortalCategoryAccess::class)->effective($org->fresh()))->toBe(['pending']);
+    expect(app(PortalCategoryAccess::class)->effective($org->fresh()))->toBe(['pending', 'report']);
     $this->get(route('manager.clients.edit', $org))->assertOk()->assertSee('Catégories de dossiers accessibles');
 });
 
 it('fails closed for malformed stored defaults and overrides', function () {
-    DB::table('portal_category_defaults')->insert(['kind' => 'client', 'categories' => json_encode('invalid')]);
-    expect(app(PortalCategoryAccess::class)->defaults('client'))->toBe([]);
-    $org = $this->organisations['client'];
+    DB::table('portal_category_defaults')->insert(['kind' => 'delegataire', 'categories' => json_encode('invalid')]);
+    expect(app(PortalCategoryAccess::class)->defaults('delegataire'))->toBe(['report']);
+    $org = $this->organisations['delegataire'];
     $org->forceFill(['portal_categories' => ['invoiced', 'all', 'invalid']])->save();
-    expect(app(PortalCategoryAccess::class)->effective($org))->toBe([]);
+    expect(app(PortalCategoryAccess::class)->effective($org))->toBe(['report']);
 });
 
 it('blocks documents previews archives uploads comments and recontrol on forbidden dossiers', function (string $kind) {
@@ -191,18 +191,18 @@ it('blocks documents previews archives uploads comments and recontrol on forbidd
     $this->post(route('client.dossiers.upload', $this->allowed), ['name' => 'Denied', 'document' => UploadedFile::fake()->image('test.jpg')])->assertForbidden();
     $this->post(route('client.dossiers.recontrol', [$this->allowed, $this->allowed->operations()->first()]), ['version' => 1, 'body' => 'Denied'])->assertForbidden();
     expect($this->allowed->documents()->count())->toBe(1)->and($this->allowed->comments()->count())->toBe(0);
-})->with(['client', 'delegataire']);
+})->with(['delegataire']);
 
 it('returns to the permitted list after recontrol moves a dossier into a forbidden category', function () {
     $dossier = ($this->makeDossier)('CORRECTION', ['NON CONFORMITES']);
-    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'client', ['non_compliant']);
-    $this->actingAs($this->accounts['client'])->post(route('client.dossiers.recontrol', [$dossier, $dossier->operations()->first()]),
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', ['non_compliant']);
+    $this->actingAs($this->accounts['delegataire'])->post(route('client.dossiers.recontrol', [$dossier, $dossier->operations()->first()]),
         ['version' => 1, 'body' => 'Correction effectuée'])->assertRedirect(route('client.dossiers'));
     $this->get(route('client.dossiers.show', $dossier))->assertForbidden();
 });
 
 it('does not leak hidden dossiers through lot rows counts or satisfaction including deleted appointments', function () {
-    $org = $this->organisations['client'];
+    $org = $this->organisations['delegataire'];
     $lot = Lot::create(['name' => 'Lot test', 'delegataire_id' => $org->id]);
     $service = Service::create(['name' => 'Test', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     foreach ([$this->blocked, $this->allowed] as $dossier) {
@@ -219,8 +219,8 @@ it('does not leak hidden dossiers through lot rows counts or satisfaction includ
         }
     }
     $lot->appointments()->create(['customer_name' => 'UNLINKED']);
-    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'client', ['non_compliant']);
-    $this->actingAs($this->accounts['client'])->get(route('client.lots'))->assertOk()
+    app(PortalCategoryAccess::class)->saveDefaults($this->staff, 'delegataire', ['non_compliant']);
+    $this->actingAs($this->accounts['delegataire'])->get(route('client.lots'))->assertOk()
         ->assertViewHas('lots', fn ($lots) => $lots->first()->appointments_count === 1);
     $this->get(route('client.lots.show', $lot))->assertOk()->assertSee('VISIBLE')->assertDontSee('BLOCKED')->assertDontSee('UNLINKED')
         ->assertViewHas('stats', fn ($stats) => $stats === ['physical' => null, 'contact' => null]);
@@ -228,8 +228,8 @@ it('does not leak hidden dossiers through lot rows counts or satisfaction includ
 });
 
 it('authorizes category administration and validates unknown duplicated and invalid values', function () {
-    $url = route('manager.clients.categories.update', 'client');
-    $this->actingAs($this->accounts['client'])->get(route('manager.clients.categories'))->assertForbidden();
+    $url = route('manager.clients.categories.update', 'delegataire');
+    $this->actingAs($this->accounts['delegataire'])->get(route('manager.clients.categories'))->assertForbidden();
     $this->put($url, ['categories' => []])->assertForbidden();
     $this->actingAs(User::factory()->create(['role' => 1, 'admin' => false]))->put($url, ['categories' => []])->assertForbidden();
     $this->actingAs($this->staff)->get(route('manager.clients.categories'))->assertOk();
@@ -238,5 +238,5 @@ it('authorizes category administration and validates unknown duplicated and inva
     }
     expect(DB::table('portal_category_defaults')->count())->toBe(0);
     $this->put($url, [])->assertRedirect();
-    expect(app(PortalCategoryAccess::class)->defaults('client'))->toBe([]);
+    expect(app(PortalCategoryAccess::class)->defaults('delegataire'))->toBe(['report']);
 });

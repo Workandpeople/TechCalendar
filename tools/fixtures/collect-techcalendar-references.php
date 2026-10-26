@@ -3,7 +3,10 @@
 declare(strict_types=1);
 
 // Explicit columns: new production fields are never exported implicitly.
-return static function (PDO $pdo, bool $planningOnly = false): array {
+return static function (PDO $pdo, bool $planningOnly = false, bool $internalUsersOnly = false): array {
+    if ($planningOnly && $internalUsersOnly) {
+        throw new RuntimeException('Choisir un seul perimetre de collecte.');
+    }
     $columns = [
         'departments' => 'code,name,created_at,updated_at',
         'users' => 'id,first_name,last_name,email,role,admin,phone,address,department_code,latitude,longitude,day_start_time,day_end_time,break_duration_minutes,created_at,updated_at,deleted_at',
@@ -19,6 +22,8 @@ return static function (PDO $pdo, bool $planningOnly = false): array {
     if ($planningOnly) {
         $columns = array_intersect_key($columns, array_flip(['departments', 'users', 'services', 'department_user']));
         $columns['users'] = 'id,email,role,department_code,day_start_time,day_end_time,break_duration_minutes,deleted_at';
+    } elseif ($internalUsersOnly) {
+        $columns = array_intersect_key($columns, array_flip(['departments', 'users', 'services', 'external_service_aliases', 'service_user', 'department_user']));
     }
 
     $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -28,7 +33,7 @@ return static function (PDO $pdo, bool $planningOnly = false): array {
 
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $report = [
-        'format' => $planningOnly ? 'techcalendar.planning-snapshot' : 'techcalendar.reference-snapshot',
+        'format' => $internalUsersOnly ? 'techcalendar.internal-users-snapshot' : ($planningOnly ? 'techcalendar.planning-snapshot' : 'techcalendar.reference-snapshot'),
         'version' => 1,
         'source' => 'techcalendar',
         'exported_at' => gmdate(DATE_ATOM),
@@ -75,6 +80,12 @@ return static function (PDO $pdo, bool $planningOnly = false): array {
                 }
                 if ($planningOnly && $table === 'department_user') {
                     $conditions[] = '`user_id` IN (SELECT `id` FROM `users` WHERE `role` = 2)';
+                }
+                if ($internalUsersOnly && $table === 'users') {
+                    $conditions[] = '`role` IN (0, 1, 2)';
+                }
+                if ($internalUsersOnly && in_array($table, ['department_user', 'service_user'], true)) {
+                    $conditions[] = '`user_id` IN (SELECT `id` FROM `users` WHERE `role` IN (0, 1, 2))';
                 }
                 if ($cursor !== null) {
                     $conditions[] = "`{$key}` > ?";

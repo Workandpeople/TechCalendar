@@ -1765,9 +1765,12 @@
 
         function stageDocumentFiles(context, files) {
             context.stagedFiles = Array.from(files || []);
+            const tooLarge = context.stagedFiles.some(file => file.size > {{ \App\Services\DocumentUpload::MAX_BYTES }});
+            if (tooLarge) context.stagedFiles = [];
             context.form?.classList.toggle('hidden', context.stagedFiles.length === 0);
             renderStagedDocumentFiles(context.stagedFiles, context.uploadList);
             clearDocumentUploadStatus(context.status);
+            if (tooLarge) setDocumentUploadStatus(context.status, @json(\App\Services\DocumentUpload::TOO_LARGE), '#b91c1c');
             if (context.stagedFiles.length === 0 && context.fileInput) {
                 context.fileInput.value = '';
             }

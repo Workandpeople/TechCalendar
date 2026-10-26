@@ -5,5 +5,5 @@
 </div>
 @endif
 
-{{ $markdown }}
+{!! $html !!}
 </x-mail::message>

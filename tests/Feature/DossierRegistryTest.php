@@ -8,6 +8,7 @@ use App\Models\ExternalDelegataire;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierRegistry;
+use App\Services\DocumentUpload;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -237,7 +238,7 @@ it('rejects executable html oversized and missing files without storing anything
     foreach ([
         UploadedFile::fake()->createWithContent('evil.php', '<?php echo 1;'),
         UploadedFile::fake()->createWithContent('evil.html', '<script>alert(1)</script>'),
-        UploadedFile::fake()->create('large.pdf', 10241, 'application/pdf'),
+        UploadedFile::fake()->create('large.pdf', DocumentUpload::MAX_KILOBYTES + 1, 'application/pdf'),
     ] as $file) {
         $this->post(route('v2.dossiers.documents.store', $dossier), ['name' => 'Test', 'document' => $file])->assertSessionHasErrors('document');
     }

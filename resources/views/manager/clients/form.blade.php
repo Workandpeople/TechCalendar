@@ -27,11 +27,15 @@
                     $categoryMode = old('category_mode', $client->portal_categories === null ? 'inherit' : 'custom');
                     $categorySelection = old('category_mode') ? old('categories', []) : app(\App\Services\Crm\PortalCategoryAccess::class)->effective($client);
                 @endphp
+                @if (old('kind', $client->kind) === 'client')
+                    <p class="text-sm">Les clients accèdent à toutes les catégories sauf les dossiers supprimés. Lecture seule, sauf ajout de pièces et commentaires en non-conformité, selon leurs droits de partage.</p>
+                @else
                 <label class="flex items-center gap-2 text-sm"><input type="radio" name="category_mode" value="inherit" @checked($categoryMode === 'inherit')>Hériter des catégories du type de cette organisation</label>
                 <label class="flex items-center gap-2 text-sm"><input type="radio" name="category_mode" value="custom" @checked($categoryMode === 'custom')>Personnaliser pour cette organisation</label>
                 <p class="text-xs text-slate-500">La sélection ci-dessous s’applique uniquement en mode personnalisé et remplace les réglages du type. <a class="gc-link" href="{{ route('manager.clients.categories') }}">Gérer les réglages par type</a></p>
-                <div class="gc-category-selection">@include('manager.clients.category-checkboxes', ['selectedCategories' => $categorySelection, 'categoryPrefix' => 'organisation'])</div>
+                <div class="gc-category-selection">@include('manager.clients.category-checkboxes', ['selectedCategories' => $categorySelection, 'categoryPrefix' => 'organisation', 'categoryKind' => 'delegataire'])</div>
                 @include('manager.clients.category-warning')
+                @endif
             </fieldset>
             <button class="gc-btn-primary">Enregistrer le client</button>
         </form>

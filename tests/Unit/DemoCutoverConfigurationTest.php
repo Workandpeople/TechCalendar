@@ -51,7 +51,7 @@ it('prepares an isolated local probe and preserves existing headers and the sour
         ->and($v2)->toContain('root /var/www/TechCalendar-v2/public;', 'location = /index.php {',
             'location ~ \.php$ {', 'return 404;', 'techcalendar-v2-demo.sock',
             'proxy_pass http://127.0.0.1:8081;', 'X-TechCalendar-Release v2-demo',
-            'listen 80;', 'deny all;', 'client_max_body_size 40m;',
+            'listen 80;', 'deny all;', 'client_max_body_size 1100m;', 'fastcgi_read_timeout 3900s;',
             'add_header Content-Security-Policy "default-src \'self\'; worker-src \'self\' blob:;" always;',
             'add_header X-Frame-Options "SAMEORIGIN" always;')
         ->not->toContain('php8.3-fpm.sock', 'auth_basic')

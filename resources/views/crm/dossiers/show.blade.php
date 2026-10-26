@@ -6,7 +6,7 @@
     <div class="gc-dossier-detail space-y-5">
         <a href="{{ route('v2.dossiers.index') }}" class="gc-link text-sm">← Tous les dossiers</a>
         <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Détail du dossier" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
-            <a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>
+            @if ($smsUnavailable === null)<a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>@endif
             <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier les informations</a>
         </x-workspace-heading>
         @can('delete', $dossier)
@@ -32,7 +32,8 @@
             <div class="gc-dossier-main" aria-label="Documents, commentaires et informations du dossier">
                 @include('crm.dossiers.detail.documents')
                 @include('crm.dossiers.detail.comments')
-                @include('crm.dossiers.detail.sms')
+                @include('crm.dossiers.detail.mail')
+                @if ($smsUnavailable === null)@include('crm.dossiers.detail.sms')@endif
                 @include('crm.dossiers.detail.information')
                 @include('crm.dossiers.detail.capcee')
             </div>

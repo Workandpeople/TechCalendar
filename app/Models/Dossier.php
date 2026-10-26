@@ -24,7 +24,7 @@ class Dossier extends Model
     protected function casts(): array
     {
         return ['version' => 'integer', 'planning_user_id' => 'integer', 'client_contact' => 'array', 'delegataire_contact' => 'array',
-            'billing_review_required' => 'boolean', 'billing_review_evidence' => 'array'];
+            'billing_review_required' => 'boolean', 'billing_review_evidence' => 'array', 'inspection_geocode' => 'array'];
     }
 
     public function beneficiaryLabel(): string

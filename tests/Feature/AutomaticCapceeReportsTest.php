@@ -86,7 +86,7 @@ it('never guesses EMMY and lets a manager complete metadata without uploading th
 
 it('does not replay historical reports by enabling a delegataire or queue a first-stage RT report', function () {
     $this->operation->forceFill(['legacy_status' => 'RDV VISITE'])->save();
-    ($this->upload)()->assertSessionHasNoErrors();
+    ($this->upload)(['audience' => 'internal'])->assertSessionHasNoErrors();
     expect(CapceeAutomaticSubmission::count())->toBe(0)->and($this->operation->fresh()->legacy_status)->toBe('CONTROLE RT');
     $this->delegataire->update(['capcee_enabled' => false]);
     ($this->upload)()->assertSessionHasNoErrors();

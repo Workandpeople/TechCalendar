@@ -32,6 +32,7 @@ beforeEach(function () {
         'external_client_id' => $this->client->id, 'portal_enabled' => true,
         'portal_permissions' => ClientAccess::defaults('client'), 'must_change_password' => false]);
     $this->dossier = Dossier::create(['reference' => 'VISIBILITY', 'delegataire_id' => $this->client->id, 'address' => 'Rue de test', 'city' => 'Paris']);
+    $this->dossier->operations()->create()->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->other = Dossier::create(['reference' => 'FOREIGN', 'address' => 'Rue de test', 'city' => 'Paris']);
     $this->collection = sys_get_temp_dir().'/visibility-test-'.bin2hex(random_bytes(8));
     mkdir($this->collection, 0700);
@@ -152,6 +153,7 @@ it('keeps comments optional for delegataires and never shares workflow history',
 it('only shares explicitly public lot attachments linked to the assigned dossier', function () {
     $service = Service::create(['name' => 'Test', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     $operation = $this->dossier->operations()->create(['service_id' => $service->id]);
+    $operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
     $appointment = Appointment::create(['service_id' => $service->id,
         'technician_id' => $this->staff->id, 'created_by' => $this->staff->id, 'customer_first_name' => 'Test', 'customer_last_name' => 'Client',
         'customer_phone' => '0600000000', 'address' => 'Rue de test', 'starts_at' => now(), 'ends_at' => now()->addHour(),

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Symfony\Component\Mime\Address;
 use Throwable;
 
 class AppServiceProvider extends ServiceProvider
@@ -27,6 +28,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
+
+        Event::listen(MessageSending::class, static function (MessageSending $event): void {
+            if (config('crm.v2_enabled') && ($address = config('mail.contact_address'))) {
+                $event->message->from(new Address($address, config('mail.from.name') ?: 'Genius Contrôle'));
+                $event->message->replyTo($address);
+            }
+        });
 
         if (! config('mail.delivery_enabled')) {
             Event::listen(MessageSending::class, static fn () => false);

@@ -1804,7 +1804,7 @@ commandes de cette section ne remettent pas ce domaine en maintenance.
   sont reverifies par le worker. API desactivee : intention locale seulement,
   aucun appel, debit, livraison ou replay de job externe.
 
-Cette release comporte deux migrations V2 et des assets reconstruits. **Ne pas
+Cette release comporte quatre migrations V2 ciblees et des assets reconstruits. **Ne pas
 utiliser `--update-user-management`**, ne pas relancer le seeder ou l'import, et
 ne pas recopier les documents. Le nouvel outil reste limite a la recette interne :
 emails/portails fermes, SMS desactives/simules, CAPCEE desactive, Global+ TEST.
@@ -1834,7 +1834,7 @@ migrations inattendues, une autre revision et toute configuration PHP/service
 dediee differente. Il sauvegarde la base V2 avec le seul compte SQL V2 limite,
 le code precedent, les assets et le `.env` dans un repertoire root prive
 `/var/lib/cofrac2-production/release-*`. Il ne lit pas le SQL Coffrac original.
-Seules les deux nouvelles migrations sont appliquees, sans seeder, puis les
+Seules les migrations ciblees encore manquantes sont appliquees, sans seeder, puis les
 caches et assets sont prepares et la revision runtime avance apres controles.
 La configuration partagee et les processus existants sont compares avant/apres.
 Seul `--open` relance les trois services dedies et recharge Apache gracieusement.
@@ -1845,8 +1845,88 @@ prive pour une reprise ciblee. Le retour arriere de l'ancien domaine (section 14
 n'annule pas une release V2 et ne doit pas etre utilise pour la mettre a jour.
 
 La fixture jetable teste MySQL reel, sauvegarde et restauration de controle dans
-une autre base jetable, les deux migrations depuis l'ancien schema, les refus,
+une autre base jetable, les migrations ciblees depuis l'ancien schema, les refus,
 une panne de migration suivie d'une reprise, les assets, HTTPS, worker et Reverb.
 Elle verifie les comptes et les fichiers source inchanges. Le durcissement
 systemd du vrai serveur et les livraisons d'API reelles restent des controles
 distincts ; aucun acces ou envoi externe n'est active par cette release.
+
+### Documents jusqu'a 1 Go
+
+Les documents natifs des dossiers (equipe, clients et delegataires) et des RDV
+de lots acceptent **1 Go par fichier**, soit 1 073 741 824 octets (1 024 Mio).
+Les formats autorises, controles MIME/extension et droits de partage restent
+inchanges. Les contrats d'upload des API Coffrac mobile et CAPCEE conservent leurs
+propres plafonds ; un rapport stocke localement de plus de 35 000 000 octets ne
+peut pas etre transmis a CAPCEE.
+
+Le pool FPM dedie et le seul vhost HTTPS Cofrac2 sont mis a jour par le parcours
+de release ci-dessus : `upload_max_filesize=1024M`, `post_max_size=1100M`,
+`LimitRequestBody=1153433600`, `max_input_time=3600` et delai FPM/proxy de 3900 s.
+Le stockage reste en flux et `memory_limit` reste a 256M. Ne pas modifier le
+`php.ini` global, le pool Coffrac original ou les vhosts des autres applications.
+La configuration FPM precedente est verifiee depuis la revision preparee,
+sauvegardee et restauree si la release echoue ; les services restent arretes
+jusqu'a `--open`. Le rechargement Apache applique ensuite le vhost V2 actualise.
+
+Sur le CT de demonstration, `update-demo.sh` sauvegarde et met a jour le seul
+pool `techcalendar-v2-demo` et le vhost TechCalendar : corps a 1100m et delais
+FastCGI a 3900s, sans changer les autres pools ou les politiques de securite.
+Prevoir environ 2 Go temporaires par transfert en cours (fichier temporaire PHP
+et copie privee), en plus de la reserve normale du disque ; Nginx peut aussi
+mettre le corps en tampon disque. Une connexion interrompue oblige a recommencer
+le transfert : ce changement n'ajoute pas de protocole d'upload reprenable.
+
+Les tests utilisent des fichiers de petite taille dont la taille declaree est
+simulee pour verifier le seuil exact et son depassement d'un octet. La fixture
+`tools/deploy/tests/check-large-document-upload.sh` teste egalement un vrai corps
+multipart de 1 Gio a travers Apache/FPM en conteneur jetable sans reseau externe,
+ainsi que son depassement d'un octet, avec les deux configurations du depot.
+Un essai d'un gros PDF sur le serveur reste necessaire apres deploiement pour
+valider les limites effectives (y compris un eventuel proxy intermediaire).
+
+### Correctifs metier et ergonomie du 26 octobre
+
+Le meme parcours de release applique egalement les correctifs suivants :
+
+- Acces Rapport Genius impose aux delegataires ; les clients voient tous leurs
+  dossiers attribues sauf les dossiers supprimes. Les documents et commentaires
+  restent soumis a leur audience et aux permissions du compte. Les ajouts externes
+  sont limites a la non-conformite, sans ouvrir les autres modifications.
+- Acces Planning pour les gerants, avec une seule entree Dossiers dans le menu.
+- Nom automatique des visites techniques et rapports, suffixe beneficiaire pour
+  les documents libres et fiche deduite lorsqu'une seule prestation est presente.
+  Le rapport visible du client conduit a Rapport Genius ; un rapport interne va
+  au Controle RT. L'avis reste independant et alimente la satisfaction du lot.
+- Changement manuel de l'etat d'une fiche sans motif ni document obligatoire,
+  avec version et audit automatique. RDV, pieces, avis et facturation sont gardes.
+- Changement de prestation en AJAX, sous reserve des controles existants sur les
+  fiches deja rapportees/facturees. Aucun rendez-vous n'est recree silencieusement.
+- Adresse corrigeable dans une modale avec autocompletion Mapbox ; Valider recalcule
+  le point geographique utilise pour la carte et les prises/replacements de RDV.
+- Recherche sur l'adresse complete, filtres de dates/departement/Corse/DOM-TOM/SAV,
+  listes recherchables et filtre multi-prestations. Les exports suivent les filtres.
+- Tableaux plus lisibles : adresses nettoyees a l'affichage et en gras, caracteres
+  agrandis, telephones francais normalises sans modifier la donnee source.
+- Prise de RDV avec recapitulatif du dossier selectionne ; replacement centre sur
+  le seul rendez-vous concerne, sans liste des autres demandes a placer.
+- Modale d'email depuis le dossier, modele ou texte libre, sauts de ligne conserves,
+  modeles existants actives. En V2, l'expediteur est le contact configure et non
+  noreply, y compris pour les notifications ; le verrou de livraison reste intact.
+- Parametres a cles contenant des points enregistres correctement, secrets vides
+  conserves et jamais reaffiches dans l'ancien formulaire lors d'une erreur.
+- Favicon Genius commun aux espaces internes, externes et pages de connexion ;
+  fichier ICO multiresolution pour les pages utilisant le choix par defaut du navigateur.
+- Section SMS masquee lorsqu'elle n'est pas configuree ; cette release conserve
+  les envois desactives/simules et ne modifie aucun secret ou fournisseur.
+
+Les outils de reprise des utilisateurs TechCalendar sont versionnes, mais ne sont
+jamais executes par cette release. La fusion deja validee et les mots de passe
+existants sont conserves. Ne pas relancer de collecte/import, seeder ou dump source.
+
+Le paquet est lie a `RUNTIME-PREPARED.json`, pas simplement au HEAD du checkout.
+Lire uniquement son champ `revision` pour choisir la base du manifeste, puis
+verifier les empreintes et les revisions avant de fermer la V2. L'updater refuse
+tout changement de dependances ; seules les quatre migrations autorisees peuvent
+etre appliquees. Le favicon et les trois outils de collecte font partie du perimetre
+autorise, sans droit d'execution automatique des collecteurs.

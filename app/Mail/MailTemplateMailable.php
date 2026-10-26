@@ -7,6 +7,8 @@ use App\Models\MailTemplate;
 use App\Services\MailSenderMailerConfigurator;
 use App\Services\MailTemplateRenderer;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Mail\Factory;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
@@ -57,9 +59,11 @@ class MailTemplateMailable extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            from: $this->senderFromAddress
+            from: config('crm.v2_enabled') && config('mail.contact_address')
+                ? new Address(config('mail.contact_address'), config('mail.from.name') ?: 'Genius Contrôle')
+                : ($this->senderFromAddress
                 ? new Address($this->senderFromAddress, $this->senderFromName ?: null)
-                : null,
+                : null),
             subject: $this->renderedSubject,
         );
     }
@@ -70,6 +74,7 @@ class MailTemplateMailable extends Mailable
             markdown: 'emails.templates.dynamic',
             with: [
                 'markdown' => $this->renderedMarkdown,
+                'html' => app(MailTemplateRenderer::class)->renderHtml($this->renderedMarkdown),
                 'logoUrl' => $this->logoUrl,
             ],
         );
@@ -81,7 +86,7 @@ class MailTemplateMailable extends Mailable
     }
 
     /**
-     * @param  \Illuminate\Contracts\Mail\Factory|\Illuminate\Contracts\Mail\Mailer  $mailer
+     * @param  Factory|Mailer  $mailer
      */
     public function send($mailer)
     {

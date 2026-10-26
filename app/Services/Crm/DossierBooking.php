@@ -83,6 +83,7 @@ class DossierBooking
                     'postal_code' => $parts[1] ?? $dossier->postal_code,
                     'city' => isset($parts[2]) ? trim($parts[2]) : $dossier->city,
                 ]);
+                $dossier->forceFill(['inspection_geocode' => DossierLocation::metadata($dossier, $geocoded)])->save();
             }
             if (filled($data['comment'] ?? null)) {
                 $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => trim($data['comment'])]);
@@ -168,7 +169,7 @@ class DossierBooking
 
     private function address(Dossier $dossier): string
     {
-        return trim(implode(', ', array_filter([$dossier->address, trim($dossier->postal_code.' '.$dossier->city)])));
+        return DossierLocation::address($dossier);
     }
 
     private function mapCacheKey(Dossier $dossier): string
@@ -176,9 +177,30 @@ class DossierBooking
         return 'dossier-map-preview:'.$dossier->id.':'.hash('sha256', $this->address($dossier));
     }
 
+    public function summary(DossierOperation $operation): array
+    {
+        $operation->loadMissing(['service', 'dossier.client', 'dossier.delegataire']);
+        $dossier = $operation->dossier;
+        $display = app(DossierTable::class);
+
+        return [
+            'beneficiary' => $dossier->beneficiaryLabel(), 'email' => $dossier->email,
+            'phone_numbers' => $display->phoneNumbers($dossier), 'address' => $display->address($dossier)['full'],
+            'service' => $operation->service?->name ?: $operation->legacy_service_name,
+            'status' => DossierStatusCatalog::describe($operation->legacy_status)['label'],
+            'client' => $dossier->client?->company_name ?: $dossier->client?->name
+                ?: ($dossier->client_contact['company_name'] ?? null) ?: ($dossier->client_contact['name'] ?? null),
+            'delegataire' => $dossier->delegataire?->company_name ?: $dossier->delegataire?->name
+                ?: ($dossier->delegataire_contact['company_name'] ?? null) ?: ($dossier->delegataire_contact['name'] ?? null),
+            'site' => $dossier->site_name, 'installer' => $dossier->installer_name, 'lot' => $dossier->legacy_lot_name,
+            'dossier_url' => route('v2.dossiers.show', $dossier, absolute: false),
+        ];
+    }
+
     private function serialize(DossierOperation $operation, array $legacy = [], ?array $point = null, array $collectedDocuments = []): array
     {
         $dossier = $operation->dossier;
+        $point = DossierLocation::coordinates($dossier) ?? $point;
         if ($point === null && trim($legacy['adress'] ?? '') === trim($dossier->address)
             && trim($legacy['ville'] ?? '') === trim($dossier->city) && trim($legacy['zip'] ?? '') === trim($dossier->postal_code ?? '')
             && is_numeric($legacy['latitude'] ?? null) && is_numeric($legacy['longitude'] ?? null)
@@ -194,6 +216,7 @@ class DossierBooking
         return [
             'id' => 'dossier-'.$operation->id,
             'dossier_id' => $dossier->id, 'dossier_operation_id' => $operation->id, 'dossier_version' => $dossier->version,
+            'dossier_summary' => $this->summary($operation),
             'source' => 'Dossier TechCalendar', 'external_source' => null,
             'external_reference' => $dossier->reference, 'external_payload' => null,
             'status' => 'pending', 'remote_status_name' => $operation->legacy_status,

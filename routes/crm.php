@@ -2,13 +2,16 @@
 
 use App\Http\Controllers\Crm\AutomaticCapceeController;
 use App\Http\Controllers\Crm\CapceeReportController;
+use App\Http\Controllers\Crm\DossierAddressController;
 use App\Http\Controllers\Crm\DossierAppointmentController;
 use App\Http\Controllers\Crm\DossierArchivingController;
 use App\Http\Controllers\Crm\DossierBillingController;
 use App\Http\Controllers\Crm\DossierController;
 use App\Http\Controllers\Crm\DossierExportController;
+use App\Http\Controllers\Crm\DossierMailController;
 use App\Http\Controllers\Crm\DossierPlanningAssignmentController;
 use App\Http\Controllers\Crm\DossierPlanningController;
+use App\Http\Controllers\Crm\DossierServiceController;
 use App\Http\Controllers\Crm\DossierSmsController;
 use App\Http\Controllers\Crm\DossierWorkflowController;
 use App\Http\Middleware\EnsureCrmV2Enabled;
@@ -28,6 +31,10 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::post('/dossiers/{dossier}/sms', [DossierSmsController::class, 'store'])->middleware('throttle:10,1')->name('dossiers.sms.store');
     Route::post('/dossiers/{dossier}/sms/{sms}/file', [DossierSmsController::class, 'resume'])->middleware('throttle:10,1')->name('dossiers.sms.resume');
     Route::get('/dossiers/{dossier}/modifier', [DossierController::class, 'edit'])->name('dossiers.edit');
+    Route::get('/dossiers/{dossier}/adresse/suggestions', [DossierAddressController::class, 'suggestions'])->middleware('throttle:60,1')->name('dossiers.address.suggestions');
+    Route::patch('/dossiers/{dossier}/adresse', [DossierAddressController::class, 'update'])->middleware('throttle:10,1')->name('dossiers.address.update');
+    Route::post('/dossiers/{dossier}/email/apercu', [DossierMailController::class, 'preview'])->middleware('throttle:30,1')->name('dossiers.mail.preview');
+    Route::post('/dossiers/{dossier}/email', [DossierMailController::class, 'store'])->middleware('throttle:10,1')->name('dossiers.mail.store');
     Route::get('/dossiers/{dossier}/carte', [DossierController::class, 'mapPreview'])->middleware('throttle:60,1')->name('dossiers.map');
     Route::get('/dossiers/{dossier}/capcee/suivi', [CapceeReportController::class, 'status'])->middleware('throttle:60,1')->name('capcee.status');
     Route::get('/dossiers/{dossier}/capcee/envois/{delivery}/pdf', [CapceeReportController::class, 'download'])->name('capcee.download');
@@ -39,6 +46,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::patch('/dossiers/{dossier}/prestations/{operation}/fiche', DossierServiceController::class)->name('dossiers.operations.service');
         Route::patch('/dossiers/{dossier}/capcee/automatique/{submission}', [AutomaticCapceeController::class, 'update'])->name('capcee.automatic.update');
         Route::delete('/dossiers/{dossier}', [DossierArchivingController::class, 'destroy'])->name('dossiers.destroy');
         Route::post('/dossiers/{dossier}/restaurer', [DossierArchivingController::class, 'restore'])->withTrashed()->name('dossiers.restore');
@@ -49,6 +57,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
         Route::delete('/dossiers/{dossier}/documents-collectes/{document}', [DossierController::class, 'removeCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.destroy');
         Route::patch('/dossiers/{dossier}/rendez-vous/{appointment}/technicien', [DossierAppointmentController::class, 'update'])->whereNumber('appointment')->name('dossiers.appointments.technician');
         Route::patch('/dossiers/{dossier}/suivi-planning', DossierPlanningAssignmentController::class)->name('dossiers.planning-assignment');
+        Route::patch('/dossiers/{dossier}/prestations/{operation}/etat', [DossierWorkflowController::class, 'status'])->name('dossiers.operations.status');
         Route::post('/dossiers/{dossier}/prestations/{operation}/apres-visite', [DossierWorkflowController::class, 'postVisit'])->name('dossiers.operations.post-visit');
         Route::post('/dossiers/{dossier}/prestations/{operation}/reprendre', [DossierWorkflowController::class, 'reopen'])->name('dossiers.operations.reopen');
         Route::post('/dossiers/{dossier}/prestations/{operation}/probleme', [DossierWorkflowController::class, 'problem'])->name('dossiers.operations.problem');

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use App\Models\User;
+use Cofrac2\Deploy\DocumentUploadNginx;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,8 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Question\ChoiceQuestion;
 use Symfony\Component\Console\Question\Question;
+
+require_once __DIR__.'/lib/DocumentUploadNginx.php';
 
 function cutoverPasswordQuestion(string $prompt): Question
 {
@@ -45,9 +48,7 @@ try {
         $replace('fastcgi_pass unix:/run/php/php8.3-fpm.sock;', 'fastcgi_pass unix:/run/php/techcalendar-v2-demo.sock;');
         $replace('fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;', 'fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;');
         $replace('charset utf-8;', "charset utf-8;\n    add_header X-TechCalendar-Release v2-demo always;");
-        if (! str_contains($source, 'client_max_body_size')) {
-            $source = str_replace('charset utf-8;', "charset utf-8;\n    client_max_body_size 40m;", $source);
-        }
+        $source = DocumentUploadNginx::prepare($source);
         $replace('location / {', <<<'NGINX'
 location ^~ /app/ {
         proxy_pass http://127.0.0.1:8081;

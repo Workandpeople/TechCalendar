@@ -35,7 +35,7 @@ it('renders collapsible admin technician manager data and planner sections with 
     }
     expect($xpath->query('//*[@data-sidebar-storage-key="techcalendar.sidebar.sections.v2.'.$user->id.'"]')->length)->toBe(1)
         ->and($xpath->query('//*[@id="sidebar-desktop-manager-data-items"]//a')->length)->toBe(4)
-        ->and($xpath->query('//*[@id="app-sidebar"]//a[normalize-space(.)="Les RDV"]')->length)->toBe(2)
+        ->and($xpath->query('//*[@id="app-sidebar"]//a[normalize-space(.)="Les RDV"]')->length)->toBe(1)
         ->and($xpath->query('//*[@id="app-sidebar"]//a[normalize-space(.)="Les lots"]')->length)->toBe(1)
         ->and($xpath->query('//nav//a[contains(@href,"/appointments/modify")]')->length)->toBe(0);
     $response->assertDontSee('Suivi des RDV')->assertDontSee('Gestion des RDV')->assertDontSee('Mon planning');
@@ -56,7 +56,7 @@ it('keeps navigation scoped to the authenticated role', function (int $role, arr
         expect($xpath->query('//*[@id="sidebar-toggle"]')->length)->toBe(0);
     }
 })->with([
-    [0, ['Gérant', 'Gestion des données'], ['Admin', 'Planning', 'Planning technicien']],
+    [0, ['Gérant', 'Gestion des données', 'Planning'], ['Admin', 'Planning technicien']],
     [1, ['Planning'], ['Admin', 'Gérant', 'Planning technicien']],
     [2, [], ['Admin', 'Gérant', 'Planning', 'Planning technicien']],
 ]);
@@ -79,7 +79,7 @@ it('places the same dossiers page inside the allowed manager and planner section
 })->with([
     [0, false, ['manager']],
     [1, false, ['planner']],
-    [2, true, ['manager', 'planner']],
+    [2, true, ['planner']],
 ]);
 
 it('hides dossier links and rejects the page when the registry is disabled', function (int $role, bool $admin) {

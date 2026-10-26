@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Mail\MailTemplateMailable;
 use App\Models\MailTemplate;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 class MailTemplateRenderer
 {
@@ -44,7 +45,7 @@ class MailTemplateRenderer
      */
     public function renderSubject(MailTemplate $template, array $data = []): string
     {
-        return $this->replaceVariables($template->subject, $data);
+        return preg_replace('/[\r\n]+/', ' ', $this->replaceVariables($template->subject, $data));
     }
 
     /**
@@ -53,6 +54,14 @@ class MailTemplateRenderer
     public function renderMarkdownBody(MailTemplate $template, array $data = []): string
     {
         return $this->replaceVariables($template->markdown_body, $data);
+    }
+
+    public function renderHtml(string $markdown): string
+    {
+        return Str::markdown($markdown, [
+            'html_input' => 'escape', 'allow_unsafe_links' => false,
+            'renderer' => ['soft_break' => "<br />\n"],
+        ]);
     }
 
     /**

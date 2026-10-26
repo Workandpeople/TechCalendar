@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Crm;
 
+use App\Services\DocumentUpload;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ClientCorrectionRequest extends FormRequest
@@ -16,10 +17,15 @@ class ClientCorrectionRequest extends FormRequest
         return [
             'version' => ['required', 'integer', 'min:1'],
             'comment' => ['nullable', 'string', 'max:10000'],
-            'document' => ['nullable', 'file', 'max:10240',
+            'document' => ['bail', 'nullable', 'file', DocumentUpload::SIZE_RULE,
                 'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,docx,xlsx'],
             'document_name' => ['nullable', 'string', 'max:190'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['document.max' => DocumentUpload::TOO_LARGE];
     }
 
     public function attributes(): array

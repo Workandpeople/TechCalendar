@@ -1,6 +1,13 @@
 @layer components {
     .gc-dossier-dialog { position: fixed; inset: 0; margin: auto; width: min(920px, calc(100vw - 24px)); max-height: 92dvh; padding: 0; border: 1px solid #b9c8d9; border-radius: 1rem; background: white; color: var(--gc-text); }
     .gc-dossier-dialog[open] { display: flex; flex-direction: column; }
+    .gc-dossier-dialog.gc-address-dialog { width: min(560px, calc(100vw - 24px)); }
+    .gc-dossier-address-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem; }
+    .gc-workspace .gc-dossier-address-row .gc-address-edit { min-height: 30px; padding: .3rem .55rem; font-size: .73rem; box-shadow: none; }
+    .gc-address-edit svg { width: 14px; height: 14px; }
+    .gc-address-suggestions { max-height: 230px; overflow-y: auto; border: 1px solid #bdcbd6; border-radius: .5rem; margin-top: .4rem; background: white; }
+    .gc-address-suggestions [role='option'] { padding: .65rem .75rem; cursor: pointer; font-size: .8rem; }
+    .gc-address-suggestions [role='option'][aria-selected='true'], .gc-address-suggestions [role='option']:hover { background: #edf5ff; color: #2459a8; }
     .gc-dossier-dialog::backdrop { background: #10233bb3; backdrop-filter: blur(4px); }
     .gc-dossier-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; background: #edf5ff; flex-shrink: 0; }
     .gc-dossier-dialog h2 { font-size: 1.1rem; font-weight: 700; }

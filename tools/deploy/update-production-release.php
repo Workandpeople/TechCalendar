@@ -46,7 +46,8 @@ try {
     $applied = $db->query('SELECT migration FROM migrations')->fetchAll(PDO::FETCH_COLUMN);
     $expected = array_map(fn ($file) => basename($file, '.php'), glob($app.'/database/migrations/*.php'));
     $pending = array_values(array_diff($expected, $applied));
-    $allowed = ['2026_10_25_110000_add_reversible_dossier_deletion', '2026_10_25_120000_add_automatic_capcee_reports'];
+    $allowed = ['2026_10_25_110000_add_reversible_dossier_deletion', '2026_10_25_120000_add_automatic_capcee_reports',
+        '2026_10_26_100000_activate_existing_mail_templates', '2026_10_26_110000_add_dossier_inspection_geocode'];
     if (array_diff($pending, $allowed) !== [] || array_diff($applied, $expected) !== [] || $db->query('SELECT COUNT(*) FROM dossiers')->fetchColumn() < 1
         || disk_free_space('/var/lib/cofrac2-production') < 5 * 1024 ** 3) {
         throw new RuntimeException('Migrations inattendues, base vide ou marge disque insuffisante.');

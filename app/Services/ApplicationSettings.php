@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ApplicationSetting;
 use App\Models\ApplicationSettingAudit;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -55,10 +56,6 @@ class ApplicationSettings
             $this->rememberInitialConfigValue($configKey);
 
             $value = $this->get($key);
-
-            if ($value === null) {
-                continue;
-            }
 
             config([$configKey => $value]);
         }
@@ -118,7 +115,7 @@ class ApplicationSettings
                     'description' => $definition['description'] ?? null,
                     'options' => $definition['options'] ?? [],
                     'is_secret' => (bool) ($definition['secret'] ?? false),
-                    'value' => $hasDatabaseValue && ! ($definition['secret'] ?? false) ? $setting->value : $this->get($key),
+                    'value' => ($definition['secret'] ?? false) ? null : ($hasDatabaseValue ? $setting->value : $this->get($key)),
                     'has_database_value' => $hasDatabaseValue,
                     'has_env_value' => $hasEnvValue,
                     'source' => $effectiveSource,
@@ -130,44 +127,49 @@ class ApplicationSettings
     }
 
     /**
-     * @param array<string, mixed> $values
+     * @param  array<string, mixed>  $values
      */
     public function update(array $values, int $userId): void
     {
-        foreach ($this->definitions() as $key => $definition) {
-            $incomingValue = $values[$key] ?? null;
-            $incomingValue = is_string($incomingValue) ? trim($incomingValue) : $incomingValue;
-            $setting = $this->setting($key);
-            $previousHadValue = $setting && filled($setting->value);
+        DB::transaction(function () use ($values, $userId): void {
+            foreach ($this->definitions() as $key => $definition) {
+                if (! array_key_exists($key, $values)) {
+                    continue;
+                }
+                $incomingValue = $values[$key];
+                $incomingValue = is_string($incomingValue) ? trim($incomingValue) : $incomingValue;
+                $setting = $this->setting($key);
+                $previousHadValue = $setting && filled($setting->value);
 
-            if (($definition['secret'] ?? false) && blank($incomingValue)) {
-                continue;
+                if (($definition['secret'] ?? false) && blank($incomingValue)) {
+                    continue;
+                }
+
+                $setting = ApplicationSetting::query()->updateOrCreate(
+                    ['key' => $key],
+                    [
+                        'group' => $definition['group'],
+                        'label' => $definition['label'],
+                        'type' => $definition['type'] ?? 'string',
+                        'value' => $incomingValue,
+                        'is_secret' => (bool) ($definition['secret'] ?? false),
+                        'is_active' => filled($incomingValue),
+                        'description' => $definition['description'] ?? null,
+                        'validation_rules' => $definition['rules'] ?? [],
+                        'updated_by' => $userId,
+                    ],
+                );
+
+                ApplicationSettingAudit::query()->create([
+                    'application_setting_id' => $setting->id,
+                    'key' => $key,
+                    'changed_by' => $userId,
+                    'had_value_before' => $previousHadValue,
+                    'has_value_after' => filled($incomingValue),
+                    'changed_at' => now(),
+                ]);
             }
-
-            $setting = ApplicationSetting::query()->updateOrCreate(
-                ['key' => $key],
-                [
-                    'group' => $definition['group'],
-                    'label' => $definition['label'],
-                    'type' => $definition['type'] ?? 'string',
-                    'value' => $incomingValue,
-                    'is_secret' => (bool) ($definition['secret'] ?? false),
-                    'is_active' => filled($incomingValue),
-                    'description' => $definition['description'] ?? null,
-                    'validation_rules' => $definition['rules'] ?? [],
-                    'updated_by' => $userId,
-                ],
-            );
-
-            ApplicationSettingAudit::query()->create([
-                'application_setting_id' => $setting->id,
-                'key' => $key,
-                'changed_by' => $userId,
-                'had_value_before' => $previousHadValue,
-                'has_value_after' => filled($incomingValue),
-                'changed_at' => now(),
-            ]);
-        }
+        });
 
         Cache::forget(self::CACHE_KEY);
         $this->applyToConfig();
@@ -263,7 +265,7 @@ class ApplicationSettings
     }
 
     /**
-     * @param array<string, mixed> $definition
+     * @param  array<string, mixed>  $definition
      */
     private function hasEnvironmentValue(array $definition): bool
     {

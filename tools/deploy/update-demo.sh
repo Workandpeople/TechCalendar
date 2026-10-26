@@ -16,12 +16,13 @@ DOMAIN=techcalendar.lucas-dinnichert.fr
 DATABASE=techcalendar_v2_demo_simulation
 NGINX_VHOST=/etc/nginx/sites-available/techcalendar.lucas-dinnichert.fr
 NGINX_PREVIEW_MAP=/etc/nginx/conf.d/techcalendar-v2-document-preview.conf
+PHP_POOL=/etc/php/8.4/fpm/pool.d/techcalendar-v2-demo.conf
 COMPOSER=$(command -v composer)
 
 # Share the cutover lock: an update and a V1/V2 switch must never overlap.
 exec 9>/run/lock/techcalendar-v2-cutover.lock
 flock -n 9 || { echo 'Une operation de deploiement est deja en cours.' >&2; exit 1; }
-for tool in php8.4 rsync mysql mysqldump gzip curl nginx; do command -v "$tool" >/dev/null; done
+for tool in php8.4 php-fpm8.4 rsync mysql mysqldump gzip curl nginx; do command -v "$tool" >/dev/null; done
 test -f "$APP/.env"
 test ! -e "$APP/storage/framework/down"
 test -S /run/php/techcalendar-v2-demo.sock
@@ -104,16 +105,28 @@ if [[ -e "$NGINX_PREVIEW_MAP" ]]; then
     NGINX_MAP_EXISTED=1
 fi
 php8.4 "$STAGE/tools/deploy/document-preview-nginx.php" \
-    "$NGINX_VHOST" "$WORK/nginx-vhost.next" "$WORK/nginx-preview-map.next" "$NGINX_PREVIEW_MAP"
+    "$NGINX_VHOST" "$WORK/nginx-vhost.preview" "$WORK/nginx-preview-map.next" "$NGINX_PREVIEW_MAP"
+php8.4 "$STAGE/tools/deploy/document-upload-nginx.php" "$WORK/nginx-vhost.preview" "$WORK/nginx-vhost.next"
+test -f "$PHP_POOL" && test ! -L "$PHP_POOL"
+cp -p "$PHP_POOL" "$BACKUP/php-pool.conf"
+sha256sum "$PHP_POOL" > "$BACKUP/php-checksums"
+# Only replace our known dedicated pool, never the shared PHP defaults.
+diff -u <(sed -E '/^(request_terminate_timeout|php_admin_value\[(upload_max_filesize|post_max_size|max_input_time|max_execution_time)\]) = /d' "$PHP_POOL") \
+    <(sed -E '/^(request_terminate_timeout|php_admin_value\[(upload_max_filesize|post_max_size|max_input_time|max_execution_time)\]) = /d' "$STAGE/tools/deploy/php-fpm-demo.conf.example")
 
 cd "$APP"
 MAINTENANCE=0
 SUCCESS=0
 NGINX_CHANGED=0
+PHP_CHANGED=0
 finish() {
     local status=$?
     trap - EXIT INT TERM HUP
     if [[ $SUCCESS -ne 1 && $MAINTENANCE -eq 1 ]]; then
+        if [[ $PHP_CHANGED -eq 1 ]]; then
+            install -o root -g root -m 0644 "$BACKUP/php-pool.conf" "$PHP_POOL"
+            php-fpm8.4 -t && systemctl reload php8.4-fpm || true
+        fi
         if [[ $NGINX_CHANGED -eq 1 ]]; then
             install -o root -g root -m 0644 "$BACKUP/nginx-vhost.conf" "$NGINX_VHOST" || true
             if [[ $NGINX_MAP_EXISTED -eq 1 ]]; then
@@ -185,6 +198,10 @@ runuser -u www-data -- php8.4 artisan clients:reconcile-legacy | tee "$WORK/clie
 sha256sum -c "$BACKUP/nginx-checksums"
 if [[ $NGINX_MAP_EXISTED -eq 0 ]]; then test ! -e "$NGINX_PREVIEW_MAP"; fi
 NGINX_CHANGED=1
+sha256sum -c "$BACKUP/php-checksums"
+PHP_CHANGED=1
+install -o root -g root -m 0644 "$APP/tools/deploy/php-fpm-demo.conf.example" "$PHP_POOL"
+php-fpm8.4 -t
 install -o root -g root -m 0644 "$WORK/nginx-preview-map.next" "$NGINX_PREVIEW_MAP"
 install -o root -g root -m 0644 "$WORK/nginx-vhost.next" "$NGINX_VHOST"
 nginx -t

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Crm\DossierStatusRequest;
 use App\Http\Requests\Crm\PostVisitRequest;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
@@ -17,6 +18,15 @@ use Illuminate\Validation\Rule;
 
 class DossierWorkflowController extends Controller
 {
+    public function status(DossierStatusRequest $request, Dossier $dossier, DossierOperation $operation, DossierWorkflow $workflow): RedirectResponse
+    {
+        $changed = $workflow->changeStatus($request->user(), $dossier, $operation,
+            [...$request->validated(), ...ContentAudience::fromRequest($request, 'client')]);
+
+        return redirect(route('v2.dossiers.show', $dossier).'#fiche-'.$operation->id)
+            ->with('status', $changed ? 'État mis à jour. Rendez-vous, documents, avis et facturation conservés.' : 'Cette fiche est déjà dans cet état. Aucune modification effectuée.');
+    }
+
     public function problem(Request $request, Dossier $dossier, DossierOperation $operation, DossierWorkflow $workflow): RedirectResponse
     {
         Gate::authorize('update', $dossier);

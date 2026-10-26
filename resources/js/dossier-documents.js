@@ -23,6 +23,9 @@ export function initDossierDocuments(root = document, browser = window) {
             const type = form.querySelector('[name="document_type"]:checked')?.value || 'free';
             const report = type === 'report';
             const canReview = form.dataset.canReview === '1';
+            const nameField = form.querySelector('[data-document-name]');
+            nameField.hidden = type !== 'free';
+            nameField.querySelector('input').disabled = type !== 'free';
             for (const [selector, enabled] of [['[data-operation-fields]', type !== 'free'], ['[data-report-fields]', report], ['[data-visit-fields]', type === 'visit']]) {
                 const fields = form.querySelector(selector);
                 fields.hidden = !enabled;
@@ -37,15 +40,18 @@ export function initDossierDocuments(root = document, browser = window) {
             const appointment = form.querySelector('[data-visit-appointment]');
             Array.from(appointment.options).forEach((option) => { option.disabled = !!option.value && option.dataset.operation !== operation.value; });
             if (appointment.selectedOptions[0]?.disabled) appointment.value = '';
+            const candidates = Array.from(appointment.options).filter(option => option.value && !option.disabled);
+            if (!appointment.value && candidates.length === 1) appointment.value = candidates[0].value;
             form.querySelector('[data-document-effect]').textContent = type === 'free' ? 'Pièce libre : aucun changement d’état.'
                 : type === 'visit' ? 'Ce document confirmera la visite et passera la fiche en RDV visité.'
-                : state === 'visited' ? 'Ce rapport passera la fiche en Contrôle RT, quel que soit l’avis.'
-                : ['rt_control', 'recontrol'].includes(state) ? 'Ce rapport passera la fiche en Rapport Genius, quel que soit l’avis.'
+                : ['visited', 'rt_control', 'recontrol'].includes(state) ? (form.querySelector('[name="audience"]:checked')?.value === 'internal'
+                    ? 'Rapport privé : la fiche passera en Contrôle RT, quel que soit l’avis.'
+                    : 'Rapport partagé : la fiche passera en Rapport Genius, quel que soit l’avis.')
                 : 'Choisissez une fiche en RDV visité, contrôle RT ou recontrôle.';
             form.querySelector('[type="file"]').accept = report ? '.pdf,application/pdf' : '.pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx';
         };
         form.addEventListener('change', (event) => {
-            if (event.target.name === 'document_type' || event.target === operation) update();
+            if (['document_type', 'audience'].includes(event.target.name) || event.target === operation) update();
         });
         update();
     });

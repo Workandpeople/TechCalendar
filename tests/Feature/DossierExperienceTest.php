@@ -173,11 +173,11 @@ function experienceReport($test, array $extra = []): array
 
 it('uploads reports with required metadata and reuses the existing RT workflow', function () {
     $url = route('v2.dossiers.documents.store', $this->dossier);
-    $this->post($url, experienceReport($this, ['workflow_action' => 'submit_control']))->assertSessionHasNoErrors();
+    $this->post($url, experienceReport($this, ['workflow_action' => 'submit_control', 'audience' => 'internal']))->assertSessionHasNoErrors();
     expect($this->operation->fresh()->legacy_status)->toBe('CONTROLE RT');
     $doc = $this->dossier->documents()->sole();
     expect($doc->control_reference)->toBe('CONTROL-001')->and($doc->issued_on->toDateString())->toBe(now()->subDay()->toDateString())
-        ->and($doc->client_visible)->toBeTrue()->and($doc->delegataire_visible)->toBeFalse();
+        ->and($doc->client_visible)->toBeFalse()->and($doc->delegataire_visible)->toBeFalse();
     $this->post($url, experienceReport($this, ['workflow_action' => 'validate_report', 'outcome' => 'unsatisfactory']))->assertSessionHasNoErrors();
     expect($this->operation->fresh()->legacy_status)->toBe('RAPPORT GENIUS')->and($this->operation->fresh()->control_outcome)->toBe('unsatisfactory');
     expect($this->dossier->operations()->count())->toBe(1);
@@ -218,7 +218,7 @@ it('defaults new contents to client only without exposing older internal records
 
 it('uses the same automatic report transitions for every opinion and ignores obsolete form actions', function (string $outcome) {
     $url = route('v2.dossiers.documents.store', $this->dossier);
-    $this->post($url, experienceReport($this, ['outcome' => $outcome, 'workflow_action' => 'store']))->assertSessionHasNoErrors();
+    $this->post($url, experienceReport($this, ['outcome' => $outcome, 'workflow_action' => 'store', 'audience' => 'internal']))->assertSessionHasNoErrors();
     expect($this->operation->fresh()->legacy_status)->toBe('CONTROLE RT')
         ->and($this->operation->fresh()->control_outcome)->toBe($outcome)
         ->and($this->operation->fresh()->report_document_id)->not->toBeNull();

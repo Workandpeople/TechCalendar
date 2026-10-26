@@ -14,7 +14,13 @@ git_app() { runuser -u cofrac2-deploy -- git -C "$APP" "$@"; }
 BASE=$(git_app rev-parse HEAD)
 cp -p "$STATE/RUNTIME-PREPARED.json" /tmp/release-prepared.before.json
 printf '\n{{-- Fixture asset/schema release --}}\n' >> "$APP/resources/views/components/user-email-conflict.blade.php"
-git_app add resources/views/components/user-email-conflict.blade.php
+# Exercise all newly permitted tracked paths, not just an ordinary Blade update.
+printf '\n// Fixture export tooling update.\n' >> "$APP/tools/fixtures/collect-techcalendar-references.php"
+printf '\n// Fixture export tooling update.\n' >> "$APP/tools/fixtures/prepare-techcalendar-export.php"
+printf '\n# Fixture export tooling update.\n' >> "$APP/tools/fixtures/fetch-techcalendar-internal-users.sh"
+printf '\0' >> "$APP/public/favicon.ico"
+git_app add resources/views/components/user-email-conflict.blade.php public/favicon.ico \
+    tools/fixtures/collect-techcalendar-references.php tools/fixtures/prepare-techcalendar-export.php tools/fixtures/fetch-techcalendar-internal-users.sh
 git_app -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-schema-release >/dev/null
 REVISION=$(git_app rev-parse HEAD)
 BUNDLE=$(mktemp -d /tmp/cofrac2-update-XXXXXXXX)
@@ -35,7 +41,7 @@ bash "$APP/tools/deploy/configure-production-runtime.sh" --maintenance --reload-
 sha256sum "$APP/.env" /srv/cofrac2-runtime/documents.list0 > /tmp/release-inputs.sha256
 sql 'UPDATE cofrac2production.dossiers SET deleted_at=NULL;'
 # Restore only this disposable fixture to the pre-release schema to exercise both actual migrations.
-runuser -u cofrac2-app -- php8.4 "$APP/artisan" migrate:rollback --step=2 --force --no-interaction > /tmp/release-rollback-fixture.log 2>&1
+runuser -u cofrac2-app -- php8.4 "$APP/artisan" migrate:rollback --step=4 --force --no-interaction > /tmp/release-rollback-fixture.log 2>&1
 sql "INSERT INTO cofrac2production.dossiers (id,reference,address,city,created_at,updated_at) VALUES (80001,'LEGACY-DELETED-TEST','Fixture','Paris',NOW(),NOW());"
 sql 'SELECT id,email,password,role,admin,deleted_at,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/release-users.before.tsv
 if bash "$SCRIPT" --apply "$BUNDLE" "$(printf '0%.0s' {1..64})" > /tmp/release-bad-sha.log 2>&1; then exit 1; fi

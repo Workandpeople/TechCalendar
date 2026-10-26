@@ -10,9 +10,13 @@
                     @csrf @method('PUT')
                     <input type="hidden" name="_category_kind" value="{{ $kind }}">
                     <h2 class="text-lg font-semibold">{{ $label === 'Client' ? 'Partenaires clients' : 'Délégataires' }}</h2>
-                    <p class="text-sm text-slate-500">Appliqué aux organisations de ce type qui n’ont pas de réglage personnalisé.</p>
-                    @include('manager.clients.category-checkboxes', ['selectedCategories' => old('_category_kind') === $kind ? old('categories', []) : $defaults[$kind], 'categoryPrefix' => $kind])
+                    @if ($kind === 'client')
+                        <p class="text-sm">Tous les dossiers attribués sont accessibles, sauf les dossiers supprimés. Les droits sur les documents et commentaires restent applicables.</p>
+                    @else
+                    <p class="text-sm text-slate-500">Appliqué aux organisations de ce type qui n’ont pas de réglage personnalisé. Rapport Genius est toujours accessible.</p>
+                    @include('manager.clients.category-checkboxes', ['selectedCategories' => old('_category_kind') === $kind ? old('categories', []) : $defaults[$kind], 'categoryPrefix' => $kind, 'categoryKind' => $kind])
                     <button class="gc-btn-primary" type="submit">Enregistrer pour ce type</button>
+                    @endif
                 </form>
             @endforeach
         </div>
