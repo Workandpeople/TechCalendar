@@ -181,6 +181,31 @@ class DossierRegistry
     public function create(User $actor, array $data): Dossier
     {
         Gate::forUser($actor)->authorize('create', Dossier::class);
+
+        return $this->persistCreation($actor, $data);
+    }
+
+    public function createForClient(User $actor, array $data): Dossier
+    {
+        Gate::forUser($actor)->authorize('createFromPortal', Dossier::class);
+        $information = Arr::only($data, [
+            'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',
+            'address', 'postal_code', 'city', 'beneficiary_address', 'beneficiary_postal_code',
+            'beneficiary_city', 'installer_name', 'installer_siren', 'service_ids',
+        ]);
+
+        return $this->persistCreation($actor, [
+            ...$information,
+            // A stable, organisation-scoped reference prevents duplicate form submissions.
+            'reference' => 'DOS-CLIENT-'.$actor->external_client_id.'-'.Str::upper($data['submission_id']),
+            'client_id' => $actor->external_client_id,
+            'client_contact' => DossierContacts::details($actor->externalClient),
+            'delegataire_id' => null, 'delegataire_contact' => [],
+        ]);
+    }
+
+    private function persistCreation(User $actor, array $data): Dossier
+    {
         $data = DossierContacts::fillMissingSnapshots($data);
         $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
 

@@ -1,6 +1,10 @@
 <x-layouts.app>
     <div class="space-y-6" data-ajax-list="client-dossiers">
-        <x-workspace-heading title="Mes dossiers" :eyebrow="auth()->user()->externalClient->name" description="Suivez vos inspections, retrouvez les documents partagés et répondez aux demandes de correction." />
+        <x-workspace-heading title="Mes dossiers" :eyebrow="auth()->user()->externalClient->name" description="Suivez vos inspections, retrouvez les documents partagés et répondez aux demandes de correction.">
+            @can('createFromPortal', \App\Models\Dossier::class)
+                <a class="gc-btn-primary" href="{{ route('client.dossiers.create') }}"><x-nav-icon name="plus" /> Nouveau dossier</a>
+            @endcan
+        </x-workspace-heading>
         @include('client.notice')
         <div data-ajax-results="categories">@include('crm.dossiers.categories', ['categoryRoute' => 'client.dossiers'])</div>
         <form data-ajax-filters method="GET" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">

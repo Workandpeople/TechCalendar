@@ -19,6 +19,8 @@ Route::middleware(['auth', EnsureCrmV2Enabled::class])->group(function (): void 
     });
     Route::prefix('espace-client')->name('client.')->middleware(EnsureClientPortal::class)->controller(ClientPortalController::class)->group(function (): void {
         Route::get('/', 'index')->name('dossiers');
+        Route::get('/dossiers/nouveau', 'create')->name('dossiers.create');
+        Route::post('/dossiers', 'store')->middleware('throttle:15,1')->name('dossiers.store');
         Route::get('/dossiers/{dossier}', 'show')->name('dossiers.show');
         Route::post('/dossiers/{dossier}/comments', 'comment')->middleware('throttle:30,1')->name('dossiers.comments');
         Route::post('/dossiers/{dossier}/documents', 'upload')->middleware('throttle:15,1')->name('dossiers.upload');

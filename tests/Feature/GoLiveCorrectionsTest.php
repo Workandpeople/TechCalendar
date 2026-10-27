@@ -111,7 +111,7 @@ it('offers report access by default for delegates and non deleted categories for
     expect(app(PortalCategoryAccess::class)->effective($organisation))->toBe([]);
 })->with(['client', 'delegataire']);
 
-it('enforces read only client access except correction uploads and comments in non conformity', function () {
+it('allows client documents in every visible state but comments only in non conformity', function () {
     $org = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'CLIENT', 'kind' => 'client', 'name' => 'Client', 'is_active' => true]);
     $client = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false, 'external_client_id' => $org->id,
         'portal_enabled' => true, 'must_change_password' => false,
@@ -124,7 +124,8 @@ it('enforces read only client access except correction uploads and comments in n
         $this->operation->forceFill(['legacy_status' => $state])->save();
         $this->get(route('client.dossiers.show', $this->dossier))->assertOk();
         $this->postJson($comments, ['body' => 'Interdit'])->assertForbidden();
-        $this->postJson($upload, ['name' => 'Interdit', 'document' => UploadedFile::fake()->image('doc.jpg')])->assertForbidden();
+        $this->postJson($upload, ['name' => 'Complément', 'document' => UploadedFile::fake()->image('doc.jpg')])->assertRedirect();
+        expect($this->operation->fresh()->legacy_status)->toBe($state);
     }
     $this->operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->post($comments, ['body' => 'Correction client'])->assertRedirect();

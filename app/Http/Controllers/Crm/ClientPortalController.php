@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\ClientCorrectionRequest;
+use App\Http\Requests\Crm\ClientDossierRequest;
 use App\Models\Dossier;
 use App\Models\DossierDocument;
 use App\Models\DossierOperation;
+use App\Models\Service;
 use App\Services\Crm\ClientAccess;
 use App\Services\Crm\ClientPortal;
 use App\Services\Crm\CollectedDossierDocuments;
@@ -16,6 +18,8 @@ use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\PostVisitWorkflow;
 use App\Services\DocumentUpload;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ClientPortalController extends Controller
@@ -31,6 +35,25 @@ class ClientPortalController extends Controller
     public function show(Request $request, Dossier $dossier, ClientPortal $portal)
     {
         return view('client.dossier', $portal->dossier($request->user(), $dossier));
+    }
+
+    public function create()
+    {
+        Gate::authorize('createFromPortal', Dossier::class);
+
+        return view('client.create-dossier', [
+            'dossier' => new Dossier,
+            'submissionId' => (string) Str::uuid(),
+            'services' => Service::query()->catalog()->orderBy('name')->get(['id', 'name', 'type']),
+        ]);
+    }
+
+    public function store(ClientDossierRequest $request, DossierRegistry $registry)
+    {
+        $dossier = $registry->createForClient($request->user(), $request->validated());
+
+        return redirect()->route('client.dossiers.show', $dossier)
+            ->with('status', 'Dossier créé. Notre équipe le retrouve dans « Prise de RDV » pour organiser la visite.');
     }
 
     public function lots(Request $request, ClientAccess $access)

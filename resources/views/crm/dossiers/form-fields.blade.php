@@ -1,14 +1,18 @@
-        <form method="POST" action="{{ $dossier->exists ? route('v2.dossiers.update', $dossier) : route('v2.dossiers.store') }}" class="space-y-6">
+        @php $portalCreation = $portalCreation ?? false; @endphp
+        <form method="POST" action="{{ $portalCreation ? route('client.dossiers.store') : ($dossier->exists ? route('v2.dossiers.update', $dossier) : route('v2.dossiers.store')) }}" class="space-y-6">
             @csrf
+            @if ($portalCreation)<input type="hidden" name="submission_id" value="{{ is_string(old('submission_id')) ? old('submission_id') : $submissionId }}">@endif
             <input type="hidden" name="_form" value="information">
             @if ($dossier->exists)
                 @method('PUT')
                 <input type="hidden" name="version" value="{{ old('version', $dossier->version) }}">
             @endif
+            @unless ($portalCreation)
             <div class="grid gap-6 xl:grid-cols-2">
                 @include('crm.dossiers.contact-fields', ['role' => 'client'])
                 @include('crm.dossiers.contact-fields', ['role' => 'delegataire'])
             </div>
+            @endunless
             @php
                 $groups = [
                     'Bénéficiaire' => [
@@ -36,7 +40,8 @@
                             @foreach ($fields as $field => [$fieldLabel, $maxLength])
                                 <div class="{{ str_contains($field, 'address') || in_array($field, ['company_name', 'installer_name']) ? 'sm:col-span-2' : '' }}">
                                     <label for="{{ $field }}" class="gc-label">{{ $fieldLabel }}</label>
-                                    <input id="{{ $field }}" name="{{ $field }}" class="gc-input" value="{{ old($field, $dossier->$field ?: ($field === 'company_name' && blank($dossier->last_name) && blank($dossier->first_name) ? $dossier->legacy_label : null)) }}" maxlength="{{ $maxLength }}" type="{{ $field === 'email' ? 'email' : ($field === 'phone' ? 'tel' : 'text') }}" @required(in_array($field, ['address', 'city'])) @if ($field === 'installer_siren') inputmode="numeric" pattern="[0-9]{9}" @endif>
+                                    @php($fieldValue = old($field, $dossier->$field ?: ($field === 'company_name' && blank($dossier->last_name) && blank($dossier->first_name) ? $dossier->legacy_label : null)))
+                                    <input id="{{ $field }}" name="{{ $field }}" class="gc-input" value="{{ is_scalar($fieldValue) ? $fieldValue : '' }}" maxlength="{{ $maxLength }}" type="{{ $field === 'email' ? 'email' : ($field === 'phone' ? 'tel' : 'text') }}" @required(in_array($field, ['address', 'city'])) @if ($field === 'installer_siren') inputmode="numeric" pattern="[0-9]{9}" @endif>
                                 </div>
                             @endforeach
                         </div>
@@ -48,16 +53,17 @@
                     <legend class="px-2 text-lg font-semibold">Prestations *</legend>
                     <p class="mb-4 text-sm text-slate-500">Les prestations sélectionnées constituent les fiches du dossier. Elles ne créent pas encore de rendez-vous.</p>
                     <div class="grid max-h-72 gap-2 overflow-y-auto md:grid-cols-2">
+                        @php($selectedServices = is_array(old('service_ids')) ? old('service_ids') : [])
                         @forelse ($services as $service)
-                            <label class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50"><input type="checkbox" name="service_ids[]" value="{{ $service->id }}" @checked(in_array($service->id, old('service_ids', [])))><span>{{ $service->name }} <span class="text-xs text-slate-500">{{ $service->type }}</span></span></label>
+                            <label class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50"><input type="checkbox" name="service_ids[]" value="{{ $service->id }}" @checked(in_array($service->id, $selectedServices))><span>{{ $service->name }} <span class="text-xs text-slate-500">{{ $service->type }}</span></span></label>
                         @empty
-                            <p class="text-sm text-rose-800">Ajoute d’abord une prestation dans le référentiel existant.</p>
+                            <p class="text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
                         @endforelse
                     </div>
                 </fieldset>
             @endunless
             <div class="gc-dialog-actions flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5">
-                <p class="text-sm text-slate-500">* Champs obligatoires. Aucun appel aux CRM externes.</p>
-                <button class="gc-btn-primary" type="submit" @disabled(! $dossier->exists && $services->isEmpty())>{{ $dossier->exists ? 'Enregistrer les modifications' : 'Créer le dossier local' }}</button>
+                <p class="text-sm text-slate-500">{{ $portalCreation ? '* Champs obligatoires. Aucun rendez-vous n’est fixé à cette étape.' : '* Champs obligatoires. Aucun appel aux CRM externes.' }}</p>
+                <button class="gc-btn-primary" type="submit" @disabled(! $dossier->exists && $services->isEmpty())>{{ $portalCreation ? 'Transmettre le dossier' : ($dossier->exists ? 'Enregistrer les modifications' : 'Créer le dossier local') }}</button>
             </div>
         </form>

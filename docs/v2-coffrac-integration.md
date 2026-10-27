@@ -1311,3 +1311,24 @@ disponibilités, verrouillage et traçabilité ne sont pas contournés.
   destinataires et les restrictions de partage. Utiliser la sauvegarde avec le
   code correspondant si un retour arrière est nécessaire.
 - Les paramètres SMS et les protections du mode simulation restent inchangés.
+
+### Création et dépôt depuis le portail client (27 octobre 2026)
+
+- Les comptes de type client disposent du droit administrable `create_dossiers`,
+  activé par défaut, y compris pour les comptes existants qui n'ont pas encore
+  cette clé. Un refus explicite reste prioritaire. La catégorie `pending` doit
+  aussi être autorisée. Les délégataires n'obtiennent pas ce droit.
+- Le formulaire `/espace-client/dossiers/nouveau` transmet le bénéficiaire, les
+  coordonnées du site, l'installateur facultatif et les prestations du catalogue
+  actif. Le serveur impose l'organisation du compte, son auteur et l'état
+  `PRISE DE RDV` pour toutes les prestations. Aucun RDV, email, SMS ou appel API
+  n'est déclenché par cette création. Un identifiant de formulaire unique évite
+  de créer deux dossiers lors d'une double soumission.
+- Les clients peuvent déposer des pièces dans tous les états auxquels ils ont
+  accès. Les documents restent de type libre, visibles du client mais pas du
+  délégataire ; leur ajout ne change ni l'état ni la facturation. Les droits de
+  lecture et de dépôt restent requis et révocables. Les dossiers supprimés et les
+  catégories interdites restent inaccessibles.
+- Les délégataires conservent le dépôt uniquement en non-conformité. Les règles
+  des commentaires et des demandes explicites de recontrôle ne changent pas.
+- Aucun import, seeder, migration ou réinitialisation des droits n'est nécessaire.

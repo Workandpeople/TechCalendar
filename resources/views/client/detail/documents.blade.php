@@ -52,7 +52,7 @@
                 @csrf
                 <input type="hidden" name="_form" value="client-document">
                 <p class="gc-portal-form-intro">Transmettez une pièce à notre équipe. L’ajout seul ne change pas l’état du dossier et ne demande pas de recontrôle.</p>
-                <div><label class="gc-label" for="document-name">Nom du document</label><input id="document-name" name="name" maxlength="190" required class="gc-input" placeholder="Ex. : photo de la correction" value="{{ old('_form') === 'client-document' ? old('name') : '' }}"></div>
+                <div><label class="gc-label" for="document-name">Nom du document</label><input id="document-name" name="name" maxlength="190" required class="gc-input" placeholder="Ex. : plan, facture ou photo" value="{{ old('_form') === 'client-document' ? old('name') : '' }}"></div>
                 <div class="gc-portal-file-input"><label class="gc-label" for="document-file">Fichier, {{ \App\Services\DocumentUpload::LIMIT_LABEL }} maximum</label><input id="document-file" name="document" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" required aria-describedby="document-formats" data-document-max-bytes="{{ \App\Services\DocumentUpload::MAX_BYTES }}"><p id="document-formats">PDF, image JPG / PNG / WebP, Word ou Excel.</p></div>
                 <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button class="gc-btn-primary" type="submit"><x-nav-icon name="upload" />Transmettre le document</button></footer>
             </form>

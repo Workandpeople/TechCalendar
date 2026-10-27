@@ -57,6 +57,11 @@ class DossierPolicy
         return $this->viewAny($user);
     }
 
+    public function createFromPortal(User $user): bool
+    {
+        return app(ClientAccess::class)->createDossier($user);
+    }
+
     public function update(User $user, Dossier $dossier): bool
     {
         return ! $dossier->trashed() && $this->viewAny($user);

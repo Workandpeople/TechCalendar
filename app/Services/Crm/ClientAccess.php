@@ -16,25 +16,27 @@ class ClientAccess
     public function __construct(private readonly PortalCategoryAccess $categories) {}
 
     public const PERMISSIONS = [
+        'create_dossiers' => 'Créer des dossiers en prise de RDV',
         'documents' => 'Consulter les documents partagés',
         'comments' => 'Lire les commentaires partagés',
         'add_comments' => 'Ajouter des commentaires',
-        'upload_documents' => 'Ajouter des documents en non-conformité',
-        'upload_corrections' => 'Ajouter des justificatifs en non-conformité',
+        'upload_documents' => 'Ajouter des documents',
+        'upload_corrections' => 'Ajouter des justificatifs',
         'lots' => 'Consulter les lots attribués',
     ];
 
     public static function defaults(string $kind): array
     {
-        return ['documents' => true, 'comments' => $kind === 'client',
+        return ['create_dossiers' => $kind === 'client', 'documents' => true, 'comments' => $kind === 'client',
             'add_comments' => $kind === 'client', 'upload_documents' => false,
             'upload_corrections' => true, 'lots' => true];
     }
 
     public function permissions(User $user): array
     {
-        // Existing accounts gain the correction-only right, never general upload or read access.
-        return ['upload_corrections' => true, ...($user->portal_permissions ?? [])];
+        // Preserve explicit revocations; neither fallback grants document read access.
+        return ['create_dossiers' => $user->externalClient?->kind === 'client',
+            'upload_corrections' => true, ...($user->portal_permissions ?? [])];
     }
 
     public function active(User $user): bool
@@ -64,7 +66,13 @@ class ClientAccess
             return false;
         }
 
-        return $this->isNonCompliant($dossier);
+        return $user->externalClient->kind === 'client' || $this->isNonCompliant($dossier);
+    }
+
+    public function createDossier(User $user): bool
+    {
+        return $this->allows($user, 'create_dossiers') && $user->externalClient->kind === 'client'
+            && in_array('pending', $this->categoryKeys($user), true);
     }
 
     public function addComment(User $user, Dossier $dossier): bool

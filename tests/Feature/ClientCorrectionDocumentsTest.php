@@ -84,8 +84,16 @@ it('atomically attaches a correction with the explicit recontrol request for bot
     expect($this->operation->fresh()->legacy_status)->toBe('RECONTROLE')
         ->and($activity->changed_fields['response_document_id'])->toBe($document->id)
         ->and($document->author_id)->toBe($account->id);
-    $this->get(route('client.dossiers.show', $this->dossier))->assertOk()->assertDontSee('id="client-document-upload"', false);
-    $this->postJson($this->uploadUrl, ['name' => 'Trop tard', 'document' => UploadedFile::fake()->image('late.jpg')])->assertForbidden();
+    $response = $this->get(route('client.dossiers.show', $this->dossier))->assertOk();
+    $upload = ['name' => 'Complément', 'document' => UploadedFile::fake()->image('late.jpg')];
+    if ($kind === 'client') {
+        $response->assertSee('id="client-document-upload"', false);
+        $this->postJson($this->uploadUrl, $upload)->assertRedirect();
+        expect($this->operation->fresh()->legacy_status)->toBe('RECONTROLE');
+    } else {
+        $response->assertDontSee('id="client-document-upload"', false);
+        $this->postJson($this->uploadUrl, $upload)->assertForbidden();
+    }
     $this->get(route('client.documents.download', $document))->assertDownload();
 })->with(['client', 'delegataire']);
 
@@ -97,8 +105,8 @@ it('does not grant the correction right outside non conformity', function (strin
     expect($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
 })->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'RDV VISITE', 'CONTROLE RT', 'RECONTROLE', 'RAPPORT GENIUS', 'DOSSIERS FACTURER', 'DOSSIER ANNULE']);
 
-it('honors explicit correction revocation and requires document read access', function (array $permissions) {
-    $account = $this->accounts['delegataire'];
+it('honors explicit correction revocation and requires document read access', function (string $kind, array $permissions) {
+    $account = $this->accounts[$kind];
     $account->forceFill(['portal_permissions' => [...$account->portal_permissions, ...$permissions]])->save();
     $this->actingAs($account)->get(route('client.dossiers.show', $this->dossier))->assertOk()
         ->assertDontSee('id="client-document-upload"', false)->assertDontSee('Justificatif (1 Go maximum)');
@@ -107,7 +115,38 @@ it('honors explicit correction revocation and requires document read access', fu
     $this->postJson($this->responseUrl, ['version' => 1, ...$file])->assertForbidden();
     expect($this->operation->fresh()->legacy_status)->toBe('NON CONFORMITES')
         ->and($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
-})->with([[['upload_corrections' => false]], [['documents' => false]]]);
+})->with(['client', 'delegataire'])->with([[['upload_corrections' => false]], [['documents' => false]]]);
+
+it('lets an assigned client upload in every visible state without changing state billing or sharing', function (string $state) {
+    $this->operation->forceFill(['legacy_status' => $state])->save();
+    $account = $this->accounts['client'];
+    $this->actingAs($account)->get(route('client.dossiers.show', $this->dossier))->assertOk()
+        ->assertSee('id="client-document-upload"', false);
+    $this->postJson($this->uploadUrl, ['name' => 'Pièce complémentaire',
+        'document' => UploadedFile::fake()->image('piece.jpg'), 'delegataire_visible' => true,
+        'document_type' => 'report', 'control_outcome' => 'satisfactory'])->assertRedirect();
+    $document = $this->dossier->documents()->sole();
+    expect($this->operation->fresh()->legacy_status)->toBe($state)
+        ->and($this->dossier->fresh()->version)->toBe(1)
+        ->and($document->author_id)->toBe($account->id)->and($document->client_visible)->toBeTrue()
+        ->and($document->delegataire_visible)->toBeFalse()->and($document->document_type)->toBe('free')
+        ->and($document->control_outcome)->toBeNull()->and($this->dossier->billings()->count())->toBe(0);
+    $this->get(route('client.documents.download', $document))->assertDownload();
+    $this->actingAs($this->accounts['delegataire'])->get(route('client.documents.download', $document))->assertNotFound();
+})->with(['PRISE DE RDV', 'Problème rendez- vous', 'RDV ATTENTE VISITE', 'RDV VISITE', 'CONTROLE RT',
+    'NON CONFORMITES', 'RECONTROLE', 'RAPPORT GENIUS', 'DOSSIERS FACTURER', 'DOSSIER ANNULE']);
+
+it('still refuses client uploads to deleted or category-blocked dossiers', function (bool $deleted) {
+    if ($deleted) {
+        $this->dossier->delete();
+    } else {
+        $this->accounts['client']->externalClient->update(['portal_categories' => ['pending']]);
+    }
+    $this->actingAs($this->accounts['client'])->postJson($this->uploadUrl, [
+        'name' => 'Interdit', 'document' => UploadedFile::fake()->image('denied.jpg'),
+    ])->assertStatus($deleted ? 404 : 403);
+    expect($this->dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
+})->with([true, false]);
 
 it('refuses foreign dossiers and invalid uploads', function (string $kind) {
     $other = Dossier::create(['reference' => 'FOREIGN', 'address' => 'Rue', 'city' => 'Paris']);
