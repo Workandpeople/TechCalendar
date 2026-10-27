@@ -4,10 +4,11 @@
 @endphp
 <section class="overflow-hidden rounded-2xl border border-slate-200" aria-label="Résultats de recherche">
     <div class="gc-dossier-results-toolbar border-b border-slate-200 bg-white px-4 py-3">
-        <div><h2 class="font-semibold">{{ number_format($dossiers->total(), 0, ',', ' ') }} dossier(s) · {{ $categories[($filters['status'] ?? null) ?: 'all']['label'] ?? 'Facturés' }}</h2>
+        <div><h2 class="font-semibold">{{ number_format($dossiers->total(), 0, ',', ' ') }} dossier(s) · {{ \App\Services\Crm\DossierStatusCatalog::STATUSES[$filters['status'] ?? '']['label'] ?? 'Tous les dossiers actifs' }}</h2>
         <p class="mt-1 text-xs text-slate-500">{{ filled($filters['sort'] ?? null) ? 'Tri : '.\App\Services\Crm\DossierTable::COLUMNS[$filters['sort']].' · '.(($filters['direction'] ?? 'asc') === 'asc' ? 'croissant' : 'décroissant') : 'Tri par défaut : derniers dossiers ajoutés' }}</p></div>
         <div class="gc-dossier-results-options">
             <label><input type="checkbox" name="all_columns" form="dossier-filters" data-dossier-all-columns value="1" @checked($filters['all_columns'] ?? false)> Toutes les colonnes</label>
+            @include('crm.dossiers.page-size', ['paginator' => $dossiers])
         </div>
     </div>
     <div class="gc-dossier-table-scroll" tabindex="0" role="region" aria-label="Tableau des dossiers">

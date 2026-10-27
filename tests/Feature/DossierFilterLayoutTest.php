@@ -39,9 +39,12 @@ it('separates primary criteria complementary filters and table preferences witho
     }
     expect($xpath->query('//input[@name="all_columns" and @form="dossier-filters" and not(ancestor::form)]')->length)->toBe(1)
         ->and($xpath->query('//*[@data-dossier-page-size]')->length)->toBe(1)
-        ->and($xpath->query('//nav[contains(@class,"gc-pagination")]//*[@data-dossier-page-size]')->length)->toBe(1)
-        ->and($xpath->query('//section[@aria-label="Résultats de recherche"]//*[@data-dossier-page-size]')->length)->toBe(0)
-        ->and($xpath->query($form.'//input[@name="per_page" and @type="hidden"]')->length)->toBe(1)
+        ->and($xpath->query('//nav[contains(@class,"gc-pagination")]//*[@data-dossier-page-size]')->length)->toBe(0)
+        ->and($xpath->query('//div[contains(@class,"gc-dossier-results-options")]//input[@data-dossier-all-columns]')->length)->toBe(1)
+        ->and($xpath->query('//div[contains(@class,"gc-dossier-results-options")]//select[@data-dossier-page-size and @form="dossier-filters" and @name="per_page"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@name="per_page"]')->length)->toBe(1)
+        ->and($xpath->query('//select[@data-dossier-page-size]/option[@selected]')->item(0)->getAttribute('value'))->toBe('10')
+        ->and($xpath->query('//*[@data-dossier-skeleton and @hidden and @aria-hidden="true"]')->length)->toBe(1)
         ->and($xpath->query($form.'//noscript//button[@type="submit"]')->length)->toBe(1);
     Http::assertNothingSent();
 });

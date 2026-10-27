@@ -9,7 +9,6 @@
     <input type="hidden" name="status" value="{{ $filters['status'] ?? '' }}">
     <input type="hidden" name="sort" value="{{ $filters['sort'] ?? '' }}">
     <input type="hidden" name="direction" value="{{ $filters['direction'] ?? '' }}">
-    <input type="hidden" name="per_page" value="{{ $filters['per_page'] ?? 25 }}">
     <header class="gc-dossier-filter-heading">
         <div class="gc-dossier-filter-title"><span class="gc-dossier-filter-icon"><x-nav-icon name="search" /></span><div><h2 id="dossier-filters-heading">Rechercher et filtrer</h2><p>Les résultats se mettent à jour automatiquement.</p></div></div>
         <a href="{{ route('v2.dossiers.index') }}" data-dossier-clear class="gc-dossier-filter-reset">Tout effacer</a>

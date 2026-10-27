@@ -26,7 +26,7 @@ export function syncDossierFilters(form, url, browser) {
             input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
             continue;
         }
-        const value = url.searchParams.get(name) ?? (name === 'per_page' ? '25' : name === 'date_field' ? 'created' : '');
+        const value = url.searchParams.get(name) ?? (name === 'per_page' ? '10' : name === 'date_field' ? 'created' : '');
         if (input.type === 'checkbox') input.checked = value === '1';
         else if (input.value !== value) input.value = value;
     }
@@ -41,7 +41,7 @@ export function dossierListUrl(base, entries, changes = {}) {
     const setMultiple = (key, values) => {
         if (key === 'service_ids') url.searchParams.delete('service_id');
         url.searchParams.delete(`${key}[]`);
-        for (const value of new Set(values.map(value => String(value).trim()).filter(Boolean))) url.searchParams.append(`${key}[]`, value);
+        for (const value of [...new Set(values.map(value => String(value).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) url.searchParams.append(`${key}[]`, value);
     };
     for (const [name, value] of entries) {
         const key = arrayFilterName(name);
@@ -61,10 +61,36 @@ export function dossierListUrl(base, entries, changes = {}) {
     if (url.searchParams.get('status') !== 'visited') url.searchParams.delete('planning_user_ids[]');
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');
-    if (url.searchParams.get('per_page') === '25') url.searchParams.delete('per_page');
+    if (url.searchParams.get('per_page') === '10') url.searchParams.delete('per_page');
+    if (url.searchParams.get('date_field') === 'created') url.searchParams.delete('date_field');
     if (url.searchParams.get('all_columns') === '0') url.searchParams.delete('all_columns');
     url.searchParams.sort();
     return url;
+}
+
+export function dossierCategoryScope(url) {
+    const scope = dossierListUrl(url.href, url.searchParams);
+    for (const name of ['per_page', 'sort', 'direction', 'all_columns']) scope.searchParams.delete(name);
+    return scope.href;
+}
+
+export function selectDossierCategory(categories, url) {
+    const selected = url.searchParams.get('status') || 'all';
+    categories.querySelectorAll('[data-category]').forEach(link => {
+        link.href = dossierListUrl(url.href, url.searchParams, { status: link.dataset.category === 'all' ? null : link.dataset.category }).href;
+        if (link.dataset.category === selected) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+    });
+}
+
+export function setDossierLoadingState(results, skeleton, stage, pending) {
+    if (skeleton) {
+        if (pending && !results.hidden) skeleton.style.minHeight = `${Math.min(results.getBoundingClientRect().height, 1100)}px`;
+        skeleton.hidden = !pending;
+        results.hidden = pending;
+    }
+    results.setAttribute('aria-busy', String(pending));
+    stage?.setAttribute('aria-busy', String(pending));
 }
 
 // Cancel on input, not after the debounce: an older response must never overwrite newer filters.
@@ -84,7 +110,7 @@ export function createDossierLoader(browser, { pending, success, failure }) {
         lastRequest = { url, options };
         cancel();
         const current = generation;
-        pending();
+        pending(url, options);
         const run = async () => {
             const request = new AbortController();
             controller = request;
@@ -93,7 +119,8 @@ export function createDossierLoader(browser, { pending, success, failure }) {
             timeoutTimer = timeout;
             try {
                 const response = await browser.fetch(url.href, {
-                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest',
+                        ...(options.categories === false ? { 'X-Dossier-Categories': 'unchanged' } : {}) },
                     credentials: 'same-origin', cache: 'no-store', signal: request.signal,
                 });
                 if (!response.ok) {
@@ -102,7 +129,7 @@ export function createDossierLoader(browser, { pending, success, failure }) {
                     throw error;
                 }
                 const payload = await response.json();
-                if (typeof payload.categories !== 'string' || typeof payload.results !== 'string'
+                if ((typeof payload.categories !== 'string' && !(options.categories === false && payload.categories === null)) || typeof payload.results !== 'string'
                     || !Number.isInteger(payload.total) || payload.total < 0) throw new Error('Invalid listing response');
                 if (current === generation) success(payload, url, options);
             } catch (error) {
@@ -114,7 +141,7 @@ export function createDossierLoader(browser, { pending, success, failure }) {
         if (options.delay) debounceTimer = browser.setTimeout(run, options.delay);
         else void run();
     };
-    const refresh = fallback => load(lastRequest?.url || fallback, { ...lastRequest?.options, delay: 0, scroll: false });
+    const refresh = fallback => load(lastRequest?.url || fallback, { ...lastRequest?.options, delay: 0, scroll: false, categories: true });
     return { load, cancel, refresh };
 }
 
@@ -124,6 +151,8 @@ export function initDossierList(root = document, browser = window) {
     const form = listing.querySelector('[data-dossier-filters]');
     const categories = listing.querySelector('[data-dossier-categories]');
     const results = listing.querySelector('[data-dossier-results]');
+    const skeleton = listing.querySelector('[data-dossier-skeleton]');
+    const stage = listing.querySelector('[data-dossier-stage]');
     const feedback = listing.querySelector('[data-dossier-feedback]');
     const status = listing.querySelector('[data-dossier-status]');
     const spinner = listing.querySelector('[data-dossier-loader]');
@@ -131,6 +160,7 @@ export function initDossierList(root = document, browser = window) {
     const errorMessage = listing.querySelector('[data-dossier-error-message]');
     let retry;
     let composing = false;
+    let focusWasInResults = false;
     let renderedUrl = new URL(browser.location.href);
     const preferencesKey = listing.dataset?.preferencesKey;
     const storePreferences = url => {
@@ -150,21 +180,30 @@ export function initDossierList(root = document, browser = window) {
     const busy = (value) => {
         feedback.hidden = false;
         spinner.hidden = !value;
-        results.setAttribute('aria-busy', String(value));
+        setDossierLoadingState(results, skeleton, stage, value);
         categories.setAttribute('aria-busy', String(value));
     };
     const loader = createDossierLoader(browser, {
-        pending() {
+        pending(url, options) {
+            focusWasInResults ||= results.contains(root.activeElement);
+            root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-before-update'));
             filterPanel.sync();
+            selectDossierCategory(categories, url);
             busy(true);
             errorBox.hidden = true;
-            status.textContent = 'Mise à jour des dossiers…';
+            const label = categories.querySelector('[aria-current="page"] .gc-dossier-category-label')?.textContent.trim();
+            status.textContent = label ? `Chargement : ${label}…` : 'Chargement des dossiers…';
+            if (options.scroll) (skeleton || results).scrollIntoView({ behavior: 'instant', block: 'start' });
         },
         success(payload, url, options) {
-            const restoreFocus = results.contains(root.activeElement) || categories.contains(root.activeElement);
+            const restoreFocus = (focusWasInResults && root.activeElement === root.body)
+                || results.contains(root.activeElement) || categories.contains(root.activeElement);
             root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-before-update'));
             // These fragments come exclusively from the authenticated, same-origin Blade endpoint.
-            categories.innerHTML = payload.categories;
+            if (payload.categories !== null) categories.innerHTML = payload.categories;
+            selectDossierCategory(categories, url);
+            const activeCount = categories.querySelector('[aria-current="page"] .gc-dossier-category-count');
+            if (activeCount) activeCount.textContent = payload.total.toLocaleString('fr-FR');
             results.innerHTML = payload.results;
             filterPanel.sync();
             listing.querySelectorAll('[data-dossier-section]').forEach(link => {
@@ -183,6 +222,7 @@ export function initDossierList(root = document, browser = window) {
                 else browser.history.pushState(null, '', url.href);
             }
             busy(false);
+            focusWasInResults = false;
             status.textContent = `${payload.total.toLocaleString('fr-FR')} dossier(s) trouvé(s).`;
             if (restoreFocus) {
                 const target = options.focus ? listing.querySelector(options.focus) : results;
@@ -192,6 +232,9 @@ export function initDossierList(root = document, browser = window) {
         },
         failure(error, url, options) {
             busy(false);
+            selectDossierCategory(categories, renderedUrl);
+            if (focusWasInResults && root.activeElement === root.body) results.focus({ preventScroll: true });
+            focusWasInResults = false;
             status.textContent = '';
             errorMessage.textContent = error.status === 401
                 ? 'Ta session a expiré. Recharge la page pour te reconnecter.'
@@ -204,25 +247,27 @@ export function initDossierList(root = document, browser = window) {
             retry = () => loader.load(url, options);
         },
     });
-    const filterPanel = initDossierFilterPanel(form, categories, root, browser, () => loader.load(formUrl()));
+    const load = (url, options = {}) => loader.load(url, {
+        ...options, categories: dossierCategoryScope(url) !== dossierCategoryScope(renderedUrl),
+    });
+    const filterPanel = initDossierFilterPanel(form, categories, root, browser, () => load(formUrl()));
     initDossierAssignment(listing, root, browser, () => loader.refresh(renderedUrl));
     form.addEventListener('submit', event => {
         event.preventDefault();
-        loader.load(formUrl());
+        load(formUrl());
     });
     const search = form.elements.namedItem('q');
-    search.addEventListener('compositionstart', () => { composing = true; loader.cancel(); busy(false); status.textContent = ''; });
-    search.addEventListener('compositionend', () => { composing = false; loader.load(formUrl(), { delay: 300 }); });
-    search.addEventListener('input', () => { if (!composing) loader.load(formUrl(), { delay: 300 }); });
+    search.addEventListener('compositionstart', () => { composing = true; loader.cancel(); busy(false); focusWasInResults = false; selectDossierCategory(categories, renderedUrl); status.textContent = ''; });
+    search.addEventListener('compositionend', () => { composing = false; load(formUrl(), { delay: 300 }); });
+    search.addEventListener('input', () => { if (!composing) load(formUrl(), { delay: 300 }); });
     form.addEventListener('change', event => {
-        if (event.target !== search) loader.load(formUrl());
+        if (event.target !== search) load(formUrl());
     });
     listing.addEventListener('change', event => {
         if (event.target.matches('[data-dossier-page-size]')) {
-            form.elements.namedItem('per_page').value = event.target.value;
-            loader.load(formUrl(), { focus: '[data-dossier-page-size]' });
+            load(formUrl(), { focus: '[data-dossier-page-size]' });
         } else if (event.target.matches('[data-dossier-all-columns]')) {
-            loader.load(formUrl(), { focus: '[data-dossier-all-columns]' });
+            load(formUrl(), { focus: '[data-dossier-all-columns]' });
         }
     });
     listing.addEventListener('click', event => {
@@ -254,14 +299,14 @@ export function initDossierList(root = document, browser = window) {
         } else return;
         event.preventDefault();
         syncForm(url);
-        loader.load(url, options);
+        load(url, options);
     });
     listing.querySelector('[data-dossier-retry]').addEventListener('click', () => retry?.());
     const restoreLocation = () => {
         const url = new URL(browser.location.href);
         if (url.pathname !== new URL(form.action).pathname) return;
         syncForm(url, true);
-        loader.load(url, { history: false });
+        load(url, { history: false });
     };
     browser.addEventListener('popstate', restoreLocation);
     browser.addEventListener('pageshow', event => { if (event.persisted) restoreLocation(); });
@@ -271,7 +316,7 @@ export function initDossierList(root = document, browser = window) {
             const preferred = preferredDossierUrl(renderedUrl, readDossierPreferences(browser.localStorage, preferencesKey));
             if (preferred.href !== renderedUrl.href) {
                 syncForm(preferred);
-                loader.load(preferred, { history: 'replace' });
+                load(preferred, { history: 'replace' });
             } else storePreferences(renderedUrl);
         } catch { /* Keep the server-rendered page when storage is unavailable. */ }
     }

@@ -40,18 +40,19 @@ class DossierController extends Controller
     public function index(DossierListRequest $request, DossierRegistry $registry): View|JsonResponse
     {
         $filters = $request->validated();
+        $includeCategories = ! $request->expectsJson() || $request->header('X-Dossier-Categories') !== 'unchanged';
 
         $data = [
             'filters' => $filters,
             'dossiers' => $registry->search($request->user(), $filters),
-            'categories' => $registry->categories($request->user(), $filters),
+            'categories' => $includeCategories ? $registry->categories($request->user(), $filters) : [],
             'table' => app(DossierTable::class),
             'planningUsers' => app(DossierPlanningAssignment::class)->users(),
         ];
 
         if ($request->expectsJson()) {
             return response()->json([
-                'categories' => view('crm.dossiers.categories', $data)->render(),
+                'categories' => $includeCategories ? view('crm.dossiers.categories', $data)->render() : null,
                 'results' => view('crm.dossiers.results', $data)->render(),
                 'total' => $data['dossiers']->total(),
             ])->header('Cache-Control', 'private, no-store');

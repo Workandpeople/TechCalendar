@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList } from '../../resources/js/dossier-list.js';
+import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList, dossierCategoryScope, selectDossierCategory, setDossierLoadingState } from '../../resources/js/dossier-list.js';
 
 const base = 'https://example.test/v2/dossiers';
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -17,7 +17,7 @@ test('keeps the independent billing filter across categories sorting and paginat
 
 test('builds a canonical filtered URL and resets pagination without carrying unrelated parameters', () => {
     const url = dossierListUrl(`${base}?page=8#table`, new URLSearchParams({
-        q: ' Lyon ', per_page: '25', service_id: '3', status: '', all_columns: '0', page: '8', ignored: 'yes', direction: 'asc',
+        q: ' Lyon ', per_page: '10', service_id: '3', status: '', all_columns: '0', page: '8', ignored: 'yes', direction: 'asc',
     }));
     assert.equal(url.href, `${base}?q=Lyon&service_ids%5B%5D=3`);
     assert.equal(dossierListUrl(base, new URLSearchParams('service_id=3&q=Lyon')).href, url.href);
@@ -116,7 +116,7 @@ function fixture() {
         },
     };
     const loader = createDossierLoader(browser, {
-        pending: () => events.push(['pending']),
+        pending: (...args) => events.push(['pending', ...args]),
         success: (...args) => events.push(['success', ...args]),
         failure: (...args) => events.push(['failure', ...args]),
     });
@@ -206,4 +206,103 @@ test('refreshes the current page after assignment and discards stale reads witho
     ui.requests[1].resolve(response()); await settle();
     assert.equal(ui.events.at(-1)[0], 'success');
     assert.equal(ui.timers.size, 0);
+});
+
+test('reuses category counters only when their actual filtering scope is unchanged', () => {
+    const current = new URL(`${base}?status=visited&service_ids[]=3&planning_user_ids[]=12`);
+    const scope = dossierCategoryScope(current);
+    for (const changes of ['&page=3', '&sort=client&direction=desc', '&per_page=100', '&all_columns=1']) {
+        assert.equal(dossierCategoryScope(new URL(current.href + changes)), scope);
+    }
+    for (const changes of ['&q=Lyon', '&department=75', '&date_from=2026-10-01', '&billing=invoiced']) {
+        assert.notEqual(dossierCategoryScope(new URL(current.href + changes)), scope);
+    }
+    assert.notEqual(dossierCategoryScope(new URL(`${base}?status=pending&service_ids[]=3`)), scope);
+    assert.notEqual(dossierCategoryScope(new URL(`${base}?status=visited&service_ids[]=3&planning_user_ids[]=15`)), scope);
+});
+
+test('canonicalizes implicit defaults and reordered multiselections before deciding whether pagination is stale', () => {
+    const rendered = new URL(`${base}?status=visited&service_ids[0]=7&service_ids[1]=3&planning_user_ids[]=15&planning_user_ids[]=12`);
+    const form = dossierListUrl(base, new URLSearchParams('status=visited&date_field=created&per_page=10&service_ids[]=3&service_ids[]=7&planning_user_ids[]=12&planning_user_ids[]=15'));
+    assert.equal(form.href, dossierListUrl(base, rendered.searchParams).href);
+    assert.equal(dossierCategoryScope(form), dossierCategoryScope(rendered));
+    assert.equal(dossierCategoryScope(new URL(`${base}?status=pending&date_field=created`)), dossierCategoryScope(new URL(`${base}?status=pending`)));
+});
+
+test('requests just one page and permits omitted counters only when explicitly requested', async () => {
+    const ui = fixture();
+    const url = new URL(`${base}?status=visited&page=3&per_page=10`);
+    ui.loader.load(url, { categories: false });
+    assert.equal(ui.requests.length, 1);
+    assert.equal(ui.requests[0].url, url.href);
+    assert.equal(ui.requests[0].options.headers['X-Dossier-Categories'], 'unchanged');
+    ui.requests[0].resolve(response({ ...payload, categories: null })); await settle();
+    assert.equal(ui.events.at(-1)[0], 'success');
+    assert.equal(ui.requests.length, 1); // No prefetch of other pages.
+
+    ui.loader.load(new URL(`${base}?status=pending`));
+    assert.equal(ui.requests[1].options.headers['X-Dossier-Categories'], undefined);
+    ui.requests[1].resolve(response({ ...payload, categories: null })); await settle();
+    assert.equal(ui.events.at(-1)[0], 'failure');
+});
+
+test('refreshes counters after a planning write even if the previous request only changed page', async () => {
+    const ui = fixture();
+    ui.loader.load(new URL(`${base}?status=visited&page=2`), { categories: false });
+    ui.requests[0].resolve(response({ ...payload, categories: null })); await settle();
+    ui.loader.refresh(new URL(base));
+    assert.equal(ui.requests[1].options.headers['X-Dossier-Categories'], undefined);
+    ui.requests[1].resolve(response()); await settle();
+    assert.equal(ui.events.at(-1)[0], 'success');
+});
+
+test('selects the requested category immediately and can restore the last rendered category on failure', () => {
+    const links = ['all', 'pending', 'visited'].map(category => ({
+        dataset: { category }, current: undefined,
+        setAttribute(name, value) { this.current = value; }, removeAttribute() { this.current = undefined; },
+    }));
+    const categories = { querySelectorAll: () => links };
+    selectDossierCategory(categories, new URL(`${base}?status=visited&page=3&per_page=50&planning_user_ids[]=12`));
+    assert.deepEqual(links.map(link => link.current), [undefined, undefined, 'page']);
+    assert.equal(new URL(links[1].href).searchParams.get('per_page'), '50');
+    assert.equal(new URL(links[1].href).searchParams.has('page'), false);
+    assert.equal(new URL(links[1].href).searchParams.has('planning_user_ids[]'), false);
+    assert.deepEqual(new URL(links[2].href).searchParams.getAll('planning_user_ids[]'), ['12']);
+    selectDossierCategory(categories, new URL(`${base}?status=pending`));
+    assert.deepEqual(links.map(link => link.current), [undefined, 'page', undefined]);
+    selectDossierCategory(categories, new URL(base));
+    assert.deepEqual(links.map(link => link.current), ['page', undefined, undefined]);
+});
+
+test('shows an accessible skeleton immediately without discarding the previous results', () => {
+    const attributes = new Map();
+    const results = { hidden: false, innerHTML: 'previous page', getBoundingClientRect: () => ({ height: 720 }),
+        setAttribute: (name, value) => attributes.set(`results:${name}`, value) };
+    const stage = { setAttribute: (name, value) => attributes.set(`stage:${name}`, value) };
+    const skeleton = { hidden: true, style: {} };
+    setDossierLoadingState(results, skeleton, stage, true);
+    assert.equal(skeleton.hidden, false);
+    assert.equal(results.hidden, true);
+    assert.equal(skeleton.style.minHeight, '720px');
+    assert.equal(attributes.get('stage:aria-busy'), 'true');
+    setDossierLoadingState(results, skeleton, stage, true);
+    assert.equal(skeleton.style.minHeight, '720px');
+    setDossierLoadingState(results, skeleton, stage, false);
+    assert.equal(skeleton.hidden, true);
+    assert.equal(results.hidden, false);
+    assert.equal(results.innerHTML, 'previous page');
+    assert.equal(attributes.get('stage:aria-busy'), 'false');
+});
+
+test('passes the requested category to the immediate pending state and ignores an older category response', async () => {
+    const ui = fixture();
+    const first = new URL(`${base}?status=visited`), latest = new URL(`${base}?status=report`);
+    ui.loader.load(first);
+    assert.equal(ui.events[0][1].href, first.href);
+    ui.loader.load(latest);
+    assert.equal(ui.events.at(-1)[1].href, latest.href);
+    ui.requests[0].resolve(response()); await settle();
+    assert.equal(ui.events.some(event => event[0] === 'success'), false);
+    ui.requests[1].resolve(response()); await settle();
+    assert.equal(ui.events.at(-1)[2].href, latest.href);
 });

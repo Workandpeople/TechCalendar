@@ -107,7 +107,9 @@ class ConnectionDiagnostics
         $authenticated = app(SmtpConnectionProbe::class)->check($configuration);
         $message = $authenticated ? 'Connexion SMTP et authentification réussies.' : 'Connexion SMTP réussie ; authentification non confirmée (serveur sans AUTH ou identifiants absents).';
 
-        return [$authenticated ? 'ok' : 'warning', $message.' Aucun email envoyé ; la livraison en boîte de réception n’est pas testée.'];
+        $delivery = config('mail.delivery_enabled') ? '' : ' La livraison réelle est désactivée sur ce serveur.';
+
+        return [$authenticated ? 'ok' : 'warning', $message.$delivery.' Aucun email envoyé ; la livraison en boîte de réception n’est pas testée.'];
     }
 
     private function mapbox(): array

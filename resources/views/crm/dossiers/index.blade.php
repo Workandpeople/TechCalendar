@@ -23,8 +23,11 @@
                 <button type="button" data-dossier-retry class="mt-2 font-semibold underline">Réessayer</button>
             </div>
         </div>
-        <div data-dossier-results class="space-y-6" aria-busy="false" tabindex="-1">
-            @include('crm.dossiers.results')
+        <div data-dossier-stage aria-busy="false">
+            @include('crm.dossiers.skeleton')
+            <div data-dossier-results class="space-y-6" aria-busy="false" tabindex="-1">
+                @include('crm.dossiers.results')
+            </div>
         </div>
         <div data-dossier-map-config data-mapbox-token="{{ $mapboxToken }}" hidden></div>
         @if ($mapboxToken)

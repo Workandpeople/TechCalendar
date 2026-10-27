@@ -2131,3 +2131,31 @@ appointment_forced : auteur, date de confirmation, creneau, technicien, IDs des
 RDV/absences presents. Si l'historique echoue, le placement entier est annule.
 Aucune migration, suppression, modification des identifiants ou activation des
 envois n'est necessaire. SMS et autres modes de livraison restent inchanges.
+
+### Pagination legere et changement de categorie immediat
+
+Dans Les dossiers, le selecteur Dossiers par page est place a cote de Toutes les
+colonnes, dans la barre du tableau. Il propose 10, 25, 50 et 100 ; 10 est le
+nouveau defaut. Une preference deja enregistree reste respectee. Le selecteur est
+associe au formulaire GET meme sans JavaScript, sans champ cache per_page duplique.
+
+Le serveur conserve une pagination SQL bornee et ne charge que les dossiers de
+la page demandee avec leurs relations. Aucun prechargement des autres pages ni
+stockage de dossiers dans le navigateur n'est ajoute. Lorsqu'une navigation AJAX
+ne change que la page, le nombre de lignes, le tri ou les colonnes, le navigateur
+peut demander X-Dossier-Categories: unchanged : le serveur omet alors le calcul
+et le HTML des compteurs, sans changer les autorisations ni le filtrage SQL.
+Un changement de filtre/categorie et une modification de suivi planning
+rafraichissent les compteurs. Les liens de categories gardent les criteres courants,
+y compris lorsqu'on les ouvre dans un nouvel onglet.
+
+La categorie selectionnee et l'indicateur de chargement reagissent au clic, avant
+la reponse. Un squelette accessible remplace temporairement le tableau ; il respecte
+la preference de reduction des animations. Les reponses depassees sont ignorees.
+Sur erreur reseau, l'ancien tableau et sa categorie sont restaures, avec un bouton
+Reessayer. Les preferences et l'historique ne sont valides qu'apres une reponse reussie.
+
+Le diagnostic SMTP confirme la connexion et l'authentification sans commande
+MAIL FROM, RCPT TO ou DATA. Son resultat distingue desormais cette connexion du
+verrou de livraison reelle : SMTP peut etre valide alors que MAIL_DELIVERY_ENABLED
+reste false. Cette release ne l'active pas et n'envoie aucun message de test.

@@ -158,7 +158,8 @@ it('checks SMTP with delivery disabled without sending or mutating the mailer', 
     $before = config('mail');
     $this->mock(SmtpConnectionProbe::class)->shouldReceive('check')->once()
         ->with(Mockery::on(fn ($config) => $config['host'] === 'smtp.example.test'))->andReturn(true);
-    $this->postJson(route('admin.settings.diagnostics'), ['check' => 'mail'])->assertOk()->assertJsonPath('status', 'ok');
+    $this->postJson(route('admin.settings.diagnostics'), ['check' => 'mail'])->assertOk()->assertJsonPath('status', 'ok')
+        ->assertJsonPath('message', fn ($message) => str_contains($message, 'La livraison réelle est désactivée sur ce serveur.'));
     expect(config('mail'))->toBe($before);
     Mail::assertNothingSent();
     Mail::assertNothingQueued();

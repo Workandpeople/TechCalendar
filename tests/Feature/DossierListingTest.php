@@ -148,7 +148,7 @@ it('keeps the number of list queries bounded as the page fills up', function () 
     DB::flushQueryLog();
     DB::enableQueryLog();
     $rows = $registry->search($this->manager, []);
-    expect($rows->count())->toBe(25)->and(count(DB::getQueryLog()))->toBe($firstCount);
+    expect($rows->count())->toBe(10)->and(count(DB::getQueryLog()))->toBe($firstCount);
     DB::disableQueryLog();
 });
 

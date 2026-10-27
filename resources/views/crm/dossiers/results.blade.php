@@ -1,4 +1,6 @@
 @include('crm.dossiers.table')
+@if ($dossiers->hasPages())
 <div class="gc-dossier-pagination">
-    {{ $dossiers->links('pagination::tailwind', ['pageSizeControl' => 'crm.dossiers.page-size']) }}
+    {{ $dossiers->links('pagination::tailwind') }}
 </div>
+@endif

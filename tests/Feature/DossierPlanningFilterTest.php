@@ -81,7 +81,8 @@ it('preserves the full selection in pagination and exports only the matching dos
     $this->get(route('v2.dossiers.index', [...$this->filters, 'page' => 2]))->assertOk()->assertViewHas('dossiers', function ($rows) {
         parse_str(parse_url($rows->url(1), PHP_URL_QUERY), $query);
 
-        return $rows->total() === 28 && $rows->count() === 3 && $query['planning_user_ids'] === array_map(strval(...), $this->filters['planning_user_ids']);
+        return $rows->total() === 28 && $rows->count() === 10 && $rows->perPage() === 10
+            && $query['planning_user_ids'] === array_map(strval(...), $this->filters['planning_user_ids']);
     });
     $response = $this->get(route('v2.dossiers.export', $this->filters))->assertOk();
     $path = tempnam(sys_get_temp_dir(), 'planning-filter-');

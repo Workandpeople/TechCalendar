@@ -38,7 +38,7 @@ class DossierRegistry
             'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
                 ->orderByDesc('created_at')->orderByDesc('id')->limit(3),
         ])->withCount(['appointments', 'comments'])
-            ->paginate($filters['per_page'] ?? 25)->withQueryString();
+            ->paginate($filters['per_page'] ?? 10)->withQueryString();
     }
 
     public function matchingQuery(User $actor, array $filters): Builder
