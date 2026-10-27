@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\MobileAccessToken;
 use App\Models\MobilePushToken;
 use App\Models\User;
+use App\Services\PasswordResetLinkSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password as PasswordBroker;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
@@ -60,7 +60,7 @@ class MobileAuthController extends Controller
         ]);
     }
 
-    public function sendPasswordResetLink(Request $request): JsonResponse
+    public function sendPasswordResetLink(Request $request, PasswordResetLinkSender $resetLinks): JsonResponse
     {
         $payload = $request->validate([
             'email' => ['required', 'email'],
@@ -77,7 +77,9 @@ class MobileAuthController extends Controller
             ->first();
 
         if ($technician) {
-            PasswordBroker::sendResetLink(['email' => $technician->email]);
+            if ($resetLinks->send($technician->email) === PasswordResetLinkSender::DELIVERY_FAILED) {
+                return response()->json(['message' => __(PasswordResetLinkSender::DELIVERY_FAILED)], 503);
+            }
         }
 
         return response()->json([

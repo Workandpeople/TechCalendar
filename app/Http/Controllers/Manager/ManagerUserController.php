@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Rules\AvailableUserEmail;
+use App\Services\PasswordResetLinkSender;
 use App\Services\UserAccountConflict;
 use App\Services\UserBillingPermission;
 use App\Services\UserNameNormalizer;
@@ -219,7 +220,7 @@ class ManagerUserController extends Controller
         return redirect()->route('manager.users', ['status' => 'trashed'])->with('status', 'Utilisateur supprimé définitivement.');
     }
 
-    public function sendResetLink(Request $request, int $user): RedirectResponse
+    public function sendResetLink(Request $request, int $user, PasswordResetLinkSender $resetLinks): RedirectResponse
     {
         abort_unless($this->canManageUsers($request), 403);
 
@@ -229,7 +230,7 @@ class ManagerUserController extends Controller
             return back()->withErrors(['user' => 'Impossible d envoyér un lien de reset à un compte supprimé.']);
         }
 
-        $status = Password::sendResetLink(['email' => $target->email]);
+        $status = $resetLinks->send($target->email);
 
         if ($status !== Password::RESET_LINK_SENT) {
             return back()->withErrors(['user' => __($status)]);

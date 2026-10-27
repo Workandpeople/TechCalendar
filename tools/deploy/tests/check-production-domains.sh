@@ -108,4 +108,27 @@ test ! -e "$STATE/PRODUCTION-DOMAINS.json"
 bash "$SCRIPT" --activate --reload-shared-apache > /tmp/domain-open-again.log 2>&1
 sha256sum --status -c /tmp/domain-certificates.sha256
 sha256sum --status -c /tmp/runtime-original.sha256
+# A subsequent release must preserve both domains and make updated translations readable.
+git_app() { runuser -u cofrac2-deploy -- git -C "$APP" "$@"; }
+BASE=$(git_app rev-parse HEAD)
+printf '\n// Domain release fixture.\n' >> "$APP/lang/fr/passwords.php"
+git_app add lang/fr/passwords.php
+git_app -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-domain-language-release >/dev/null
+REV=$(git_app rev-parse HEAD)
+BUNDLE=$(mktemp -d /tmp/domain-language-release-XXXXXXXX)
+cp -a "$APP/public/build" "$BUNDLE/build"
+find "$BUNDLE" -type d -exec chmod 0700 {} +
+find "$BUNDLE" -type f -exec chmod 0600 {} +
+SHA=$(php8.4 -r '
+    require "/var/www/cofrac2/tools/deploy/lib/ProductionAssetUpdate.php";
+    echo Cofrac2\Deploy\ProductionAssetUpdate::seal($argv[1],$argv[2],$argv[3]);
+' "$BUNDLE" "$REV" "$BASE")
+bash "$APP/tools/deploy/configure-production-runtime.sh" --maintenance --reload-shared-apache > /tmp/domain-release-close.log 2>&1
+bash "$APP/tools/deploy/update-production-release.sh" --apply "$BUNDLE" "$SHA" > /tmp/domain-release-update.log 2>&1
+bash "$APP/tools/deploy/configure-production-runtime.sh" --open --reload-shared-apache > /tmp/domain-release-open.log 2>&1
+runuser -u cofrac2-app -- test -r "$APP/lang/fr/passwords.php"
+for host in cofrac.geniuscontrole.com cofrac2.geniuscontrole.com; do
+    curl --noproxy '*' -fsS --resolve "$host:443:127.0.0.1" "https://$host/login" >/dev/null
+done
+sha256sum --status -c /tmp/runtime-original.sha256
 printf 'OK : deux domaines, meme V2/DB, TLS, ACME, WebSocket, modes mail/SMS, reouverture et retours arriere verifies.\n'

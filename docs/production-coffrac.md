@@ -2279,3 +2279,22 @@ Le retour sur l'onglet actualise la liste en lecture seule, sans geocoder tout l
 backlog et sans appel aux connecteurs, en conservant recherche et pagination.
 Les erreurs reseau conservent la liste existante ; les reponses obsoletes sont
 ignorees. Aucun traitement de reprise SQL ou migration n'est necessaire.
+
+### Echec SMTP des liens de reinitialisation
+
+Les formulaires public, admin/gerant et l'API mobile utilisent le meme service
+`PasswordResetLinkSender`. Un refus SMTP (identifiants, droit d'expedition ou
+indisponibilite) ne remonte plus en erreur 500 : retour avec erreur formulaire,
+ou HTTP 503 mobile, sans annoncer a tort un lien envoye. Seuls les echecs de
+transport sont interceptes ; les erreurs applicatives restent diagnostiquables.
+Les logs de ce service contiennent une categorie et un code SMTP controle,
+jamais le message distant, le destinataire, le token ou les secrets.
+
+Le broker Laravel conserve ses autorisations, ses jetons et son delai entre
+demandes, y compris apres echec : aucune suppression de token ni reprise d'envoi.
+Ce traitement ne corrige pas des identifiants SMTP invalides. Le mot de passe du
+compte SMTP doit etre saisi uniquement dans les parametres, puis verifie avec
+le diagnostic du transport par defaut (EHLO/STARTTLS/AUTH, sans email).
+Un succes de ce diagnostic ne prouve pas les droits Send As ni la delivrabilite.
+Les modes mail/SMS et les parametres d'authentification ne sont pas modifies
+par cette release. Les SMS restent simules/desactives.
