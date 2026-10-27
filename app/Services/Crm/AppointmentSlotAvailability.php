@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm;
 
+use App\Exceptions\AppointmentPlacementConflict;
 use App\Models\Appointment;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -43,18 +44,27 @@ class AppointmentSlotAvailability
     /** Called after locking the technician, inside the booking/edit transaction. */
     public function assertAvailable(User $technician, CarbonInterface $start, CarbonInterface $end, array $location, ?int $ignoreId = null, bool $forced = false): array
     {
-        $overlaps = $this->overlaps($technician->id, $start, $end, $ignoreId);
-        $absences = $technician->absences()->where('starts_at', '<', $end)->where('ends_at', '>', $start)->get(['id']);
-        if (! $forced) {
-            if ($absences->isNotEmpty()) {
-                throw ValidationException::withMessages(['starts_at' => 'Le technicien est absent sur ce créneau.']);
-            }
-            if ($overlaps->contains(fn (Appointment $appointment): bool => ! $this->sameSite($location, $appointment))) {
-                throw ValidationException::withMessages(['starts_at' => 'Ce technicien a déjà un RDV sur ce créneau à une autre adresse (distance non vérifiée ou supérieure ou égale à 1 km).']);
-            }
+        $checks = $this->inspect($technician, $start, $end, $location, $ignoreId);
+        if (! $forced && $checks['conflicts'] !== []) {
+            throw AppointmentPlacementConflict::fromConflicts($checks['conflicts']);
         }
 
-        return ['overlapping_appointment_ids' => $overlaps->modelKeys(), 'absence_ids' => $absences->modelKeys()];
+        return $checks;
+    }
+
+    public function inspect(User $technician, CarbonInterface $start, CarbonInterface $end, array $location, ?int $ignoreId = null): array
+    {
+        $overlaps = $this->overlaps($technician->id, $start, $end, $ignoreId);
+        $absences = $technician->absences()->where('starts_at', '<', $end)->where('ends_at', '>', $start)->get(['id']);
+        $conflicts = [];
+        if ($absences->isNotEmpty()) {
+            $conflicts[] = ['field' => 'starts_at', 'type' => 'absence', 'message' => 'Le technicien est absent sur ce créneau.'];
+        }
+        if ($overlaps->contains(fn (Appointment $appointment): bool => ! $this->sameSite($location, $appointment))) {
+            $conflicts[] = ['field' => 'starts_at', 'type' => 'overlap', 'message' => 'Ce technicien a déjà un RDV sur ce créneau à une autre adresse (distance non vérifiée ou supérieure ou égale à 1 km).'];
+        }
+
+        return ['overlapping_appointment_ids' => $overlaps->modelKeys(), 'absence_ids' => $absences->modelKeys(), 'conflicts' => $conflicts];
     }
 
     public function recordForcedPlacement(User $actor, Appointment $appointment, array $checks): void

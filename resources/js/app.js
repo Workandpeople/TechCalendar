@@ -22,10 +22,13 @@ import { createBookingTravelTooltip } from './booking-travel-tooltip';
 import { initAdminSettings } from './admin-settings';
 import { confirmForcedPlacement } from './booking-force-placement';
 import { initBetaFeedback } from './beta-feedback';
+import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentAssignments } from './appointment-placement';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
 window.TechCalendarBookingForce = { confirm: confirmForcedPlacement };
+window.TechCalendarAppointments = { request: requestAppointmentPlacement, confirm: confirmAppointmentAction };
+initAppointmentAssignments();
 initCommentMarkup();
 initCommentExcerpts();
 

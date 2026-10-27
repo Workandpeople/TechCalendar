@@ -300,6 +300,7 @@ class PlannerTrackingController extends Controller
     private function appointmentDetailsQuery()
     {
         return Appointment::query()
+            ->where('status', '!=', Appointment::STATUS_CANCELLED)
             ->when(config('crm.v2_enabled'), fn ($query) => $query->withTrashed()
                 ->where(fn ($query) => $query->whereNull('deleted_at')->orWhere('external_source', 'coffrac_archive')))
             ->with([
@@ -307,7 +308,7 @@ class PlannerTrackingController extends Controller
                 'technician' => fn ($query) => $query->withTrashed()->select('id', 'first_name', 'last_name', 'email', 'address', 'department_code', 'latitude', 'longitude', 'role'),
                 'technician.departments:code',
                 'creator:id,first_name,last_name',
-            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,inspected_on'));
+            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,inspected_on,control_submitted_at,control_validated_at'));
     }
 
     /**
@@ -369,6 +370,11 @@ class PlannerTrackingController extends Controller
                     'updated_at' => $appointment->updated_at?->toIso8601String(),
                     'is_historical' => $appointment->trashed(),
                     'can_edit' => ! $appointment->trashed(),
+                    'can_cancel' => config('crm.v2_enabled') && ! $appointment->trashed()
+                        && $appointment->starts_at?->isFuture() && $appointment->dossier_operation_id !== null
+                        && $appointment->dossierOperation?->inspected_on === null
+                        && $appointment->dossierOperation?->control_submitted_at === null
+                        && $appointment->dossierOperation?->control_validated_at === null,
                     'post_visit_locked' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation?->inspected_on !== null,
                     'customer_phone' => $appointment->customer_phone,
                     'customer_email' => $appointmentMailData->defaultRecipientEmail($appointment),
@@ -431,6 +437,8 @@ class PlannerTrackingController extends Controller
                 'technician_id' => ['sometimes', 'integer', Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 2)->where('admin', false)->whereNull('deleted_at'))],
                 'service_id' => ['sometimes', 'integer', Rule::exists('services', 'id')],
                 'updated_at' => ['nullable', 'date'],
+                'force_placement' => ['sometimes', 'boolean'],
+                'force_confirmed' => [Rule::excludeIf(! $request->boolean('force_placement')), 'required', 'accepted'],
             ]);
             $updated = app(AppointmentEditor::class)->update($appointment, $payload, $request->user());
             $appointmentMails->detailsUpdated($updated);
@@ -521,6 +529,28 @@ class PlannerTrackingController extends Controller
         AppointmentTechnicianMailService $appointmentMails,
     ): JsonResponse {
         abort_unless($this->canAccess($request), 403);
+
+        if (config('crm.v2_enabled')) {
+            $data = $request->validate([
+                'technician_id' => ['required', 'integer', Rule::exists('users', 'id')->where(fn ($query) => $query
+                    ->where('role', 2)->where('admin', false)->whereNull('external_client_id')->whereNull('deleted_at'))],
+                'updated_at' => ['present', 'nullable', 'date'],
+                'force_placement' => ['sometimes', 'boolean'],
+                'force_confirmed' => [Rule::excludeIf(! $request->boolean('force_placement')), 'required', 'accepted'],
+            ]);
+            $current = Appointment::query()->findOrFail($appointment);
+            $updated = app(AppointmentEditor::class)->update($current->id, [
+                ...$data, 'address' => $current->address, 'starts_at' => $current->starts_at->toDateTimeString(),
+                'duration_minutes' => $current->duration_minutes,
+            ], $request->user());
+            $appointmentMails->reassigned($updated, (int) $current->technician_id);
+
+            return response()->json(['message' => 'Rendez-vous réaffecté.', 'technician' => [
+                'id' => $updated->technician_id, 'name' => $updated->technician->full_name_with_departments,
+                'address' => $updated->technician->address, 'latitude' => $updated->technician->latitude,
+                'longitude' => $updated->technician->longitude,
+            ], 'updated_at' => $updated->updated_at?->toIso8601String()]);
+        }
 
         $appointment = Appointment::query()
             ->with('service:id,type,name')

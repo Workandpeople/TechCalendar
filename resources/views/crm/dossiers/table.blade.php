@@ -92,7 +92,12 @@
                                         @empty<li><x-dossier-status /></li>@endforelse</ul>
                                         @break
                                     @case('technician')
-                                        <span class="gc-dossier-cell-lines" title="{{ $appointment?->technician?->full_name_with_departments }}">{{ $appointment?->technician?->full_name_with_departments ?: '—' }}</span>
+                                        @if (($filters['status'] ?? null) === 'awaiting_visit' && $appointment && ! $appointment->trashed()
+                                            && ! $dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)
+                                            @include('crm.dossiers.technician-assignment', ['auto' => true])
+                                        @else
+                                            <span class="gc-dossier-cell-lines" title="{{ $appointment?->technician?->full_name_with_departments }}">{{ $appointment?->technician?->full_name_with_departments ?: '—' }}</span>
+                                        @endif
                                         @break
                                     @case('planning_user')
                                         @include('crm.dossiers.planning-assignment')

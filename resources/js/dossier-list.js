@@ -252,6 +252,7 @@ export function initDossierList(root = document, browser = window) {
     });
     const filterPanel = initDossierFilterPanel(form, categories, root, browser, () => load(formUrl()));
     initDossierAssignment(listing, root, browser, () => loader.refresh(renderedUrl));
+    root.addEventListener('techcalendar:appointment-assigned', () => loader.refresh(renderedUrl));
     form.addEventListener('submit', event => {
         event.preventDefault();
         load(formUrl());

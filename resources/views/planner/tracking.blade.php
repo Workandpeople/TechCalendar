@@ -163,10 +163,14 @@
                         <a id="tracking-detail-post-visit" class="mt-2 ml-3 hidden text-sm font-semibold underline">Documents de visite et rapports</a>
                     @endcan
                 </div>
-                @if(config('crm.v2_enabled'))
-                    <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier</button>
-                @endif
-                <button type="button" id="tracking-detail-close" class="gc-link">Fermer</button>
+                <div class="gc-appointment-modal-actions">
+                    @if(config('crm.v2_enabled'))
+                        <button type="button" id="tracking-delete-appointment" class="gc-btn-danger" hidden>Supprimer le RDV</button>
+                        <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier</button>
+                    @endif
+                    <button type="button" id="tracking-detail-close" class="gc-btn-secondary">Fermer</button>
+                    <p id="tracking-delete-status" role="status" class="text-xs text-rose-700"></p>
+                </div>
             </div>
 
             <div class="gc-appointment-modal-body">
@@ -508,6 +512,7 @@
         const trackingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const trackingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const trackingDetailsUrlTemplate = @json(route('planner.tracking.appointments.details', ['appointment' => '__APPOINTMENT__']));
+        const trackingDeleteUrlTemplate = @json(route('planner.tracking.appointments.destroy', ['appointment' => '__APPOINTMENT__']));
         const trackingReassignUrlTemplate = @json(route('planner.tracking.appointments.technician', ['appointment' => '__APPOINTMENT__']));
         const trackingCoffracRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
         const trackingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
@@ -1947,6 +1952,13 @@
             }
 
             const editButton = document.getElementById('tracking-open-edit');
+            const deleteButton = document.getElementById('tracking-delete-appointment');
+            if (deleteButton) {
+                deleteButton.hidden = props.can_cancel !== true || !event.start || new Date(event.start) <= new Date();
+                deleteButton.disabled = false;
+            }
+            const deleteStatus = document.getElementById('tracking-delete-status');
+            if (deleteStatus) deleteStatus.textContent = '';
             const postVisitLink = document.getElementById('tracking-detail-post-visit');
             if (postVisitLink) {
                 postVisitLink.classList.toggle('hidden', !props.dossier_url);
@@ -2831,6 +2843,33 @@
             }
         });
 
+        document.getElementById('tracking-delete-appointment')?.addEventListener('click', async () => {
+            const current = trackingCurrentDetailEvent;
+            if (!current?.extendedProps?.can_cancel || !current.start || new Date(current.start) <= new Date()) return;
+            const approved = await window.TechCalendarAppointments.confirm({
+                title: 'Supprimer le rendez-vous ?', label: 'Supprimer et remettre en prise de RDV',
+                messages: ['Le créneau sera libéré et la prestation repassera en prise de RDV.', 'Les documents, la facturation et l’historique seront conservés.'],
+            });
+            if (!approved) return;
+            const button = document.getElementById('tracking-delete-appointment');
+            const feedback = document.getElementById('tracking-delete-status');
+            button.disabled = true;
+            try {
+                const response = await fetch(trackingDeleteUrlTemplate.replace('__APPOINTMENT__', current.id), {
+                    method: 'DELETE', credentials: 'same-origin',
+                    headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': trackingCsrfToken },
+                    body: JSON.stringify({ confirmed: true, updated_at: current.extendedProps.updated_at || null }),
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(Object.values(payload.errors || {}).flat()[0] || payload.message || 'Suppression impossible.');
+                trackingSearchResultEvents.delete(String(current.id));
+                closeTrackingAppointmentModal();
+                refetchCalendar();
+                if (!document.getElementById('tracking-list-panel')?.classList.contains('hidden')) runTrackingAppointmentSearch(trackingSearchPage);
+            } catch (error) { feedback.textContent = error.message || 'Suppression non confirmée. Actualise avant de réessayer.'; }
+            finally { button.disabled = false; }
+        });
+
         trackingDetailsForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
 
@@ -2849,31 +2888,14 @@
             setTrackingDetailsStatus('');
 
             try {
-                const response = await fetch(trackingDetailsUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': trackingCsrfToken,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        starts_at: startsAt,
-                        duration_minutes: Number(durationMinutes),
-                        address,
-                        latitude: latitude === '' ? null : Number(latitude),
-    longitude: longitude === '' ? null : Number(longitude),
-    ...Object.fromEntries(['customer_first_name','customer_last_name','customer_phone','technician_id','service_id','comment','updated_at']
-        .map((key) => [key, document.getElementById(`tracking_edit_${key}`)])
-        .filter(([, field]) => field).map(([key, field]) => [key, field.value])),
-}),
-
+                const payload = await window.TechCalendarAppointments.request(trackingDetailsUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    starts_at: startsAt, duration_minutes: Number(durationMinutes), address,
+                    latitude: latitude === '' ? null : Number(latitude), longitude: longitude === '' ? null : Number(longitude),
+                    ...Object.fromEntries(['customer_first_name', 'customer_last_name', 'customer_phone', 'technician_id', 'service_id', 'comment', 'updated_at']
+                        .map(key => [key, document.getElementById(`tracking_edit_${key}`)])
+                        .filter(([, field]) => field).map(([key, field]) => [key, field.value])),
                 });
-                const payload = await response.json();
-
-                if (!response.ok) {
-                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
-                    throw new Error(firstError || 'Impossible de modifier le RDV.');
-                }
+                if (!payload) return;
 
                 const updatedAppointment = payload.appointment || {};
                 const detailEvent = trackingDetailEventById(appointmentId);
@@ -2975,21 +2997,10 @@ setTrackingDetailsStatus('Rendez-vous mis à jour.');
             setTrackingReassignStatus('');
 
             try {
-                const response = await fetch(trackingReassignUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({ technician_id: Number(technicianId) }),
+                const payload = await window.TechCalendarAppointments.request(trackingReassignUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
+                    technician_id: Number(technicianId), updated_at: trackingCurrentDetailEvent?.extendedProps?.updated_at || null,
                 });
-                const payload = await response.json();
-
-                if (!response.ok) {
-                    const firstError = payload?.errors ? Object.values(payload.errors)[0][0] : payload?.message;
-                    throw new Error(firstError || 'Impossible de réaffecter le RDV.');
-                }
+                if (!payload) return;
 
                 const technician = payload.technician || {};
                 const targetCheckbox = technicianCheckboxes.find((checkbox) => String(checkbox.value) === String(technician.id));
@@ -3005,6 +3016,7 @@ setTrackingDetailsStatus('Rendez-vous mis à jour.');
                 if (detailEvent) {
                     trackingSetEventTitle(detailEvent, `${technician.name || 'Technicien'} | ${detailEvent.extendedProps?.customer_name || ''}`);
                     trackingSetEventExtendedProp(detailEvent, 'technician_id', technician.id);
+                    if (payload.updated_at) trackingSetEventExtendedProp(detailEvent, 'updated_at', payload.updated_at);
                     trackingSetEventExtendedProp(detailEvent, 'technician_name', technician.name);
                     trackingSetEventExtendedProp(detailEvent, 'technician_address', technician.address);
                     trackingSetEventExtendedProp(detailEvent, 'technician_latitude', technician.latitude);

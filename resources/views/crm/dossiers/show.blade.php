@@ -3,7 +3,7 @@
         $planningRoute = (auth()->user()->admin || auth()->user()->role === 0) ? 'manager.appointments' : 'planner.tracking';
         $documentCount = $documents->total() + $legacyDocuments->total() + $lotDocuments->total();
     @endphp
-    <div class="gc-dossier-detail space-y-5">
+    <div class="gc-dossier-detail space-y-5" data-dossier-id="{{ $dossier->id }}">
         <a href="{{ route('v2.dossiers.index') }}" class="gc-link text-sm">← Tous les dossiers</a>
         <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Détail du dossier" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
             @if ($smsUnavailable === null)<a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>@endif

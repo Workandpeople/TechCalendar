@@ -758,6 +758,25 @@ html.sidebar-hidden .app-sidebar {
             linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 250, 252, .96));
     }
 
+    .gc-appointment-modal-header > div:first-child { flex: 1; min-width: 0; }
+    .gc-appointment-modal-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; max-width: 100%; }
+    .gc-appointment-modal-actions > p { flex-basis: 100%; max-width: 24rem; }
+    .gc-appointment-modal-actions > p:empty { display: none; }
+    .gc-appointment-modal-actions > button { white-space: nowrap; }
+    .gc-appointment-modal-actions > button[hidden] { display: none; }
+    .gc-placement-dialog { width: min(36rem, calc(100vw - 2rem)); }
+    .gc-placement-dialog > form > header, .gc-placement-reasons, .gc-placement-dialog > form > footer { padding: 1.25rem; }
+    .gc-placement-dialog h2 { font-size: 1.15rem; font-weight: 700; }
+    .gc-placement-reasons ul { list-style: disc; padding-left: 1.25rem; }
+    .gc-placement-reasons li + li { margin-top: .5rem; }
+    .gc-placement-accept { display: flex; align-items: flex-start; gap: .6rem; margin-top: 1rem; font-size: .9rem; }
+    .gc-placement-accept[hidden] { display: none; }
+    .gc-technician-assignment .gc-input { min-width: 9rem; font-size: .82rem; }
+    @media (max-width: 640px) {
+        .gc-appointment-modal-header { flex-direction: column; }
+        .gc-appointment-modal-actions { width: 100%; }
+    }
+
     .gc-appointment-modal-body {
         min-height: 0;
         flex: 1;

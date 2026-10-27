@@ -13,6 +13,7 @@ use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerMailTemplateController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\PlannerAppointmentCancellationController;
 use App\Http\Controllers\Planner\PlannerAppointmentMailController;
 use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
@@ -189,6 +190,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('planner.tracking.appointments.coffrac.refresh');
     Route::patch('/planner/tracking/appointments/{appointment}/details', [PlannerTrackingController::class, 'updateDetails'])
         ->name('planner.tracking.appointments.details');
+    Route::delete('/planner/tracking/appointments/{appointment}', [PlannerAppointmentCancellationController::class, 'destroy'])
+        ->name('planner.tracking.appointments.destroy');
     Route::patch('/planner/tracking/appointments/{appointment}/technician', [PlannerTrackingController::class, 'reassignTechnician'])
         ->name('planner.tracking.appointments.technician');
 

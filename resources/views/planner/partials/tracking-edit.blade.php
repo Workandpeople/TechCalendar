@@ -23,7 +23,7 @@
                                 <option value="{{ $technician->id }}" data-service-ids="{{ $technician->services->pluck('id')->implode(',') }}">{{ $technician->full_name_with_departments }}</option>
                             @endforeach
                         </select>
-                        <p class="mt-1 text-xs text-slate-500">Les techniciens non habilités à cette prestation sont désactivés.</p>
+                        <p class="mt-1 text-xs text-slate-500">Les contraintes de planning sont vérifiées à l’enregistrement.</p>
                     </div>
                     <div><label class="gc-label" for="tracking_detail_starts_at">Date et heure</label><input id="tracking_detail_starts_at" type="datetime-local" class="gc-input" required></div>
                     <div><label class="gc-label" for="tracking_detail_duration_minutes">Durée (minutes)</label><input id="tracking_detail_duration_minutes" type="number" min="5" max="1440" class="gc-input" required></div>

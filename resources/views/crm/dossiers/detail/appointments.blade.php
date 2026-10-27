@@ -9,7 +9,7 @@
                         <p class="text-xs text-slate-500">RDV #{{ $appointment->id }} · Prestation #{{ $appointment->dossier_operation_id }}</p>
                         <p class="mt-1 font-semibold">{{ $appointment->starts_at?->format('d/m/Y H:i') }} à {{ $appointment->ends_at?->format('H:i') }}</p>
                         <p class="mt-1 text-sm" data-operation-label="{{ $appointment->dossier_operation_id }}">{{ $appointment->service->name }}</p>
-                        <p class="mt-1 text-sm text-slate-600">{{ $appointment->technician?->full_name ?: 'Technicien indisponible' }}</p>
+                        <p class="mt-1 text-sm text-slate-600" data-appointment-technician="{{ $appointment->id }}">{{ $appointment->technician?->full_name ?: 'Technicien indisponible' }}</p>
                         @if ($appointment->trashed())
                             <span class="mt-2 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">Retiré du planning</span>
                         @elseif ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)
@@ -30,22 +30,12 @@
                             @if (! $dossier->operations->firstWhere('id', $appointment->dossier_operation_id)?->inspected_on)
                                 <details class="gc-technician-editor">
                                     <summary class="gc-btn-warning"><x-nav-icon name="users" />Changer le technicien</summary>
-                                    <form method="POST" data-appointment-editor="{{ $appointment->id }}" data-operation="{{ $appointment->dossier_operation_id }}" action="{{ route('v2.dossiers.appointments.technician', [$dossier, $appointment->id]) }}" class="mt-3 space-y-3">
-                                        @csrf @method('PATCH')
-                                        <input type="hidden" name="version" value="{{ $dossier->version }}">
-                                        <input type="hidden" name="updated_at" value="{{ $appointment->updated_at?->toIso8601String() }}">
-                                        <label class="gc-label" for="appointment-tech-{{ $appointment->id }}">Technicien habilité pour cette prestation</label>
-                                        <select class="gc-input" id="appointment-tech-{{ $appointment->id }}" name="technician_id" required>
-                                            @foreach ($technicians as $technician)
-                                                @if ($technician->id === $appointment->technician_id || $technician->services->contains('id', $appointment->service_id))<option value="{{ $technician->id }}" @selected($technician->id === $appointment->technician_id)>{{ $technician->full_name }}</option>@endif
-                                            @endforeach
-                                        </select>
-                                        <p class="text-xs text-slate-500">Le créneau reste identique. Les absences, chevauchements et habilitations sont vérifiés à l’enregistrement.</p>
-                                        <button type="submit" class="gc-btn-warning">Enregistrer le technicien</button>
-                                    </form>
+                                    @include('crm.dossiers.technician-assignment', ['auto' => false])
+                                    <p class="text-xs text-slate-500">Le créneau reste identique. Les conflits sont expliqués avant toute confirmation de placement forcé.</p>
+
                                 </details>
                             @endif
-                            <a class="gc-btn-secondary" href="{{ route($planningRoute, ['appointment_id' => $appointment->id, 'technician_id' => $appointment->technician_id, 'date' => $appointment->starts_at?->toDateString()]) }}">Voir / modifier dans le planning</a>
+                            <a class="gc-btn-secondary" data-appointment-planning="{{ $appointment->id }}" href="{{ route($planningRoute, ['appointment_id' => $appointment->id, 'technician_id' => $appointment->technician_id, 'date' => $appointment->starts_at?->toDateString()]) }}">Voir / modifier dans le planning</a>
                         @endunless
                     </div>
                 </li>

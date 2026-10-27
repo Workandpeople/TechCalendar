@@ -36,6 +36,8 @@ class Appointment extends Model
 
     public const STATUS_PROBLEM = 'problem';
 
+    public const STATUS_CANCELLED = 'cancelled';
+
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);

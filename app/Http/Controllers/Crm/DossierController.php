@@ -48,6 +48,9 @@ class DossierController extends Controller
             'categories' => $includeCategories ? $registry->categories($request->user(), $filters) : [],
             'table' => app(DossierTable::class),
             'planningUsers' => app(DossierPlanningAssignment::class)->users(),
+            'technicians' => ($filters['status'] ?? null) === 'awaiting_visit'
+                ? User::query()->internal()->where('role', 2)->where('admin', false)->with('services:id')->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
+                : collect(),
         ];
 
         if ($request->expectsJson()) {

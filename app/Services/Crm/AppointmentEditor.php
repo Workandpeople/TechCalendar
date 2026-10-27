@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm;
 
+use App\Exceptions\AppointmentPlacementConflict;
 use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\Service;
@@ -16,7 +17,13 @@ class AppointmentEditor
 {
     public function update(int $id, array $data, User $actor): Appointment
     {
-        return DB::transaction(function () use ($id, $data, $actor) {
+        Gate::forUser($actor)->authorize('viewAny', Dossier::class);
+        $forced = (bool) ($data['force_placement'] ?? false);
+        if ($forced && ! in_array($data['force_confirmed'] ?? null, [true, 1, '1', 'yes', 'on', 'true'], true)) {
+            throw ValidationException::withMessages(['force_confirmed' => 'Confirme explicitement le placement forcé.']);
+        }
+
+        return DB::transaction(function () use ($id, $data, $actor, $forced) {
             $appointment = Appointment::query()->lockForUpdate()->findOrFail($id);
             if (array_key_exists('updated_at', $data) && ($appointment->updated_at === null
                 ? $data['updated_at'] !== null
@@ -33,10 +40,11 @@ class AppointmentEditor
                     throw ValidationException::withMessages(['service_id' => 'La prestation possède un historique de visites ou de contrôle. Elle ne peut pas être remplacée depuis ce rendez-vous.']);
                 }
             }
-            $technician = User::query()->where('role', 2)->where('admin', false)->lockForUpdate()->findOrFail($technicianId);
+            $technician = User::query()->internal()->where('role', 2)->where('admin', false)->lockForUpdate()->findOrFail($technicianId);
+            $conflicts = [];
             if (($technicianId !== $appointment->technician_id || $serviceId !== $appointment->service_id)
                 && ! $technician->services()->whereKey($serviceId)->exists()) {
-                throw ValidationException::withMessages(['technician_id' => 'Ce technicien ne couvre pas cette prestation.']);
+                $conflicts[] = ['field' => 'technician_id', 'type' => 'qualification', 'message' => 'Ce technicien ne couvre pas cette prestation.'];
             }
             $service = Service::query()->findOrFail($serviceId);
             if ($serviceId !== $appointment->service_id && $service->retired_at !== null) {
@@ -53,10 +61,19 @@ class AppointmentEditor
             }
             $start = Carbon::parse($data['starts_at']);
             $end = $start->copy()->addMinutes($data['duration_minutes']);
-            app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end, [
+            if ($appointment->dossierOperation && ($technicianId !== $appointment->technician_id
+                || $serviceId !== $appointment->service_id || ! $start->equalTo($appointment->starts_at)
+                || ! $end->equalTo($appointment->ends_at) || $data['address'] !== $appointment->address)) {
+                PostVisitWorkflow::assertPlanningMutable($appointment->dossierOperation);
+            }
+            $checks = app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end, [
                 'address' => $data['address'], 'latitude' => array_key_exists('latitude', $data) ? $data['latitude'] : $appointment->latitude,
                 'longitude' => array_key_exists('longitude', $data) ? $data['longitude'] : $appointment->longitude,
             ], $id);
+            $conflicts = [...$conflicts, ...$checks['conflicts']];
+            if ($conflicts !== [] && ! $forced) {
+                throw AppointmentPlacementConflict::fromConflicts($conflicts, $appointment->dossier_operation_id !== null);
+            }
             $oldTechnician = $appointment->technician_id;
             $oldDate = $appointment->starts_at->toDateString();
             foreach (['customer_first_name', 'customer_last_name', 'customer_phone'] as $field) {
@@ -64,7 +81,7 @@ class AppointmentEditor
                     $data[$field] = (string) ($data[$field] ?? '');
                 }
             }
-            $appointment->fill(collect($data)->except('updated_at')->all());
+            $appointment->fill(collect($data)->except(['updated_at', 'force_placement', 'force_confirmed'])->all());
             $commentChanged = $appointment->isDirty('comment');
             $appointment->forceFill(['technician_id' => $technicianId, 'service_id' => $serviceId, 'starts_at' => $start, 'ends_at' => $end]);
 
@@ -84,6 +101,10 @@ class AppointmentEditor
                 }
             }
             $appointment->save();
+            if ($forced) {
+                app(AppointmentSlotAvailability::class)->recordForcedPlacement($actor, $appointment,
+                    [...$checks, 'conflicts' => $conflicts, 'previous_technician_id' => $oldTechnician]);
+            }
             TechnicianDailyRouteMetric::query()->whereIn('technician_id', [$oldTechnician, $technicianId])
                 ->where(fn ($query) => $query->whereDate('service_date', $oldDate)->orWhereDate('service_date', $start->toDateString()))->delete();
 

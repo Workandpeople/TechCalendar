@@ -2420,3 +2420,27 @@ les anciens droits et ne modifier que users.portal_permissions. Elle ne doit
 ni reactiver/restaurer des comptes, ni toucher aux mots de passe, aux categories,
 aux affectations ou aux services. Ne plus rejouer l'ancien script d'ouverture
 generale apres avoir applique ce profil.
+
+### Retrait de rendez-vous et changement de technicien
+
+Le retrait d'un RDV futur demande une confirmation et verifie la date de debut
+sous verrou : un rendez-vous commence ou passe ne peut pas etre retire. Le
+RDV est supprime logiquement, la prestation repasse en prise de RDV et les
+lignes de lot non traitees sont liberees pour etre placees de nouveau. Les
+preuves de controle, lots traites/archives et autres RDV futurs de la meme fiche
+bloquent le retrait. Documents, facturation et historique sont conserves ;
+aucun appel CRM ni envoi de message n'est declenche par ce retrait.
+
+Le changement de technicien est accessible depuis la categorie RDV en attente
+de visite et la fiche dossier. Les listes ne proposent que des techniciens
+internes non supprimes. Les absences, chevauchements distants et habilitations
+manquantes sont retournes sous forme de conflits, avec confirmation explicite
+avant un deuxieme envoi force. Une adresse identique ou distante de moins de
+1 km conserve l'exception de chevauchement deja definie.
+
+Les controles bloquants (droits internes, version du dossier, date de
+modification du RDV, compte desactive et controle engage) ne sont jamais
+contournes. Un placement force est trace dans l'historique interne avec acteur,
+technicien precedent, rendez-vous en chevauchement et absences constatees.
+La liste des dossiers est rechargee en AJAX apres reaffectation, sans changer
+ses filtres ou sa page de pagination. Aucun nouvel import ou migration requis.

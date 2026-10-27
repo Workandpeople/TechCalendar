@@ -443,7 +443,7 @@ it('supports imported appointments without a modification date but still rejects
     $replacement->services()->attach($this->service);
     $url = route('v2.dossiers.appointments.technician', [$this->dossier, $this->appointment->id]);
     $this->get(route('v2.dossiers.show', $this->dossier))->assertOk();
-    $this->patchJson($url, ['version' => 1, 'technician_id' => $replacement->id, 'updated_at' => null])->assertRedirect();
+    $this->patchJson($url, ['version' => 1, 'technician_id' => $replacement->id, 'updated_at' => null])->assertOk();
     expect($this->appointment->fresh()->technician_id)->toBe($replacement->id);
     $this->patchJson($url, ['version' => $this->dossier->fresh()->version, 'technician_id' => $this->tech->id, 'updated_at' => null])
         ->assertUnprocessable()->assertJsonValidationErrors('appointment');
