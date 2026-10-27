@@ -37,7 +37,7 @@ beforeEach(function () {
     };
 });
 
-it('counts native pending operations and untreated lot rows without calls or double counting legacy copies', function () {
+it('counts distinct native pending dossiers including replacements without adding lot or legacy copies', function () {
     ($this->operation)();
     ($this->operation)();
     foreach (['RDV ATTENTE VISITE', 'DOSSIERS FACTURER', 'PROBLÈME RENDEZ-VOUS', 'DOSSIER ANNULE'] as $status) {
@@ -47,11 +47,12 @@ it('counts native pending operations and untreated lot rows without calls or dou
     LotAppointment::create(['lot_id' => $this->lot->id, 'customer_name' => 'Dossier du lot', 'status' => LotAppointment::STATUS_PENDING]);
     ExternalAppointmentRequest::create(['source' => 'coffrac', 'external_reference' => 'legacy-copy', 'status' => ExternalAppointmentRequest::STATUS_PENDING]);
 
-    expect(app(SidebarNotifications::class)->forUser($this->planner)['pending'])->toBe(3);
+    expect(app(SidebarNotifications::class)->forUser($this->planner)['pending'])->toBe(1);
     Http::assertNothingSent();
 });
 
 it('counts only lot rows still eligible for processing', function (array $attributes, bool $archived, int $expected) {
+    config(['crm.v2_enabled' => false]);
     if ($archived) {
         $this->lot->update(['status' => Lot::STATUS_ARCHIVED]);
     }
@@ -75,6 +76,7 @@ it('counts only lot rows still eligible for processing', function (array $attrib
 ]);
 
 it('excludes linked lot rows even if their old status still says pending', function () {
+    config(['crm.v2_enabled' => false]);
     $appointment = ($this->appointment)(($this->operation)());
     LotAppointment::create(['lot_id' => $this->lot->id, 'customer_name' => 'Dossier du lot', 'status' => LotAppointment::STATUS_PENDING, 'appointment_id' => $appointment->id]);
     expect(app(SidebarNotifications::class)->forUser($this->planner)['pending'])->toBe(0);
@@ -85,7 +87,7 @@ it('updates the count on the next page load without a stale cache', function () 
     $notifications = app(SidebarNotifications::class);
     expect($notifications->forUser($this->planner)['pending'])->toBe(1);
     $appointment = ($this->appointment)($operation);
-    expect($notifications->forUser($this->planner)['pending'])->toBe(0);
+    expect($notifications->forUser($this->planner)['pending'])->toBe(1);
     $appointment->delete();
     expect($notifications->forUser($this->planner)['pending'])->toBe(1);
     $operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();

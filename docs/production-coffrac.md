@@ -2258,3 +2258,24 @@ ou si la configuration a change, le retour cible est refuse et doit etre prepare
 Les tests jetables `check-production-domains.sh` couvrent les deux acces HTTPS,
 WebSocket, ACME, les refus de fichiers prives, la conservation des modes d'envoi,
 la maintenance/reouverture commune et la restauration apres echec du cache.
+
+### Comptage commun des dossiers en prise de RDV (27 octobre 2026)
+
+La V2 utilise le statut de la prestation comme source de verite, sans cache ni
+recopie depuis un connecteur. Le badge « Prendre un RDV » compte les dossiers
+distincts ayant une prestation en « PRISE DE RDV », comme la categorie de dossiers
+sans filtre supplementaire. Les lignes de lots non encore creees en dossier sont
+traitees dans leur onglet dedie et ne gonflent pas ce badge.
+
+La liste principale de prise de RDV conserve une ligne par prestation. Elle
+affiche explicitement les deux unites (dossiers et prestations). Une prestation
+remise en prise de RDV avec un rendez-vous planifie, futur ou passe, reste visible
+dans cette meme liste avec « Replacer le RDV ». L'action reutilise le rendez-vous
+existant : l'API de nouvelle reservation refuse toujours un doublon. Les anciens
+rendez-vous et le changement de statut manuel restent conserves sans mutation
+automatique ni suppression de preuve.
+
+Le retour sur l'onglet actualise la liste en lecture seule, sans geocoder tout le
+backlog et sans appel aux connecteurs, en conservant recherche et pagination.
+Les erreurs reseau conservent la liste existante ; les reponses obsoletes sont
+ignorees. Aucun traitement de reprise SQL ou migration n'est necessaire.

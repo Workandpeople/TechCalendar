@@ -92,7 +92,7 @@
                     'items' => [
                         ['route' => 'planner.dashboard', 'label' => $user->admin || $user->role === 0 ? 'Vue planning' : 'Tableau de bord', 'icon' => 'dashboard'],
                         ...($user->role === 0 && ! $user->admin ? [] : $dossierItems),
-                        ['route' => 'planner.book', 'active' => 'planner.book*', 'label' => 'Prendre un RDV', 'icon' => 'book', 'badge' => $notifications['pending'], 'badge_label' => 'RDV à placer'],
+                        ['route' => 'planner.book', 'active' => 'planner.book*', 'label' => 'Prendre un RDV', 'icon' => 'book', 'badge' => $notifications['pending'], 'badge_label' => config('crm.v2_enabled') ? 'dossier(s) en prise de RDV' : 'RDV à placer'],
                         ['route' => 'planner.tracking', 'active' => ['planner.tracking*', 'planner.appointments.modify'], 'label' => 'Les RDV', 'icon' => 'tracking'],
                     ],
                 ];

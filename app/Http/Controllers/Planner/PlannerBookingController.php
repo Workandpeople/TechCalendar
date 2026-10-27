@@ -94,8 +94,6 @@ class PlannerBookingController extends Controller
 
         return view('planner.book', [
             'crmAppointments' => $coffracPending['appointments'],
-            'replacementRequests' => config('crm.v2_enabled') && ! $isReplacementMode
-                ? app(DossierBooking::class)->replacements($request->user()) : null,
             'coffracApiStatus' => $coffracPending['status'],
             'externalAppointmentSources' => $externalAppointmentSources,
             'bookingConnectorsEnabled' => $bookingConnectorsEnabled,

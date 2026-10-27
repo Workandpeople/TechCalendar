@@ -27,9 +27,11 @@ class SidebarNotifications
 
     private function pendingAppointmentsCount(): int
     {
-        $requests = config('crm.v2_enabled')
-            ? DossierOperation::query()->awaitingBooking()->count()
-            : app(CoffracAppointmentService::class)->pendingCountLocally();
+        if (config('crm.v2_enabled')) {
+            // Same unit and status as the dossiers category, including appointments to replace.
+            return DossierOperation::query()->pendingStatus()->distinct()->count('dossier_id');
+        }
+        $requests = app(CoffracAppointmentService::class)->pendingCountLocally();
 
         $lotRequests = LotAppointment::query()
             ->whereNull('appointment_id')

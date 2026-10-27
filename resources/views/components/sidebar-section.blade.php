@@ -15,8 +15,8 @@
         <button type="button" class="sidebar-section-toggle {{ $isSectionActive ? 'sidebar-section-current' : '' }}"
             data-sidebar-section-toggle="{{ $section['id'] }}" aria-expanded="true" aria-controls="{{ $panelId }}">
             <span>{{ $section['label'] }}</span>
-            @if ($notificationCount > 0)
-                <span class="sidebar-notification sidebar-section-notification"
+            @if ($notificationCount > 0 || ($section['id'] === 'planner' && config('crm.v2_enabled')))
+                <span class="sidebar-notification sidebar-section-notification {{ $notificationCount > 0 ? '' : 'hidden' }}" @if ($section['id'] === 'planner' && config('crm.v2_enabled')) data-booking-pending-count @endif
                     aria-label="{{ $notificationCount }} notification(s) dans {{ $section['label'] }}"
                     title="{{ $notificationCount }} notification(s) dans {{ $section['label'] }}">{{ $notificationCount }}</span>
             @endif
@@ -35,8 +35,8 @@
                     <a href="{{ route($item['route']) }}" class="sidebar-link {{ $isActive ? 'sidebar-link-active' : '' }}" data-workspace-tone="{{ \App\Support\WorkspaceUi::forRoute($item['route'])['tone'] }}" title="{{ $item['label'] }}" @if ($isActive) aria-current="page" @endif>
                         <span class="gc-sidebar-icon shrink-0" aria-hidden="true"><x-nav-icon :name="$item['icon']" /></span>
                         <span class="sidebar-link-label">{{ $item['label'] }}</span>
-                        @if (($item['badge'] ?? 0) > 0)
-                            <span class="sidebar-notification" aria-label="{{ $item['badge'] }} {{ $item['badge_label'] }}" title="{{ $item['badge'] }} {{ $item['badge_label'] }}">{{ $item['badge'] }}</span>
+                        @if (($item['badge'] ?? 0) > 0 || ($item['route'] === 'planner.book' && config('crm.v2_enabled')))
+                            <span class="sidebar-notification {{ ($item['badge'] ?? 0) > 0 ? '' : 'hidden' }}" @if ($item['route'] === 'planner.book' && config('crm.v2_enabled')) data-booking-pending-count @endif aria-label="{{ $item['badge'] }} {{ $item['badge_label'] }}" title="{{ $item['badge'] }} {{ $item['badge_label'] }}">{{ $item['badge'] }}</span>
                         @endif
                     </a>
                 </li>

@@ -403,7 +403,10 @@
                             <span class="text-lg font-semibold" style="color:var(--gc-text);">depuis des lots</span>
                         </label>
                     </div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Hors lots : dossiers au statut « Prise de RDV », avec une ligne par prestation à planifier.' }}</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Dossiers en « Prise de RDV » : une ligne par prestation, à placer ou à replacer.' }}</p>
+                    @if (! $bookingConnectorsEnabled)
+                        <p id="booking-pending-summary" class="mt-1 text-sm font-semibold" role="status">{{ $crmAppointments->pluck('dossier_id')->unique()->count() }} dossier(s) · {{ $crmAppointments->count() }} prestation(s)</p>
+                    @endif
                 </div>
             </div>
 
@@ -411,10 +414,6 @@
                 <label class="gc-label" for="booking_crm_search">Recherche client</label>
                 <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prénom du client" autocomplete="off" />
             </div>
-
-            @if (($replacementRequests ?? null)?->total())
-                @include('planner.partials.booking-replacements')
-            @endif
 
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
                 Aucun RDV ne correspond à cette recherche.
@@ -469,7 +468,10 @@
                                 @if ($bookingConnectorsEnabled && (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null)))
                                     <span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>
                                 @endif
-                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                                @if ($appointment['replace_appointment_id'] ?? null)
+                                    <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" title="RDV existant : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer le RDV</a>
+                                @endif
+                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="{{ ($appointment['replace_appointment_id'] ?? null) ? 'Voir le dossier' : 'Voir le détail du RDV' }}" aria-label="{{ ($appointment['replace_appointment_id'] ?? null) ? 'Voir le dossier' : 'Voir le détail du RDV' }}">
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                         <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                         <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1990,6 +1992,10 @@
             const gpsBadge = hasCoordinates || !bookingConnectorsEnabled
                 ? ''
                 : '<span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>';
+            const replacementLink = appointment.replace_appointment_id
+                ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" title="RDV existant : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer le RDV</a>`
+                : '';
+            const detailLabel = appointment.replace_appointment_id ? 'Voir le dossier' : 'Voir le détail du RDV';
 
             return `
                 <div
@@ -2012,7 +2018,8 @@
                         <span class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
                         ${serviceBadge}
                         ${gpsBadge}
-                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                        ${replacementLink}
+                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="${detailLabel}" aria-label="${detailLabel}">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2113,6 +2120,42 @@
             bookingCrmPage = preserveUi ? previousPage : 1;
             bindBookingCrmCards();
             filterBookingCrmCards();
+            updateNativeBookingCount();
+        };
+
+        const updateNativeBookingCount = () => {
+            if (bookingConnectorsEnabled || bookingIsReplacementMode) return;
+
+            const count = new Set(bookingCrmAppointments.map(row => row.dossier_id)).size;
+            const summary = document.getElementById('booking-pending-summary');
+            if (summary) summary.textContent = `${count} dossier(s) · ${bookingCrmAppointments.length} prestation(s)`;
+            document.querySelectorAll('[data-booking-pending-count]').forEach(badge => {
+                badge.textContent = String(count);
+                badge.classList.toggle('hidden', count === 0);
+                badge.setAttribute('aria-label', `${count} dossier(s) en prise de RDV`);
+                badge.title = `${count} dossier(s) en prise de RDV`;
+            });
+        };
+
+        let nativeBookingQueueRefresh = null;
+        const refreshNativeBookingQueue = async () => {
+            if (bookingConnectorsEnabled || bookingIsReplacementMode || document.visibilityState === 'hidden') return;
+
+            nativeBookingQueueRefresh?.abort();
+            const controller = new AbortController();
+            nativeBookingQueueRefresh = controller;
+            try {
+                const response = await fetch(bookingCrmIndexUrl, {
+                    headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal,
+                });
+                if (!response.ok) return;
+                const payload = await response.json();
+                if (nativeBookingQueueRefresh === controller && Array.isArray(payload.appointments)) {
+                    renderBookingCrmAppointments(payload.appointments, null, { preserveUi: true });
+                }
+            } catch {
+                // Keep the current list and selection when the connection is unavailable.
+            }
         };
 
         const refreshBookingCrmAppointments = async () => {
@@ -3250,6 +3293,11 @@
 
         const openCrmAppointmentDetail = (crmId) => {
             const appointment = crmAppointmentById(crmId);
+
+            if (appointment?.replace_appointment_id && appointment.dossier_summary?.dossier_url) {
+                window.location.assign(appointment.dossier_summary.dossier_url);
+                return;
+            }
 
             if (!appointment || !bookingCrmDetailModal) {
                 showFeedback('Impossible de retrouver ce RDV dans les données locales.', 'error');
@@ -5757,7 +5805,15 @@
             }
         };
 
-        const analyzeCrmAppointment = async (crmId) => analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Coffrac' : 'Dossier à placer');
+        const analyzeCrmAppointment = async (crmId) => {
+            const appointment = crmAppointmentById(crmId);
+            if (appointment?.replace_appointment_id) {
+                window.location.assign(`${bookingReplacementPageUrl}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}`);
+                return false;
+            }
+
+            return analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Coffrac' : 'Dossier à placer');
+        };
         const lotProcessingSelectFor = (lotAppointmentId) => document.querySelector(`.lot-processing-mode-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
 
@@ -5945,7 +6001,7 @@
                 });
                 card.addEventListener('mouseleave', hideCrmAppointmentTooltip);
                 card.addEventListener('click', (event) => {
-                    if (event.target.closest('.crm-appointment-detail-button')) return;
+                    if (event.target.closest('a, button')) return;
 
                     hideCrmAppointmentTooltip();
 
@@ -5958,6 +6014,7 @@
                     analyzeCrmAppointment(card.dataset.crmId);
                 });
                 card.addEventListener('keydown', (event) => {
+                    if (event.target !== card) return;
                     if (!['Enter', ' '].includes(event.key)) return;
 
                     event.preventDefault();
@@ -5986,6 +6043,11 @@
         };
 
         bindBookingCrmCards();
+        updateNativeBookingCount();
+        window.addEventListener('focus', refreshNativeBookingQueue);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') refreshNativeBookingQueue();
+        });
 
         const bookingLotFilterStoragePrefix = 'techcalendar.planner.book.lot_filters.';
         const bookingLotDefaultStatusFilter = 'pending';

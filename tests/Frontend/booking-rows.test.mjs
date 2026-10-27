@@ -12,6 +12,7 @@ function render(appointment, connectors = false) {
     return runInNewContext(`${escape}\n${renderer}\nrenderBookingCrmCard(appointment);`, {
         appointment,
         bookingConnectorsEnabled: connectors,
+        bookingReplacementPageUrl: '/planner/appointments/modify',
         formatShortDateTime: () => '14/10/2026 12:00',
     });
 }
@@ -39,4 +40,14 @@ test('missing services and legacy GPS warnings keep compact accessible labels', 
     assert.match(html, /title="Service non renseigné"/);
     assert.match(html, /truncate[^>]*title="GPS à recalculer"/);
     assert.doesNotMatch(render({ id: 'dossier-1' }), /GPS à recalculer/);
+});
+
+test('scheduled pending requests use a replacement link in the same row instead of a hidden second list', () => {
+    const html = render({ id: 'dossier-1', dossier_id: 1, replace_appointment_id: 42, existing_appointment_at: '2026-10-27T10:00:00Z' });
+    assert.match(html, /href="\/planner\/appointments\/modify\?replace_appointment_id=42"/);
+    assert.match(html, /Replacer le RDV/);
+    assert.match(html, /title="Voir le dossier"/);
+    assert.doesNotMatch(source, /booking-replacements/);
+    assert.match(source, /event\.target\.closest\('a, button'\)/);
+    assert.match(source, /if \(event\.target !== card\) return/);
 });

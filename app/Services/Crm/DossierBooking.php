@@ -7,7 +7,6 @@ use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
 use App\Services\MapboxAddressGeocoder;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -17,18 +16,6 @@ use Illuminate\Validation\ValidationException;
 
 class DossierBooking
 {
-    public function replacements(User $actor): LengthAwarePaginator
-    {
-        Gate::forUser($actor)->authorize('viewAny', Dossier::class);
-
-        return DossierOperation::query()->pendingStatus()
-            ->whereHas('appointments', fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED))
-            ->with(['service:id,name', 'dossier:id,company_name,first_name,last_name,legacy_label,address,postal_code,city,reference',
-                'appointments' => fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED)
-                    ->orderByDesc('starts_at')->orderByDesc('id')->limit(1)])
-            ->orderByDesc('id')->paginate(10, ['*'], 'replacement_page')->withQueryString()->fragment('booking-replacements');
-    }
-
     public function pending(User $actor, ?int $limit = null): Collection
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
@@ -156,17 +143,20 @@ class DossierBooking
         $dossier->increment('version');
     }
 
-    private function query(): Builder
+    private function query(bool $onlyUnscheduled = false): Builder
     {
-        return DossierOperation::query()->awaitingBooking()->with([
-            'service', 'dossier.client', 'dossier.delegataire', 'dossier.documents',
-            'dossier.comments' => fn ($query) => $query->with('author:id,first_name,last_name')->orderByDesc('created_at')->orderByDesc('id')->limit(10),
-        ]);
+        return DossierOperation::query()->when($onlyUnscheduled,
+            fn ($query) => $query->awaitingBooking(), fn ($query) => $query->pendingStatus())->with([
+                'service', 'dossier.client', 'dossier.delegataire', 'dossier.documents',
+                'appointments' => fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED)
+                    ->orderByDesc('starts_at')->orderByDesc('id')->limit(1),
+                'dossier.comments' => fn ($query) => $query->with('author:id,first_name,last_name')->orderByDesc('created_at')->orderByDesc('id')->limit(10),
+            ]);
     }
 
     private function operation(string $id): ?DossierOperation
     {
-        return preg_match('/^dossier-([1-9][0-9]*)$/D', $id, $matches) ? $this->query()->find($matches[1]) : null;
+        return preg_match('/^dossier-([1-9][0-9]*)$/D', $id, $matches) ? $this->query(onlyUnscheduled: true)->find($matches[1]) : null;
     }
 
     private function lockPending(int $id): DossierOperation
@@ -225,10 +215,13 @@ class DossierBooking
         $department = str_starts_with($postalCode, '20') ? ((int) $postalCode < 20200 ? '2A' : '2B')
             : substr($postalCode, 0, preg_match('/^9[78]/', $postalCode) ? 3 : 2);
         $service = $operation->service?->only(['id', 'name', 'type', 'average_duration_minutes']);
+        $existingAppointment = $operation->appointments->first();
 
         return [
             'id' => 'dossier-'.$operation->id,
             'dossier_id' => $dossier->id, 'dossier_operation_id' => $operation->id, 'dossier_version' => $dossier->version,
+            'replace_appointment_id' => $existingAppointment?->id,
+            'existing_appointment_at' => $existingAppointment?->starts_at?->toIso8601String(),
             'dossier_summary' => $this->summary($operation),
             'source' => 'Dossier TechCalendar', 'external_source' => null,
             'external_reference' => $dossier->reference, 'external_payload' => null,

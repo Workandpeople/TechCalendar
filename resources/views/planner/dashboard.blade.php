@@ -36,7 +36,7 @@
                     <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Clique sur une demande pour lancér directement la recherche de techniciens.</p>
                 </div>
                 <div class="flex flex-col items-start gap-2 md:items-end">
-                    <span id="dashboard-crm-count" class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $crmAppointments->count() }} demande(s)</span>
+                    <span id="dashboard-crm-count" class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $crmAppointments->count() }} {{ config('crm.v2_enabled') ? 'prestation(s) affichée(s)' : 'demande(s)' }}</span>
                     <a href="{{ route('planner.book') }}" class="gc-link">Voir toutes les demandes</a>
                 </div>
             </div>
@@ -53,14 +53,14 @@
             <div id="dashboard-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                 @foreach ($crmAppointments as $appointment)
                     <a
-                        href="{{ route('planner.book', ['crm_appointment_id' => $appointment['id']]) }}"
+                        href="{{ ($appointment['replace_appointment_id'] ?? null) ? route('planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) : route('planner.book', ['crm_appointment_id' => $appointment['id']]) }}"
                         class="dashboard-crm-card group rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md"
                         style="border-color:var(--gc-border);background:linear-gradient(135deg,#ffffff 0%,#fcf8ea 100%);"
                         data-client="{{ str($appointment['last_name'].' '.$appointment['first_name'])->lower() }}"
                     >
                         <div class="flex items-start justify-between gap-3">
                             <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#1d4ed8;">{{ $appointment['source'] }}</span>
-                            <span class="text-xs font-semibold transition group-hover:translate-x-0.5" style="color:var(--gc-primary);">Trouver</span>
+                            <span class="text-xs font-semibold transition group-hover:translate-x-0.5" style="color:var(--gc-primary);">{{ ($appointment['replace_appointment_id'] ?? null) ? 'Replacer' : 'Trouver' }}</span>
                         </div>
                         <h3 class="mt-3 font-semibold" style="color:var(--gc-text);">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</h3>
                         <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['phone'] }}</p>

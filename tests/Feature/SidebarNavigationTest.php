@@ -144,7 +144,7 @@ it('renders matching link and folded section notification totals on desktop and 
             $badge = $xpath->query($button.'/*[contains(@class,"sidebar-section-notification")]');
             expect($badge->length)->toBe(1)->and(trim($badge->item(0)->textContent))->toBe((string) $count);
         }
-        $pending = $xpath->query('//*[@id="sidebar-'.$scope.'-planner-items"]//a[@href="'.route('planner.book').'"]//span[@aria-label="12 RDV à placer"]');
+        $pending = $xpath->query('//*[@id="sidebar-'.$scope.'-planner-items"]//a[@href="'.route('planner.book').'"]//span[@data-booking-pending-count and @aria-label="12 dossier(s) en prise de RDV"]');
         expect($pending->length)->toBe(1);
     }
     expect($xpath->query('//button[@data-sidebar-section-toggle="manager"]/*[contains(@class,"sidebar-section-notification")]')->length)->toBe(0);

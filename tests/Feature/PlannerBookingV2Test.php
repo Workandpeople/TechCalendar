@@ -11,6 +11,7 @@ use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierRegistry;
 use App\Services\MapboxAddressGeocoder;
 use App\Services\SidebarNotifications;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -144,11 +145,12 @@ it('books a native pending dossier atomically without calling Coffrac and preven
     Http::assertNothingSent();
 });
 
-it('does not offer an already scheduled operation even if its old status is still pending', function () {
+it('lists an already scheduled pending operation but still refuses creating a duplicate appointment', function () {
     extract(nativeBookingFixture());
     $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertCreated();
     $operation->refresh()->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
-    $this->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(0, 'appointments');
+    $this->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(1, 'appointments')
+        ->assertJsonPath('appointments.0.replace_appointment_id', Appointment::sole()->id);
     $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertNotFound();
     Http::assertNothingSent();
 });
@@ -160,21 +162,34 @@ it('shows pending operations with an existing appointment as replacements withou
     if ($past) {
         $appointment->forceFill(['starts_at' => now()->subWeek(), 'ends_at' => now()->subWeek()->addHour()])->save();
     }
-    $operation->refresh()->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $this->patch(route('v2.dossiers.operations.status', [$dossier, $operation]), [
+        'version' => $dossier->fresh()->version, 'status' => 'pending',
+    ])->assertSessionHasNoErrors();
     $this->get(route('planner.book'))->assertOk()
-        ->assertViewHas('crmAppointments', fn ($rows) => $rows->isEmpty())
-        ->assertViewHas('replacementRequests', fn ($rows) => $rows->total() === 1 && $rows->first()->id === $operation->id)
-        ->assertSee('Replacer le RDV')->assertSee('Camille TEST')
+        ->assertViewHas('crmAppointments', fn ($rows) => $rows->count() === 1 && $rows->first()['dossier_operation_id'] === $operation->id)
+        ->assertSee('Replacer le RDV')->assertSee('TEST Camille')->assertSee('1 dossier(s) · 1 prestation(s)')
         ->assertSee(route('planner.appointments.modify', ['replace_appointment_id' => $appointment->id]), false);
+    $this->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(1, 'appointments')
+        ->assertJsonPath('appointments.0.replace_appointment_id', $appointment->id);
+    expect(app(SidebarNotifications::class)->forUser($actor)['pending'])->toBe(1);
     $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertNotFound();
     $this->postJson(route('planner.book.analyze'), ['replace_appointment_id' => $appointment->id])->assertOk();
     $this->get(route('planner.appointments.modify', ['replace_appointment_id' => $appointment->id]))->assertOk()
-        ->assertViewHas('replacementRequests', null)->assertDontSee('id="booking-replacements"', false);
+        ->assertViewHas('crmAppointments', fn ($rows) => $rows->isEmpty());
+    $this->get(route('planner.dashboard'))->assertOk()->assertSee(route('planner.appointments.modify', ['replace_appointment_id' => $appointment->id]), false);
     expect(Appointment::count())->toBe(1)->and($operation->fresh()->legacy_status)->toBe('PRISE DE RDV');
+    $this->postJson(route('planner.book.appointments.store'), [
+        'replace_appointment_id' => $appointment->id, 'technician_id' => $technician->id,
+        'starts_at' => now()->addWeeks(2)->setTime(10, 0)->toIso8601String(), 'duration_minutes' => 60,
+    ])->assertOk();
+    expect(Appointment::sole()->id)->toBe($appointment->id)
+        ->and($operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE')
+        ->and(app(SidebarNotifications::class)->forUser($actor)['pending'])->toBe(0);
+    $this->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(0, 'appointments');
     Http::assertNothingSent();
 })->with([false, true]);
 
-it('bounds replacement rows to the requested page without duplicating operations or including deleted dossiers', function () {
+it('lists each pending operation once with only its latest live scheduled appointment and excludes deleted dossiers', function () {
     extract(nativeBookingFixture());
     $this->actingAs($actor);
     foreach (range(1, 13) as $index) {
@@ -187,11 +202,40 @@ it('bounds replacement rows to the requested page without duplicating operations
                 'ends_at' => now()->addWeek()->setTime($hour + 1, 0), 'status' => Appointment::STATUS_SCHEDULED]);
         }
     }
-    $this->get(route('planner.book', ['replacement_page' => 2]))->assertOk()
-        ->assertViewHas('replacementRequests', fn ($rows) => $rows->total() === 13 && $rows->count() === 3
-            && $rows->every(fn ($row) => $row->appointments->count() === 1));
+    $this->get(route('planner.book'))->assertOk()->assertSee('1 dossier(s) · 14 prestation(s)')
+        ->assertViewHas('crmAppointments', fn ($rows) => $rows->count() === 14
+            && $rows->pluck('dossier_operation_id')->unique()->count() === 14
+            && $rows->whereNotNull('replace_appointment_id')->count() === 13
+            && $rows->whereNotNull('replace_appointment_id')->every(fn ($row) => Carbon::parse($row['existing_appointment_at'])->hour === 12));
     $dossier->delete();
-    expect(app(DossierBooking::class)->replacements($actor)->total())->toBe(0);
+    expect(app(DossierBooking::class)->pending($actor))->toBeEmpty();
+    Http::assertNothingSent();
+});
+
+it('uses the same pending dossier count in categories the sidebar and the booking queue', function () {
+    extract(nativeBookingFixture());
+    $this->actingAs($actor);
+    foreach (range(1, 7) as $index) {
+        $created = app(DossierRegistry::class)->create($actor, [
+            'reference' => 'COUNT-'.$index, 'company_name' => 'Client '.$index,
+            'address' => 'Rue Test', 'city' => 'Paris', 'service_ids' => [$service->id],
+        ]);
+        if ($index <= 2) {
+            $created->operations()->first()->appointments()->create([
+                'service_id' => $service->id, 'technician_id' => $technician->id, 'created_by' => $actor->id,
+                'customer_first_name' => 'Client', 'customer_last_name' => 'Test', 'customer_phone' => '',
+                'address' => 'Paris', 'duration_minutes' => 60, 'status' => Appointment::STATUS_SCHEDULED,
+                'starts_at' => now()->addDay(), 'ends_at' => now()->addDay()->addHour(),
+            ]);
+        }
+    }
+    $additional = $dossier->operations()->create(['service_id' => $service->id]);
+    $additional->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $categories = app(DossierRegistry::class)->categories($actor, []);
+    expect($categories['pending']['count'])->toBe(8)
+        ->and(app(SidebarNotifications::class)->forUser($actor)['pending'])->toBe(8);
+    $this->getJson(route('planner.book.crm-appointments.index'))->assertOk()->assertJsonCount(9, 'appointments');
+    $this->get(route('planner.book'))->assertOk()->assertSee('8 dossier(s) · 9 prestation(s)');
     Http::assertNothingSent();
 });
 
