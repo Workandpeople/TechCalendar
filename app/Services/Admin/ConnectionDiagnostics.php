@@ -116,7 +116,7 @@ class ConnectionDiagnostics
 
         $delivery = config('mail.delivery_enabled') ? '' : ' La livraison réelle est désactivée sur ce serveur.';
 
-        return [$authenticated ? 'ok' : 'warning', $message.$delivery.' Aucun email envoyé ; la livraison en boîte de réception n’est pas testée.'];
+        return [$authenticated ? 'ok' : 'warning', $message.$delivery.' Aucun email envoyé ; le droit d’utiliser l’adresse d’expédition et la livraison en boîte de réception ne sont pas testés.'];
     }
 
     private function mapbox(): array

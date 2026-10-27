@@ -1019,7 +1019,10 @@
                                             @endforeach
                                         </select>
                                     </div>
-                                    <div id="booking_crm_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    @if (config('crm.v2_enabled'))
+                                        <x-problem-comment-audience id="booking_crm_problem_audience" />
+                                    @endif
+                                    <div id="booking_crm_problem_recall_fields" class="{{ config('crm.v2_enabled') ? '' : 'hidden' }} grid grid-cols-1 gap-3 md:grid-cols-2">
                                         <div>
                                             <label class="gc-label" for="booking_crm_problem_recall_date">Date de rappel</label>
                                             <input id="booking_crm_problem_recall_date" type="date" class="gc-input" />
@@ -1227,7 +1230,10 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div id="booking_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                @if (config('crm.v2_enabled'))
+                                    <x-problem-comment-audience id="booking_problem_audience" />
+                                @endif
+                                <div id="booking_problem_recall_fields" class="{{ config('crm.v2_enabled') ? '' : 'hidden' }} grid grid-cols-1 gap-3 md:grid-cols-2">
                                     <div>
                                         <label class="gc-label" for="booking_problem_recall_date">Date de rappel</label>
                                         <input id="booking_problem_recall_date" type="date" class="gc-input" />
@@ -2799,9 +2805,9 @@
         const syncProblemRecallFields = (select, wrapper, dateInput, timeInput) => {
             const requiresRecall = problemTypeRequiresRecall(select);
 
-            wrapper?.classList.toggle('hidden', !requiresRecall);
+            wrapper?.classList.toggle('hidden', bookingConnectorsEnabled && !requiresRecall);
 
-            if (!requiresRecall) {
+            if (bookingConnectorsEnabled && !requiresRecall) {
                 if (dateInput) dateInput.value = '';
                 if (timeInput) timeInput.value = '';
             }
@@ -2809,6 +2815,8 @@
 
         const resetProblemSection = (section, commentInput, typeSelect, recallWrapper, recallDateInput, recallTimeInput) => {
             if (section) section.open = false;
+            const audience = section?.querySelector('[name="audience"]');
+            if (audience) audience.value = 'client';
             if (commentInput) commentInput.value = '';
             if (typeSelect) typeSelect.value = '';
             if (recallDateInput) recallDateInput.value = '';
@@ -2832,6 +2840,10 @@
                 throw new Error('Le type de problème RDV est obligatoire.');
             }
 
+            if (!bookingConnectorsEnabled && recallTime && !recallDate) {
+                throw new Error('Indiquez la date du rappel.');
+            }
+
             if (requiresRecall && (!recallDate || !recallTime)) {
                 throw new Error('La date et l’heure de rappel sont obligatoires pour une demande de rappel.');
             }
@@ -2839,8 +2851,9 @@
             return {
                 comment,
                 problem_type: problemType,
-                recall_date: requiresRecall ? recallDate : null,
-                recall_time: requiresRecall ? recallTime : null,
+                recall_date: !bookingConnectorsEnabled || requiresRecall ? (recallDate || null) : null,
+                recall_time: !bookingConnectorsEnabled || requiresRecall ? (recallTime || null) : null,
+                ...(!bookingConnectorsEnabled ? { audience: commentInput?.closest('details')?.querySelector('[name="audience"]')?.value || 'client' } : {}),
             };
         };
 

@@ -2314,3 +2314,35 @@ et les transports sont oublies s'ils ont change, sans redemarrage manuel requis
 apres une modification des Parametres. La simulation, les verrous de livraison
 et la configuration SMS restent inchanges. Les e-mails deja en echec ne sont
 ni purges ni rejoues par le deploiement.
+
+### Commentaire et rappel des problemes RDV
+
+Les formulaires du dossier, de prise de RDV (dossier non place ou rendez-vous
+place) et de suivi planning utilisent les memes trois portees : interne,
+client uniquement par defaut, ou client et delegataire. Les autorisations de
+consultation du dossier et des commentaires restent indispensables. Un rappel
+est conserve dans le commentaire avec la meme portee et dans l'historique
+interne ; ce dernier n'est jamais partage par cette action.
+
+La date de rappel est proposee pour tous les motifs V2, sans perte a chaque
+changement de motif. Elle est facultative hors demande de rappel ; ce motif
+conserve une date et une heure obligatoires. Une heure seule est refusee.
+Il s'agit d'une echeance enregistree, sans notification ni envoi automatique.
+A l'ouverture d'un autre dossier, les champs repartent vides et la portee
+revient a client uniquement. Aucun changement du contrat des connecteurs V1.
+
+### Emails automatiques personnalises en francais
+
+Les notifications natives de reinitialisation et de verification utilisent des
+vues propres au projet sous `resources/views/emails/auth`, sans modifier vendor.
+Le lien, le jeton, la duree du broker et la signature de verification restent
+ceux de Laravel. Les textes, boutons, instructions de secours et pieds de page
+sont en francais, meme avec une locale de serveur anglaise. Le gabarit commun
+HTML/texte et celui des notifications sont personnalises pour l'espace Cofrac,
+avec le logo Genius Controle sur HTML. Les modeles metier en base restent
+personnalisables : leur contenu n'est ni remplace ni traduit automatiquement.
+
+Le deploiement preserve les parametres SMTP enregistres, notamment le compte et
+le From autorises en .fr, et les modes mail/SMS. Aucun email de test ni reprise
+de message echoue n'est effectue. Le diagnostic SMTP precise que le droit
+d'expedition et la livraison ne sont pas testes par une simple authentification.

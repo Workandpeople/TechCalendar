@@ -18,6 +18,7 @@ use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
+use App\Services\Crm\AppointmentProblemReport;
 use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
@@ -334,6 +335,9 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $payload = $request->validate($this->problemReportRules($coffracAppointments));
+        if (config('crm.v2_enabled')) {
+            $payload = AppointmentProblemReport::fromRequest($request, $payload);
+        }
 
         if (config('crm.v2_enabled')) {
             return $this->nativeBookingResponse($request, app(DossierBooking::class)->markProblem($request->user(), $crmAppointmentId, $payload), 'Dossier passé en problème rendez-vous.');
@@ -1254,6 +1258,10 @@ class PlannerBookingController extends Controller
      */
     private function problemReportRules(CoffracAppointmentService $coffracAppointments): array
     {
+        if (config('crm.v2_enabled')) {
+            return AppointmentProblemReport::rules($coffracAppointments->problemTypeValues());
+        }
+
         return [
             'comment' => ['required', 'string', 'min:3', 'max:5000'],
             'problem_type' => ['required', 'string', Rule::in($coffracAppointments->problemTypeValues())],

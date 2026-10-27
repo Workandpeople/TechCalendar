@@ -102,7 +102,7 @@ it('reports a problem on the native dossier without contacting Coffrac', functio
         'recall_date' => '2026-11-01', 'recall_time' => '14:00',
     ])->assertOk();
     expect($operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS')
-        ->and($dossier->comments()->first()->body)->toBe('Le client demande un rappel.')
+        ->and($dossier->comments()->first()->body)->toContain('Le client demande un rappel.', 'Rappel prévu le 01/11/2026 à 14:00.')
         ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM);
     Http::assertNothingSent();
 });

@@ -418,7 +418,10 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div id="tracking_problem_recall_fields" class="hidden grid grid-cols-1 gap-3 md:grid-cols-2">
+                                @if (config('crm.v2_enabled'))
+                                    <x-problem-comment-audience id="tracking_problem_audience" />
+                                @endif
+                                <div id="tracking_problem_recall_fields" class="{{ config('crm.v2_enabled') ? '' : 'hidden' }} grid grid-cols-1 gap-3 md:grid-cols-2">
                                     <div>
                                         <label class="gc-label" for="tracking_problem_recall_date">Date de rappel</label>
                                         <input id="tracking_problem_recall_date" type="date" class="gc-input" />
@@ -664,9 +667,9 @@
         const syncTrackingProblemRecallFields = () => {
             const requiresRecall = trackingProblemTypeRequiresRecall();
 
-            trackingProblemRecallFields?.classList.toggle('hidden', !requiresRecall);
+            trackingProblemRecallFields?.classList.toggle('hidden', !trackingNativeDossiers && !requiresRecall);
 
-            if (!requiresRecall) {
+            if (!trackingNativeDossiers && !requiresRecall) {
                 if (trackingProblemRecallDate) trackingProblemRecallDate.value = '';
                 if (trackingProblemRecallTime) trackingProblemRecallTime.value = '';
             }
@@ -674,6 +677,8 @@
 
         const resetTrackingProblemSection = () => {
             if (trackingProblemSection) trackingProblemSection.open = false;
+            const audience = trackingProblemSection?.querySelector('[name="audience"]');
+            if (audience) audience.value = 'client';
             if (trackingProblemComment) trackingProblemComment.value = '';
             if (trackingProblemType) trackingProblemType.value = '';
             if (trackingProblemRecallDate) trackingProblemRecallDate.value = '';
@@ -697,6 +702,10 @@
                 throw new Error('Le type de problème RDV est obligatoire.');
             }
 
+            if (trackingNativeDossiers && recallTime && !recallDate) {
+                throw new Error('Indiquez la date du rappel.');
+            }
+
             if (requiresRecall && (!recallDate || !recallTime)) {
                 throw new Error('La date et l’heure de rappel sont obligatoires pour une demande de rappel.');
             }
@@ -704,8 +713,9 @@
             return {
                 comment,
                 problem_type: problemType,
-                recall_date: requiresRecall ? recallDate : null,
-                recall_time: requiresRecall ? recallTime : null,
+                recall_date: trackingNativeDossiers || requiresRecall ? (recallDate || null) : null,
+                recall_time: trackingNativeDossiers || requiresRecall ? (recallTime || null) : null,
+                ...(trackingNativeDossiers ? { audience: trackingProblemSection?.querySelector('[name="audience"]')?.value || 'client' } : {}),
             };
         };
 

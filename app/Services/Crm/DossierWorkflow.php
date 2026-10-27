@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -96,15 +97,25 @@ class DossierWorkflow
             }
             $previousStatus = $operation->legacy_status;
             $operation->forceFill(['legacy_status' => 'PROBLÈME RENDEZ-VOUS'])->save();
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => trim($data['comment']),
+            $comment = trim($data['comment']);
+            if (filled($data['recall_date'] ?? null)) {
+                $comment .= "\nRappel prévu le ".CarbonImmutable::parse($data['recall_date'])->format('d/m/Y');
+                if (filled($data['recall_time'] ?? null)) {
+                    $comment .= ' à '.$data['recall_time'];
+                }
+                $comment .= '.';
+            }
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $comment,
+                'changed_fields' => ['operation_id' => $operation->id, ...Arr::only($data, ['problem_type', 'recall_date', 'recall_time'])],
                 'client_visible' => (bool) ($data['client_visible'] ?? false),
                 'delegataire_visible' => (bool) (($data['client_visible'] ?? false) && ($data['delegataire_visible'] ?? false))]);
             $details = $data['problem_type'] ?? 'Problème rendez-vous';
-            if (filled($data['recall_date'] ?? null) && filled($data['recall_time'] ?? null)) {
-                $details .= ' · Rappel le '.$data['recall_date'].' à '.$data['recall_time'];
+            if (filled($data['recall_date'] ?? null)) {
+                $details .= ' · Rappel le '.$data['recall_date'].(filled($data['recall_time'] ?? null) ? ' à '.$data['recall_time'] : '');
             }
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
                 'body' => 'Problème rendez-vous · Fiche #'.$operation->id.' · '.$details,
+                'client_visible' => false, 'delegataire_visible' => false,
                 'changed_fields' => ['operation_id' => $operation->id, 'previous_status' => $previousStatus,
                     'status' => 'PROBLÈME RENDEZ-VOUS', 'problem_type' => $data['problem_type'] ?? null,
                     'recall_date' => $data['recall_date'] ?? null, 'recall_time' => $data['recall_time'] ?? null]]);

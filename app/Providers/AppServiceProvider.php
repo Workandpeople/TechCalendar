@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\ApplicationSettings;
+use App\Services\FrenchMailNotifications;
 use App\Services\GlobalMailConfiguration;
 use App\Services\Simulation\SimulationSafety;
 use Illuminate\Mail\Events\MessageSending;
@@ -30,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
+        FrenchMailNotifications::register();
 
         Event::listen(MessageSending::class, static function (MessageSending $event): void {
             if (config('crm.v2_enabled') && ($address = config('mail.from.address'))) {

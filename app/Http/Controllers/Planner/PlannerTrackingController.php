@@ -16,6 +16,7 @@ use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\AppointmentEditor;
+use App\Services\Crm\AppointmentProblemReport;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -638,6 +639,9 @@ class PlannerTrackingController extends Controller
         $appointment = Appointment::query()->findOrFail($appointment);
 
         $payload = $request->validate($this->problemReportRules($coffracAppointments));
+        if (config('crm.v2_enabled')) {
+            $payload = AppointmentProblemReport::fromRequest($request, $payload);
+        }
 
         try {
             $appointment = DB::transaction(function () use ($appointment, $coffracAppointments, $payload): Appointment {
@@ -751,6 +755,10 @@ class PlannerTrackingController extends Controller
      */
     private function problemReportRules(CoffracAppointmentService $coffracAppointments): array
     {
+        if (config('crm.v2_enabled')) {
+            return AppointmentProblemReport::rules($coffracAppointments->problemTypeValues());
+        }
+
         return [
             'comment' => ['required', 'string', 'min:3', 'max:5000'],
             'problem_type' => ['required', 'string', Rule::in($coffracAppointments->problemTypeValues())],

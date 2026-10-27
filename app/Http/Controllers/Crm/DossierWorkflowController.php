@@ -8,13 +8,13 @@ use App\Http\Requests\Crm\PostVisitRequest;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Services\CoffracAppointmentService;
+use App\Services\Crm\AppointmentProblemReport;
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierWorkflow;
 use App\Services\Crm\PostVisitWorkflow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 
 class DossierWorkflowController extends Controller
 {
@@ -32,11 +32,7 @@ class DossierWorkflowController extends Controller
         $types = app(CoffracAppointmentService::class)->problemTypes(allowRemote: false);
         $data = $request->validate([
             'version' => ['required', 'integer', 'min:1'], 'appointment_id' => ['nullable', 'integer'],
-            'comment' => ['required', 'string', 'min:3', 'max:5000'],
-            'problem_type' => ['required', Rule::in(array_column($types, 'value'))],
-            'recall_date' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date_format:Y-m-d'],
-            'recall_time' => ['nullable', 'required_if:problem_type,'.CoffracAppointmentService::PROBLEM_TYPE_CALLBACK, 'date_format:H:i'],
-            ...ContentAudience::rules(),
+            ...AppointmentProblemReport::rules(array_column($types, 'value')),
         ]);
         $workflow->reportProblem($request->user(), $dossier, $operation, [...$data, ...ContentAudience::fromRequest($request, 'client')]);
 
