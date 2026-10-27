@@ -27,16 +27,25 @@ class ClientAccess
 
     public static function defaults(string $kind): array
     {
-        return ['create_dossiers' => $kind === 'client', 'documents' => true, 'comments' => $kind === 'client',
-            'add_comments' => $kind === 'client', 'upload_documents' => false,
-            'upload_corrections' => true, 'lots' => true];
+        return ['create_dossiers' => $kind === 'client', 'documents' => true, 'comments' => true,
+            'add_comments' => $kind === 'client', 'upload_documents' => $kind === 'client',
+            'upload_corrections' => $kind === 'client', 'lots' => true];
     }
 
     public function permissions(User $user): array
     {
         // Preserve explicit revocations; neither fallback grants document read access.
-        return ['create_dossiers' => $user->externalClient?->kind === 'client',
-            'upload_corrections' => true, ...($user->portal_permissions ?? [])];
+        $client = $user->externalClient?->kind === 'client';
+        $permissions = ['create_dossiers' => $client,
+            'upload_corrections' => $client, ...($user->portal_permissions ?? [])];
+        if (! $client) {
+            // Old forms and stored flags cannot enable a client-only action for a delegataire.
+            foreach (['create_dossiers', 'upload_documents', 'upload_corrections'] as $permission) {
+                $permissions[$permission] = false;
+            }
+        }
+
+        return $permissions;
     }
 
     public function active(User $user): bool
@@ -66,7 +75,7 @@ class ClientAccess
             return false;
         }
 
-        return $user->externalClient->kind === 'client' || $this->isNonCompliant($dossier);
+        return $user->externalClient->kind === 'client';
     }
 
     public function createDossier(User $user): bool

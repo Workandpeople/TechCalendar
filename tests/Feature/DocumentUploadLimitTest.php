@@ -48,7 +48,7 @@ it('accepts up to exactly one GiB and refuses one extra byte in document form re
     'one byte over' => [1_073_741_825, false],
 ]);
 
-it('stores a large document for staff and both external profiles without changing permissions or making external calls', function (string $profile) {
+it('stores a large document for staff and clients but refuses delegataires without external calls', function (string $profile) {
     $dossier = Dossier::create(['reference' => 'LARGE-'.$profile, 'address' => 'Rue du test', 'city' => 'Paris']);
     $operation = $dossier->operations()->create(['legacy_service_name' => 'Test']);
     $operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
@@ -66,8 +66,14 @@ it('stores a large document for staff and both external profiles without changin
     }
     $file = UploadedFile::fake()->createWithContent('preuve.pdf', file_get_contents(__DIR__.'/../Fixtures/documents/preview.pdf'))
         ->size(DocumentUpload::MAX_KILOBYTES);
-    $this->actingAs($actor)->post($url, ['name' => 'Preuve', 'document' => $file, 'document_type' => 'free', 'audience' => 'client'])
-        ->assertRedirect()->assertSessionHasNoErrors();
+    $response = $this->actingAs($actor)->post($url, ['name' => 'Preuve', 'document' => $file, 'document_type' => 'free', 'audience' => 'client']);
+    if ($profile === 'delegataire') {
+        $response->assertForbidden();
+        expect($dossier->documents()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([]);
+
+        return;
+    }
+    $response->assertRedirect()->assertSessionHasNoErrors();
     $document = $dossier->documents()->sole();
     expect((int) $document->size)->toBe(DocumentUpload::MAX_BYTES)
         ->and($document->author_id)->toBe($actor->id)

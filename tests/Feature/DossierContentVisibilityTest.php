@@ -137,7 +137,7 @@ it('can make an old public comment private without the legacy fallback making it
 
 it('keeps comments optional for delegataires and never shares workflow history', function () {
     $this->client->update(['kind' => 'delegataire']);
-    $this->external->forceFill(['portal_permissions' => ClientAccess::defaults('delegataire')])->save();
+    $this->external->forceFill(['portal_permissions' => [...ClientAccess::defaults('delegataire'), 'comments' => false]])->save();
     $shared = $this->dossier->activities()->create(['kind' => 'legacy_comment', 'body' => 'SHARED-WITH-DELEGATAIRE', 'changed_fields' => ['is_private' => 1]]);
     $private = $this->dossier->activities()->create(['kind' => 'comment', 'body' => 'ALWAYS-INTERNAL']);
     $history = $this->dossier->activities()->create(['kind' => 'legacy_history', 'body' => 'AUDIT-INTERNAL']);

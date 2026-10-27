@@ -130,13 +130,13 @@ it('applies delegataire defaults and private priority to collected documents', f
                 'payload' => json_encode(['name' => 'Archive-'.$id, 'path' => 'test.pdf', 'is_private' => $private, 'is_delegataire' => $delegate])]);
         }
         $this->actingAs($this->external)->get(route('client.dossiers.show', $this->dossier))->assertOk()
-            ->assertSee('Archive-1')->assertDontSee('Archive-2')->assertDontSee('Archive-3')->assertDontSee('Échanges avec notre équipe');
+            ->assertSee('Archive-1')->assertDontSee('Archive-2')->assertDontSee('Archive-3')->assertSee('Échanges avec notre équipe');
         $this->get(route('client.dossiers.archive', [$this->dossier, 1]))->assertDownload();
         $this->get(route('client.dossiers.archive', [$this->dossier, 2]))->assertNotFound();
         $this->get(route('client.dossiers.archive', [$this->dossier, 3]))->assertNotFound();
         $this->get(route('client.dossiers.archive', [$this->privateDossier, 1]))->assertForbidden();
         $this->post(route('client.dossiers.comments', $this->dossier), ['body' => 'Not allowed'])->assertForbidden();
-        $this->post(route('client.dossiers.upload', $this->dossier), ['name' => 'Correction', 'document' => UploadedFile::fake()->image('x.jpg')])->assertRedirect();
+        $this->post(route('client.dossiers.upload', $this->dossier), ['name' => 'Correction', 'document' => UploadedFile::fake()->image('x.jpg')])->assertForbidden();
     } finally {
         File::deleteDirectory($root);
     }

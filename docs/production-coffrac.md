@@ -2392,3 +2392,31 @@ publiques et 50 par heure au total pour celles-ci, via le cache fichier (pas SQL
 La commande support:prune efface uniquement les rapports de plus de 30 jours ;
 elle est planifiee a 03:30 via le scheduler existant, sans changer les services.
 Ne pas purger ni rejouer les jobs mail existants pour activer cette fonctionnalite.
+
+### Droits externes et depot reserve aux clients
+
+La gestion individuelle des droits est conservee. Le profil client ouvre la
+creation en prise de RDV, la lecture des pieces et commentaires partages, les
+commentaires en non-conformite, les depots libres et les lots attribues. Le
+profil delegataire ouvre les lectures de documents, commentaires et lots ;
+creation, ajout de commentaires et depots sont desactives par defaut.
+
+Le depot de documents et justificatifs est reserve aux clients, dans les etats
+autorises par leurs categories. Cette limite est controlee cote serveur meme
+avec d'anciens droits de depot encore a true ou un formulaire administrateur
+obsolete : les deux droits de depot d'un delegataire sont remis a false a
+l'enregistrement. Les cases correspondantes ne sont pas proposees aux
+delegataires. Les clients conservent des droits de depot revocables ; pour
+interdire tout depot, decocher documents ET justificatifs.
+
+Un depot externe est toujours un document libre, sans fiche, resultat de
+controle ni metadonnees de rapport, y compris lors d'un appel direct au service.
+Il ne modifie pas le statut ni la facturation. Le recontrole reste une action
+distincte et un delegataire autorise ne peut y joindre aucun fichier.
+Les categories et les trois audiences de confidentialite restent inchangees.
+
+L'application ponctuelle des profils aux comptes existants doit sauvegarder
+les anciens droits et ne modifier que users.portal_permissions. Elle ne doit
+ni reactiver/restaurer des comptes, ni toucher aux mots de passe, aux categories,
+aux affectations ou aux services. Ne plus rejouer l'ancien script d'ouverture
+generale apres avoir applique ce profil.

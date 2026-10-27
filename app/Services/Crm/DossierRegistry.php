@@ -288,8 +288,8 @@ class DossierRegistry
                     'mime_type' => $file->getMimeType(), 'size' => $file->getSize(),
                     'client_visible' => $actor->isExternal() || $clientVisible,
                     'delegataire_visible' => $actor->isExternal() ? $actor->externalClient->kind === 'delegataire' : ($clientVisible && ($delegataireVisible ?? $clientVisible)),
-                    ...Arr::only($metadata, ['description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome',
-                        'capcee_emmy_reference', 'capcee_object_type', 'capcee_inspection_type']),
+                    ...($actor->isExternal() ? ['document_type' => 'free'] : Arr::only($metadata, ['description', 'document_type', 'dossier_operation_id', 'control_reference', 'inspected_on', 'issued_on', 'control_outcome',
+                        'capcee_emmy_reference', 'capcee_object_type', 'capcee_inspection_type'])),
                 ]);
                 $dossier->activities()->create([
                     'author_id' => $actor->id, 'kind' => 'document', 'body' => 'Document ajouté : '.$name,

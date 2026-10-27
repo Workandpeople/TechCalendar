@@ -50,6 +50,10 @@ class ClientManagement
             $permissions['upload_documents'] = $permissions['upload_documents'] && $permissions['documents'];
             $permissions['upload_corrections'] = $permissions['upload_corrections'] && $permissions['documents'];
             $permissions['create_dossiers'] = $permissions['create_dossiers'] && $client->kind === 'client';
+            if ($client->kind !== 'client') {
+                $permissions['upload_documents'] = false;
+                $permissions['upload_corrections'] = false;
+            }
             $account->forceFill([
                 'first_name' => $data['first_name'], 'last_name' => $data['last_name'], 'email' => $data['email'],
                 'external_client_id' => $client->id, 'role' => User::ROLE_EXTERNAL, 'admin' => false,

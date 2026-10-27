@@ -350,7 +350,8 @@ it('lets an authorized delegataire respond to an imported non conformity without
     $this->client->externalClient->update(['kind' => 'delegataire']);
     $this->client->forceFill(['portal_permissions' => ClientAccess::defaults('delegataire')])->save();
     $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Interdit'])->assertForbidden();
-    $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('delegataire.jpg')])->assertRedirect();
+    $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('delegataire.jpg')])->assertForbidden();
+    $this->postJson($this->responseUrl, ['version' => 1])->assertRedirect();
     expect($this->operation->fresh()->control_outcome)->toBeNull()->and($this->row->fresh()->physical_satisfaction)->toBeNull();
     $this->actingAs($this->planner);
     postVisitAction($this, 'validate_report', ['report_document_id' => $this->document->id])->assertForbidden();

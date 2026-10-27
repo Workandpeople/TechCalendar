@@ -17,11 +17,15 @@
     </div>
     <fieldset class="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"><legend class="px-2 text-sm font-semibold">Droits sur les éléments attribués</legend>
         @foreach (\App\Services\Crm\ClientAccess::PERMISSIONS as $key => $label)
-            @continue($key === 'create_dossiers' && $client->kind !== 'client')
+            @continue($client->kind !== 'client' && in_array($key, ['create_dossiers', 'upload_documents', 'upload_corrections'], true))
             <label class="flex items-center gap-2 text-sm"><input type="hidden" name="permissions[{{ $key }}]" value="0"><input type="checkbox" name="permissions[{{ $key }}]" value="1" @checked($retry ? old('permissions.'.$key, $permissions[$key] ?? false) : ($permissions[$key] ?? false))>{{ $label }}</label>
         @endforeach
     </fieldset>
-    <p class="text-xs text-slate-500">{{ $client->kind === 'client' ? 'Le client peut déposer des documents et justificatifs dans tous les états autorisés. Les commentaires restent limités à la non-conformité.' : 'Le délégataire peut déposer des documents et justificatifs uniquement en non-conformité.' }} Pour interdire tout dépôt, décochez les deux droits d’ajout de documents.</p>
+    @if ($client->kind === 'client')
+        <p class="text-xs text-slate-500">Le client peut déposer des documents libres et justificatifs dans tous les états autorisés, jamais une visite technique ni un rapport de contrôle. Pour interdire tout dépôt, décochez les deux droits d’ajout de documents. Les commentaires restent limités à la non-conformité.</p>
+    @else
+        <p class="text-xs text-slate-500">Le délégataire peut consulter les pièces partagées, mais ne peut déposer aucun document ni justificatif. Si l’ajout de commentaires est autorisé, il reste limité aux dossiers en non-conformité accessibles dans ses catégories.</p>
+    @endif
     <p class="text-xs text-slate-500">Ces droits n’ouvrent que les éléments publics des dossiers attribués à ce client. Les documents privés et l’historique interne restent invisibles. Désactiver la lecture des commentaires masque aussi leur section, même si certains commentaires sont publics.</p>
     <p class="text-xs text-slate-500">Les droits d’ajout nécessitent le droit de lecture correspondant. Un nouveau mot de passe impose son changement à la prochaine connexion.</p>
     <button class="gc-btn-primary">{{ $account ? 'Enregistrer les droits' : 'Créer le compte' }}</button>
