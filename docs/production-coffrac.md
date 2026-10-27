@@ -2201,3 +2201,60 @@ effective est refusee. Les rapports separent mail_delivery_enabled,
 sms_delivery_enabled et capcee_delivery_enabled pour ne pas confondre les canaux.
 Ne pas modifier le .env a la main sans mettre a jour la preparation par cette
 operation : un simple changement manuel serait refuse par le prochain deploiement.
+
+### Domaine historique sur la meme V2 (27 octobre 2026)
+
+Apres installation de la release et reouverture de la V2 :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-domains.sh \
+  --activate --reload-shared-apache
+```
+
+`cofrac.geniuscontrole.com` reste dans la barre d'adresse et devient l'adresse
+principale. `cofrac2.geniuscontrole.com` continue a servir directement la meme
+application : `/var/www/cofrac2/public`, socket `/run/cofrac2/php-fpm.sock`, base
+`cofrac2production`, documents et services V2 existants. Aucune copie ou fusion de
+base n'est realisee. La fermeture future de cofrac2 n'est PAS automatique.
+
+Le script exige les deux vhosts historiques connus encore en maintenance tracee,
+des services V2 actifs et un certificat historique valide (controle HTTPS local
+avec verification TLS, sans `-k`). Il reutilise ce certificat sans modifier les
+cles ni appeler certbot. La route HTTP du challenge ACME historique reste servie
+depuis son emplacement existant. Le code, la base, les documents et les processus
+de l'ancienne application restent inchanges ; seuls ses vhosts cessent de servir
+la maintenance pour servir la V2.
+
+Une courte maintenance de la V2 permet de sauvegarder la configuration puis de
+changer seulement `APP_URL`, `VITE_REVERB_HOST` et `REVERB_ALLOWED_ORIGINS`. Le
+transport serveur Reverb reste en boucle locale. Les origines autorisees sont
+exactement les deux domaines, jamais `*`. Le cache est reconstruit et l'empreinte
+de `RUNTIME-PREPARED.json` actualisee. Les modes mail/SMS, les secrets et les droits
+ne changent pas. Aucun email de test, job metier, import ou migration n'est lance.
+
+Les cookies restent isoles par hote, sans les etendre a `.geniuscontrole.com`.
+Une reconnexion est donc possible sur l'adresse historique, avec les memes comptes.
+Les liens generes hors requete, notamment les liens de mot de passe oublie, utilisent
+desormais le domaine historique.
+
+`PRODUCTION-DOMAINS.json` conserve la preparation privee des vhosts ouverts et en
+maintenance. Les futurs `--maintenance`/`--open` concernent les DEUX domaines ; ils
+ne reactivent jamais l'ancien PHP. Une modification du modele Apache ou des vhosts
+approuves est refusee plutot qu'ecrasee silencieusement. Un nouvel accord de
+configuration est alors necessaire.
+
+Retour cible sur la meme revision, sans annuler les donnees saisies depuis :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/configure-production-domains.sh \
+  --rollback --reload-shared-apache
+```
+
+Ce retour remet le domaine historique en maintenance statique et laisse la V2
+ouverte sur cofrac2. Ne PAS utiliser l'ancien `legacy-domain-maintenance/rollback.sh` :
+il concerne les vhosts V1, pas cette bascule. Si une release ulterieure est installee
+ou si la configuration a change, le retour cible est refuse et doit etre prepare.
+
+Les tests jetables `check-production-domains.sh` couvrent les deux acces HTTPS,
+WebSocket, ACME, les refus de fichiers prives, la conservation des modes d'envoi,
+la maintenance/reouverture commune et la restauration apres echec du cache.

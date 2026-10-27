@@ -12,7 +12,10 @@ final class ProductionMailEnablement
     public static function enabledEnvironment(string $contents): string
     {
         $before = Dotenv::parse($contents);
-        foreach (['APP_ENV' => 'production', 'APP_URL' => 'https://cofrac2.geniuscontrole.com',
+        if (! in_array($before['APP_URL'] ?? null, ['https://cofrac2.geniuscontrole.com', 'https://cofrac.geniuscontrole.com'], true)) {
+            throw new RuntimeException('Domaine applicatif non approuve.');
+        }
+        foreach (['APP_ENV' => 'production',
             'DB_DATABASE' => 'cofrac2production', 'CRM_V2_ENABLED' => 'true', 'SIMULATION_MODE' => 'false',
             'MAIL_MAILER' => 'log', 'MAIL_DELIVERY_ENABLED' => 'false',
             'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false'] as $key => $expected) {

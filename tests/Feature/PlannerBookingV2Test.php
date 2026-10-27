@@ -147,9 +147,51 @@ it('books a native pending dossier atomically without calling Coffrac and preven
 it('does not offer an already scheduled operation even if its old status is still pending', function () {
     extract(nativeBookingFixture());
     $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertCreated();
-    $operation->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $operation->refresh()->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
     $this->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(0, 'appointments');
     $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertNotFound();
+    Http::assertNothingSent();
+});
+
+it('shows pending operations with an existing appointment as replacements without allowing duplicate placement', function (bool $past) {
+    extract(nativeBookingFixture());
+    $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertCreated();
+    $appointment = Appointment::sole();
+    if ($past) {
+        $appointment->forceFill(['starts_at' => now()->subWeek(), 'ends_at' => now()->subWeek()->addHour()])->save();
+    }
+    $operation->refresh()->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $this->get(route('planner.book'))->assertOk()
+        ->assertViewHas('crmAppointments', fn ($rows) => $rows->isEmpty())
+        ->assertViewHas('replacementRequests', fn ($rows) => $rows->total() === 1 && $rows->first()->id === $operation->id)
+        ->assertSee('Replacer le RDV')->assertSee('Camille TEST')
+        ->assertSee(route('planner.appointments.modify', ['replace_appointment_id' => $appointment->id]), false);
+    $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertNotFound();
+    $this->postJson(route('planner.book.analyze'), ['replace_appointment_id' => $appointment->id])->assertOk();
+    $this->get(route('planner.appointments.modify', ['replace_appointment_id' => $appointment->id]))->assertOk()
+        ->assertViewHas('replacementRequests', null)->assertDontSee('id="booking-replacements"', false);
+    expect(Appointment::count())->toBe(1)->and($operation->fresh()->legacy_status)->toBe('PRISE DE RDV');
+    Http::assertNothingSent();
+})->with([false, true]);
+
+it('bounds replacement rows to the requested page without duplicating operations or including deleted dossiers', function () {
+    extract(nativeBookingFixture());
+    $this->actingAs($actor);
+    foreach (range(1, 13) as $index) {
+        $row = $dossier->operations()->create(['service_id' => $service->id]);
+        $row->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+        foreach ([10, 12] as $hour) {
+            $row->appointments()->create(['service_id' => $service->id, 'technician_id' => $technician->id, 'created_by' => $actor->id,
+                'customer_first_name' => 'Camille', 'customer_last_name' => 'TEST',
+                'address' => 'Paris', 'customer_phone' => '', 'duration_minutes' => 60, 'starts_at' => now()->addWeek()->setTime($hour, 0),
+                'ends_at' => now()->addWeek()->setTime($hour + 1, 0), 'status' => Appointment::STATUS_SCHEDULED]);
+        }
+    }
+    $this->get(route('planner.book', ['replacement_page' => 2]))->assertOk()
+        ->assertViewHas('replacementRequests', fn ($rows) => $rows->total() === 13 && $rows->count() === 3
+            && $rows->every(fn ($row) => $row->appointments->count() === 1));
+    $dossier->delete();
+    expect(app(DossierBooking::class)->replacements($actor)->total())->toBe(0);
     Http::assertNothingSent();
 });
 

@@ -412,6 +412,10 @@
                 <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prénom du client" autocomplete="off" />
             </div>
 
+            @if (($replacementRequests ?? null)?->total())
+                @include('planner.partials.booking-replacements')
+            @endif
+
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
                 Aucun RDV ne correspond à cette recherche.
             </div>

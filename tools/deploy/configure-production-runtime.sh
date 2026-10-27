@@ -37,6 +37,33 @@ apache2ctl configtest
 git_app() { runuser -u cofrac2-deploy -- git -C "$APP" "$@"; }
 [ "$(git_app branch --show-current)" = v2 ] && [ -z "$(git_app status --porcelain)" ] || stop 'checkout V2 propre requis.'
 REVISION=$(git_app rev-parse HEAD)
+LEGACY_BUNDLE=
+LEGACY_SITES=(cofrac.geniuscontrole.com.conf cofrac.geniuscontrole.com-le-ssl.conf)
+if [ -e "$STATE/PRODUCTION-DOMAINS.json" ] || [ -L "$STATE/PRODUCTION-DOMAINS.json" ]; then
+    LEGACY_BUNDLE=$(php8.4 "$HERE/production-domain.php" --runtime-info) || stop 'configuration des domaines non validee.'
+    [ -n "$LEGACY_BUNDLE" ] || stop 'preparation du domaine historique absente.'
+    for name in "${LEGACY_SITES[@]}"; do
+        [ -f "/etc/apache2/sites-available/$name" ] && [ ! -L "/etc/apache2/sites-available/$name" ] \
+            && [ "$(stat -c %u "/etc/apache2/sites-available/$name")" = 0 ] \
+            && [ "$(realpath "/etc/apache2/sites-enabled/$name")" = "/etc/apache2/sites-available/$name" ] \
+            || stop 'vhost historique actif inattendu.'
+    done
+fi
+legacy_check() {
+    [ -z "$LEGACY_BUNDLE" ] && return 0
+    for name in "${LEGACY_SITES[@]}"; do
+        cmp -s "/etc/apache2/sites-available/$name" "$LEGACY_BUNDLE/$1/$name" || stop 'vhost historique different de la preparation approuvee.'
+    done
+}
+legacy_write() {
+    [ -z "$LEGACY_BUNDLE" ] && return 0
+    install -d -m 0700 "$WORK/legacy.before"
+    for name in "${LEGACY_SITES[@]}"; do
+        cp -p "/etc/apache2/sites-available/$name" "$WORK/legacy.before/$name"
+        legacy_written=1
+        install -o root -g root -m 0644 "$LEGACY_BUNDLE/$1/$name" "/etc/apache2/sites-available/$name"
+    done
+}
 UNITS=(cofrac2-php-fpm.service cofrac2-queue.service cofrac2-reverb.service)
 app_cli() {
     runuser -u "$RUNTIME" -- env -i PATH="$PATH" HOME=/var/lib/cofrac2-app USER="$RUNTIME" LOGNAME="$RUNTIME" \
@@ -47,7 +74,11 @@ snapshot_services() {
         --property=Id,ActiveState,MainPID,ExecMainStartTimestampMonotonic
 }
 snapshot_configs() {
-    find -L /etc/apache2/sites-enabled /etc/apache2/conf-enabled /etc/apache2/mods-enabled -type f \
+    exclusions=()
+    if [ -n "$LEGACY_BUNDLE" ]; then
+        for name in "${LEGACY_SITES[@]}"; do exclusions+=(! -path "/etc/apache2/sites-enabled/$name"); done
+    fi
+    find -L /etc/apache2/sites-enabled /etc/apache2/conf-enabled /etc/apache2/mods-enabled -type f "${exclusions[@]}" \
         ! -name "$DOMAIN.conf" ! -name cofrac2-runtime-modules.conf -print0 | sort -z | xargs -0 -r sha256sum
 }
 WORK=$(mktemp -d "$STATE/runtime-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")
@@ -62,6 +93,7 @@ reload_attempted=0
 services_started=0
 env_written=0
 fpm_written=0
+legacy_written=0
 cleanup() {
     result=$?
     trap - EXIT
@@ -73,6 +105,11 @@ cleanup() {
         fi
         if [ "$fpm_written" = 1 ]; then install -o root -g root -m 0600 "$WORK/php-fpm.before.conf" /etc/cofrac2/php-fpm.conf; fi
         if [ "$site_written" = 1 ]; then install -o root -g root -m 0644 "$WORK/site.before" "$SITE"; fi
+        if [ "$legacy_written" = 1 ]; then
+            for name in "${LEGACY_SITES[@]}"; do
+                [ ! -f "$WORK/legacy.before/$name" ] || install -o root -g root -m 0644 "$WORK/legacy.before/$name" "/etc/apache2/sites-available/$name"
+            done
+        fi
         if [ "$module_written" = 1 ]; then rm -f -- "$MODULES"; fi
         if [ "$module_removed" = 1 ]; then install -o root -g root -m 0644 "$WORK/modules.before" "$MODULES"; fi
         if [ "$reload_attempted" = 1 ]; then
@@ -161,6 +198,8 @@ fi
 
 if [ "$ACTION" = --maintenance ]; then
     cmp -s "$SITE" "$HERE/apache-production-app.conf.example" || stop 'vhost applicatif V2 inattendu.'
+    legacy_check open
+    legacy_write maintenance
     if [ -e "$MODULES" ]; then
         prepared_path=$(php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if(!preg_match("#^/var/lib/cofrac2-production/runtime-[A-Za-z0-9_-]+$#D",$r["work_directory"]))exit(1);echo $r["work_directory"];' "$STATE/RUNTIME-PREPARED.json")
         cmp -s "$MODULES" "$prepared_path/modules.conf" || stop 'modules V2 modifies ; ne pas supprimer.'
@@ -178,7 +217,7 @@ if [ "$ACTION" = --maintenance ]; then
     sha256sum "$SITE" > "$STATE/apache-config.sha256"
     if [ -f "$STATE/INTERNAL-SITE-OPEN.json" ]; then mv -- "$STATE/INTERNAL-SITE-OPEN.json" "$WORK/open.before.json"; fi
     success=1
-    printf 'Seul cofrac2 remis en maintenance statique. Donnees V2 conservees, ancien Coffrac inchange.\n'
+    printf 'Domaines de la V2 remis en maintenance statique. Donnees conservees, ancien code Coffrac inchange.\n'
     exit 0
 fi
 
@@ -306,6 +345,7 @@ PREPARED=${prepared[0]}
 ASSET=${prepared[1]}
 [[ "$ASSET" =~ ^/build/assets/[A-Za-z0-9_-]+\.css$ ]] || stop 'asset de controle inattendu.'
 cmp -s "$SITE" "$HERE/apache-production-https.conf.example" || stop 'maintenance HTTPS statique attendue avant ouverture.'
+legacy_check maintenance
 for name in php-fpm queue reverb; do
     cmp -s "/etc/systemd/system/cofrac2-$name.service" "$HERE/cofrac2-$name.service.example" || stop 'unite V2 modifiee.'
     ! systemctl is-active --quiet "cofrac2-$name.service" || stop 'service V2 deja actif, examiner avant nouvelle ouverture.'
@@ -331,6 +371,7 @@ if [ -s "$PREPARED/modules.conf" ]; then
 fi
 install -o root -g root -m 0644 "$HERE/apache-production-app.conf.example" "$SITE"
 site_written=1
+legacy_write open
 apache2ctl configtest
 reload_attempted=1
 systemctl reload apache2.service
@@ -349,6 +390,13 @@ for path in /.env /.git/config /phpmyadmin /storage/anything.php; do
     [[ "$code" = 403 || "$code" = 404 ]] || stop 'controle de refus HTTP echoue.'
 done
 php8.4 "$HERE/production-runtime.php" --websocket
+if [ -n "$LEGACY_BUNDLE" ]; then
+    for path in /login /up "$ASSET"; do
+        code=$(curl --noproxy '*' --silent --show-error --max-time 30 --resolve "cofrac.geniuscontrole.com:443:127.0.0.1" \
+            -o /dev/null -w '%{http_code}' "https://cofrac.geniuscontrole.com$path")
+        [ "$code" = 200 ] || stop 'controle HTTPS du domaine historique echoue.'
+    done
+fi
 snapshot_services > "$WORK/services.after"
 snapshot_configs > "$WORK/apache.after"
 cmp -s "$WORK/services.before" "$WORK/services.after" && cmp -s "$WORK/apache.before" "$WORK/apache.after" || stop 'configuration ou processus partage different.'
@@ -356,11 +404,14 @@ systemctl enable "${UNITS[@]}"
 sha256sum "$SITE" > "$STATE/apache-config.sha256"
 php8.4 -r '
     $check=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
-    echo json_encode(["url"=>"https://cofrac2.geniuscontrole.com","internal_only"=>true,
+    $domains=is_file($argv[2])?json_decode(file_get_contents($argv[2]),true,32,JSON_THROW_ON_ERROR):null;
+    echo json_encode(["url"=>"https://".($domains["primary"]??"cofrac2.geniuscontrole.com"),"internal_only"=>true,
         "outbound_delivery_enabled"=>$check["outbound_delivery_enabled"],"mail_delivery_enabled"=>$check["mail_delivery_enabled"],
         "sms_delivery_enabled"=>false,"capcee_delivery_enabled"=>false,"final_cutover_ready"=>false],JSON_THROW_ON_ERROR)."\n";
-' "$WORK/application-check.json" > "$STATE/INTERNAL-SITE-OPEN.json"
+' "$WORK/application-check.json" "$STATE/PRODUCTION-DOMAINS.json" > "$STATE/INTERNAL-SITE-OPEN.json"
 success=1
-printf 'Cofrac 2 ouvert pour recette interne : https://cofrac2.geniuscontrole.com\n'
-printf 'PHP, worker et Reverb dedies verifies. Ancien Coffrac et services existants inchanges.\n'
+if [ -n "$LEGACY_BUNDLE" ]; then
+    printf 'V2 ouverte : https://cofrac.geniuscontrole.com (principal) et https://cofrac2.geniuscontrole.com.\n'
+else printf 'Cofrac 2 ouvert pour recette interne : https://cofrac2.geniuscontrole.com\n'; fi
+printf 'PHP, worker et Reverb dedies verifies. Code/base Coffrac originaux et services partages inchanges.\n'
 printf 'Mode mail approuve conserve ; SMS en simulation/desactives et CAPCEE desactive. Aucun email de test envoye.\n'

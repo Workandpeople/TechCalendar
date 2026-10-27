@@ -317,3 +317,4 @@ sha256sum -c /tmp/runtime-before-update.sha256
 printf 'OK : SMTP conserve sans livraison, precontrole epingle en lecture seule, livraison active/absente et modes mutateurs refuses.\n'
 bash "$APP/tools/deploy/tests/check-production-release.sh"
 bash "$APP/tools/deploy/tests/check-production-mail.sh"
+bash "$APP/tools/deploy/tests/check-production-domains.sh"

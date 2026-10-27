@@ -34,17 +34,24 @@ try {
     require $root.'/vendor/autoload.php';
     require $root.'/tools/deploy/lib/ProductionRuntimeBundle.php';
     $env = Dotenv\Dotenv::parse(file_get_contents($root.'/.env'));
+    $domain = match ($env['APP_URL'] ?? null) {
+        'https://cofrac2.geniuscontrole.com' => 'cofrac2.geniuscontrole.com',
+        'https://cofrac.geniuscontrole.com' => 'cofrac.geniuscontrole.com',
+        default => throw new RuntimeException('Domaine applicatif non approuve.'),
+    };
+    $origins = $domain === 'cofrac.geniuscontrole.com'
+        ? 'cofrac2.geniuscontrole.com,cofrac.geniuscontrole.com' : 'cofrac2.geniuscontrole.com';
     $mailDeliveryEnabled = match ($env['MAIL_DELIVERY_ENABLED'] ?? null) {
         'true' => true,
         'false' => false,
         default => throw new RuntimeException('Verrou MAIL_DELIVERY_ENABLED explicite requis.'),
     };
-    foreach (['APP_ENV' => 'production', 'APP_DEBUG' => 'false', 'APP_URL' => 'https://cofrac2.geniuscontrole.com', 'APP_TIMEZONE' => 'Europe/Paris',
+    foreach (['APP_ENV' => 'production', 'APP_DEBUG' => 'false', 'APP_URL' => 'https://'.$domain, 'APP_TIMEZONE' => 'Europe/Paris',
         'CRM_V2_ENABLED' => 'true', 'SIMULATION_MODE' => 'false', 'DB_CONNECTION' => 'mysql', 'DB_HOST' => '127.0.0.1',
         'DB_PORT' => '3306', 'DB_DATABASE' => 'cofrac2production', 'DB_USERNAME' => 'cofrac2_app', 'DB_URL' => '', 'DB_SOCKET' => '',
         'MAIL_MAILER' => $mailDeliveryEnabled ? 'smtp' : 'log', 'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false',
         'QUEUE_CONNECTION' => 'database', 'SESSION_SECURE_COOKIE' => 'true', 'SESSION_COOKIE' => 'cofrac2_session', 'REVERB_SERVER_HOST' => '127.0.0.1',
-        'REVERB_SERVER_PORT' => '8091', 'REVERB_ALLOWED_ORIGINS' => 'cofrac2.geniuscontrole.com'] as $key => $expected) {
+        'REVERB_SERVER_PORT' => '8091', 'REVERB_ALLOWED_ORIGINS' => $origins] as $key => $expected) {
         if (($env[$key] ?? null) !== $expected) {
             throw new RuntimeException('Configuration runtime refusee : '.$key);
         }
@@ -167,7 +174,6 @@ try {
             throw new RuntimeException('Controle WebSocket root uniquement.');
         }
         $key = base64_encode(random_bytes(16));
-        $domain = 'cofrac2.geniuscontrole.com';
         $context = stream_context_create(['ssl' => ['peer_name' => $domain, 'verify_peer' => true, 'verify_peer_name' => true, 'SNI_enabled' => true]]);
         $socket = stream_socket_client($action === '--websocket' ? 'tls://127.0.0.1:443' : 'tcp://127.0.0.1:8091', $errno, $error, 8, STREAM_CLIENT_CONNECT, $context);
         stream_set_timeout($socket, 8);
@@ -204,7 +210,8 @@ try {
         || config('app.debug') || config('simulation.enabled') || ! config('crm.v2_enabled')
         || config('services.smsfactor.enabled') || config('services.smsfactor.mode') !== 'simulate' || config('capcee.enabled')
         || config('services.global_plus.api_url') !== 'https://cee-api.test.globalplus.fr'
-        || config('queue.connections.database.retry_after') <= 1800 || config('reverb.client.host') !== 'cofrac2.geniuscontrole.com') {
+        || config('queue.connections.database.retry_after') <= 1800 || config('reverb.client.host') !== $domain
+        || config('app.url') !== 'https://'.$domain || config('reverb.apps.apps.0.allowed_origins') !== explode(',', $origins)) {
         throw new RuntimeException('Configuration effective differente de la recette interne approuvee.');
     }
     if ($action === '--queue-probe') {

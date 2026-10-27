@@ -7,6 +7,7 @@ use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
 use App\Services\MapboxAddressGeocoder;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -16,6 +17,18 @@ use Illuminate\Validation\ValidationException;
 
 class DossierBooking
 {
+    public function replacements(User $actor): LengthAwarePaginator
+    {
+        Gate::forUser($actor)->authorize('viewAny', Dossier::class);
+
+        return DossierOperation::query()->pendingStatus()
+            ->whereHas('appointments', fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED))
+            ->with(['service:id,name', 'dossier:id,company_name,first_name,last_name,legacy_label,address,postal_code,city,reference',
+                'appointments' => fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED)
+                    ->orderByDesc('starts_at')->orderByDesc('id')->limit(1)])
+            ->orderByDesc('id')->paginate(10, ['*'], 'replacement_page')->withQueryString()->fragment('booking-replacements');
+    }
+
     public function pending(User $actor, ?int $limit = null): Collection
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);

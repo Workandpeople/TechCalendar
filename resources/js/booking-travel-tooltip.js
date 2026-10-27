@@ -86,6 +86,7 @@ export function createBookingTravelTooltip({ root = document, browser = window, 
         const text = (parent, value, style) => { const node = root.createElement('p'); node.textContent = value; node.style.cssText = style; parent.append(node); };
         text(tooltip, event.extendedProps?.is_suggestion ? 'Distances de la proposition' : 'Trajets du rendez-vous', 'font-weight:800');
         text(tooltip, `Technicien : ${technicianName}`, 'margin-top:3px;color:rgba(255,255,255,.85)');
+        text(tooltip, `Fiche : ${event.extendedProps?.service_label || 'Non renseignée'}`, 'margin-top:3px;color:rgba(255,255,255,.85)');
         for (const row of rows) {
             const section = root.createElement('div');
             section.style.cssText = 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:8px';

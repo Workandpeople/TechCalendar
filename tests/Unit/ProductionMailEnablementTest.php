@@ -13,14 +13,14 @@ function mailActivationEnvironment(): string
         ."DB_PASSWORD=fictional-private-value\nMAIL_PASSWORD=fictional-smtp-value\n";
 }
 
-it('activates only the delivery gate and SMTP fallback while preserving every secret and SMS gate', function () {
-    $source = mailActivationEnvironment();
+it('activates only the delivery gate and SMTP fallback while preserving every secret and SMS gate', function (string $domain) {
+    $source = str_replace('https://cofrac2.geniuscontrole.com', 'https://'.$domain, mailActivationEnvironment());
     $next = ProductionMailEnablement::enabledEnvironment($source);
     $expected = str_replace(['MAIL_MAILER=log', 'MAIL_DELIVERY_ENABLED=false'], ['MAIL_MAILER=smtp', 'MAIL_DELIVERY_ENABLED=true'], $source);
     expect($next)->toBe($expected)
         ->and(Dotenv::parse($next)['SMSFACTOR_ENABLED'])->toBe('false')
         ->and(Dotenv::parse($next)['SMSFACTOR_MODE'])->toBe('simulate');
-});
+})->with(['cofrac2.geniuscontrole.com', 'cofrac.geniuscontrole.com']);
 
 it('refuses unsafe or already changed production inputs without revealing their values', function (string $key, string $value) {
     $source = mailActivationEnvironment();

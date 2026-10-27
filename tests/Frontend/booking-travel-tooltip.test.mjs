@@ -81,10 +81,11 @@ const position = { clientX: 600, clientY: 200 };
 
 test('one tooltip shows the full technician name as safe text for suggestions and placed events', async () => {
     const ui = harness();
-    const event = appointment(1, 10, { technician_full_name: '<img src=x onerror=alert(1)>' });
+    const event = appointment(1, 10, { technician_full_name: '<img src=x onerror=alert(1)>', service_label: 'COFFRAC - BAR EN 101 <script>' });
     const source = element(); source.setAttribute('aria-describedby', 'previous-help');
     ui.tooltip.show(position, event, source);
     assert.match(ui.text(), /Technicien : <img src=x onerror=alert\(1\)>/);
+    assert.match(ui.text(), /Fiche : COFFRAC - BAR EN 101 <script>/);
     assert.match(ui.text(), /Calcul du trajet/);
     await ui.run(150);
     assert.match(ui.text(), /12.0 km · 25 min/);
@@ -95,6 +96,7 @@ test('one tooltip shows the full technician name as safe text for suggestions an
     ui.tooltip.show(position, appointment(2, 12, { is_suggestion: true, home_to_distance_km: 4, home_to_minutes: 8 }));
     assert.match(ui.text(), /Distances de la proposition/);
     assert.match(ui.text(), /Technicien : Camille TECH/);
+    assert.match(ui.text(), /Fiche : Non renseignée/);
     assert.equal(ui.timers.size, 0);
     assert.equal(ui.calls.length, 2);
 });

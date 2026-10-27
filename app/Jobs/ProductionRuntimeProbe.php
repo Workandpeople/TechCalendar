@@ -21,7 +21,8 @@ final class ProductionRuntimeProbe implements ShouldQueue
     public function handle(): void
     {
         if (! app()->environment('production') || config('database.connections.mysql.database') !== 'cofrac2production'
-            || config('app.url') !== 'https://cofrac2.geniuscontrole.com' || ! preg_match('/^[a-f0-9]{32}$/D', $this->nonce)) {
+            || ! in_array(config('app.url'), ['https://cofrac2.geniuscontrole.com', 'https://cofrac.geniuscontrole.com'], true)
+            || ! preg_match('/^[a-f0-9]{32}$/D', $this->nonce)) {
             throw new RuntimeException('Sonde du worker hors de sa cible de production V2.');
         }
         Cache::put('cofrac2.runtime-probe.'.$this->nonce, 'processed', 60);
