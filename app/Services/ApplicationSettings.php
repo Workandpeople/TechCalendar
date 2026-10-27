@@ -69,8 +69,11 @@ class ApplicationSettings
             return null;
         }
 
-        $databaseValue = $this->databaseValues()[$key] ?? null;
+        return $this->resolveValue($definition, $this->databaseValues()[$key] ?? null);
+    }
 
+    private function resolveValue(array $definition, mixed $databaseValue): mixed
+    {
         if ($databaseValue !== null && $databaseValue !== '') {
             return $this->castValue($databaseValue, $definition['type'] ?? 'string');
         }
@@ -99,12 +102,20 @@ class ApplicationSettings
      */
     public function formRows(): array
     {
+        try {
+            $stored = Schema::hasTable('application_settings')
+                ? ApplicationSetting::query()->get()->keyBy('key') : collect();
+        } catch (Throwable) {
+            $stored = collect();
+        }
+
         return collect($this->definitions())
-            ->map(function (array $definition, string $key): array {
-                $setting = $this->setting($key);
-                $hasDatabaseValue = $setting && filled($setting->value);
+            ->map(function (array $definition, string $key) use ($stored): array {
+                $setting = $stored->get($key);
+                $hasDatabaseValue = $setting && $setting->is_active && filled($setting->value);
                 $hasEnvValue = $this->hasEnvironmentValue($definition);
                 $effectiveSource = $hasDatabaseValue ? 'bdd' : ($hasEnvValue ? 'env' : 'fallback');
+                $effectiveValue = $this->resolveValue($definition, $hasDatabaseValue ? $setting->value : null);
 
                 return [
                     'key' => $key,
@@ -115,9 +126,10 @@ class ApplicationSettings
                     'description' => $definition['description'] ?? null,
                     'options' => $definition['options'] ?? [],
                     'is_secret' => (bool) ($definition['secret'] ?? false),
-                    'value' => ($definition['secret'] ?? false) ? null : ($hasDatabaseValue ? $setting->value : $this->get($key)),
+                    'value' => ($definition['secret'] ?? false) ? null : $effectiveValue,
                     'has_database_value' => $hasDatabaseValue,
                     'has_env_value' => $hasEnvValue,
+                    'is_missing' => blank($effectiveValue),
                     'source' => $effectiveSource,
                     'updated_at' => $setting?->updated_at,
                 ];

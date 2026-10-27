@@ -2050,3 +2050,36 @@ sans appel au connecteur Coffrac et sans contenu de fichier charge dans le listi
 La recherche et les paginations sont cote serveur. Sur mobile, les pieces s'ouvrent
 dans le lecteur du navigateur ; l'apercu integre reste disponible sur ordinateur.
 Aucune migration, seeder, modification de compte ou activation d'envoi n'est requise.
+
+### Parametres Super-Admin Et Diagnostics
+
+La page Parametres utilise des lignes compactes, une recherche par libelle/cle/env
+et des filtres par section, source BDD, configuration serveur, valeur par defaut ou
+valeur non renseignee. Une valeur 0/false n'est pas consideree comme absente. Les
+champs non modifies ne deviennent pas des overrides BDD lors d'un enregistrement
+avec JavaScript ; les secrets vides restent conserves et ne sont jamais renvoyes
+dans le HTML ni dans les anciennes saisies apres validation. Les filtres ne retirent
+pas les champs modifies du formulaire. Le chargement des valeurs est groupe.
+
+POST admin.settings.diagnostics est reserve au super-admin, protege par CSRF et
+limite a 20 appels/minute. Les tests sont manuels, sequentiels et portent sur les
+valeurs deja enregistrees. SQL : SELECT 1 ; cache : lecture seulement ; mail :
+connexion TLS/SMTP et AUTH sur le transport par defaut ou un expediteur actif,
+sans MAIL FROM/RCPT TO/DATA. Un serveur sans AUTH n'est pas annonce authentifie.
+Les connexions SMTP sont bloquees dans la demo et la simulation isolee.
+
+Mapbox : GET /tokens/v2 (TokenValid requis) ; OpenAI : GET /v1/models, sans
+generation ; SMSFactor : GET /credits, sans envoi ni debit ; Global+ et CAPCEE :
+authentification seule, sans conservation du token de diagnostic ni envoi metier.
+Un connecteur CAPCEE/SMSFactor desactive n'est pas active pour le test. Les tests
+HTTP n'acceptent aucune destination fournie par le navigateur, refusent les
+redirections, verifient TLS et ont des delais connexion/total de 3/8 secondes.
+Le SMTP utilise un transport jetable, TLS obligatoire avant AUTH et timeout de
+5 secondes par operation. Les erreurs sont expurgees : aucun corps distant, token,
+mot de passe ou exception brute n'est renvoye. Un succes ne garantit ni livraison
+email, quota IA, ni autorisations metier de tous les endpoints du fournisseur.
+
+References des sondes en lecture seule :
+- https://docs.mapbox.com/api/accounts/tokens/#retrieve-a-token
+- https://developers.openai.com/api/reference/resources/models/methods/list
+- https://dev.smsfactor.com/en/api/sms/account/credits

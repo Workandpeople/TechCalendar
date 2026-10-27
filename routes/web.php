@@ -87,6 +87,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/admin/users/{user}/send-reset-link', [AdminUserController::class, 'sendResetLink'])->name('admin.users.send-reset-link');
 
     Route::get('/admin/settings', [AdminSettingController::class, 'index'])->name('admin.settings');
+    Route::post('/admin/settings/diagnostics', [AdminSettingController::class, 'diagnose'])->middleware('throttle:20,1')->name('admin.settings.diagnostics');
     Route::put('/admin/settings', [AdminSettingController::class, 'update'])->name('admin.settings.update');
     Route::delete('/admin/settings', [AdminSettingController::class, 'destroy'])->name('admin.settings.destroy');
     Route::delete('/admin/settings/external-appointments', [AdminSettingController::class, 'resetExternalAppointments'])->name('admin.settings.external-appointments.reset');

@@ -1,142 +1,156 @@
 <x-layouts.app>
-    <div class="space-y-6">
-        <x-workspace-heading title="Paramètres" eyebrow="Administration" description="Configurez les connexions et les règles de l’application. Les valeurs enregistrées ici sont chiffrées et prioritaires sur la configuration du serveur." />
-
-        @if (session('status'))
-            <div class="gc-alert">{{ session('status') }}</div>
-        @endif
-
-        @if ($errors->any())
-            <div class="gc-alert" style="border-color:#fecaca;background:#fff1f2;color:#9f1239;">
-                {{ $errors->first() }}
+    @php
+        $allSettings = $groups->flatten(1);
+        $oldSettings = old('settings', []);
+        $sourceLabels = ['bdd' => 'BDD active', 'env' => '.ENV actif', 'fallback' => 'Valeur par défaut'];
+    @endphp
+    <div class="settings-workspace" data-settings-workspace>
+        <header class="settings-heading">
+            <div>
+                <p class="settings-eyebrow">Administration</p>
+                <h1>Paramètres</h1>
+                <p>Les valeurs BDD sont chiffrées et prioritaires sur la configuration du serveur.</p>
             </div>
+            <a href="#connection-tests" class="gc-btn-secondary settings-small"><x-nav-icon name="check" /> Tests de connexion</a>
+        </header>
+        @if (session('status'))
+            <div class="gc-alert" role="status">{{ session('status') }}</div>
         @endif
-
-        <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6" data-validate-form>
+        @if ($errors->any())
+            <div class="gc-alert settings-error" role="alert">{{ $errors->first() }}</div>
+        @endif
+        <form method="POST" action="{{ route('admin.settings.update') }}" data-settings-form>
             @csrf
             @method('PUT')
-
-            @foreach ($groups as $group => $settings)
-                <section class="gc-card p-5">
-                    <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <p class="text-sm" style="color:var(--gc-text-soft);">Configuration</p>
-                            <h2 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $group }}</h2>
-                        </div>
-                        <span class="rounded-full px-3 py-1 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $settings->count() }} cle(s)</span>
+            <div class="settings-toolbar">
+                <div class="settings-filters">
+                    <label class="settings-search">
+                        <span class="sr-only">Rechercher une variable</span>
+                        <x-nav-icon name="search" />
+                        <input type="search" class="gc-input" placeholder="Rechercher un nom, une clé ou une variable .env…" data-settings-search autocomplete="off">
+                    </label>
+                    <label>
+                        <span class="sr-only">Section</span>
+                        <select class="gc-input" data-settings-group>
+                            <option value="">Toutes les sections</option>
+                            @foreach ($groups->keys() as $group)
+                                <option value="{{ $group }}">{{ $group }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label>
+                        <span class="sr-only">Source ou état</span>
+                        <select class="gc-input" data-settings-source>
+                            <option value="">Toutes les variables ({{ $allSettings->count() }})</option>
+                            <option value="bdd">BDD ({{ $allSettings->where('source', 'bdd')->count() }})</option>
+                            <option value="env">.env / serveur ({{ $allSettings->where('source', 'env')->count() }})</option>
+                            <option value="missing">Non renseignées ({{ $allSettings->where('is_missing', true)->count() }})</option>
+                            <option value="fallback">Valeurs par défaut ({{ $allSettings->where('source', 'fallback')->where('is_missing', false)->count() }})</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="settings-toolbar-footer">
+                    <div><span data-settings-count aria-live="polite">{{ $allSettings->count() }} variables</span><span data-settings-dirty class="settings-dirty" hidden></span></div>
+                    <div class="settings-toolbar-actions">
+                        <button type="button" class="settings-reset-filters" data-settings-reset>Effacer les filtres</button>
+                        <button type="submit" class="gc-btn-primary settings-small" aria-label="Enregistrer les paramètres">Enregistrer</button>
                     </div>
-
-                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                </div>
+            </div>
+            <div class="settings-groups">
+                @foreach ($groups as $group => $settings)
+                    <section class="gc-card settings-group" data-setting-section data-group="{{ $group }}">
+                        <h2><span>{{ $group }}</span><span class="settings-section-count" data-setting-section-count>{{ $settings->count() }}</span></h2>
                         @foreach ($settings as $setting)
                             @php
-                                $oldSettings = old('settings', []);
+                                $id = 'setting_'.str_replace('.', '_', $setting['key']);
                                 $inputValue = is_array($oldSettings) && array_key_exists($setting['key'], $oldSettings)
                                     && (is_scalar($oldSettings[$setting['key']]) || $oldSettings[$setting['key']] === null)
                                     ? $oldSettings[$setting['key']] : $setting['value'];
-                                $sourceMeta = match ($setting['source']) {
-                                    'bdd' => [
-                                        'label' => 'BDD active',
-                                        'background' => '#dcfce7',
-                                        'color' => '#15803d',
-                                    ],
-                                    'env' => [
-                                        'label' => '.ENV actif',
-                                        'background' => '#e0f2fe',
-                                        'color' => '#1d4ed8',
-                                    ],
-                                    default => [
-                                        'label' => 'Fallback',
-                                        'background' => '#fef3c7',
-                                        'color' => '#b45309',
-                                    ],
-                                };
                             @endphp
-                            <div class="rounded-xl border p-4" style="border-color:var(--gc-border);">
-                                <div class="mb-3 flex items-start justify-between gap-3">
-                                    <div>
-                                        <label class="gc-label mb-1" for="setting_{{ str_replace('.', '_', $setting['key']) }}">{{ $setting['label'] }}</label>
-                                        <p class="text-xs" style="color:var(--gc-text-soft);">{{ $setting['key'] }}</p>
-                                    </div>
-                                    <span class="shrink-0 rounded-full px-2 py-1 text-xs font-semibold" style="background:{{ $sourceMeta['background'] }};color:{{ $sourceMeta['color'] }};">
-                                        {{ $sourceMeta['label'] }}
-                                    </span>
-                                </div>
-
-                                <div class="mb-3 flex flex-wrap items-center gap-2">
-                                    @if ($setting['env_key'])
-                                        <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#f8fafc;color:var(--gc-text);border:1px solid var(--gc-border);">
-                                            .env: {{ $setting['env_key'] }}
-                                        </span>
+                            <div class="settings-row" data-setting-row data-source="{{ $setting['source'] }}"
+                                data-missing="{{ $setting['is_missing'] ? 'true' : 'false' }}"
+                                data-search="{{ $setting['label'].' '.$setting['key'].' '.$setting['env_key'].' '.$setting['description'] }}">
+                                <div class="settings-row-label">
+                                    <label for="{{ $id }}">{{ $setting['label'] }}</label>
+                                    <code title="{{ $setting['key'] }}">{{ $setting['env_key'] ?: $setting['key'] }}</code>
+                                    @if ($setting['description'])
+                                        <small>{{ $setting['description'] }}</small>
                                     @endif
-                                    <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:{{ $setting['has_env_value'] ? '#ecfdf5' : '#fff7ed' }};color:{{ $setting['has_env_value'] ? '#047857' : '#c2410c' }};">
-                                        {{ $setting['has_env_value'] ? 'Valeur .env disponible' : 'Valeur .env absente' }}
-                                    </span>
                                 </div>
-
-                                @if ($setting['type'] === 'select')
-                                    <select id="setting_{{ str_replace('.', '_', $setting['key']) }}" name="settings[{{ $setting['key'] }}]" class="gc-input">
-                                        <option value="">Utiliser .env / fallback</option>
-                                        @foreach ($setting['options'] as $value => $label)
-                                            <option value="{{ $value }}" @selected((string) $inputValue === (string) $value)>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                @else
-                                    <input
-                                        id="setting_{{ str_replace('.', '_', $setting['key']) }}"
-                                        name="settings[{{ $setting['key'] }}]"
-                                        type="{{ $setting['type'] === 'password' ? 'password' : ($setting['type'] === 'email' ? 'email' : 'text') }}"
-                                        class="gc-input"
-                                        value="{{ $setting['is_secret'] ? '' : $inputValue }}"
-                                        placeholder="{{ $setting['is_secret'] && $setting['has_database_value'] ? 'Valeur BDD définie - laisser vide pour conserver' : 'Laisser vide pour utiliser .env / fallback' }}"
-                                        autocomplete="off"
-                                    />
-                                @endif
-
-                                @if ($setting['description'])
-                                    <p class="mt-2 text-xs" style="color:var(--gc-text-soft);">{{ $setting['description'] }}</p>
-                                @endif
-
-                                <div class="mt-3 flex items-center justify-between gap-3">
-                                    <p class="text-xs" style="color:var(--gc-text-soft);">
-                                        @if ($setting['has_database_value'])
-                                            Override BDD prioritaire.
-                                        @elseif ($setting['has_env_value'])
-                                            Utilise actuellement la valeur .env/config.
-                                        @else
-                                            Aucune valeur .env: utilise le fallback applicatif.
-                                        @endif
-                                    </p>
+                                <div class="settings-row-control">
+                                    @if ($setting['type'] === 'select')
+                                        <select id="{{ $id }}" name="settings[{{ $setting['key'] }}]" class="gc-input" data-setting-input data-saved-value="{{ $setting['value'] }}">
+                                            <option value="">Utiliser .env / défaut</option>
+                                            @foreach ($setting['options'] as $value => $label)
+                                                <option value="{{ $value }}" @selected((string) $inputValue === (string) $value)>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    @else
+                                        <input id="{{ $id }}" name="settings[{{ $setting['key'] }}]" data-setting-input data-saved-value="{{ $setting['is_secret'] ? '' : $setting['value'] }}"
+                                            type="{{ $setting['type'] === 'password' ? 'password' : ($setting['type'] === 'email' ? 'email' : 'text') }}"
+                                            class="gc-input" value="{{ $setting['is_secret'] ? '' : $inputValue }}"
+                                            @if ($setting['type'] === 'integer') inputmode="numeric" @endif
+                                            placeholder="{{ $setting['is_secret'] && ! $setting['is_missing'] ? 'Secret enregistré · laisser vide pour conserver' : 'Utiliser .env / défaut' }}"
+                                            autocomplete="off">
+                                    @endif
+                                </div>
+                                <div class="settings-row-source">
+                                    <span class="settings-source" data-source="{{ $setting['is_missing'] ? 'missing' : $setting['source'] }}"
+                                        title=".env: {{ $setting['env_key'] ?: '—' }} · {{ $setting['has_env_value'] ? 'Valeur .env disponible' : 'Valeur .env absente' }}">
+                                        {{ $setting['is_missing'] ? 'Non renseignée' : $sourceLabels[$setting['source']] }}
+                                    </span>
                                     @if ($setting['has_database_value'])
-                                        <button
-                                            type="submit"
-                                            form="reset-setting-{{ str_replace('.', '_', $setting['key']) }}"
-                                            class="gc-btn-danger"
-                                        >
-                                            Revenir .env
-                                        </button>
+                                        <button type="submit" form="reset-{{ $id }}" class="settings-revert" title="Supprimer la valeur BDD et utiliser la configuration du serveur">Revenir .env</button>
                                     @endif
                                 </div>
                             </div>
                         @endforeach
-                    </div>
-                </section>
-            @endforeach
-
-            <div class="flex justify-end">
-                <button type="submit" class="gc-btn-primary">Enregistrer les paramètres</button>
+                    </section>
+                @endforeach
             </div>
+            <p class="settings-empty" data-settings-empty hidden>Aucune variable ne correspond à ces filtres.</p>
+            <p class="settings-help">Un secret laissé vide est conservé. « Revenir .env » retire uniquement sa valeur BDD. Les filtres ne modifient pas les valeurs.</p>
         </form>
-
-        @foreach ($groups as $settings)
-            @foreach ($settings as $setting)
-                @if ($setting['has_database_value'])
-                    <form id="reset-setting-{{ str_replace('.', '_', $setting['key']) }}" method="POST" action="{{ route('admin.settings.destroy') }}" class="hidden">
-                        @csrf
-                        @method('DELETE')
-                        <input type="hidden" name="key" value="{{ $setting['key'] }}">
-                    </form>
-                @endif
-            @endforeach
+        <section id="connection-tests" class="gc-card settings-diagnostics" data-diagnostics data-url="{{ route('admin.settings.diagnostics') }}">
+            <header>
+                <div><p class="settings-eyebrow">Diagnostic à la demande</p><h2>Tests de connexion</h2></div>
+                <button type="button" class="gc-btn-secondary settings-small" data-diagnostics-all hidden>Tout tester</button>
+            </header>
+            <p class="settings-help">Valeurs enregistrées uniquement : enregistrez vos changements avant de tester. Aucun email, SMS, dossier ou document n’est envoyé. Les tests ne modifient pas les modes simulation ni les activations.</p>
+            <div class="settings-diagnostic-grid">
+                @foreach ($diagnostics as $key => $diagnostic)
+                    <article class="settings-diagnostic" data-diagnostic="{{ $key }}">
+                        <div class="settings-diagnostic-title">
+                            <h3>{{ $diagnostic['label'] }}</h3>
+                            <button type="button" class="gc-btn-secondary settings-small" data-diagnostic-run hidden>Tester</button>
+                        </div>
+                        <p>{{ $diagnostic['description'] }}</p>
+                        @if ($key === 'mail')
+                            <label class="settings-mail-sender">
+                                <span class="sr-only">Connexion mail à tester</span>
+                                <select class="gc-input" data-diagnostic-mail-sender>
+                                    <option value="">Transport par défaut</option>
+                                    @foreach ($mailSenders as $sender)
+                                        <option value="{{ $sender['id'] }}">{{ $sender['name'] }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                        @endif
+                        <p class="settings-diagnostic-result" data-diagnostic-result data-state="idle" role="status" aria-live="polite">Non testé</p>
+                    </article>
+                @endforeach
+            </div>
+            <noscript><p class="settings-help">Activez JavaScript pour lancer les tests de connexion.</p></noscript>
+        </section>
+        @foreach ($allSettings as $setting)
+            @if ($setting['has_database_value'])
+                <form id="reset-setting_{{ str_replace('.', '_', $setting['key']) }}" method="POST" action="{{ route('admin.settings.destroy') }}" hidden>
+                    @csrf
+                    @method('DELETE')
+                    <input type="hidden" name="key" value="{{ $setting['key'] }}">
+                </form>
+            @endif
         @endforeach
     </div>
 </x-layouts.app>

@@ -1,0 +1,70 @@
+.settings-workspace { display: grid; gap: 1.25rem; max-width: 1400px; margin-inline: auto; }
+.settings-workspace [hidden] { display: none !important; }
+.settings-heading, .settings-diagnostics > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.settings-heading h1 { font-size: 1.65rem; line-height: 1.2; font-weight: 750; color: var(--gc-text); }
+.settings-heading > div > p:last-child { font-size: .85rem; color: var(--gc-text-soft); margin-top: .35rem; }
+.settings-eyebrow { font-size: .65rem; font-weight: 750; text-transform: uppercase; letter-spacing: .12em; color: #2563eb; margin-bottom: .25rem; }
+.settings-workspace .settings-small { min-height: 34px; padding: .4rem .75rem; font-size: .78rem; gap: .4rem; white-space: nowrap; }
+.settings-small svg { width: 16px; height: 16px; }
+.settings-toolbar { position: sticky; top: 0; z-index: 15; padding: .8rem 1rem; background: #f9fbff; border: 1px solid #cddcf3; border-radius: 12px; box-shadow: 0 3px 12px #21459408; }
+.settings-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 190px 220px; gap: .65rem; }
+.settings-filters > label { min-width: 0; }
+.settings-workspace .gc-input { min-height: 36px; height: 36px; padding: .4rem .65rem; font-size: .8rem; border-radius: 7px; }
+.settings-search { position: relative; }
+.settings-search > svg { position: absolute; left: .65rem; top: 10px; width: 16px; height: 16px; color: #6484a5; pointer-events: none; }
+.settings-workspace .settings-search input { padding-left: 2rem; }
+.settings-toolbar-footer { display: flex; justify-content: space-between; align-items: center; gap: .6rem; margin-top: .7rem; font-size: .75rem; color: var(--gc-text-soft); }
+.settings-toolbar-actions { display: flex; align-items: center; gap: 1rem; }
+.settings-reset-filters, .settings-revert { color: #375b8e; text-decoration: underline; text-underline-offset: 3px; font-size: .72rem; cursor: pointer; }
+.settings-dirty { margin-left: .6rem; color: #a15400; font-weight: 650; }
+.settings-groups { display: grid; gap: 1rem; margin-top: 1rem; }
+.settings-group { overflow: visible; }
+.settings-group h2 { display: flex; align-items: center; gap: .5rem; padding: .7rem 1rem; font-weight: 750; font-size: .9rem; border-bottom: 1px solid var(--gc-border); background: #f1f6ff; border-radius: 12px 12px 0 0; }
+.settings-section-count { background: white; border: 1px solid #d6e1f3; border-radius: 5px; padding: 0 .3rem; font-size: .65rem; color: #4773ac; }
+.settings-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 140px; align-items: center; gap: 1rem; padding: .65rem 1rem; border-bottom: 1px solid #e8eef4; }
+.settings-row:last-child { border-bottom: 0; }
+.settings-row:hover { background: #f9fbfe; }
+.settings-row-label { display: grid; gap: .1rem; min-width: 0; }
+.settings-row-label label { font-size: .8rem; font-weight: 650; }
+.settings-row-label code { font-size: .62rem; color: #71819a; overflow-wrap: anywhere; }
+.settings-row-label small { font-size: .7rem; line-height: 1.35; color: var(--gc-text-soft); }
+.settings-row-control { min-width: 0; }
+.settings-row-source { display: flex; flex-direction: column; align-items: flex-end; gap: .25rem; }
+.settings-source { display: inline-flex; font-size: .65rem; font-weight: 650; padding: .18rem .45rem; border-radius: 5px; background: #f1f5f9; color: #586577; white-space: nowrap; }
+.settings-source[data-source="bdd"] { background: #d8faeb; color: #08754c; }
+.settings-source[data-source="env"] { background: #e1f1ff; color: #1c5fa5; }
+.settings-source[data-source="missing"] { background: #fff0de; color: #9b5100; }
+.settings-help { font-size: .75rem; line-height: 1.55; color: var(--gc-text-soft); margin: .8rem 0 0; }
+.settings-empty { padding: 1.5rem; text-align: center; font-size: .85rem; color: var(--gc-text-soft); }
+.settings-diagnostics { padding: 1rem; scroll-margin-top: 1rem; }
+.settings-diagnostics h2 { font-size: 1rem; font-weight: 750; }
+.settings-diagnostic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; margin-top: 1rem; }
+.settings-diagnostic { border: 1px solid #dce6ef; border-radius: 8px; padding: .75rem; min-width: 0; }
+.settings-diagnostic-title { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.settings-diagnostic h3 { font-size: .85rem; font-weight: 750; }
+.settings-diagnostic > p { font-size: .73rem; line-height: 1.5; color: var(--gc-text-soft); }
+.settings-diagnostic-result { margin-top: .6rem; padding: .4rem .55rem; border-radius: 6px; background: #f3f6fa; overflow-wrap: anywhere; }
+.settings-diagnostic-result[data-state="ok"] { background: #e1f8eb; color: #08754c; }
+.settings-diagnostic-result[data-state="error"], .settings-error { background: #fff0f2; color: #b01940; border-color: #fecdd5; }
+.settings-diagnostic-result[data-state="warning"] { background: #fff3df; color: #8e5400; }
+.settings-diagnostic-result[data-state="running"] { background: #e9f1ff; color: #2456a8; }
+.settings-mail-sender { display: block; margin-top: .5rem; }
+@media (max-width: 1000px) {
+    .settings-filters { grid-template-columns: 1fr 1fr; }
+    .settings-search { grid-column: 1 / -1; }
+    .settings-row { grid-template-columns: minmax(150px, 1fr) minmax(140px, 1fr); gap: .4rem .8rem; }
+    .settings-row-source { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+}
+@media (max-width: 600px) {
+    .settings-filters { grid-template-columns: 1fr; }
+    .settings-search { grid-column: auto; }
+    .settings-heading { flex-direction: column; align-items: flex-start; }
+    .settings-toolbar { padding: .65rem; position: static; }
+    .settings-workspace .gc-input { font-size: 16px; height: 40px; }
+    .settings-toolbar-footer { flex-wrap: wrap; }
+    .settings-toolbar-actions { width: 100%; justify-content: space-between; }
+    .settings-row { display: flex; flex-direction: column; align-items: stretch; padding: .75rem; }
+    .settings-row-label { margin-bottom: .2rem; }
+    .settings-row-source { flex-direction: row; align-items: center; margin-top: .2rem; }
+    .settings-diagnostic-grid { grid-template-columns: 1fr; }
+}

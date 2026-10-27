@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ApplicationSettingsRequest;
+use App\Services\Admin\ConnectionDiagnostics;
 use App\Services\ApplicationSettings;
 use App\Services\ExternalAppointmentSourceRegistry;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,13 +17,28 @@ class AdminSettingController extends Controller
 {
     public function index(
         Request $request,
-        ApplicationSettings $settings
+        ApplicationSettings $settings,
+        ConnectionDiagnostics $diagnostics
     ): View {
         abort_unless((bool) $request->user()?->admin, 403);
 
         return view('admin.settings', [
             'groups' => collect($settings->formRows())->groupBy('group'),
+            'diagnostics' => $diagnostics->catalog(),
+            'mailSenders' => $diagnostics->mailSenders(),
         ]);
+    }
+
+    public function diagnose(Request $request, ConnectionDiagnostics $diagnostics): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->admin, 403);
+        $payload = $request->validate([
+            'check' => ['required', 'string', Rule::in(array_keys($diagnostics->catalog()))],
+            'mail_sender_id' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        return response()->json($diagnostics->run($payload['check'], isset($payload['mail_sender_id']) ? (int) $payload['mail_sender_id'] : null))
+            ->header('Cache-Control', 'private, no-store');
     }
 
     public function update(ApplicationSettingsRequest $request, ApplicationSettings $settings): RedirectResponse

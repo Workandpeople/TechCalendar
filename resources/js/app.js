@@ -19,6 +19,7 @@ import { initDocumentUploadLimits } from './document-upload-limit';
 import { initBookingDossierSummary } from './booking-dossier-summary';
 import { initCommentExcerpts } from './comment-excerpts';
 import { createBookingTravelTooltip } from './booking-travel-tooltip';
+import { initAdminSettings } from './admin-settings';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
@@ -43,6 +44,7 @@ initSelectMenus();
 initDossierService();
 initDossierMail();
 initDossierAddress();
+initAdminSettings();
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,
