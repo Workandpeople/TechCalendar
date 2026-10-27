@@ -427,6 +427,8 @@
                             $serviceDisplayType = trim((string) ($appointment['service']['type'] ?? $appointment['service_type'] ?? ''));
                             $serviceDisplayName = trim((string) ($appointment['service']['name'] ?? $appointment['service_display_name'] ?? $appointment['service_name'] ?? ''));
                             $serviceBadgeLabel = trim(implode(' - ', array_filter([$serviceDisplayType, $serviceDisplayName])));
+                            $postalCode = trim((string) ($appointment['postal_code'] ?? ''));
+                            $locationBadgeLabel = $postalCode !== '' ? 'CP '.$postalCode : (filled($appointment['department_code'] ?? null) ? 'Dép. '.$appointment['department_code'] : 'CP non renseigné');
                             $createdAtValue = $appointment['created_at'] ?? $appointment['external_payload']['created_at'] ?? $appointment['fetched_at'] ?? null;
                             $createdAtLabel = '-';
 
@@ -452,14 +454,14 @@
                             data-has-coordinates="{{ is_numeric($appointment['latitude'] ?? null) && is_numeric($appointment['longitude'] ?? null) ? '1' : '0' }}"
                         >
                             <div class="gc-booking-request-client min-w-0">
-                                <p class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
+                                <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
                                 <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="{{ $companyName !== '' ? $companyName : $appointment['source'] }}">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
                             </div>
-                            <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
+                            <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
                             <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le {{ $createdAtLabel }}">Créé le {{ $createdAtLabel }}</p>
                             <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="{{ $appointment['address'] }}">{{ $appointment['address'] }}</p>
                             <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
-                                <span class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. {{ $appointment['department_code'] }}</span>
+                                <span class="gc-booking-request-postal shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $locationBadgeLabel }}</span>
                                 @if ($serviceBadgeLabel !== '')
                                     <span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="{{ $serviceBadgeLabel }}">{{ $serviceBadgeLabel }}</span>
                                 @else
@@ -1510,6 +1512,7 @@
         let bookingInitialCrmDetailComment = '';
         let bookingTravelTooltip = null;
         let bookingCrmAppointmentTooltip = null;
+        let bookingCrmCommentTooltipTarget = null;
         let currentTechnicianColors = {};
         let currentCrmAppointmentId = null;
         let currentAnalysisPayload = null;
@@ -1988,6 +1991,8 @@
             const serviceDisplayType = (appointment.service?.type || appointment.service_type || '').trim();
             const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
             const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ');
+            const postalCode = String(appointment.postal_code ?? '').trim();
+            const locationBadgeLabel = postalCode ? `CP ${postalCode}` : (appointment.department_code ? `Dép. ${appointment.department_code}` : 'CP non renseigné');
             const createdAtLabel = formatShortDateTime(appointment.created_at || appointment.external_payload?.created_at || appointment.fetched_at);
             const searchHaystack = `${customerName} ${companyName} ${serviceDisplayType} ${serviceDisplayName}`.trim().toLowerCase();
             const hasCoordinates = appointment.latitude != null && appointment.longitude != null
@@ -2014,14 +2019,14 @@
                     data-has-coordinates="${hasCoordinates ? '1' : '0'}"
                 >
                     <div class="gc-booking-request-client min-w-0">
-                        <p class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
+                        <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
                         <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="${escapeHtml(companyName || appointment.source || '')}">${escapeHtml(companyName || appointment.source || '')}</p>
                     </div>
-                    <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
+                    <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
                     <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le ${escapeHtml(createdAtLabel)}">Créé le ${escapeHtml(createdAtLabel)}</p>
                     <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="${escapeHtml(appointment.address)}">${escapeHtml(appointment.address)}</p>
                     <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
-                        <span class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dép. ${escapeHtml(appointment.department_code)}</span>
+                        <span class="gc-booking-request-postal shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(locationBadgeLabel)}</span>
                         ${serviceBadge}
                         ${gpsBadge}
                         ${replacementLink}
@@ -3038,6 +3043,8 @@
             }
 
             bookingCrmAppointmentTooltip = document.createElement('div');
+            bookingCrmAppointmentTooltip.id = 'booking-crm-comments-tooltip';
+            bookingCrmAppointmentTooltip.setAttribute('role', 'tooltip');
             bookingCrmAppointmentTooltip.style.cssText = [
                 'position:fixed',
                 'z-index:95',
@@ -3100,6 +3107,8 @@
         };
 
         const hideCrmAppointmentTooltip = () => {
+            bookingCrmCommentTooltipTarget?.removeAttribute('aria-describedby');
+            bookingCrmCommentTooltipTarget = null;
             if (bookingCrmAppointmentTooltip) {
                 bookingCrmAppointmentTooltip.style.display = 'none';
             }
@@ -6004,13 +6013,32 @@
                 if (card.dataset.bound === '1') return;
 
                 card.dataset.bound = '1';
-                card.addEventListener('mouseenter', (event) => {
-                    showCrmAppointmentTooltip(event, crmAppointmentById(card.dataset.crmId));
-                });
-                card.addEventListener('mousemove', (event) => {
-                    if (bookingCrmAppointmentTooltip?.style.display === 'block') {
-                        moveCrmAppointmentTooltip(event);
-                    }
+                card.querySelectorAll('[data-crm-comments-trigger]').forEach((target) => {
+                    const showComments = (event) => {
+                        hideCrmAppointmentTooltip();
+                        const box = target.getBoundingClientRect();
+                        showCrmAppointmentTooltip(event.type === 'focus'
+                            ? { clientX: box.left + box.width / 2, clientY: box.top }
+                            : event, crmAppointmentById(card.dataset.crmId));
+                        if (bookingCrmAppointmentTooltip?.style.display === 'block') {
+                            bookingCrmCommentTooltipTarget = target;
+                            target.setAttribute('aria-describedby', 'booking-crm-comments-tooltip');
+                        }
+                    };
+                    target.addEventListener('mouseenter', showComments);
+                    target.addEventListener('focus', showComments);
+                    target.addEventListener('mousemove', (event) => {
+                        if (bookingCrmAppointmentTooltip?.style.display === 'block') moveCrmAppointmentTooltip(event);
+                    });
+                    target.addEventListener('mouseleave', hideCrmAppointmentTooltip);
+                    target.addEventListener('blur', hideCrmAppointmentTooltip);
+                    target.addEventListener('keydown', (event) => {
+                        if (event.key === 'Escape') hideCrmAppointmentTooltip();
+                        if (['Enter', ' '].includes(event.key)) {
+                            event.preventDefault();
+                            card.click();
+                        }
+                    });
                 });
                 card.addEventListener('mouseleave', hideCrmAppointmentTooltip);
                 card.addEventListener('click', (event) => {

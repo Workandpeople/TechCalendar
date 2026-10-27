@@ -25,7 +25,27 @@ test('initial and refreshed booking rows share the same responsive layout', () =
         assert.match(markup, /gc-booking-request-service min-w-0 flex-1 truncate/);
         assert.match(markup, /crm-appointment-detail-button inline-flex h-8 w-8 shrink-0/);
         assert.doesNotMatch(markup, /flex-wrap\b|md:grid-cols-/);
+        assert.equal((markup.match(/data-crm-comments-trigger/g) || []).length, 2);
+        assert.match(markup, /gc-booking-request-phone text-sm font-bold tabular-nums/);
+        assert.match(markup, /gc-booking-request-postal shrink-0 whitespace-nowrap/);
     }
+});
+
+test('postal badges display the whole code including leading zeroes and overseas codes', () => {
+    for (const postal_code of ['01300', '20100', '31500', '97100']) {
+        const html = render({ id: 'dossier-1', postal_code, department_code: postal_code.slice(0, 2) });
+        assert.match(html, new RegExp(`>CP ${postal_code}</span>`));
+        assert.doesNotMatch(html, />Dép\./);
+    }
+    assert.match(render({ id: 'dossier-1', department_code: '2A' }), />Dép\. 2A<\/span>/);
+    assert.match(render({ id: 'dossier-1' }), />CP non renseigné<\/span>/);
+});
+
+test('phone and postal values remain escaped in refreshed rows', () => {
+    const html = render({ id: 'dossier-1', phone: '06 12 34 56 78 <img onerror=alert(1)>', postal_code: '<script>alert(1)</script>' });
+    assert.match(html, /gc-booking-request-phone[^>]*title="06 12 34 56 78 &lt;img/);
+    assert.match(html, />CP &lt;script&gt;/);
+    assert.doesNotMatch(html, /<img|<script/);
 });
 
 test('long service names stay complete in an escaped title without introducing markup', () => {

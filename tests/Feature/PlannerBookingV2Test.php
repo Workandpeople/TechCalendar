@@ -113,6 +113,22 @@ function nativeBookingFixture(string $status = 'PRISE DE RDV'): array
     return compact('actor', 'technician', 'service', 'dossier', 'operation', 'payload');
 }
 
+it('renders bold phones full postal codes and comment triggers only on name and phone', function () {
+    extract(nativeBookingFixture());
+    $dossier->forceFill(['postal_code' => '01300'])->save();
+    $response = $this->actingAs($actor)->get(route('planner.book'))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML($response->getContent(), LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+    $row = $xpath->query('//*[@data-crm-id="dossier-'.$operation->id.'"]')->item(0);
+    expect($row)->not->toBeNull();
+    expect($xpath->query('.//*[@data-crm-comments-trigger]', $row)->length)->toBe(2)
+        ->and($xpath->query('.//*[contains(@class,"gc-booking-request-phone") and contains(@class,"font-bold")]', $row)->item(0)->textContent)->toBe('0600000000')
+        ->and($xpath->query('.//*[contains(@class,"gc-booking-request-postal")]', $row)->item(0)->textContent)->toBe('CP 01300')
+        ->and($xpath->query('.//*[contains(@class,"gc-booking-request-address") and @data-crm-comments-trigger]', $row)->length)->toBe(0);
+    Http::assertNothingSent();
+});
+
 it('lists only pending operations with their own services comments and documents', function () {
     extract(nativeBookingFixture());
     $dossier->activities()->create(['kind' => 'legacy_comment', 'body' => 'Appeler avant la visite']);
