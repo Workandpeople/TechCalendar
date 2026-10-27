@@ -1240,13 +1240,39 @@
                         <div id="booking_detail_status" class="mt-3 hidden text-sm"></div>
 
                         <div class="mt-4 flex flex-wrap justify-end gap-2">
+                            @if (config('crm.v2_enabled'))
+                                <button id="booking-place-alongside-btn" type="button" class="gc-btn-secondary hidden">Placer le dossier ici</button>
+                                <button id="booking-force-placement-btn" type="button" class="gc-btn-danger hidden">Forcer le placement</button>
+                            @endif
                             <button id="booking-confirm-suggestion-btn" type="button" class="gc-btn-primary">Valider la prise du RDV</button>
                         </div>
+                        @if (config('crm.v2_enabled'))
+                            <p class="mt-3 text-xs" style="color:var(--gc-text-soft);">Chevauchement autorisé à la même adresse ou à moins de 1 km à vol d’oiseau. Le placement forcé demande une confirmation et reste tracé.</p>
+                        @endif
                     </form>
                 </section>
             </div>
         </div>
     </div>
+
+    @if (config('crm.v2_enabled'))
+        <dialog id="booking-force-confirmation" class="gc-booking-force-dialog gc-card m-auto p-5" aria-labelledby="booking-force-title">
+            <form method="dialog" class="space-y-4">
+                <h2 id="booking-force-title" class="text-lg font-semibold" style="color:#9f1239;">Forcer ce placement ?</h2>
+                <dl class="space-y-2 text-sm">
+                    <div><dt class="gc-label">Technicien</dt><dd data-force-technician></dd></div>
+                    <div><dt class="gc-label">Date et heure</dt><dd data-force-date></dd></div>
+                    <div><dt class="gc-label">Client et adresse</dt><dd data-force-customer></dd><dd data-force-address></dd></div>
+                </dl>
+                <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm" style="color:#92400e;">Ce RDV sera placé malgré les chevauchements, absences ou contraintes de trajet et d’horaires. Vérifie l’organisation avec le technicien. Cette action sera enregistrée dans l’historique interne.</p>
+                <label class="flex items-start gap-2 text-sm"><input type="checkbox" required data-force-accepted class="mt-1"><span>Je confirme ce placement forcé.</span></label>
+                <div class="flex flex-wrap justify-end gap-2">
+                    <button type="submit" value="cancel" formnovalidate class="gc-btn-secondary">Annuler</button>
+                    <button type="submit" value="confirm" class="gc-btn-danger">Confirmer le placement forcé</button>
+                </div>
+            </form>
+        </dialog>
+    @endif
 
     <div id="booking-lot-contact-modal" class="gc-modal hidden">
         <div class="gc-modal-panel gc-appointment-modal-panel">
@@ -1316,6 +1342,8 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <style>
+        .gc-booking-force-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
+        .gc-booking-force-dialog::backdrop { background: #0f172a99; }
         .booking-lot-details > summary::-webkit-details-marker {
             display: none;
         }
@@ -1436,6 +1464,7 @@
         const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
         const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
         const bookingConnectorsEnabled = @json($bookingConnectorsEnabled);
+        const bookingForcePlacementEnabled = @json((bool) config('crm.v2_enabled'));
         const bookingPaginationLabels = @json(__('pagination'));
         const bookingCrmRefreshUrl = @json(route('planner.book.crm-appointments.refresh'));
         const bookingCrmRefreshOneUrlTemplate = @json(route('planner.book.crm-appointments.refresh-one', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
@@ -3911,7 +3940,7 @@
                 startsAt.setHours(8, 0, 0, 0);
             }
 
-            const activeTechnicians = selectedAvailableTechnicians(startsAt);
+            const activeTechnicians = bookingForcePlacementEnabled ? selectedTechnicians() : selectedAvailableTechnicians(startsAt);
 
             if (activeTechnicians.length === 0) {
                 showFeedback('Aucun technicien sélectionné n’est disponible sur ce créneau: ils sont absents ou non sélectionnés.', 'error');
@@ -5056,9 +5085,9 @@
             placementConfirmationSection.querySelector('h2').textContent = isReplacement
                 ? 'Le rendez-vous a bien été replacé'
                 : 'Le rendez-vous a bien été placé';
-            placementConfirmationSection.querySelector('span').textContent = isReplacement
-                ? 'Replacement confirmé'
-                : 'Placement confirmé';
+            placementConfirmationSection.querySelector('span').textContent = data.forced_placement
+                ? (isReplacement ? 'Replacement forcé confirmé' : 'Placement forcé confirmé')
+                : (isReplacement ? 'Replacement confirmé' : 'Placement confirmé');
             document.getElementById('booking_confirmation_reference').textContent = data.appointment_id
                 ? `RDV #${data.appointment_id}`
                 : (isReplacement ? 'RDV replacé' : 'RDV créé');
@@ -5238,9 +5267,9 @@
 
             technicianSelectWrap.classList.toggle('hidden', !allowTechnicianChange);
             technicianSelect.innerHTML = selectedTechnicians()
-                .filter((technician) => !technicianIsAbsentAt(technician, event.start) || String(technician.id) === String(props.technician_id))
+                .filter((technician) => bookingForcePlacementEnabled || !technicianIsAbsentAt(technician, event.start) || String(technician.id) === String(props.technician_id))
                 .map((technician) => `
-                    <option value="${escapeHtml(technician.id)}">${escapeHtml(technician.name)} · ${escapeHtml(technician.driving_duration_minutes)} min</option>
+                    <option value="${escapeHtml(technician.id)}">${escapeHtml(technician.name)} · ${escapeHtml(technician.driving_duration_minutes)} min${technicianIsAbsentAt(technician, event.start) ? ' · ABSENT' : ''}</option>
                 `).join('');
             technicianSelect.value = props.technician_id || '';
             technicianSelect.onchange = allowTechnicianChange ? syncDraftEventFromInputs : null;
@@ -5262,6 +5291,8 @@
             document.getElementById('booking-confirm-suggestion-btn').textContent = bookingConfirmSuggestionLabel();
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
+            document.getElementById('booking-force-placement-btn')?.classList.toggle('hidden', !isSuggestion);
+            document.getElementById('booking-place-alongside-btn')?.classList.toggle('hidden', isSuggestion || !currentAppointmentRequest);
 
             if (shouldSelectCrmService) {
                 syncCrmServiceSelection();
@@ -6745,8 +6776,24 @@
             }
         });
 
-        document.getElementById('booking-confirm-suggestion-btn').addEventListener('click', async () => {
+        document.getElementById('booking-place-alongside-btn')?.addEventListener('click', () => {
+            if (!currentAppointmentRequest || !selectedCalendarEvent || selectedCalendarEvent.extendedProps?.is_suggestion) return;
+            const technician = technicianById(selectedCalendarEvent.extendedProps?.technician_id);
+            if (!technician) return;
+            const startsAt = new Date(selectedCalendarEvent.start);
+            openBookingAppointmentModal({
+                id: `calendar-draft-${Date.now()}`, title: `Placement | ${technician.name}`,
+                start: startsAt, end: addMinutes(startsAt, requestDurationMinutes()),
+                extendedProps: draftPropsForTechnician(technician, startsAt),
+            });
+        });
+
+        let bookingPlacementBusy = false;
+        const placeSelectedAppointment = async (forced = false) => {
+            if (bookingPlacementBusy || !selectedCalendarEvent?.extendedProps?.is_suggestion) return;
             const button = document.getElementById('booking-confirm-suggestion-btn');
+            const forceButton = document.getElementById('booking-force-placement-btn');
+            const confirmedEvent = selectedCalendarEvent;
             const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
             const serviceSelect = document.getElementById('booking_detail_service_select');
             const lotAliasSelectWrap = document.getElementById('booking_detail_lot_alias_select_wrap');
@@ -6773,10 +6820,32 @@
                 payload.lot_service_alias_id = Number(lotAliasSelect.value);
             }
 
+            // An earlier confirmation must never be reused by a normal placement.
+            delete payload.force_placement;
+            delete payload.force_confirmed;
+            if (!payload.technician_id || !payload.starts_at || !Number.isFinite(new Date(payload.starts_at).getTime())
+                || !Number.isInteger(Number(payload.duration_minutes)) || Number(payload.duration_minutes) < 30 || Number(payload.duration_minutes) > 480) {
+                showDetailStatus('Choisis un technicien, une date et une durée de 30 à 480 minutes.', 'error');
+                return;
+            }
+
+            bookingPlacementBusy = true;
             button.disabled = true;
-            button.textContent = 'Validation...';
+            if (forceButton) forceButton.disabled = true;
 
             try {
+                if (forced) {
+                    if (!bookingForcePlacementEnabled) return;
+                    const accepted = await window.TechCalendarBookingForce?.confirm({
+                        technician: technicianById(payload.technician_id)?.name || confirmedEvent.extendedProps.technician_name,
+                        date: formatDateTimeForConfirmation(payload.starts_at),
+                        customer: confirmedEvent.extendedProps.customer_name, address: confirmedEvent.extendedProps.address,
+                    });
+                    if (!accepted || selectedCalendarEvent !== confirmedEvent) return;
+                    payload.force_placement = true;
+                    payload.force_confirmed = true;
+                }
+                button.textContent = 'Validation...';
                 const response = await fetch(bookingStoreUrl, {
                     method: 'POST',
                     headers: {
@@ -6793,7 +6862,6 @@
                     throw new Error(firstError);
                 }
 
-                const confirmedEvent = selectedCalendarEvent;
                 closeBookingAppointmentModal();
                 if (!bookingConnectorsEnabled && payload.crm_appointment_id) {
                     renderBookingCrmAppointments(bookingCrmAppointments.filter((row) => row.id !== payload.crm_appointment_id), null);
@@ -6802,10 +6870,14 @@
             } catch (error) {
                 showDetailStatus(error.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.'), 'error');
             } finally {
+                bookingPlacementBusy = false;
                 button.disabled = false;
+                if (forceButton) forceButton.disabled = false;
                 button.textContent = bookingConfirmSuggestionLabel();
             }
-        });
+        };
+        document.getElementById('booking-confirm-suggestion-btn').addEventListener('click', () => placeSelectedAppointment(false));
+        document.getElementById('booking-force-placement-btn')?.addEventListener('click', () => placeSelectedAppointment(true));
 
         window.addEventListener('techcalendar:layout-resized', () => {
             bookingMap?.resize();

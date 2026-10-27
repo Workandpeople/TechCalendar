@@ -416,10 +416,24 @@ it('refuses unavailable or unqualified technician assignments and foreign appoin
     $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('technician_id');
     $replacement->services()->attach($this->service);
     $busy = $this->appointment->replicate();
-    $busy->forceFill(['technician_id' => $replacement->id, 'dossier_operation_id' => null])->save();
+    $busy->forceFill(['technician_id' => $replacement->id, 'dossier_operation_id' => null,
+        'address' => '20 rue de Lyon, 69000 Lyon', 'latitude' => 45.76, 'longitude' => 4.84])->save();
     $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('starts_at');
     $this->patchJson(route('v2.dossiers.appointments.technician', [$this->dossier, $busy->id]), $payload)->assertNotFound();
     expect($this->appointment->fresh()->technician_id)->toBe($this->tech->id);
+});
+
+it('allows a shared nearby slot when reassigning a technician directly from the dossier', function () {
+    $replacement = User::factory()->create(['role' => 2, 'admin' => false]);
+    $replacement->services()->attach($this->service);
+    $nearby = $this->appointment->replicate();
+    $nearby->forceFill(['technician_id' => $replacement->id, 'dossier_operation_id' => null,
+        'address' => '12 rue du Test', 'latitude' => 48.8005, 'longitude' => 2.3])->save();
+    $this->patch(route('v2.dossiers.appointments.technician', [$this->dossier, $this->appointment->id]), [
+        'version' => $this->dossier->fresh()->version, 'technician_id' => $replacement->id,
+        'updated_at' => $this->appointment->fresh()->updated_at->toIso8601String(),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+    expect($this->appointment->fresh()->technician_id)->toBe($replacement->id);
 });
 
 it('supports imported appointments without a modification date but still rejects stale tokens', function () {

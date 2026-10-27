@@ -2083,3 +2083,36 @@ References des sondes en lecture seule :
 - https://docs.mapbox.com/api/accounts/tokens/#retrieve-a-token
 - https://developers.openai.com/api/reference/resources/models/methods/list
 - https://dev.smsfactor.com/en/api/sms/account/credits
+
+### Chevauchements Et Placement Force
+
+En V2, la reservation et l'edition/reaffectation utilisent le meme controle de
+creneau : chaque RDV en chevauchement doit etre a la meme adresse normalisee ou
+a une distance GPS strictement inferieure a 1 km a vol d'oiseau (Haversine, sans
+appel Mapbox). Les coordonnees nulles, non finies, hors plage ou 0/0 ne prouvent
+pas une proximite. Sans GPS, une adresse identique doit au moins contenir une
+partie textuelle et numerique ; une ville ou un libelle vide/non renseigne ne
+suffit pas. Les bornes temporelles sont ouvertes : fin = debut n'est pas un
+chevauchement. Tous les chevauchements sont controles, pas seulement le premier.
+Les rendez-vous supprimes et le RDV en cours de replacement sont exclus.
+
+Le bouton Placer le dossier ici permet de reprendre le creneau/technicien d'un
+RDV deja affiche pour le dossier actuellement selectionne, sans modifier le RDV
+existant. Les propositions automatiques restent prudentes ; un placement dans
+un creneau existant se fait par ce bouton ou en ajustant le creneau choisi.
+
+Forcer le placement ouvre une boite de confirmation native avec recapitulatif,
+focus initial sur Annuler et case obligatoire. L'annulation/Echap ne cree aucune
+requete de placement ; chaque tentative demande une nouvelle confirmation.
+L'API requiert force_placement=true ET force_confirmed accepte. Seuls les acteurs
+de planning deja autorises peuvent le demander ; l'ancien workflow connecteur ne
+l'accepte pas. Le forçage contourne les conflits de planning et absences, mais
+jamais les habilitations, un technicien supprime, les donnees obligatoires, les
+acces dossier, les protections de statut ou une prestation deja planifiee.
+
+Le technicien est verrouille dans la transaction avant de lire les chevauchements
+et absences. Un placement force ajoute obligatoirement une activite interne
+appointment_forced : auteur, date de confirmation, creneau, technicien, IDs des
+RDV/absences presents. Si l'historique echoue, le placement entier est annule.
+Aucune migration, suppression, modification des identifiants ou activation des
+envois n'est necessaire. SMS et autres modes de livraison restent inchanges.

@@ -20,9 +20,11 @@ import { initBookingDossierSummary } from './booking-dossier-summary';
 import { initCommentExcerpts } from './comment-excerpts';
 import { createBookingTravelTooltip } from './booking-travel-tooltip';
 import { initAdminSettings } from './admin-settings';
+import { confirmForcedPlacement } from './booking-force-placement';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
+window.TechCalendarBookingForce = { confirm: confirmForcedPlacement };
 initCommentMarkup();
 initCommentExcerpts();
 

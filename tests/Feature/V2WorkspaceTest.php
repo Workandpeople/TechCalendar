@@ -75,6 +75,7 @@ it('edits all appointment fields locally and rejects overlapping and stale updat
         ->and($dossier->activities()->where('kind', 'appointment_updated')->count())->toBe(1);
     $this->patchJson($url, $payload + ['updated_at' => '2020-01-01T00:00:00Z'])->assertUnprocessable();
     $other = $this->appointment->fresh()->replicate();
+    $other->address = 'Une autre adresse sans coordonnées vérifiées';
     $other->save();
     $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('starts_at');
     Http::assertNothingSent();

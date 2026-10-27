@@ -18,6 +18,7 @@ use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
+use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
 use App\Services\Crm\NativeAppointmentPlacement;
@@ -454,6 +455,8 @@ class PlannerBookingController extends Controller
             'starts_at' => ['required', 'date'],
             'duration_minutes' => ['required', 'integer', 'min:30', 'max:480'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            'force_placement' => ['sometimes', 'boolean', Rule::prohibitedIf(! config('crm.v2_enabled'))],
+            'force_confirmed' => [Rule::excludeIf(! $request->boolean('force_placement')), 'required', 'accepted'],
         ]);
 
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
@@ -483,26 +486,28 @@ class PlannerBookingController extends Controller
         $startsAt = Carbon::parse($payload['starts_at']);
         $durationMinutes = (int) $payload['duration_minutes'];
         $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
-        $absence = $this->absenceOverlapForTechnician((int) $payload['technician_id'], $startsAt, $endsAt);
+        if (! config('crm.v2_enabled')) {
+            $absence = $this->absenceOverlapForTechnician((int) $payload['technician_id'], $startsAt, $endsAt);
 
-        if ($absence) {
-            throw ValidationException::withMessages([
-                'technician_id' => 'Ce technicien est absent '.$this->absenceLabel($absence).'.',
-            ]);
-        }
+            if ($absence) {
+                throw ValidationException::withMessages([
+                    'technician_id' => 'Ce technicien est absent '.$this->absenceLabel($absence).'.',
+                ]);
+            }
 
-        $hasOverlappingAppointment = Appointment::query()
-            ->where('technician_id', (int) $payload['technician_id'])
-            ->whereNull('deleted_at')
-            ->where('starts_at', '<', $endsAt)
-            ->where('ends_at', '>', $startsAt)
-            ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))
-            ->exists();
+            $hasOverlappingAppointment = Appointment::query()
+                ->where('technician_id', (int) $payload['technician_id'])
+                ->whereNull('deleted_at')
+                ->where('starts_at', '<', $endsAt)
+                ->where('ends_at', '>', $startsAt)
+                ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))
+                ->exists();
 
-        if ($hasOverlappingAppointment) {
-            throw ValidationException::withMessages([
-                'starts_at' => 'Ce technicien a déjà un RDV sur ce créneau.',
-            ]);
+            if ($hasOverlappingAppointment) {
+                throw ValidationException::withMessages([
+                    'starts_at' => 'Ce technicien a déjà un RDV sur ce créneau.',
+                ]);
+            }
         }
 
         if (($crmAppointment['external_source'] ?? null) === CoffracAppointmentService::SOURCE
@@ -530,14 +535,16 @@ class PlannerBookingController extends Controller
                 $request,
                 $startsAt
             ): Appointment {
+                $placementChecks = [];
                 if (config('crm.v2_enabled')) {
                     // Serialize reservations of the same technician before checking the slot again.
-                    User::query()->where('role', 2)->lockForUpdate()->findOrFail($payload['technician_id']);
-                    if (Appointment::query()->where('technician_id', $payload['technician_id'])
-                        ->where('starts_at', '<', $endsAt)->where('ends_at', '>', $startsAt)
-                        ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))->exists()) {
-                        throw ValidationException::withMessages(['starts_at' => 'Ce créneau vient d’être occupé. Choisis une autre proposition.']);
+                    $technician = User::query()->where('role', 2)->where('admin', false)->lockForUpdate()->findOrFail($payload['technician_id']);
+                    if (! $this->technicianSupportsService($technician->id, (int) $crmAppointment['service']['id'])) {
+                        throw ValidationException::withMessages(['technician_id' => 'Ce technicien ne réalise pas cette prestation.']);
                     }
+                    $placementChecks = app(AppointmentSlotAvailability::class)->assertAvailable(
+                        $technician, $startsAt, $endsAt, $crmAppointment, $replacementAppointment?->id, (bool) ($payload['force_placement'] ?? false)
+                    );
                     if ($replacementAppointment) {
                         $locked = Appointment::query()->lockForUpdate()->findOrFail($replacementAppointment->id);
                         if (! $locked->updated_at->equalTo($replacementAppointment->updated_at)) {
@@ -592,6 +599,9 @@ class PlannerBookingController extends Controller
 
                 if (config('crm.v2_enabled')) {
                     app(NativeAppointmentPlacement::class)->place($request->user(), $appointment, $crmAppointment);
+                    if ($payload['force_placement'] ?? false) {
+                        app(AppointmentSlotAvailability::class)->recordForcedPlacement($request->user(), $appointment, $placementChecks);
+                    }
                 } else {
                     $coffracAppointments->markPlaced($appointment, $crmAppointment);
                 }
@@ -659,6 +669,7 @@ class PlannerBookingController extends Controller
         return response()->json([
             'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
+            'forced_placement' => (bool) ($payload['force_placement'] ?? false),
             'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
             'global_plus' => $globalPlus,
         ], $replacementAppointment ? 200 : 201);

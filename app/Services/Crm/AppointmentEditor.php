@@ -53,13 +53,10 @@ class AppointmentEditor
             }
             $start = Carbon::parse($data['starts_at']);
             $end = $start->copy()->addMinutes($data['duration_minutes']);
-            if (Appointment::query()->whereKeyNot($id)->where('technician_id', $technicianId)
-                ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->exists()) {
-                throw ValidationException::withMessages(['starts_at' => 'Ce technicien a déjà un RDV sur ce créneau.']);
-            }
-            if ($technician->absences()->where('starts_at', '<', $end)->where('ends_at', '>', $start)->exists()) {
-                throw ValidationException::withMessages(['starts_at' => 'Le technicien est absent sur ce créneau.']);
-            }
+            app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end, [
+                'address' => $data['address'], 'latitude' => array_key_exists('latitude', $data) ? $data['latitude'] : $appointment->latitude,
+                'longitude' => array_key_exists('longitude', $data) ? $data['longitude'] : $appointment->longitude,
+            ], $id);
             $oldTechnician = $appointment->technician_id;
             $oldDate = $appointment->starts_at->toDateString();
             foreach (['customer_first_name', 'customer_last_name', 'customer_phone'] as $field) {
