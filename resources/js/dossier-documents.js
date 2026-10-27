@@ -126,6 +126,8 @@ export function initDocumentPreview(root = document, browser = window) {
     };
     root.querySelectorAll('[data-document-open]').forEach((link) => link.addEventListener('click', async (event) => {
         if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        // Field users need the browser's full-screen reader/zoom rather than an embedded mobile PDF viewer.
+        if (link.dataset.documentNativeMobile !== undefined && browser.matchMedia?.('(max-width: 767px), (pointer: coarse)').matches) return;
         const url = localUrl(link.href);
         const download = link.dataset.documentDownload && localUrl(link.dataset.documentDownload);
         if (!url || !download) return;

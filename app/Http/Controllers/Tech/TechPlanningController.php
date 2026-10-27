@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\AppointmentDocumentSerializer;
 use App\Services\CoffracAppointmentService;
-use App\Services\TechnicianDailyRouteMetricService;
+use App\Services\Tech\TechnicianWorkspace;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,73 +14,15 @@ use Illuminate\View\View;
 
 class TechPlanningController extends Controller
 {
-    public function index(Request $request, TechnicianDailyRouteMetricService $routeMetrics): View
+    public function index(Request $request, TechnicianWorkspace $workspace): View
     {
         abort_unless($this->canAccess($request), 403);
+        $filters = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']]);
 
-        $user = $request->user();
-        $now = now();
-        $weekStart = $now->copy()->startOfWeek();
-        $weekEnd = $now->copy()->endOfWeek();
-
-        $metrics = $routeMetrics->ensureForTechnicianPeriod($user, $weekStart, $weekEnd);
-        $nextAppointment = $this->appointmentsQuery($user->id)
-            ->where('starts_at', '>=', $now)
-            ->orderBy('starts_at')
-            ->first();
-        $upcomingAppointments = $this->appointmentsQuery($user->id)
-            ->where('starts_at', '>=', $now)
-            ->orderBy('starts_at')
-            ->limit(5)
-            ->get();
-        $todayAppointmentsCount = $this->appointmentsQuery($user->id)
-            ->whereBetween('starts_at', [$now->copy()->startOfDay(), $now->copy()->endOfDay()])
-            ->count();
-        $weekAppointments = $this->appointmentsQuery($user->id)
-            ->whereBetween('starts_at', [$weekStart, $weekEnd])
-            ->get();
-
-        return view('tech.planning', [
-            'technician' => $user,
-            'nextAppointment' => $nextAppointment,
-            'upcomingAppointments' => $upcomingAppointments,
-            'mapboxToken' => config('services.mapbox.token'),
-            'stats' => [
-                [
-                    'label' => 'RDV aujourd hui',
-                    'value' => $todayAppointmentsCount,
-                    'detail' => 'Interventions prévues sur la journée',
-                    'tone' => 'blue',
-                ],
-                [
-                    'label' => 'RDV cette semaine',
-                    'value' => $weekAppointments->count(),
-                    'detail' => round(((int) $weekAppointments->sum('duration_minutes')) / 60, 1).'h planifiées',
-                    'tone' => 'green',
-                ],
-                [
-                    'label' => 'Km semaine',
-                    'value' => round((float) $metrics->sum('drive_distance_km'), 1).' km',
-                    'detail' => 'Domicile, RDV puis retour domicile',
-                    'tone' => 'gold',
-                ],
-                [
-                    'label' => 'Temps route',
-                    'value' => round(((int) $metrics->sum('drive_duration_minutes')) / 60, 1).'h',
-                    'detail' => $metrics->where('calculation_source', 'mapbox')->count().' jour(s) Mapbox',
-                    'tone' => 'pink',
-                ],
-                [
-                    'label' => 'Heures supp',
-                    'value' => round(((int) $metrics->sum('overtime_minutes')) / 60, 1).'h',
-                    'detail' => 'Temps hors horaires, trajets inclus',
-                    'tone' => 'orange',
-                ],
-            ],
-        ]);
+        return view('tech.planning', $workspace->overview($request->user(), $filters['date'] ?? null));
     }
 
-    public function events(Request $request): JsonResponse
+    public function events(Request $request, TechnicianWorkspace $workspace): JsonResponse
     {
         abort_unless($this->canAccess($request), 403);
 
@@ -89,7 +31,7 @@ class TechPlanningController extends Controller
             'end' => ['required', 'date', 'after:start'],
         ]);
 
-        $appointments = $this->appointmentsQuery($request->user()->id)
+        $appointments = $workspace->appointmentsQuery($request->user())
             ->where('starts_at', '<', Carbon::parse($payload['end']))
             ->where('ends_at', '>', Carbon::parse($payload['start']))
             ->orderBy('starts_at')
@@ -97,7 +39,7 @@ class TechPlanningController extends Controller
         $documentsByAppointment = app(AppointmentDocumentSerializer::class)->forAppointments($appointments);
 
         return response()->json([
-            'events' => $appointments->map(function (Appointment $appointment) use ($documentsByAppointment): array {
+            'events' => $appointments->map(function (Appointment $appointment) use ($documentsByAppointment, $workspace): array {
                 $serviceLabel = $appointment->service
                     ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
                     : 'Prestation';
@@ -111,6 +53,7 @@ class TechPlanningController extends Controller
                         'service_label' => $serviceLabel,
                         'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                         'customer_phone' => $appointment->customer_phone,
+                        'phone_href' => $workspace->card($appointment)['phone']['href'] ?? null,
                         'address' => $appointment->address,
                         'latitude' => $appointment->latitude,
                         'longitude' => $appointment->longitude,
@@ -119,6 +62,7 @@ class TechPlanningController extends Controller
                         'documents' => $documentsByAppointment[$appointment->id] ?? [],
                         'external_source' => $appointment->external_source,
                         'external_reference' => $appointment->external_reference,
+                        'detail_url' => config('crm.v2_enabled') ? route('tech.appointments.show', $appointment) : null,
                     ],
                 ];
             })->values(),
@@ -147,17 +91,10 @@ class TechPlanningController extends Controller
         ]);
     }
 
-    private function appointmentsQuery(int $technicianId)
-    {
-        return Appointment::query()
-            ->with('service:id,type,name')
-            ->where('technician_id', $technicianId);
-    }
-
     private function canAccess(Request $request): bool
     {
         $user = $request->user();
 
-        return (bool) $user && ($user->admin || $user->role === 2);
+        return app(TechnicianWorkspace::class)->canAccess($user);
     }
 }

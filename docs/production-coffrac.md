@@ -2033,3 +2033,20 @@ et a l'export Excel, sans melanger les fiches techniques selectionnees. Quitter 
 categorie retire le critere, meme sur un lien direct sans JavaScript ; le retour
 arriere restaure les choix. Les autres compteurs correspondent a leurs liens sans
 ce filtre specifique. Aucun droit, dossier, utilisateur ou reglage d'envoi ne change.
+
+L'espace technicien presente une liste journaliere mobile avec selection de date,
+appel, itineraire et acces direct aux documents de chaque intervention. Le calendrier
+et les trajets restent disponibles, mais le calendrier est initialise a l'ouverture
+sur mobile. Les statistiques de route utilisent les calculs deja enregistres.
+
+Les nouvelles routes tech.appointments.show et tech.documents.download exigent une
+affectation au technicien actif (ou l'administration), une intervention non retiree
+et un dossier non supprime. Le controle est refait a chaque ouverture/telechargement,
+y compris apres reaffectation. La capacite viewDocuments est distincte de viewAny,
+view, update et des actions de partage : aucun acces de gestion n'est accorde aux
+techniciens. Les audiences client/delegataire restent inchangees. Les fichiers
+natifs, collectes et de lots sont lus sur leur stockage prive existant, sans copie,
+sans appel au connecteur Coffrac et sans contenu de fichier charge dans le listing.
+La recherche et les paginations sont cote serveur. Sur mobile, les pieces s'ouvrent
+dans le lecteur du navigateur ; l'apercu integre reste disponible sur ordinateur.
+Aucune migration, seeder, modification de compte ou activation d'envoi n'est requise.

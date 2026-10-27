@@ -1,0 +1,6 @@
+<li class="tech-file">
+    <div class="tech-file-summary"><span class="tech-file-icon"><x-nav-icon name="document" /></span><div class="tech-file-name"><h4>{{ $file['name'] }} @if ($file['outcome'] ?? null)<x-report-outcome :outcome="$file['outcome']" />@endif</h4><p>{{ $file['label'] }}@if ($file['size'] ?? null) · {{ $file['size'] >= 1048576 ? number_format($file['size'] / 1048576, 1, ',', ' ').' Mo' : max(1, (int) ceil($file['size'] / 1024)).' Ko' }}@endif @if ($file['date'] ?? null) · {{ $file['date'] }}@endif</p></div></div>
+    @if ($file['description'] ?? null)<x-comment-body :body="$file['description']" :limit="180" class="tech-file-description" />@endif
+    @if ($file['url'])<div class="tech-file-actions"><a class="tech-file-open" href="{{ $file['url'] }}?preview=1" @if ($file['previewable']) data-document-open data-document-native-mobile data-document-title="{{ $file['name'] }}" data-document-download="{{ $file['url'] }}" @endif target="_blank" rel="noopener noreferrer"><x-nav-icon name="eye" />Ouvrir<span class="sr-only"> {{ $file['name'] }}</span></a><a class="tech-file-download" href="{{ $file['url'] }}"><x-nav-icon name="download" />Télécharger<span class="sr-only"> {{ $file['name'] }}</span></a></div>
+    @else<p class="tech-file-unavailable">Fichier indisponible. Contactez l’équipe pour récupérer cette pièce.</p>@endif
+</li>

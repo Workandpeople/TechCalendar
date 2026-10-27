@@ -102,7 +102,7 @@ class CollectedDossierDocuments
 
     public function download(User $actor, Dossier $dossier, int $sourceId, bool $preview = false): BinaryFileResponse
     {
-        Gate::forUser($actor)->authorize('view', $dossier);
+        Gate::forUser($actor)->authorize('viewDocuments', $dossier);
         $record = DB::table('legacy_records')->where('source_table', 'dossier_document')
             ->whereNull('hidden_at')->where('dossier_id', $dossier->id)->where('source_id', $sourceId)->first();
         abort_unless($record, 404);

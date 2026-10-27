@@ -1,0 +1,801 @@
+<details id="tech-calendar-panel" class="tech-panel tech-calendar-panel">
+<summary><span><strong>Calendrier et trajets</strong><small>Retrouver une intervention dans le planning</small></span><x-nav-icon name="planning" /></summary>
+            <section class="tech-calendar-card rounded-3xl border bg-white p-4 shadow-sm sm:p-5" style="border-color:var(--gc-border);">
+                <div class="mb-4">
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Calendrier</p>
+                    <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Interventions planifiées</h2>
+                    <p class="mt-1 text-xs sm:text-sm" style="color:var(--gc-text-soft);">Touchez un rendez-vous pour accéder aux documents et aux trajets.</p>
+                </div>
+                <div id="tech-calendar"></div>
+            </section>
+
+</details>
+    <div id="tech-appointment-sheet" class="fixed inset-0 z-50 hidden items-end bg-black/40 p-0 sm:items-center sm:p-4">
+        <div class="max-h-[calc(100vh-1rem)] w-full overflow-y-auto overscroll-contain rounded-t-3xl border bg-white p-5 shadow-2xl sm:mx-auto sm:max-w-lg sm:rounded-3xl" style="border-color:var(--gc-border);">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p id="tech-sheet-service" class="text-sm" style="color:var(--gc-text-soft);"></p>
+                    <h2 id="tech-sheet-customer" class="mt-1 text-xl font-semibold" style="color:var(--gc-text);"></h2>
+                </div>
+                <button id="tech-sheet-close" type="button" class="rounded-full border px-3 py-1 text-sm" style="border-color:var(--gc-border);color:var(--gc-text);">Fermer</button>
+            </div>
+
+            <dl class="mt-5 space-y-3 text-sm">
+                <div>
+                    <dt class="font-medium" style="color:var(--gc-text-soft);">Horaire</dt>
+                    <dd id="tech-sheet-time" class="mt-1" style="color:var(--gc-text);"></dd>
+                </div>
+                <div>
+                    <dt class="font-medium" style="color:var(--gc-text-soft);">Adresse</dt>
+                    <dd id="tech-sheet-address" class="mt-1 leading-relaxed" style="color:var(--gc-text);"></dd>
+                </div>
+                <div id="tech-sheet-comment-wrap" class="hidden">
+                    <dt class="font-medium" style="color:var(--gc-text-soft);">Commentaire</dt>
+                    <dd id="tech-sheet-comment" class="mt-1 leading-relaxed" style="color:var(--gc-text);"></dd>
+                </div>
+            </dl>
+
+            <a id="tech-sheet-dossier" class="tech-documents-button" hidden><x-nav-icon name="document" /><span>Documents du dossier<small>Ouvrir la fiche de l’intervention</small></span><span aria-hidden="true">›</span></a>
+
+            <div class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
+                <div>
+                    <p class="text-sm font-medium" style="color:var(--gc-text);">Journée du technicien</p>
+                    <p class="text-xs" style="color:var(--gc-text-soft);">Clique un trajet pour le mettre en couleur. Les autres restent en pointillé.</p>
+                </div>
+                <div id="tech-sheet-map" class="mt-3 h-64 overflow-hidden rounded-xl border" style="border-color:var(--gc-border);"></div>
+                <div id="tech-sheet-route-summary" class="mt-3 rounded-lg px-3 py-2 text-sm" style="background:var(--gc-accent-soft);color:var(--gc-text);"></div>
+            </div>
+
+            <section class="mt-5 rounded-2xl border p-3" style="border-color:var(--gc-border);">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-medium" style="color:var(--gc-text);">Documents</p>
+                        <p id="tech-sheet-documents-status" class="mt-1 hidden text-xs"></p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <button id="tech-sheet-documents-refresh" type="button" class="hidden rounded-full border px-3 py-1 text-xs font-semibold transition hover:bg-[color:var(--gc-accent-soft)]" style="border-color:var(--gc-border);color:var(--gc-text);">
+                            Mettre à jour
+                        </button>
+                        <span id="tech-sheet-documents-count" class="rounded-full px-3 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);"></span>
+                    </div>
+                </div>
+                <div id="tech-sheet-documents" class="mt-3 space-y-2"></div>
+            </section>
+
+            <div class="mt-5 grid grid-cols-2 gap-3">
+                <a id="tech-sheet-phone" href="#" class="gc-btn-primary text-center">Appeler</a>
+                <a id="tech-sheet-maps" href="#" target="_blank" rel="noopener" class="rounded-lg border px-4 py-2.5 text-center text-sm font-medium" style="border-color:var(--gc-border);color:var(--gc-text);">
+                    Itineraire
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+
+    <style>
+        @media (max-width: 767px) {
+            .tech-planning-page .fc {
+                font-size: 12px;
+            }
+
+            .tech-planning-page .fc-toolbar.fc-header-toolbar {
+                align-items: flex-start;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            .tech-planning-page .fc-toolbar-title {
+                font-size: 16px;
+                line-height: 1.2;
+            }
+
+            .tech-planning-page .fc-button {
+                border-radius: 10px;
+                font-size: 12px;
+                padding: 6px 9px;
+            }
+
+            .tech-planning-page .fc-timegrid-slot {
+                height: 38px;
+            }
+
+            .tech-planning-page .fc-event {
+                border-radius: 10px;
+                padding: 2px 4px;
+            }
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+    <script>
+        const calendarEl = document.getElementById('tech-calendar');
+        const mobileCalendarQuery = window.matchMedia('(max-width: 767px)');
+        const techMapboxToken = @json($mapboxToken ?? null);
+        const techNativeWorkspace = @json((bool) config('crm.v2_enabled'));
+        const techCoffracRefreshUrlTemplate = @json(route('tech.planning.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT_ID__']));
+        const techDocumentsRefreshButton = document.getElementById('tech-sheet-documents-refresh');
+        const techDocumentsStatus = document.getElementById('tech-sheet-documents-status');
+        const techRouteNumber = (value) => value === null || value === undefined || value === '' ? NaN : Number(value);
+        const techHome = {
+            lat: techRouteNumber(@json($technician->latitude)),
+            lng: techRouteNumber(@json($technician->longitude)),
+            name: @json($technician->address ?: 'Domicile'),
+        };
+        let techCalendar = null;
+        let techSheetMap = null;
+        let techSheetMapMarkers = [];
+        let techSheetMapLayerHandlers = [];
+        let techSheetMapRenderRequestId = 0;
+        let selectedTechSheetEvent = null;
+
+        const techCalendarToolbar = () => mobileCalendarQuery.matches
+            ? { left: 'prev,next', center: 'title', right: 'today' }
+            : { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' };
+
+        const techCalendarHeight = () => mobileCalendarQuery.matches ? 620 : 760;
+
+        const formatEventDate = (date) => new Intl.DateTimeFormat('fr-FR', {
+            weekday: 'long',
+            day: '2-digit',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit',
+        }).format(date);
+
+        const mapsUrlForEvent = (event) => {
+            const props = event.extendedProps;
+            const destination = props.latitude && props.longitude
+                ? `${props.latitude},${props.longitude}`
+                : props.address;
+
+            return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination || '')}`;
+        };
+
+        const techEscapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
+        const techSafeExternalDocumentUrl = (url) => {
+            const normalizedUrl = String(url || '').trim();
+
+            return /^https?:\/\//i.test(normalizedUrl) ? normalizedUrl : '';
+        };
+
+        const renderTechSheetDocuments = (documents) => {
+            const list = document.getElementById('tech-sheet-documents');
+            const count = document.getElementById('tech-sheet-documents-count');
+            const safeDocuments = Array.isArray(documents) ? documents : [];
+
+            if (!list || !count) return;
+
+            count.textContent = `${safeDocuments.length} document(s)`;
+
+            if (safeDocuments.length === 0) {
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun document associé à ce RDV.</p>';
+                return;
+            }
+
+            list.innerHTML = safeDocuments.map((document, index) => {
+                const name = document.name || document.title || document.filename || document.original_name || `Document ${index + 1}`;
+                const scope = document.scope || document.type || '';
+                const url = techSafeExternalDocumentUrl(document.url || document.download_url || document.href);
+
+                return `
+                    <div class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style="border-color:var(--gc-border);background:#ffffff;">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium" style="color:var(--gc-text);">${techEscapeHtml(name)}</p>
+                            ${scope ? `<p class="mt-0.5 truncate text-xs" style="color:var(--gc-text-soft);">${techEscapeHtml(scope)}</p>` : ''}
+                        </div>
+                        ${url
+                            ? `<a href="${techEscapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="gc-link shrink-0">Ouvrir</a>`
+                            : '<span class="shrink-0 text-xs" style="color:var(--gc-text-soft);">Lien absent</span>'}
+                    </div>
+                `;
+            }).join('');
+        };
+
+        const setTechDocumentsStatus = (message = '', tone = 'muted') => {
+            if (!techDocumentsStatus) return;
+
+            techDocumentsStatus.textContent = message;
+            techDocumentsStatus.classList.toggle('hidden', !message);
+            techDocumentsStatus.style.color = tone === 'error'
+                ? '#b91c1c'
+                : tone === 'success'
+                    ? '#15803d'
+                    : 'var(--gc-text-soft)';
+        };
+
+        const setTechDocumentsRefreshVisible = (event) => {
+            if (!techDocumentsRefreshButton) return;
+
+            const isCoffrac = !techNativeWorkspace && event?.extendedProps?.external_source === 'coffrac';
+            techDocumentsRefreshButton.classList.toggle('hidden', !isCoffrac);
+            techDocumentsRefreshButton.disabled = false;
+            techDocumentsRefreshButton.textContent = 'Mettre à jour';
+        };
+
+        const techRouteDuration = (minutes) => {
+            const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
+            const hours = Math.floor(safeMinutes / 60);
+            const remainingMinutes = safeMinutes % 60;
+
+            if (hours === 0) return `${remainingMinutes} min`;
+
+            return remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`;
+        };
+
+        const techHaversineDistanceKm = (fromLat, fromLng, toLat, toLng) => {
+            const earthRadiusKm = 6371;
+            const toRadians = (value) => value * Math.PI / 180;
+            const latDelta = toRadians(toLat - fromLat);
+            const lngDelta = toRadians(toLng - fromLng);
+            const a = Math.sin(latDelta / 2) ** 2
+                + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) * Math.sin(lngDelta / 2) ** 2;
+
+            return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        };
+
+        const techValidPoint = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng);
+
+        const sameTechPlanningDay = (leftDate, rightDate) => leftDate?.toDateString?.() === rightDate?.toDateString?.();
+
+        const sameTechPlanningEvent = (left, right) => {
+            if (!left || !right) return false;
+            if (left === right) return true;
+
+            return String(left.id || '') !== '' && String(left.id) === String(right.id || '');
+        };
+
+        const techMarkerElement = (color, label) => {
+            const element = document.createElement('div');
+            element.className = 'flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold shadow-lg';
+            element.style.background = color;
+            element.style.color = '#fff';
+            element.textContent = label;
+
+            return element;
+        };
+
+        const ensureTechSheetMap = () => {
+            const container = document.getElementById('tech-sheet-map');
+
+            if (!techMapboxToken || !window.mapboxgl) {
+                container.innerHTML = '<div class="flex h-full items-center justify-center px-4 text-center text-sm" style="color:var(--gc-text-soft);">Carte indisponible: token Mapbox ou librairie manquante.</div>';
+                return null;
+            }
+
+            window.mapboxgl.accessToken = techMapboxToken;
+
+            if (!techSheetMap) {
+                techSheetMap = new window.mapboxgl.Map({
+                    container: 'tech-sheet-map',
+                    style: 'mapbox://styles/mapbox/light-v11',
+                    center: [2.2137, 46.2276],
+                    zoom: 5,
+                });
+                techSheetMap.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+            }
+
+            return techSheetMap;
+        };
+
+        const clearTechSheetMap = () => {
+            techSheetMapMarkers.forEach((marker) => marker.remove());
+            techSheetMapMarkers = [];
+
+            if (!techSheetMap || !techSheetMap.loaded()) return;
+
+            techSheetMapLayerHandlers.forEach(({ event, layerId, handler }) => {
+                if (techSheetMap.getLayer(layerId)) {
+                    techSheetMap.off(event, layerId, handler);
+                }
+            });
+            techSheetMapLayerHandlers = [];
+
+            [...techSheetMap.getStyle().layers]
+                .filter((layer) => layer.id.startsWith('tech-sheet-route'))
+                .forEach((layer) => techSheetMap.removeLayer(layer.id));
+
+            Object.keys(techSheetMap.getStyle().sources)
+                .filter((source) => source.startsWith('tech-sheet-route'))
+                .forEach((source) => techSheetMap.removeSource(source));
+        };
+
+        const fetchTechSheetRoute = async (origin, destination) => {
+            const fallbackDistanceKm = techHaversineDistanceKm(origin.lat, origin.lng, destination.lat, destination.lng);
+            const fallback = {
+                feature: {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [[origin.lng, origin.lat], [destination.lng, destination.lat]],
+                    },
+                    properties: {},
+                },
+                distance_km: fallbackDistanceKm,
+                duration_minutes: Math.max(1, Math.round((fallbackDistanceKm / 65) * 60)),
+            };
+
+            if (!techMapboxToken) return fallback;
+
+            const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`);
+            url.searchParams.set('geometries', 'geojson');
+            url.searchParams.set('overview', 'full');
+            url.searchParams.set('access_token', techMapboxToken);
+
+            try {
+                const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+                if (!response.ok) return fallback;
+
+                const payload = await response.json();
+                const route = payload.routes?.[0];
+
+                return route?.geometry ? {
+                    feature: {
+                        type: 'Feature',
+                        geometry: route.geometry,
+                        properties: {},
+                    },
+                    distance_km: Number(route.distance || 0) / 1000,
+                    duration_minutes: Math.max(1, Math.round(Number(route.duration || 0) / 60)),
+                } : fallback;
+            } catch (error) {
+                return fallback;
+            }
+        };
+
+        const techAppointmentPointFromEvent = (event, currentEvent) => {
+            const props = event.extendedProps || {};
+
+            return {
+                kind: 'appointment',
+                lat: techRouteNumber(props.latitude),
+                lng: techRouteNumber(props.longitude),
+                name: props.customer_name || props.service_label || event.title || 'RDV',
+                event,
+                isCurrent: sameTechPlanningEvent(event, currentEvent),
+            };
+        };
+
+        const buildTechSheetDaySegments = (event) => {
+            if (!techValidPoint(techHome)) return [];
+
+            const appointments = (techCalendar ? techCalendar.getEvents() : [])
+                .filter((candidate) => sameTechPlanningDay(candidate.start, event.start))
+                .map((candidate) => techAppointmentPointFromEvent(candidate, event))
+                .filter(techValidPoint)
+                .sort((left, right) => left.event.start - right.event.start);
+
+            if (!appointments.some((appointment) => appointment.isCurrent)) {
+                const currentPoint = techAppointmentPointFromEvent(event, event);
+                if (techValidPoint(currentPoint)) appointments.push(currentPoint);
+                appointments.sort((left, right) => left.event.start - right.event.start);
+            }
+
+            if (appointments.length === 0) return [];
+
+            const points = [
+                { ...techHome, kind: 'home', name: techHome.name || 'Domicile' },
+                ...appointments,
+                { ...techHome, kind: 'home', name: techHome.name || 'Domicile', isReturnHome: true },
+            ];
+
+            return points.slice(0, -1).map((from, index) => {
+                const to = points[index + 1];
+                const isCurrent = Boolean(to.isCurrent);
+
+                return {
+                    from,
+                    to,
+                    isCurrent,
+                    badge: isCurrent
+                        ? 'Trajet vers ce RDV'
+                        : (from.isCurrent ? 'Suite de journée' : (to.kind === 'home' ? 'Retour domicile' : 'Autre trajet')),
+                };
+            });
+        };
+
+        const renderTechSheetRouteSummary = (segments, isLoading = false, activeIndex = null, onSelect = null) => {
+            const summary = document.getElementById('tech-sheet-route-summary');
+
+            if (isLoading) {
+                summary.textContent = 'Calcul de la journée...';
+                return;
+            }
+
+            if (!segments || segments.length === 0) {
+                summary.textContent = 'Journée indisponible pour ce RDV.';
+                return;
+            }
+
+            const defaultActiveIndex = segments.findIndex((segment) => segment.isCurrent);
+            const safeActiveIndex = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < segments.length
+                ? activeIndex
+                : Math.max(0, defaultActiveIndex);
+
+            summary.innerHTML = `
+                <div class="space-y-2">
+                    ${segments.map((segment, index) => {
+                        const isActive = index === safeActiveIndex;
+
+                        return `
+                        <button type="button" data-tech-sheet-segment-index="${index}" class="flex w-full items-center justify-between gap-3 rounded-lg border px-2 py-2 text-left transition hover:shadow-sm" style="border-color:${isActive ? 'var(--gc-accent)' : 'transparent'};background:${isActive ? '#ffffff' : 'transparent'};">
+                            <div class="min-w-0">
+                                <span class="text-xs font-semibold">${techEscapeHtml(segment.badge)}</span>
+                                <p class="truncate text-xs" style="color:var(--gc-text-soft);">${techEscapeHtml(segment.from.name)} → ${techEscapeHtml(segment.to.name)}</p>
+                            </div>
+                            <strong class="shrink-0 text-xs">${Number(segment.route?.distance_km || 0).toFixed(1)} km · ${techRouteDuration(segment.route?.duration_minutes)}</strong>
+                        </button>
+                    `;
+                    }).join('')}
+                </div>
+            `;
+
+            summary.querySelectorAll('[data-tech-sheet-segment-index]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    onSelect?.(Number(button.dataset.techSheetSegmentIndex));
+                });
+            });
+        };
+
+        const techSheetSegmentBounds = (segment) => {
+            const bounds = new window.mapboxgl.LngLatBounds();
+            const coordinates = segment.route?.feature?.geometry?.coordinates || [];
+
+            if (coordinates.length > 0) {
+                coordinates.forEach((coordinate) => bounds.extend(coordinate));
+            } else {
+                bounds.extend([segment.from.lng, segment.from.lat]);
+                bounds.extend([segment.to.lng, segment.to.lat]);
+            }
+
+            return bounds;
+        };
+
+        const renderTechSheetMap = async (event) => {
+            if (document.getElementById('tech-appointment-sheet')?.classList.contains('hidden')) return;
+
+            const renderRequestId = ++techSheetMapRenderRequestId;
+            const map = ensureTechSheetMap();
+            let segments = buildTechSheetDaySegments(event);
+
+            if (!map) {
+                renderTechSheetRouteSummary([]);
+                return;
+            }
+
+            if (segments.length === 0) {
+                renderTechSheetRouteSummary([]);
+                clearTechSheetMap();
+                return;
+            }
+
+            if (!map.loaded()) {
+                map.once('load', () => renderTechSheetMap(event));
+                return;
+            }
+
+            clearTechSheetMap();
+            renderTechSheetRouteSummary([], true);
+
+            const enrichedSegments = [];
+
+            for (const segment of segments) {
+                const route = await fetchTechSheetRoute(segment.from, segment.to);
+                if (renderRequestId !== techSheetMapRenderRequestId) return;
+                enrichedSegments.push({ ...segment, route });
+            }
+
+            const defaultActiveIndex = Math.max(0, enrichedSegments.findIndex((segment) => segment.isCurrent));
+
+            const renderSelectedSegment = (activeSegmentIndex = defaultActiveIndex) => {
+                if (renderRequestId !== techSheetMapRenderRequestId) return;
+
+                const safeActiveIndex = Number.isInteger(activeSegmentIndex) && activeSegmentIndex >= 0 && activeSegmentIndex < enrichedSegments.length
+                    ? activeSegmentIndex
+                    : defaultActiveIndex;
+
+                renderTechSheetRouteSummary(enrichedSegments, false, safeActiveIndex, (selectedIndex) => {
+                    renderSelectedSegment(selectedIndex);
+                });
+                clearTechSheetMap();
+
+                const bounds = new window.mapboxgl.LngLatBounds();
+                const appointmentMarkerKeys = new Set();
+                const segmentsForDisplay = enrichedSegments.map((segment, index) => ({
+                    ...segment,
+                    originalIndex: index,
+                    isHighlighted: index === safeActiveIndex,
+                }));
+                const orderedSegments = [
+                    ...segmentsForDisplay.filter((segment) => !segment.isHighlighted),
+                    ...segmentsForDisplay.filter((segment) => segment.isHighlighted),
+                ];
+
+                techSheetMapMarkers.push(new window.mapboxgl.Marker({ element: techMarkerElement('#31424c', 'D') })
+                    .setLngLat([enrichedSegments[0].from.lng, enrichedSegments[0].from.lat])
+                    .addTo(map));
+
+                enrichedSegments.forEach((segment) => {
+                    [segment.from, segment.to].forEach((point) => bounds.extend([point.lng, point.lat]));
+                    (segment.route?.feature?.geometry?.coordinates || []).forEach((coordinate) => bounds.extend(coordinate));
+
+                    if (segment.to.kind === 'appointment') {
+                        const key = segment.to.event?.id ? String(segment.to.event.id) : `${segment.to.lng},${segment.to.lat}`;
+
+                        if (!appointmentMarkerKeys.has(key)) {
+                            appointmentMarkerKeys.add(key);
+                            techSheetMapMarkers.push(new window.mapboxgl.Marker({
+                                element: techMarkerElement(segment.to.isCurrent ? '#d8c27a' : '#64748b', segment.to.isCurrent ? 'R' : String(appointmentMarkerKeys.size)),
+                            })
+                                .setLngLat([segment.to.lng, segment.to.lat])
+                                .addTo(map));
+                        }
+                    }
+                });
+
+                orderedSegments.forEach((segment, index) => {
+                    const sourceId = `tech-sheet-route-${index}`;
+
+                    if (!segment.route?.feature) return;
+
+                    map.addSource(sourceId, { type: 'geojson', data: segment.route.feature });
+                    map.addLayer({
+                        id: sourceId,
+                        type: 'line',
+                        source: sourceId,
+                        layout: {
+                            'line-cap': 'round',
+                            'line-join': 'round',
+                        },
+                        paint: {
+                            'line-color': segment.isHighlighted ? '#31424c' : '#64748b',
+                            'line-width': segment.isHighlighted ? 5 : 3,
+                            'line-opacity': segment.isHighlighted ? 0.9 : 0.5,
+                            ...(segment.isHighlighted ? {} : { 'line-dasharray': [1.5, 2.2] }),
+                        },
+                    });
+
+                    const clickHandler = () => renderSelectedSegment(segment.originalIndex);
+                    const enterHandler = () => { map.getCanvas().style.cursor = 'pointer'; };
+                    const leaveHandler = () => { map.getCanvas().style.cursor = ''; };
+
+                    map.on('click', sourceId, clickHandler);
+                    map.on('mouseenter', sourceId, enterHandler);
+                    map.on('mouseleave', sourceId, leaveHandler);
+                    techSheetMapLayerHandlers.push(
+                        { event: 'click', layerId: sourceId, handler: clickHandler },
+                        { event: 'mouseenter', layerId: sourceId, handler: enterHandler },
+                        { event: 'mouseleave', layerId: sourceId, handler: leaveHandler },
+                    );
+                });
+
+                map.fitBounds(techSheetSegmentBounds(enrichedSegments[safeActiveIndex] || enrichedSegments[0]), {
+                    padding: 48,
+                    maxZoom: 14,
+                    duration: 450,
+                });
+                map.resize();
+            };
+
+            renderSelectedSegment();
+        };
+
+        const openTechAppointmentSheet = (event) => {
+            const props = event.extendedProps;
+            const sheet = document.getElementById('tech-appointment-sheet');
+            const phoneLink = document.getElementById('tech-sheet-phone');
+            const commentWrap = document.getElementById('tech-sheet-comment-wrap');
+            const phoneHref = props.phone_href || (props.customer_phone ? `tel:${String(props.customer_phone).replace(/[^\d+]/g, '')}` : '');
+
+            selectedTechSheetEvent = event;
+            setTechDocumentsStatus();
+            setTechDocumentsRefreshVisible(event);
+            document.getElementById('tech-sheet-service').textContent = props.service_label || 'Prestation';
+            document.getElementById('tech-sheet-customer').textContent = props.customer_name || event.title;
+            document.getElementById('tech-sheet-time').textContent = `${formatEventDate(event.start)} - ${event.end ? event.end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}`;
+            document.getElementById('tech-sheet-address').textContent = props.address || 'Adresse non renseignée';
+            document.getElementById('tech-sheet-maps').href = mapsUrlForEvent(event);
+            renderTechSheetDocuments(props.documents || []);
+            const dossierLink = document.getElementById('tech-sheet-dossier');
+            dossierLink.hidden = !props.detail_url;
+            if (props.detail_url) dossierLink.href = `${props.detail_url}#tech-documents`;
+            document.getElementById('tech-sheet-documents').closest('section').hidden = Boolean(props.detail_url);
+
+            if (phoneHref) {
+                phoneLink.href = phoneHref;
+                phoneLink.classList.remove('pointer-events-none', 'opacity-50');
+            } else {
+                phoneLink.href = '#';
+                phoneLink.classList.add('pointer-events-none', 'opacity-50');
+            }
+
+            if (props.comment) {
+                document.getElementById('tech-sheet-comment').textContent = props.comment;
+                commentWrap.classList.remove('hidden');
+            } else {
+                commentWrap.classList.add('hidden');
+            }
+
+            sheet.classList.remove('hidden');
+            sheet.classList.add('flex');
+            window.setTimeout(() => renderTechSheetMap(event), 80);
+        };
+
+        const closeTechAppointmentSheet = () => {
+            const sheet = document.getElementById('tech-appointment-sheet');
+            techSheetMapRenderRequestId++;
+            selectedTechSheetEvent = null;
+            setTechDocumentsStatus();
+            sheet.classList.add('hidden');
+            sheet.classList.remove('flex');
+        };
+
+        const initTechCalendar = () => {
+            if (!calendarEl || !window.FullCalendar || techCalendar) return;
+            techCalendar = new window.FullCalendar.Calendar(calendarEl, {
+                initialDate: @json($selectedDay->toDateString()),
+                initialView: mobileCalendarQuery.matches ? 'timeGridDay' : 'timeGridWeek',
+                locale: 'fr',
+                firstDay: 1,
+                hiddenDays: [0],
+                allDaySlot: false,
+                height: techCalendarHeight(),
+                expandRows: true,
+                nowIndicator: true,
+                headerToolbar: techCalendarToolbar(),
+                buttonText: {
+                    today: "Aujourd'hui",
+                    month: 'Mois',
+                    week: 'Semaine',
+                    day: 'Jour',
+                    list: 'Liste',
+                },
+                slotMinTime: '07:00:00',
+                slotMaxTime: '21:00:00',
+                slotLabelFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                },
+                eventTimeFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                },
+                events: async (fetchInfo, succèssCallback, failureCallback) => {
+                    try {
+                        const response = await fetch('{{ route('tech.planning.events') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                start: fetchInfo.startStr,
+                                end: fetchInfo.endStr,
+                            }),
+                        });
+                        const payload = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(payload?.message || 'Erreur calendrier.');
+                        }
+
+                        succèssCallback((payload.events || []).map((event) => ({
+                            ...event,
+                            backgroundColor: '#31424c',
+                            borderColor: '#d8c27a',
+                            textColor: '#ffffff',
+                        })));
+                    } catch (error) {
+                        failureCallback(error);
+                    }
+                },
+                eventDidMount: (info) => {
+                    const props = info.event.extendedProps;
+                    info.el.title = [
+                        props.service_label,
+                        props.customer_name,
+                        props.customer_phone,
+                        props.address,
+                        props.comment,
+                    ].filter(Boolean).join('\n');
+                },
+                eventClick: (info) => {
+                    info.jsEvent.preventDefault();
+                    openTechAppointmentSheet(info.event);
+                },
+            });
+
+            techCalendar.render();
+        };
+
+        const techCalendarPanel = document.getElementById('tech-calendar-panel');
+        techCalendarPanel.addEventListener('toggle', () => {
+            if (!techCalendarPanel.open) return;
+            initTechCalendar();
+            techCalendar?.updateSize();
+        });
+        if (!mobileCalendarQuery.matches) {
+            techCalendarPanel.open = true;
+            initTechCalendar();
+        }
+
+        const refreshTechCalendarViewport = () => {
+            if (!techCalendar) return;
+
+            techCalendar.setOption('height', techCalendarHeight());
+            techCalendar.setOption('headerToolbar', techCalendarToolbar());
+
+            if (mobileCalendarQuery.matches && techCalendar.view.type !== 'timeGridDay') {
+                techCalendar.changeView('timeGridDay');
+            }
+
+            if (!mobileCalendarQuery.matches && techCalendar.view.type === 'timeGridDay') {
+                techCalendar.changeView('timeGridWeek');
+            }
+
+            techCalendar.updateSize();
+        };
+
+        if (mobileCalendarQuery.addEventListener) {
+            mobileCalendarQuery.addEventListener('change', refreshTechCalendarViewport);
+        }
+
+        window.addEventListener('techcalendar:layout-resized', refreshTechCalendarViewport);
+        window.addEventListener('resize', () => window.setTimeout(refreshTechCalendarViewport, 120));
+
+        techDocumentsRefreshButton?.addEventListener('click', async () => {
+            if (!selectedTechSheetEvent) return;
+
+            techDocumentsRefreshButton.disabled = true;
+            techDocumentsRefreshButton.textContent = 'Mise à jour...';
+            setTechDocumentsStatus('Vérification du dossier Coffrac en cours...');
+
+            try {
+                const response = await fetch(techCoffracRefreshUrlTemplate.replace('__APPOINTMENT_ID__', encodeURIComponent(selectedTechSheetEvent.id)), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(payload?.message || 'Mise à jour impossible.');
+                }
+
+                const documents = Array.isArray(payload.documents) ? payload.documents : [];
+                selectedTechSheetEvent.setExtendedProp('documents', documents);
+                renderTechSheetDocuments(documents);
+                setTechDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
+            } catch (error) {
+                setTechDocumentsStatus(error.message || 'Mise à jour impossible.', 'error');
+            } finally {
+                techDocumentsRefreshButton.disabled = false;
+                techDocumentsRefreshButton.textContent = 'Mettre à jour';
+            }
+        });
+
+        document.getElementById('tech-sheet-close')?.addEventListener('click', closeTechAppointmentSheet);
+        document.getElementById('tech-appointment-sheet')?.addEventListener('click', (event) => {
+            if (event.target.id === 'tech-appointment-sheet') {
+                closeTechAppointmentSheet();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeTechAppointmentSheet();
+            }
+        });
+    </script>

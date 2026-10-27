@@ -6,6 +6,7 @@
 @import './client-portal.css';
 @import './dossier-compact.css';
 @import './dossier-filters.css';
+@import './technician.css';
 
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';

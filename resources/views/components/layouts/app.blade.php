@@ -106,7 +106,7 @@
                 ]]];
             }
             $showSidebar = $user->isExternal() || $user->admin || in_array($user->role, [0, 1], true);
-            $isTechPlanningPage = request()->routeIs('tech.planning');
+            $isTechPlanningPage = request()->routeIs('tech.*');
         @endphp
 
         <div class="flex h-screen overflow-hidden" data-sidebar-storage-key="techcalendar.sidebar.sections.v2.{{ $user->id }}">
@@ -128,6 +128,9 @@
             <div class="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
                 <header class="gc-workspace-topbar relative h-16 shrink-0 border-b border-[color:var(--gc-border)] bg-white {{ $isTechPlanningPage || $crmNavigation ? 'px-3 sm:px-6' : 'px-6' }}">
                     <div class="flex h-full items-center gap-3 {{ $showSidebar ? 'justify-between' : 'justify-end' }}">
+                        @if (! $showSidebar && $isTechPlanningPage)
+                            <a href="{{ route('tech.planning') }}" class="tech-mobile-brand"><img src="{{ asset('images/logo.png') }}" alt="Genius Contrôle"><span>Espace<strong>technicien</strong></span></a>
+                        @endif
                         @if ($showSidebar)
                             <button id="sidebar-toggle" type="button" class="sidebar-toggle hidden items-center gap-2 rounded-lg border border-[color:var(--gc-border)] px-3 py-2 text-sm font-semibold text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)] lg:inline-flex"
                                 aria-label="Replier le menu" title="Replier le menu" aria-expanded="true" aria-controls="app-sidebar">

@@ -280,7 +280,7 @@ class DossierRegistry
 
     public function download(User $actor, DossierDocument $document, bool $preview = false): StreamedResponse
     {
-        Gate::forUser($actor)->authorize('view', $document->dossier);
+        Gate::forUser($actor)->authorize('viewDocuments', $document->dossier);
         abort_if($actor->isExternal() && (! $document->{app(ClientAccess::class)->audienceColumn($actor)}
             || ! app(ClientAccess::class)->allows($actor, 'documents')), 404);
         abort_unless(Storage::disk('local')->exists($document->path), 404);

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
@@ -25,6 +26,18 @@ class DossierPolicy
     {
         return ! $dossier->trashed() && $this->view($user, $dossier) && (! $user->isExternal()
             || app(ClientAccess::class)->addComment($user, $dossier));
+    }
+
+    public function viewDocuments(User $user, Dossier $dossier): bool
+    {
+        if ($this->view($user, $dossier)) {
+            return true;
+        }
+
+        return config('crm.v2_enabled') && ! $dossier->trashed() && ! $user->trashed()
+            && ! $user->isExternal() && ! $user->must_change_password && $user->role === 2
+            && $dossier->appointments()->where('technician_id', $user->id)
+                ->whereIn('status', [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM])->exists();
     }
 
     public function uploadDocument(User $user, Dossier $dossier): bool

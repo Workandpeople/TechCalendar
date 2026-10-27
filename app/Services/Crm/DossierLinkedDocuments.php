@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm;
 
+use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\LotAppointmentDocument;
 use App\Models\User;
@@ -15,7 +16,7 @@ class DossierLinkedDocuments
 {
     public function query(User $actor, Dossier $dossier): Builder
     {
-        Gate::forUser($actor)->authorize('view', $dossier);
+        Gate::forUser($actor)->authorize('viewDocuments', $dossier);
         abort_if($actor->isExternal() && ! app(ClientAccess::class)->allows($actor, 'documents'), 403);
         $appointments = $dossier->appointments()->withTrashed()->select('appointments.id');
 
@@ -42,6 +43,25 @@ class DossierLinkedDocuments
     public function download(User $actor, Dossier $dossier, int $documentId, bool $preview = false): StreamedResponse
     {
         $document = $this->query($actor, $dossier)->findOrFail($documentId);
+
+        return $this->respond($document, $preview);
+    }
+
+    public function queryForAppointment(User $actor, Appointment $appointment): Builder
+    {
+        Gate::forUser($actor)->authorize('view', $appointment);
+
+        return LotAppointmentDocument::query()->where(fn ($query) => $query->where('appointment_id', $appointment->id)
+            ->orWhereHas('lotAppointment', fn ($row) => $row->where('appointment_id', $appointment->id)));
+    }
+
+    public function downloadForAppointment(User $actor, Appointment $appointment, int $documentId, bool $preview = false): StreamedResponse
+    {
+        return $this->respond($this->queryForAppointment($actor, $appointment)->findOrFail($documentId), $preview);
+    }
+
+    private function respond(LotAppointmentDocument $document, bool $preview): StreamedResponse
+    {
         abort_unless($document->disk === 'local', 404);
         $prefix = 'lot-appointment-documents/'.$document->lot_appointment_id.'/';
         $filename = basename($document->path);

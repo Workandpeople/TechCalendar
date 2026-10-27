@@ -1,6 +1,9 @@
 @props(['name'])
 
 @switch($name)
+    @case('phone')
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8"><path d="m7 3 3 5-2 2c1.5 3 3 4.5 6 6l2-2 5 3v3a1 1 0 0 1-1 1C10 21 3 14 3 4a1 1 0 0 1 1-1h3Z"/></svg>
+        @break
     @case('eye')
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" class="h-5 w-5" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
         @break

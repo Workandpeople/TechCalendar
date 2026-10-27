@@ -1,0 +1,124 @@
+@layer components {
+    .tech-mobile-brand { display: flex; align-items: center; gap: .55rem; margin-right: auto; text-decoration: none; color: #385768; font-size: .65rem; line-height: 1.25; }
+    .tech-mobile-brand img { width: auto; height: 34px; }
+    .tech-mobile-brand strong { display: block; font-size: .78rem; color: #21495a; }
+    .tech-workspace { --tech-ink: #153f45; --tech-blue: #174fdd; width: 100%; max-width: 1060px; margin: 0 auto; display: grid; gap: 1.25rem; padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+    .tech-workspace svg { width: 1.2rem; height: 1.2rem; flex-shrink: 0; }
+    .tech-workspace [hidden] { display: none !important; }
+    .tech-hero { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.5rem; color: #143f45; border: 1px solid #c4e5db; border-radius: 1.25rem; background: radial-gradient(ellipse at top right, #b8e9db80, transparent 70%), linear-gradient(120deg, #f6fcfa, #e6f4f0); }
+    .tech-eyebrow { font-size: .7rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; color: #2d6c65; }
+    .tech-hero h1 { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 750; line-height: 1.2; margin: .35rem 0 .5rem; letter-spacing: -.04em; }
+    .tech-hero p { font-size: .85rem; color: #41655f; }
+    .tech-hero-icon { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; background: #ffffffc0; border: 1px solid #b9dcd1; border-radius: 1rem; transform: rotate(-6deg); }
+    .tech-hero-icon svg { width: 1.7rem; height: 1.7rem; }
+    .tech-day-heading, .tech-appointment-top, .tech-back { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    .tech-day-heading { margin-bottom: 1rem; }
+    .tech-day-heading p { color: #6c7c8b; font-size: .75rem; }
+    .tech-day-heading h2 { font-size: 1.2rem; color: #233848; font-weight: 750; text-transform: capitalize; }
+    .tech-today-link, .tech-small-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .5rem .8rem; font-size: .8rem; font-weight: 700; color: #2456ad; border: 1px solid #c9daf7; border-radius: .65rem; background: #f0f5ff; text-decoration: none; white-space: nowrap; }
+    .tech-week { display: grid; grid-template-columns: 28px repeat(7, minmax(0, 1fr)) 28px; gap: .35rem; }
+    .tech-day { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem; min-height: 74px; border-radius: .85rem; border: 1px solid #dce5ee; background: white; color: #536c7e; text-decoration: none; }
+    .tech-day span { font-size: .65rem; text-transform: capitalize; }
+    .tech-day strong { font-size: 1.1rem; line-height: 1.2; }
+    .tech-day i { width: 4px; height: 4px; margin-top: .2rem; border-radius: 100%; background: #258779; }
+    .tech-day i.is-empty { background: transparent; }
+    .tech-day[aria-current] { background: #134f50; border-color: #134f50; color: white; box-shadow: 0 3px 0 #0a3b3c; }
+    .tech-day[aria-current] i:not(.is-empty) { background: #67e8c1; }
+    .tech-week-step { display: grid; place-items: center; min-height: 60px; font-size: 1.8rem; color: #4d6a7c; border-radius: .6rem; }
+    .tech-date-picker { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; padding-top: .85rem; }
+    .tech-date-picker label { font-size: .75rem; color: #637589; }
+    .tech-date-picker input { width: auto; min-width: 0; min-height: 44px; padding: .5rem .6rem; font-size: .8rem; }
+    .tech-day-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: 1rem 0 .75rem; color: #52697e; font-size: .75rem; }
+    .tech-day-summary > span { display: flex; align-items: center; gap: .4rem; }
+    .tech-day-summary > span:first-child { font-weight: 750; color: #233848; }
+    .tech-appointments { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .tech-appointment { min-width: 0; background: white; border: 1px solid #d5e0eb; border-top: 3px solid #22a28f; border-radius: 1rem; padding: 1rem; box-shadow: 0 3px 10px #15364d05; }
+    .tech-appointment[data-problem='true'] { border-top-color: #e29d32; }
+    .tech-appointment-top { margin-bottom: .75rem; }
+    .tech-time { display: flex; gap: .4rem; align-items: baseline; color: #6b7e91; }
+    .tech-time time { color: #173d48; font-size: 1.35rem; font-weight: 800; letter-spacing: -.04em; }
+    .tech-time span { font-size: .8rem; }
+    .tech-state { display: inline-flex; border-radius: .4rem; padding: .25rem .5rem; font-size: .68rem; font-weight: 750; color: #08705c; background: #dcf9ed; }
+    .tech-state.is-scheduled { color: #4a6478; background: #eef3f7; }
+    .tech-state.is-problem { color: #925719; background: #fff0d4; }
+    .tech-appointment h3 { color: #213d50; font-size: 1.05rem; font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; }
+    .tech-appointment h3 a { text-decoration: none; }
+    .tech-service { display: flex; align-items: center; gap: .45rem; font-size: .78rem; color: #61768a; margin-top: .4rem; }
+    .tech-address { display: flex; align-items: flex-start; gap: .45rem; margin-top: .8rem; font-size: .85rem; line-height: 1.5; color: #324f63; font-weight: 600; overflow-wrap: anywhere; }
+    .tech-address svg { margin-top: .15rem; color: #63869a; }
+    .tech-documents-button { display: flex; align-items: center; gap: .75rem; min-height: 64px; background: var(--tech-blue); color: white; border: 1px solid #0f44c7; border-radius: .7rem; padding: .75rem; margin-top: 1rem; text-decoration: none; box-shadow: 0 3px 0 #1236a8; }
+    .tech-documents-button > span:nth-child(2) { flex: 1; font-size: .85rem; font-weight: 750; }
+    .tech-documents-button small { display: block; font-size: .68rem; font-weight: 450; margin-top: .15rem; color: #e0e9ff; }
+    .tech-documents-button > span:last-child { font-size: 1.6rem; }
+    .tech-contact-actions { display: flex; gap: .65rem; margin-top: .8rem; }
+    .tech-contact-actions > a, .tech-contact-actions > span { display: flex; flex: 1; gap: .45rem; align-items: center; justify-content: center; min-height: 44px; padding: .5rem .25rem; border: 1px solid #dbe6ed; border-radius: .6rem; font-size: .8rem; font-weight: 650; text-decoration: none; background: #f7fafc; color: #34556b; }
+    .tech-contact-actions > span { font-size: .7rem; color: #7e8993; }
+    .tech-panel { background: white; border: 1px solid #d8e3ed; border-radius: 1rem; min-width: 0; overflow: clip; }
+    .tech-panel > summary { display: flex; align-items: center; justify-content: space-between; list-style: none; gap: 1rem; padding: 1rem; min-height: 64px; color: #2e5064; }
+    .tech-panel > summary::-webkit-details-marker { display: none; }
+    .tech-panel > summary strong { display: block; font-size: .85rem; }
+    .tech-panel > summary small { display: block; margin-top: .15rem; font-size: .7rem; color: #6d8092; }
+    .tech-panel[open] > summary { border-bottom: 1px solid #e4ecf2; }
+    .tech-calendar-panel .tech-calendar-card { border: 0; box-shadow: none; }
+    .tech-week-stats dl { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .8rem; padding: 1rem; }
+    .tech-week-stats dt { font-size: .7rem; color: #6b7d8e; }
+    .tech-week-stats dd { font-size: 1.15rem; color: #284e5c; font-weight: 750; margin-top: .25rem; }
+    .tech-week-stats > p { font-size: .7rem; color: #758493; padding: 0 1rem 1rem; }
+    .tech-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 2rem 1rem; text-align: center; background: #f8fafc; border: 1px dashed #d8e3ed; border-radius: 1rem; }
+    .tech-empty h3 { font-weight: 750; font-size: 1rem; color: #34556a; }
+    .tech-empty p { font-size: .8rem; color: #6a7e8f; max-width: 34ch; }
+    .tech-empty-icon, .tech-file-icon { flex-shrink: 0; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #e9f0ff; color: #225bd1; }
+    .tech-back { position: sticky; top: -.75rem; z-index: 10; padding: .45rem .15rem; background: #f2f5f7ed; backdrop-filter: blur(8px); border-bottom: 1px solid #dce6ef; font-size: .8rem; color: #75879a; }
+    .tech-back a { display: inline-flex; align-items: center; gap: .6rem; min-height: 44px; color: #285674; font-weight: 750; text-decoration: none; }
+    .tech-back a > span { font-size: 1.5rem; }
+    .tech-intervention-header { padding: 1.25rem; border: 1px solid #c7e1dc; border-radius: 1rem; background: linear-gradient(130deg, #effbf7, white); }
+    .tech-intervention-time { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; font-size: .9rem; font-weight: 750; color: #25685d; margin-bottom: .6rem; }
+    .tech-intervention-header h1 { font-size: 1.45rem; font-weight: 800; letter-spacing: -.035em; color: #203f4c; line-height: 1.2; overflow-wrap: anywhere; }
+    .tech-files-panel { scroll-margin-top: 4rem; }
+    .tech-files-heading { display: flex; align-items: center; gap: .75rem; padding: 1rem; border-bottom: 1px solid #d7e6ff; background: linear-gradient(110deg, #ebf3ff, #f7fbff); }
+    .tech-files-heading h2 { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: #244a75; font-size: 1rem; font-weight: 750; }
+    .tech-files-heading h2 > span { font-size: .7rem; border-radius: .4rem; background: #dce9ff; padding: .2rem .45rem; }
+    .tech-files-heading p { color: #6681a2; font-size: .72rem; margin-top: .15rem; }
+    .tech-document-search { display: flex; gap: .5rem; padding: 1rem; }
+    .tech-document-search input { flex: 1; min-width: 0; min-height: 44px; font-size: .8rem; }
+    .tech-search-summary { margin: 0 1rem 1rem; font-size: .75rem; color: #6b7d8e; }
+    .tech-search-summary a { color: #245cca; text-decoration: underline; margin-left: .5rem; }
+    .tech-file-group { padding: 0 1rem 1rem; }
+    .tech-file-group > h3 { display: flex; align-items: center; gap: .5rem; font-size: .75rem; font-weight: 750; color: #526d85; margin-bottom: .7rem; }
+    .tech-file-group > h3 span { color: #8192a1; font-weight: 450; }
+    .tech-files { list-style: none; display: grid; gap: .65rem; }
+    .tech-file { padding: .8rem; border: 1px solid #dce6ef; border-radius: .75rem; background: white; min-width: 0; }
+    .tech-file-summary { display: flex; gap: .7rem; align-items: flex-start; }
+    .tech-file-name { min-width: 0; }
+    .tech-file-name h4 { color: #2a465a; font-size: .85rem; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+    .tech-file-name p { font-size: .67rem; color: #75899a; margin-top: .2rem; }
+    .tech-file-description { font-size: .75rem; color: #62798d; padding-top: .55rem; overflow-wrap: anywhere; }
+    .tech-file-actions { display: flex; gap: .6rem; margin-top: .75rem; }
+    .tech-file-actions a { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; border-radius: .5rem; font-size: .75rem; font-weight: 700; text-decoration: none; }
+    .tech-file-open { flex: 1; padding: .5rem .7rem; color: white; background: #2459d8; border: 1px solid #1b49bd; }
+    .tech-file-download { padding: .5rem .7rem; color: #315c97; background: #f2f6fd; border: 1px solid #d3e0f4; }
+    .tech-file-unavailable { font-size: .75rem; color: #947034; padding-top: .75rem; }
+    .tech-file-group > .gc-pagination { margin-top: 1rem; }
+    .tech-instructions { padding: 1rem; }
+    .tech-instructions header { display: flex; gap: .5rem; align-items: center; font-size: .85rem; font-weight: 750; color: #315269; margin-bottom: .75rem; }
+    .tech-instructions .gc-comment-body { font-size: .85rem; color: #536d83; }
+    .tech-readonly { display: flex; gap: .5rem; font-size: .7rem; color: #7a8e9f; align-items: flex-start; }
+    .tech-return { display: flex; align-items: center; justify-content: center; min-height: 44px; text-decoration: none; font-size: .8rem; font-weight: 700; color: #285673; border: 1px solid #cfdee9; border-radius: .7rem; background: white; }
+    @media (max-width: 639px) {
+        .tech-workspace { gap: 1rem; }
+        .tech-hero { padding: 1.1rem; }
+        .tech-hero-icon { width: 2.75rem; height: 2.75rem; }
+        .tech-hero p { max-width: 26ch; font-size: .75rem; }
+        .tech-week { gap: .2rem; grid-template-columns: 22px repeat(7, minmax(0, 1fr)) 22px; }
+        .tech-day { min-height: 68px; border-radius: .65rem; }
+        .tech-day span { font-size: .6rem; }
+        .tech-day strong { font-size: 1rem; }
+        .tech-appointments { grid-template-columns: minmax(0, 1fr); }
+        .tech-day-heading h2 { font-size: 1rem; }
+        .tech-day-summary { font-size: .68rem; }
+        .tech-day-summary svg { width: 1rem; height: 1rem; }
+        .tech-week-stats dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 768px) { .tech-intervention { max-width: 760px; } }
+    @media (hover: hover) { .tech-file-open:hover, .tech-documents-button:hover { filter: brightness(1.08); } .tech-day:not([aria-current]):hover, .tech-contact-actions a:hover { background: #ebf3fb; } }
+}

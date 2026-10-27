@@ -224,6 +224,22 @@ test('renders an image directly and reports decoding errors with accessible fall
     assert.equal(ui.dialog.attributes['aria-busy'], 'false');
 });
 
+test('keeps technician mobile file links native while retaining desktop and other portal previews', async () => {
+    const ui = previewHarness();
+    ui.link.dataset.documentNativeMobile = '';
+    ui.browser.matchMedia = () => ({ matches: true });
+    await ui.click();
+    assert.equal(ui.calls.length, 0);
+    assert.equal(ui.dialog.open, false);
+    ui.browser.matchMedia = () => ({ matches: false });
+    await ui.click();
+    assert.equal(ui.dialog.open, true);
+    const otherPortal = previewHarness();
+    otherPortal.browser.matchMedia = () => ({ matches: true });
+    await otherPortal.click();
+    assert.equal(otherPortal.dialog.open, true);
+});
+
 test('never embeds attachments, login pages, permission errors or network failures', async () => {
     for (const fetch of [async () => response('text/html'), async () => response('application/pdf', 'attachment'),
         async () => response('application/pdf', 'inline', { ok: false }), async () => { throw new Error('Network or redirect'); }]) {
