@@ -42,3 +42,17 @@ it('keeps a configured SMTP default without delivering when the gate is disabled
         ->and(config('mail.delivery_enabled'))->toBeFalse()
         ->and(Mail::mailer()->getSymfonyTransport()->messages())->toHaveCount(0);
 });
+
+it('honors an enabled gate with the stored SMTP default using only an in-memory test transport', function () {
+    $admin = User::factory()->create(['admin' => true]);
+    app(ApplicationSettings::class)->update(['mail.mailer' => 'smtp'], $admin->id);
+    config(['mail.delivery_enabled' => true, 'mail.mailers.smtp' => ['transport' => 'array']]);
+    Mail::purge('smtp');
+    (new AppServiceProvider(app()))->boot();
+
+    Mail::raw('In-memory fixture only.', fn ($message) => $message->to('fixture@example.invalid')->subject('Test'));
+
+    expect(config('mail.default'))->toBe('smtp')
+        ->and(Mail::mailer()->getSymfonyTransport())->toBeInstanceOf(ArrayTransport::class)
+        ->and(Mail::mailer()->getSymfonyTransport()->messages())->toHaveCount(1);
+});

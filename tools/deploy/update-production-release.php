@@ -22,9 +22,14 @@ try {
         throw new RuntimeException('Revision du code, base du paquet ou configuration preparee differente.');
     }
     $env = Dotenv\Dotenv::parse(file_get_contents($app.'/.env'));
+    $mailEnabled = match ($env['MAIL_DELIVERY_ENABLED'] ?? null) {
+        'true' => true,
+        'false' => false,
+        default => throw new RuntimeException('Verrou mail explicite requis.'),
+    };
     foreach (['DB_CONNECTION' => 'mysql', 'DB_HOST' => '127.0.0.1', 'DB_PORT' => '3306', 'DB_DATABASE' => 'cofrac2production',
         'DB_USERNAME' => 'cofrac2_app', 'DB_URL' => '', 'DB_SOCKET' => '', 'APP_ENV' => 'production', 'APP_DEBUG' => 'false',
-        'MAIL_MAILER' => 'log', 'MAIL_DELIVERY_ENABLED' => 'false', 'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false'] as $key => $value) {
+        'MAIL_MAILER' => $mailEnabled ? 'smtp' : 'log', 'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false'] as $key => $value) {
         if (($env[$key] ?? null) !== $value) {
             throw new RuntimeException('Configuration de recette V2 modifiee : '.$key);
         }

@@ -307,12 +307,13 @@ for value in true null; do
         file_put_contents($argv[1],"<?php return ".var_export($config,true).";\n");
     ' "$APP/bootstrap/cache/config.php" "$value"
     if runtime_check > /tmp/runtime-delivery-denied.log 2>&1; then exit 1; fi
-    grep -q 'Livraison mail active ou verrou de livraison absent' /tmp/runtime-delivery-denied.log
+    grep -q 'Livraison mail effective differente de la configuration approuvee' /tmp/runtime-delivery-denied.log
     if cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- --check > /tmp/runtime-delivery-stdin-denied.log 2>&1; then exit 1; fi
-    grep -q 'Livraison mail active ou verrou de livraison absent' /tmp/runtime-delivery-stdin-denied.log
+    grep -q 'Livraison mail effective differente de la configuration approuvee' /tmp/runtime-delivery-stdin-denied.log
 done
 cp -p /tmp/runtime-delivery-cache.before.php "$APP/bootstrap/cache/config.php"
 runtime_check > /tmp/runtime-smtp-restored.json
 sha256sum -c /tmp/runtime-before-update.sha256
 printf 'OK : SMTP conserve sans livraison, precontrole epingle en lecture seule, livraison active/absente et modes mutateurs refuses.\n'
 bash "$APP/tools/deploy/tests/check-production-release.sh"
+bash "$APP/tools/deploy/tests/check-production-mail.sh"

@@ -1934,7 +1934,7 @@ autorise, sans droit d'execution automatique des collecteurs.
 
 Les modeles de mails actifs sont du contenu editable, pas une autorisation de
 livraison. Le controle runtime les accepte avant et apres la migration
-d'activation. Il conserve le repli `.env` `MAIL_MAILER=log` et le verrou
+d'activation. En recette, il conserve le repli `.env` `MAIL_MAILER=log` et le verrou
 effectif strict `MAIL_DELIVERY_ENABLED=false`, ainsi que les controles distincts du super-admin,
 des portails externes et des historiques SMS/CAPCEE. Les comptes externes deja
 actives sont conserves et controles avec les memes regles que l'application :
@@ -1945,9 +1945,10 @@ Ne pas desactiver les modeles,
 supprimer des historiques ou modifier les comptes pour contourner un controle.
 
 Le transport mail effectif peut etre SMTP si ce choix a ete enregistre dans les
-parametres. Cela ne constitue pas une autorisation d'envoi : le controle runtime
-exige toujours `mail.delivery_enabled === false` et le garde-fou applicatif bloque
-les transports par defaut et personnalises. Un verrou absent ou actif est refuse.
+parametres. Cela ne constitue pas une autorisation d'envoi : en recette le controle
+exige `mail.delivery_enabled === false` et le garde-fou applicatif bloque
+les transports par defaut et personnalises. Apres l'activation explicite decrite
+plus bas, les deploiements conservent true/smtp ; toute divergence est refusee.
 Ne pas effacer la configuration SMTP pour faire passer un deploiement.
 
 Un lanceur de correctif peut executer le `production-runtime.php` d'une revision
@@ -2159,3 +2160,44 @@ Le diagnostic SMTP confirme la connexion et l'authentification sans commande
 MAIL FROM, RCPT TO ou DATA. Son resultat distingue desormais cette connexion du
 verrou de livraison reelle : SMTP peut etre valide alors que MAIL_DELIVERY_ENABLED
 reste false. Cette release ne l'active pas et n'envoie aucun message de test.
+
+### Autorisation explicite des emails reels, SMS toujours simules
+
+L'activation mail est distincte du choix d'un transport SMTP dans les parametres.
+Une nouvelle preparation reste sans livraison ; les scripts d'import et de
+creation de base gardent ce comportement. L'activation est une operation root
+explicite sur ns365601 :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/enable-production-mail.sh --enable-real-mail
+```
+
+Installer d'abord la revision contenant ce script et les nouveaux controles runtime.
+Le site doit etre ouvert et sa preparation correspondre au code et a l'empreinte du
+.env. L'operation verifie le transport SMTP enregistre, le verrou effectif, la base
+V2 et les protections SMS/CAPCEE. Elle lit seulement des compteurs de jobs, jamais
+leurs payloads, et refuse si une file contient un job, y compris differe/reserve ou
+sur une autre queue. Aucune file n'est purgee et aucun job echoue n'est rejoue.
+
+Apres sauvegarde privee du .env, du marqueur et du cache, une courte maintenance
+arrete uniquement les services V2. Une seconde inspection de la file est effectuee
+avec le runtime arrete. Seules deux cles changent : MAIL_MAILER=smtp et
+MAIL_DELIVERY_ENABLED=true. Les secrets et tous les autres reglages, en particulier
+SMSFACTOR_ENABLED=false, SMSFACTOR_MODE=simulate et CAPCEE_ENABLED=false, restent
+identiques. L'empreinte env_sha256 de RUNTIME-PREPARED.json est mise a jour, avec une
+entree mail_delivery_changes qui trace l'autorisation. Les caches sont reconstruits,
+les modes verifies dans un nouveau processus, puis la V2 est rouverte et controlee.
+
+Un echec apres changement de configuration restaure les sauvegardes et tente une
+reouverture uniquement apres validation du mode precedent. Un second lancement sur
+un site deja active est sans effet. Aucun email de test n'est envoye ; la sonde de
+queue reste le job interne sans appel externe habituel. Les anciennes activites
+mail_simulated ne sont jamais converties en jobs.
+
+Les mises a jour suivantes acceptent et conservent le mode mail approuve : soit
+false/log pour la recette, soit true/smtp pour la livraison reelle. Le controle de
+l'empreinte du .env reste obligatoire, et une divergence avec la configuration
+effective est refusee. Les rapports separent mail_delivery_enabled,
+sms_delivery_enabled et capcee_delivery_enabled pour ne pas confondre les canaux.
+Ne pas modifier le .env a la main sans mettre a jour la preparation par cette
+operation : un simple changement manuel serait refuse par le prochain deploiement.

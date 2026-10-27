@@ -34,10 +34,15 @@ try {
     require $root.'/vendor/autoload.php';
     require $root.'/tools/deploy/lib/ProductionRuntimeBundle.php';
     $env = Dotenv\Dotenv::parse(file_get_contents($root.'/.env'));
+    $mailDeliveryEnabled = match ($env['MAIL_DELIVERY_ENABLED'] ?? null) {
+        'true' => true,
+        'false' => false,
+        default => throw new RuntimeException('Verrou MAIL_DELIVERY_ENABLED explicite requis.'),
+    };
     foreach (['APP_ENV' => 'production', 'APP_DEBUG' => 'false', 'APP_URL' => 'https://cofrac2.geniuscontrole.com', 'APP_TIMEZONE' => 'Europe/Paris',
         'CRM_V2_ENABLED' => 'true', 'SIMULATION_MODE' => 'false', 'DB_CONNECTION' => 'mysql', 'DB_HOST' => '127.0.0.1',
         'DB_PORT' => '3306', 'DB_DATABASE' => 'cofrac2production', 'DB_USERNAME' => 'cofrac2_app', 'DB_URL' => '', 'DB_SOCKET' => '',
-        'MAIL_MAILER' => 'log', 'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false',
+        'MAIL_MAILER' => $mailDeliveryEnabled ? 'smtp' : 'log', 'SMSFACTOR_ENABLED' => 'false', 'SMSFACTOR_MODE' => 'simulate', 'CAPCEE_ENABLED' => 'false',
         'QUEUE_CONNECTION' => 'database', 'SESSION_SECURE_COOKIE' => 'true', 'SESSION_COOKIE' => 'cofrac2_session', 'REVERB_SERVER_HOST' => '127.0.0.1',
         'REVERB_SERVER_PORT' => '8091', 'REVERB_ALLOWED_ORIGINS' => 'cofrac2.geniuscontrole.com'] as $key => $expected) {
         if (($env[$key] ?? null) !== $expected) {
@@ -191,9 +196,9 @@ try {
     $app = require $root.'/bootstrap/app.php';
     $app->make(Kernel::class)->bootstrap();
     Http::preventStrayRequests();
-    // SMTP settings are editable content; only the explicit delivery gate permits sending.
-    if (config('mail.delivery_enabled') !== false) {
-        throw new RuntimeException('Livraison mail active ou verrou de livraison absent. Aucun reglage modifie.');
+    if (config('mail.delivery_enabled') !== $mailDeliveryEnabled
+        || ($mailDeliveryEnabled && (config('mail.default') !== 'smtp' || config('mail.mailers.smtp.transport') !== 'smtp'))) {
+        throw new RuntimeException('Livraison mail effective differente de la configuration approuvee. Aucun reglage modifie.');
     }
     if (! app()->environment('production') || DB::connection()->getDatabaseName() !== 'cofrac2production'
         || config('app.debug') || config('simulation.enabled') || ! config('crm.v2_enabled')
@@ -271,7 +276,8 @@ try {
         $count++;
     }
     echo json_encode(['database' => 'cofrac2production', 'document_files_readable' => $count,
-        'single_super_admin' => true, 'code_read_only' => true, 'outbound_delivery_enabled' => false,
+        'single_super_admin' => true, 'code_read_only' => true, 'outbound_delivery_enabled' => $mailDeliveryEnabled,
+        'mail_delivery_enabled' => $mailDeliveryEnabled, 'sms_delivery_enabled' => false, 'capcee_delivery_enabled' => false,
         'external_portals_enabled' => $portalAccounts > 0, 'enabled_external_accounts' => $portalAccounts,
         'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {

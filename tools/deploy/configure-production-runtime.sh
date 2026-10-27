@@ -354,8 +354,13 @@ snapshot_configs > "$WORK/apache.after"
 cmp -s "$WORK/services.before" "$WORK/services.after" && cmp -s "$WORK/apache.before" "$WORK/apache.after" || stop 'configuration ou processus partage different.'
 systemctl enable "${UNITS[@]}"
 sha256sum "$SITE" > "$STATE/apache-config.sha256"
-printf '{"url":"https://cofrac2.geniuscontrole.com","internal_only":true,"outbound_delivery_enabled":false,"final_cutover_ready":false}\n' > "$STATE/INTERNAL-SITE-OPEN.json"
+php8.4 -r '
+    $check=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+    echo json_encode(["url"=>"https://cofrac2.geniuscontrole.com","internal_only"=>true,
+        "outbound_delivery_enabled"=>$check["outbound_delivery_enabled"],"mail_delivery_enabled"=>$check["mail_delivery_enabled"],
+        "sms_delivery_enabled"=>false,"capcee_delivery_enabled"=>false,"final_cutover_ready"=>false],JSON_THROW_ON_ERROR)."\n";
+' "$WORK/application-check.json" > "$STATE/INTERNAL-SITE-OPEN.json"
 success=1
 printf 'Cofrac 2 ouvert pour recette interne : https://cofrac2.geniuscontrole.com\n'
 printf 'PHP, worker et Reverb dedies verifies. Ancien Coffrac et services existants inchanges.\n'
-printf 'Envois reels toujours bloques ; comptes externes deja actives et valides conserves. Verifier maintenant la connexion et un document dans le navigateur.\n'
+printf 'Mode mail approuve conserve ; SMS en simulation/desactives et CAPCEE desactive. Aucun email de test envoye.\n'

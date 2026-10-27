@@ -147,11 +147,13 @@ php8.4 -r '
     $check=json_decode(file_get_contents($argv[1]."/application.after.json"),true,32,JSON_THROW_ON_ERROR);
     $r["external_portals_enabled"]=$check["external_portals_enabled"];
     $r["enabled_external_accounts"]=$check["enabled_external_accounts"];
+    $r["mail_delivery_enabled"]=$check["mail_delivery_enabled"];
+    $r["outbound_delivery_enabled"]=$check["outbound_delivery_enabled"];
     file_put_contents($argv[1]."/prepared.updated.json",json_encode($r,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");
 ' "$WORK"
 mv -- "$WORK/prepared.updated.json" "$STATE/RUNTIME-PREPARED.json"
 success=1
 cat "$WORK/application.after.json"
 printf 'Correctifs V2 prepares. Aucun service demarre ou recharge ; ancien domaine inchange.\n'
-printf 'SMS en simulation/desactives, emails et CAPCEE desactives, Global+ TEST conserves.\n'
+printf 'Mode mail approuve conserve. SMS en simulation/desactives, CAPCEE desactive, Global+ TEST conserves.\n'
 printf 'Ouverture : sudo bash /var/www/cofrac2/tools/deploy/configure-production-runtime.sh --open --reload-shared-apache\n'
