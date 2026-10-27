@@ -32,7 +32,7 @@ class PlannerAppointmentMailController extends Controller
         $sourceTemplate = ! empty($payload['mail_template_id'])
             ? MailTemplate::query()
                 ->with('sender')
-                ->whereHas('sender', fn ($query) => $query->where('is_active', true))
+                ->when(! config('crm.v2_enabled'), fn ($query) => $query->whereHas('sender', fn ($sender) => $sender->where('is_active', true)))
                 ->find($payload['mail_template_id'])
             : null;
         $this->ensureSelectedTemplateIsUsable($payload, $sourceTemplate);
@@ -63,7 +63,7 @@ class PlannerAppointmentMailController extends Controller
         $sourceTemplate = ! empty($payload['mail_template_id'])
             ? MailTemplate::query()
                 ->with('sender')
-                ->whereHas('sender', fn ($query) => $query->where('is_active', true))
+                ->when(! config('crm.v2_enabled'), fn ($query) => $query->whereHas('sender', fn ($sender) => $sender->where('is_active', true)))
                 ->find($payload['mail_template_id'])
             : null;
         $this->ensureSelectedTemplateIsUsable($payload, $sourceTemplate);
@@ -102,7 +102,8 @@ class PlannerAppointmentMailController extends Controller
     {
         if (! empty($payload['mail_template_id']) && ! $sourceTemplate) {
             throw ValidationException::withMessages([
-                'mail_template_id' => 'Le template sélectionné est introuvable ou son expéditeur est inactif.',
+                'mail_template_id' => config('crm.v2_enabled') ? 'Le modèle sélectionné est introuvable ou inactif.'
+                    : 'Le template sélectionné est introuvable ou son expéditeur est inactif.',
             ]);
         }
     }

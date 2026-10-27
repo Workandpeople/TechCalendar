@@ -126,7 +126,7 @@
                             <button type="button" class="gc-btn-secondary settings-small" data-diagnostic-run hidden>Tester</button>
                         </div>
                         <p>{{ $diagnostic['description'] }}</p>
-                        @if ($key === 'mail')
+                        @if ($key === 'mail' && ! config('crm.v2_enabled'))
                             <label class="settings-mail-sender">
                                 <span class="sr-only">Connexion mail à tester</span>
                                 <select class="gc-input" data-diagnostic-mail-sender>

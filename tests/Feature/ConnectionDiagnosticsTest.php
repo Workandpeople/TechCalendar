@@ -44,7 +44,7 @@ it('does not run diagnostics while rendering the settings page or disclose secre
     diagnosticMailSender(['name' => 'Inactive SMTP', 'is_active' => false]);
     $this->get(route('admin.settings'))->assertOk()->assertSee('Tests de connexion')
         ->assertSee('data-settings-search', false)->assertSee('Non renseignées')
-        ->assertSee('Contact SMTP')->assertDontSee('Inactive SMTP')->assertDontSee('smtp-do-not-render');
+        ->assertDontSee('data-diagnostic-mail-sender', false)->assertDontSee('Contact SMTP')->assertDontSee('Inactive SMTP')->assertDontSee('smtp-do-not-render');
     Http::assertNothingSent();
     Mail::assertNothingSent();
     Mail::assertNothingQueued();
@@ -166,6 +166,7 @@ it('checks SMTP with delivery disabled without sending or mutating the mailer', 
 });
 
 it('checks an active stored mail sender and redacts failed SMTP details', function () {
+    config(['crm.v2_enabled' => false]);
     $sender = diagnosticMailSender(['name' => 'Contact', 'is_active' => true, 'mail_password' => 'smtp-secret']);
     $this->mock(SmtpConnectionProbe::class)->shouldReceive('check')->once()
         ->with(Mockery::on(fn ($config) => $config['password'] === 'smtp-secret'))
@@ -176,6 +177,7 @@ it('checks an active stored mail sender and redacts failed SMTP details', functi
 });
 
 it('never tests a disabled or deleted SMTP sender', function (bool $deleted) {
+    config(['crm.v2_enabled' => false]);
     $sender = diagnosticMailSender(['name' => 'Inactive', 'is_active' => $deleted]);
     if ($deleted) {
         $sender->delete();

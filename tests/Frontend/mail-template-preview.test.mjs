@@ -25,13 +25,14 @@ for (const [subject, body] of [['', 'Contenu'], ['Objet', '   ']]) {
     });
 }
 
-test('complete mail preview still renders the server response', async () => {
+for (const senderSelect of [{ value: '1' }, null]) {
+test(`complete mail preview renders with ${senderSelect ? 'legacy sender' : 'global settings only'}`, async () => {
     let requested = false;
     const status = {}, title = {}, frame = {};
     await runInNewContext(`${previewCode}\nupdatePreview();`, {
         previewAbortController: null, AbortController,
         subjectInput: { value: 'Objet' }, markdownInput: { value: 'Contenu' },
-        senderSelect: { value: '1' }, editingTemplateId: null,
+        senderSelect, editingTemplateId: null,
         mailTemplatePreviewUrl: '/preview', mailTemplateCsrf: 'test',
         previewStatus: status, previewSubject: title, previewFrame: frame,
         renderPreviewFallback() { assert.fail('The preview should succeed.'); },
@@ -39,6 +40,7 @@ test('complete mail preview still renders the server response', async () => {
             requested = true;
             assert.equal(url, '/preview');
             assert.equal(JSON.parse(options.body).subject, 'Objet');
+            assert.equal(Object.hasOwn(JSON.parse(options.body), 'mail_sender_id'), Boolean(senderSelect));
             return { ok: true, async json() { return { subject: 'Objet', html: '<p>Contenu</p>' }; } };
         },
     });
@@ -46,6 +48,7 @@ test('complete mail preview still renders the server response', async () => {
     assert.equal(status.textContent, 'À jour');
     assert.equal(frame.srcdoc, '<p>Contenu</p>');
 });
+}
 
 test('preview errors are inserted as text rather than raw HTML', () => {
     const fallbackCode = source.slice(source.indexOf('        const renderPreviewFallback ='), source.indexOf('        const updatePreview ='));

@@ -253,7 +253,7 @@
                                     <label class="gc-label" for="booking_confirmation_mail_template">Template</label>
                                     <select id="booking_confirmation_mail_template" class="gc-input" required>
                                         @foreach ($mailTemplates as $mailTemplate)
-                                            <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }} @if($mailTemplate->sender) — {{ $mailTemplate->sender->name }} @endif</option>
+                                            <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }} @if(!config('crm.v2_enabled') && $mailTemplate->sender) — {{ $mailTemplate->sender->name }} @endif</option>
                                         @endforeach
                                     </select>
                                 </div>

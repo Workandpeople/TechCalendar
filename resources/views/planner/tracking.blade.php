@@ -286,7 +286,7 @@
                                             <label class="gc-label" for="tracking_mail_template">Template</label>
                                             <select id="tracking_mail_template" class="gc-input" required>
                                                 @foreach ($mailTemplates as $mailTemplate)
-                                                    <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }} @if($mailTemplate->sender) — {{ $mailTemplate->sender->name }} @endif</option>
+                                                    <option value="{{ $mailTemplate->id }}">{{ $mailTemplate->name }} @if(!config('crm.v2_enabled') && $mailTemplate->sender) — {{ $mailTemplate->sender->name }} @endif</option>
                                                 @endforeach
                                             </select>
                                         </div>

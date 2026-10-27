@@ -49,7 +49,7 @@ class ManagerMailTemplateController extends Controller
         }
 
         $templates = $query->paginate(20)->withQueryString();
-        $mailSenders = MailSender::query()
+        $mailSenders = config('crm.v2_enabled') ? collect() : MailSender::query()
             ->withCount('templates')
             ->with(['updatedBy:id,first_name,last_name'])
             ->orderByDesc('is_active')
@@ -110,16 +110,16 @@ class ManagerMailTemplateController extends Controller
 
         $payload = $request->validate([
             'mail_template_id' => ['nullable', 'integer', Rule::exists('mail_templates', 'id')->whereNull('deleted_at')],
-            'mail_sender_id' => ['nullable', 'integer', Rule::exists('mail_senders', 'id')->where('is_active', true)->whereNull('deleted_at')],
+            'mail_sender_id' => [Rule::excludeIf(config('crm.v2_enabled')), 'nullable', 'integer', Rule::exists('mail_senders', 'id')->where('is_active', true)->whereNull('deleted_at')],
             'subject' => ['required', 'string', 'max:190'],
             'markdown_body' => ['required', 'string', 'max:60000'],
         ]);
         $storedTemplate = ! empty($payload['mail_template_id'])
             ? MailTemplate::query()->with('sender')->find($payload['mail_template_id'])
             : null;
-        $sender = ! empty($payload['mail_sender_id'])
+        $sender = config('crm.v2_enabled') ? null : (! empty($payload['mail_sender_id'])
             ? MailSender::query()->find($payload['mail_sender_id'])
-            : $storedTemplate?->sender;
+            : $storedTemplate?->sender);
 
         $template = new MailTemplate([
             'name' => 'Preview',
@@ -127,7 +127,8 @@ class ManagerMailTemplateController extends Controller
             'mail_sender_id' => $sender?->id,
             'subject' => $payload['subject'],
             'markdown_body' => $payload['markdown_body'],
-            'logo_path' => $storedTemplate?->logo_path,
+            'logo_path' => config('crm.v2_enabled')
+                ? ($storedTemplate?->sender?->logo_path ?: $storedTemplate?->logo_path) : $storedTemplate?->logo_path,
             'is_active' => true,
         ]);
         $template->setRelation('sender', $sender);
@@ -138,6 +139,7 @@ class ManagerMailTemplateController extends Controller
     public function storeSender(Request $request): RedirectResponse
     {
         abort_unless($this->canManageMailTemplates($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'La configuration mail se gère dans les Paramètres.');
 
         $payload = $this->validatedSenderPayload($request);
         $payload['logo_path'] = $this->resolveSenderLogoPath($request, $payload['name']);
@@ -152,6 +154,7 @@ class ManagerMailTemplateController extends Controller
     public function updateSender(Request $request, MailSender $mailSender): RedirectResponse
     {
         abort_unless($this->canManageMailTemplates($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'La configuration mail se gère dans les Paramètres.');
 
         $payload = $this->validatedSenderPayload($request, $mailSender);
         $previousLogoPath = $mailSender->logo_path;
@@ -167,6 +170,7 @@ class ManagerMailTemplateController extends Controller
     public function destroySender(Request $request, MailSender $mailSender): RedirectResponse
     {
         abort_unless($this->canManageMailTemplates($request), 403);
+        abort_if(config('crm.v2_enabled'), 410, 'La configuration mail se gère dans les Paramètres.');
 
         if ($mailSender->templates()->exists()) {
             throw ValidationException::withMessages([
@@ -182,13 +186,13 @@ class ManagerMailTemplateController extends Controller
     }
 
     /**
-     * @return array{name:string,slug:string,mail_sender_id:int,subject:string,markdown_body:string,is_active:bool}
+     * @return array{name:string,slug:string,mail_sender_id:?int,subject:string,markdown_body:string,is_active:bool}
      */
     private function validatedPayload(Request $request, ?MailTemplate $template = null): array
     {
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:190'],
-            'mail_sender_id' => ['required', 'integer', Rule::exists('mail_senders', 'id')->where('is_active', true)->whereNull('deleted_at')],
+            'mail_sender_id' => [Rule::excludeIf(config('crm.v2_enabled')), 'required', 'integer', Rule::exists('mail_senders', 'id')->where('is_active', true)->whereNull('deleted_at')],
             'subject' => ['required', 'string', 'max:190'],
             'markdown_body' => ['required', 'string', 'max:60000'],
             'is_active' => ['nullable', 'boolean'],
@@ -202,7 +206,7 @@ class ManagerMailTemplateController extends Controller
         return [
             'name' => trim((string) $payload['name']),
             'slug' => $slug,
-            'mail_sender_id' => (int) $payload['mail_sender_id'],
+            'mail_sender_id' => config('crm.v2_enabled') ? $template?->mail_sender_id : (int) $payload['mail_sender_id'],
             'subject' => trim((string) $payload['subject']),
             'markdown_body' => trim((string) $payload['markdown_body']),
             'is_active' => $request->boolean('is_active'),

@@ -30,6 +30,10 @@ class ConnectionDiagnostics
 
     public function mailSenders(): array
     {
+        if (config('crm.v2_enabled')) {
+            return [];
+        }
+
         return MailSender::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
             ->map(fn (MailSender $sender): array => ['id' => $sender->id, 'name' => $sender->name])->all();
     }
@@ -89,6 +93,9 @@ class ConnectionDiagnostics
 
     private function mail(?int $senderId): array
     {
+        if (config('crm.v2_enabled')) {
+            $senderId = null;
+        }
         if (app()->environment('demo') || (config('simulation.enabled') && ! config('simulation.allow_external_apis'))) {
             return ['warning', 'Connexion SMTP bloquée en démo ou simulation isolée. Aucun appel effectué.'];
         }

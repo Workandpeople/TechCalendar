@@ -5,7 +5,7 @@
 <x-dossier-dialog id="envoyer-email" title="Envoyer un mail" :reopen="$errors->any() && old('_form') === 'mail'">
     <form method="POST" action="{{ route('v2.dossiers.mail.store', $dossier) }}" class="mt-4 space-y-4" data-dossier-mail data-preview-url="{{ route('v2.dossiers.mail.preview', $dossier) }}" data-mail-templates="{{ json_encode($mailTemplates->map->only(['id', 'subject', 'markdown_body'])->values()) }}">
         @csrf <input type="hidden" name="_form" value="mail">
-        <p class="text-xs text-slate-500">Expéditeur : {{ config('mail.contact_address') }}
+        <p class="text-xs text-slate-500">Expéditeur : {{ config('mail.from.address') }}
             @if (!config('mail.delivery_enabled') || config('simulation.enabled') || in_array(config('mail.default'), ['log', 'array'], true))
                 · Simulation sans envoi réel
             @endif

@@ -1,5 +1,6 @@
 <x-layouts.app>
     @php
+        $globalMail = (bool) config('crm.v2_enabled');
         $defaultMarkdown = <<<'MD'
 # Bonjour {{ client_name }},
 
@@ -40,7 +41,7 @@ MD;
     @endphp
 
     <div class="space-y-6" data-ajax-list="mail-templates">
-        <x-workspace-heading title="Modèles de mails" eyebrow="Communication" description="Préparez vos messages et leurs expéditeurs. Consultez l’aperçu avant d’utiliser un modèle pour un rendez-vous." />
+        <x-workspace-heading title="Modèles de mails" eyebrow="Communication" description="Préparez vos messages et consultez leur aperçu avant l’envoi." />
 
         @if ($errors->any())
             <div class="gc-alert" style="border-color:#f5c2c7;background:#fff1f2;color:#9f1239;">
@@ -75,6 +76,15 @@ MD;
             </form>
         </section>
 
+        @if ($globalMail)
+            <div class="gc-alert text-sm" data-global-mail-configuration>
+                Les mails utilisent uniquement la configuration des Paramètres.
+                Adresse d’envoi : <strong>{{ config('mail.from.address') }}</strong>.
+                @if (auth()->user()->admin)
+                    <a class="gc-link" href="{{ route('admin.settings') }}">Paramètres mail</a>
+                @endif
+            </div>
+        @else
         <section data-ajax-results="table-0" class="gc-card overflow-hidden">
             <div class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between" style="border-color:var(--gc-border);">
                 <div>
@@ -161,6 +171,7 @@ MD;
                 </table>
             </div>
         </section>
+        @endif
 
         <section data-ajax-results="table-1" class="gc-card overflow-hidden">
             <div class="overflow-x-auto">
@@ -168,7 +179,7 @@ MD;
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
                         <tr>
                             <th class="px-4 py-3 font-semibold">Modèle</th>
-                            <th class="px-4 py-3 font-semibold">Expéditeur</th>
+                            @unless ($globalMail)<th class="px-4 py-3 font-semibold">Expéditeur</th>@endunless
                             <th class="px-4 py-3 font-semibold">Sujet</th>
                             <th class="px-4 py-3 font-semibold">Variables</th>
                             <th class="px-4 py-3 font-semibold">Statut</th>
@@ -183,11 +194,11 @@ MD;
                                     'id' => $template->id,
                                     'name' => $template->name,
                                     'slug' => $template->slug,
-                                    'mail_sender_id' => $template->mail_sender_id,
+                                    'mail_sender_id' => $globalMail ? null : $template->mail_sender_id,
                                     'subject' => $template->subject,
                                     'markdown_body' => $template->markdown_body,
                                     'logo_url' => $template->logo_url,
-                                    'sender_name' => $template->sender?->name,
+                                    'sender_name' => $globalMail ? null : $template->sender?->name,
                                     'is_active' => (bool) $template->is_active,
                                     'update_url' => route('manager.mail-templates.update', $template),
                                     'delete_url' => route('manager.mail-templates.destroy', $template),
@@ -208,6 +219,7 @@ MD;
                                         </div>
                                     </div>
                                 </td>
+                                @unless ($globalMail)
                                 <td class="px-4 py-3">
                                     @if ($template->sender)
                                         <div class="font-semibold" style="color:var(--gc-text);">{{ $template->sender->name }}</div>
@@ -216,6 +228,7 @@ MD;
                                         <span style="color:var(--gc-text-soft);">Non défini</span>
                                     @endif
                                 </td>
+                                @endunless
                                 <td class="max-w-md px-4 py-3">
                                     <span class="line-clamp-2">{{ $template->subject }}</span>
                                 </td>
@@ -267,7 +280,7 @@ MD;
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucun modèle de mail.</td>
+                                <td colspan="{{ $globalMail ? 6 : 7 }}" class="px-4 py-8 text-center" style="color:var(--gc-text-soft);">Aucun modèle de mail.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -294,11 +307,12 @@ MD;
                     @csrf
                     <input id="mail_template_method" type="hidden" name="_method" value="POST" disabled />
 
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="grid grid-cols-1 gap-4 {{ $globalMail ? '' : 'md:grid-cols-2' }}">
                         <div>
                             <label class="gc-label" for="mail_template_name">Nom</label>
                             <input id="mail_template_name" name="name" type="text" maxlength="190" class="gc-input" required placeholder="Ex: Confirmation RDV" />
                         </div>
+                        @unless ($globalMail)
                         <div>
                             <label class="gc-label" for="mail_template_sender_id">Expéditeur</label>
                             <select id="mail_template_sender_id" name="mail_sender_id" class="gc-input" required>
@@ -309,6 +323,7 @@ MD;
                                 @endforelse
                             </select>
                         </div>
+                        @endunless
                     </div>
 
                     <div>
@@ -376,6 +391,7 @@ MD;
         </div>
     </div>
 
+    @unless ($globalMail)
     <div id="mail-sender-editor-modal" class="gc-modal hidden">
         <div class="gc-modal-panel gc-modal-panel-xl gc-form-modal">
             <div class="gc-form-modal-heading flex flex-col gap-3 md:flex-row md:items-start md:justify-between" style="border-color:var(--gc-border);">
@@ -485,6 +501,7 @@ MD;
             </form>
         </div>
     </div>
+    @endunless
 
     <script>
         const mailTemplateStoreUrl = @json(route('manager.mail-templates.store'));
@@ -565,7 +582,7 @@ MD;
             submitButton.textContent = template ? 'Enregistrer' : 'Créer';
 
             nameInput.value = template?.name || '';
-            senderSelect.value = String(template?.mail_sender_id || defaultMailSenderId || '');
+            if (senderSelect) senderSelect.value = String(template?.mail_sender_id || defaultMailSenderId || '');
             subjectInput.value = template?.subject || '';
             markdownInput.value = template?.markdown_body || defaultMailTemplateMarkdown;
             activeInput.checked = template ? Boolean(template.is_active) : true;
@@ -602,7 +619,7 @@ MD;
                     },
                     body: JSON.stringify({
                         mail_template_id: editingTemplateId,
-                        mail_sender_id: senderSelect.value || null,
+                        ...(senderSelect ? { mail_sender_id: senderSelect.value || null } : {}),
                         subject: subjectInput.value,
                         markdown_body: markdownInput.value,
                     }),

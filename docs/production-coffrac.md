@@ -2298,3 +2298,19 @@ le diagnostic du transport par defaut (EHLO/STARTTLS/AUTH, sans email).
 Un succes de ce diagnostic ne prouve pas les droits Send As ni la delivrabilite.
 Les modes mail/SMS et les parametres d'authentification ne sont pas modifies
 par cette release. Les SMS restent simules/desactives.
+
+### Configuration mail unique en V2
+
+Tous les envois V2 utilisent le transport et l'adresse `From email` definis dans
+les Parametres. Le choix et la gestion d'expediteur des modeles sont retires en V2,
+y compris dans les diagnostics SMTP. Le mode historique reste disponible hors V2.
+Les anciens expediteurs et leurs liens en base sont conserves pour l'historique,
+mais ne determinent plus le transport, l'identite ni la disponibilite d'un modele
+actif. Aucun effacement, migration ou changement de mot de passe SMTP.
+
+`MailTemplateMailable::send` ignore aussi les choix d'expediteur deja serialises
+dans les messages en attente. Les parametres mail sont relus avant chaque job V2
+et les transports sont oublies s'ils ont change, sans redemarrage manuel requis
+apres une modification des Parametres. La simulation, les verrous de livraison
+et la configuration SMS restent inchanges. Les e-mails deja en echec ne sont
+ni purges ni rejoues par le deploiement.

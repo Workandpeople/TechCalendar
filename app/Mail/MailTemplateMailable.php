@@ -9,13 +9,12 @@ use App\Services\MailTemplateRenderer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Mail\Factory;
 use Illuminate\Contracts\Mail\Mailer;
-use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class MailTemplateMailable extends Mailable
+class MailTemplateMailable extends GloballyConfiguredMailable
 {
     use Queueable, SerializesModels;
 
@@ -47,7 +46,7 @@ class MailTemplateMailable extends Mailable
         $this->renderedMarkdown = $renderer->renderMarkdownBody($template, $data);
         $this->logoUrl = $template->logo_url;
 
-        if ($sender) {
+        if ($sender && ! config('crm.v2_enabled')) {
             $this->senderId = $sender->id;
             $this->senderMailerName = 'mail_sender_'.$sender->id;
             $this->senderFromAddress = $sender->mail_from_address;
@@ -59,8 +58,8 @@ class MailTemplateMailable extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            from: config('crm.v2_enabled') && config('mail.contact_address')
-                ? new Address(config('mail.contact_address'), config('mail.from.name') ?: 'Genius Contrôle')
+            from: config('crm.v2_enabled') && config('mail.from.address')
+                ? new Address(config('mail.from.address'), config('mail.from.name') ?: 'Genius Contrôle')
                 : ($this->senderFromAddress
                 ? new Address($this->senderFromAddress, $this->senderFromName ?: null)
                 : null),
@@ -90,6 +89,13 @@ class MailTemplateMailable extends Mailable
      */
     public function send($mailer)
     {
+        if (config('crm.v2_enabled')) {
+            // Also discard legacy sender choices serialized into jobs before this release.
+            $this->senderId = $this->senderMailerName = $this->senderFromAddress = $this->senderFromName = null;
+
+            return parent::send($mailer);
+        }
+
         if ($this->senderId && $this->senderMailerName) {
             $sender = MailSender::query()->find($this->senderId);
 

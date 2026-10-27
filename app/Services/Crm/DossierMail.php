@@ -19,7 +19,7 @@ final class DossierMail
     public function templates(): Collection
     {
         return MailTemplate::query()->with('sender')->where('is_active', true)
-            ->where(fn ($q) => $q->whereNull('mail_sender_id')->orWhereHas('sender', fn ($s) => $s->where('is_active', true)))
+            ->when(! config('crm.v2_enabled'), fn ($query) => $query->where(fn ($q) => $q->whereNull('mail_sender_id')->orWhereHas('sender', fn ($s) => $s->where('is_active', true))))
             ->orderBy('name')->get();
     }
 
@@ -58,7 +58,8 @@ final class DossierMail
     {
         $source = empty($data['mail_template_id']) ? null : $this->templates()->firstWhere('id', (int) $data['mail_template_id']);
         if (! empty($data['mail_template_id']) && ! $source) {
-            throw ValidationException::withMessages(['mail_template_id' => 'Ce modèle ou son expéditeur n’est plus actif.']);
+            throw ValidationException::withMessages(['mail_template_id' => config('crm.v2_enabled')
+                ? 'Ce modèle n’est plus actif.' : 'Ce modèle ou son expéditeur n’est plus actif.']);
         }
         $template = new MailTemplate(['name' => 'Email dossier', 'subject' => $data['subject'],
             'markdown_body' => $data['markdown_body'], 'mail_sender_id' => $source?->mail_sender_id,

@@ -43,15 +43,15 @@ class PlannerTrackingController extends Controller
         $mailTemplates = MailTemplate::query()
             ->with('sender:id,name,logo_path,is_active')
             ->where('is_active', true)
-            ->whereHas('sender', fn ($query) => $query->where('is_active', true))
+            ->when(! config('crm.v2_enabled'), fn ($query) => $query->whereHas('sender', fn ($sender) => $sender->where('is_active', true)))
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'mail_sender_id', 'subject', 'markdown_body', 'logo_path']);
         $trackingMailTemplates = $mailTemplates
             ->map(fn (MailTemplate $template): array => [
                 'id' => $template->id,
                 'name' => $template->name,
-                'mail_sender_id' => $template->mail_sender_id,
-                'sender_name' => $template->sender?->name,
+                'mail_sender_id' => config('crm.v2_enabled') ? null : $template->mail_sender_id,
+                'sender_name' => config('crm.v2_enabled') ? null : $template->sender?->name,
                 'subject' => $template->subject,
                 'markdown_body' => $template->markdown_body,
                 'logo_url' => $template->logo_url,

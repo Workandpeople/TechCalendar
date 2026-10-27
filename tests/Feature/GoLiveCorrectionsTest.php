@@ -229,7 +229,7 @@ it('offers template or custom dossier mail with real line breaks and no delivery
     expect($this->dossier->activities()->where('kind', 'mail_simulated')->sole()->client_visible)->toBeFalse();
     config(['mail.delivery_enabled' => true, 'mail.default' => 'smtp', 'simulation.enabled' => false]);
     $this->post(route('v2.dossiers.mail.store', $this->dossier), [...$data, 'mail_template_id' => null])->assertRedirect();
-    Mail::assertQueued(MailTemplateMailable::class, fn ($mail) => $mail->envelope()->from->address === config('mail.contact_address'));
+    Mail::assertQueued(MailTemplateMailable::class, fn ($mail) => $mail->envelope()->from->address === config('mail.from.address'));
     $template->update(['is_active' => false]);
     $this->postJson(route('v2.dossiers.mail.preview', $this->dossier), $data)->assertUnprocessable();
 });

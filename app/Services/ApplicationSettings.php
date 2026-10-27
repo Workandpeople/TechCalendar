@@ -44,18 +44,19 @@ class ApplicationSettings
         })->count();
     }
 
-    public function applyToConfig(): void
+    public function applyToConfig(?string $configPrefix = null): void
     {
+        $values = $this->databaseValues();
         foreach ($this->definitions() as $key => $definition) {
             $configKey = $definition['config'] ?? null;
 
-            if (! $configKey) {
+            if (! $configKey || ($configPrefix !== null && ! str_starts_with($configKey, $configPrefix))) {
                 continue;
             }
 
             $this->rememberInitialConfigValue($configKey);
 
-            $value = $this->get($key);
+            $value = $this->resolveValue($definition, $values[$key] ?? null);
 
             config([$configKey => $value]);
         }
