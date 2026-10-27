@@ -1,13 +1,15 @@
 @layer components {
     .gc-workspace .gc-beta-trigger { position: fixed; z-index: 65; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; padding: .45rem .85rem; border: 1px solid #e8c450; border-radius: 999px; background: #fff1af; color: #553b00; box-shadow: 0 5px 18px #50390021; font-size: .8rem; font-weight: 750; cursor: pointer; }
     .gc-beta-trigger > span { display: grid; place-items: center; width: 22px; height: 22px; background: #ffcf32; border-radius: 50%; font-size: 1rem; }
-    .gc-beta-dialog { position: fixed; inset: 0; margin: auto; width: min(620px, calc(100vw - 24px)); max-height: min(90dvh, 850px); padding: 0; border: 1px solid #d4e2ea; border-radius: 20px; color: #263f50; background: white; box-shadow: 0 25px 100px #102f4940; overflow: auto; }
+    .gc-beta-dialog { position: fixed; inset: 0; margin: auto; width: min(620px, calc(100vw - 24px)); max-height: min(90dvh, 850px); padding: 0; border: 1px solid #d4e2ea; border-radius: 20px; color: #263f50; background: white; box-shadow: 0 25px 100px #102f4940; overflow: hidden; }
+    .gc-beta-dialog[open] { display: flex; flex-direction: column; }
     .gc-beta-dialog::backdrop { background: #152d45a3; backdrop-filter: blur(3px); }
-    .gc-beta-heading { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 20px 24px; border-bottom: 1px solid #dce6ec; background: linear-gradient(110deg, #fff4c9, #f8fbff); }
+    .gc-beta-heading { flex-shrink: 0; display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 20px 24px; border-bottom: 1px solid #dce6ec; background: linear-gradient(110deg, #fff4c9, #f8fbff); }
     .gc-beta-heading p { color: #8b6805; font-size: .65rem; letter-spacing: .14em; font-weight: 750; }
     .gc-beta-heading h2 { margin-top: .3rem; font-weight: 750; font-size: 1.2rem; }
-    .gc-beta-dialog form { padding: 22px 24px; }
-    .gc-beta-dialog fieldset { border: 0; min-width: 0; padding: 0; }
+    .gc-beta-heading h2:focus { outline: none; }
+    .gc-beta-dialog form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .gc-beta-dialog fieldset { border: 0; min-width: 0; min-height: 0; padding: 22px 24px; overflow-y: auto; }
     .gc-beta-label { display: block; font-size: .8rem; font-weight: 700; margin: 1rem 0 .4rem; }
     .gc-beta-label:first-child { margin-top: 0; }
     .gc-beta-dialog :is(input[type=text], select, textarea) { width: 100%; border: 1px solid #bdcfdd; border-radius: 9px; padding: .65rem .75rem; background: white; color: #284759; font: inherit; font-size: .875rem; }
@@ -21,12 +23,13 @@
     .gc-beta-previews img { width: 110px; height: 74px; object-fit: contain; border: 1px solid #d2e0e9; border-radius: 7px; background: #f3f7fa; }
     .gc-beta-previews figcaption { font-size: .65rem; overflow-wrap: anywhere; margin-top: .2rem; }
     .gc-beta-privacy { font-size: .68rem; line-height: 1.6; color: #657e8e; margin-top: 1rem; }
-    .gc-beta-status { font-size: .8rem; line-height: 1.5; margin-top: .75rem; overflow-wrap: anywhere; }
+    .gc-beta-status { flex-shrink: 0; font-size: .8rem; line-height: 1.5; padding: .65rem 24px; overflow-wrap: anywhere; }
+    .gc-beta-status:empty { display: none; }
     .gc-beta-status[data-error=true] { color: #b4233d; }
-    .gc-beta-dialog footer { display: flex; gap: .7rem; align-items: center; justify-content: flex-end; margin-top: 1rem; }
+    .gc-beta-dialog footer { flex-shrink: 0; display: flex; gap: .7rem; align-items: center; justify-content: flex-end; padding: 14px 24px; border-top: 1px solid #dce6ec; background: white; }
     .gc-beta-close, .gc-beta-submit { min-height: 38px; padding: .5rem .8rem; border-radius: 9px; border: 1px solid #bfd0df; background: white; font-size: .8rem; font-weight: 650; cursor: pointer; }
     .gc-beta-submit { color: white; background: #1857e7; border-color: #1857e7; }
     .gc-beta-dialog :disabled { opacity: .65; cursor: wait; }
     .gc-beta-dialog :is(button, input, select, textarea):focus-visible, .gc-beta-trigger:focus-visible { outline: 3px solid #24c5d6; outline-offset: 2px; }
-    @media (max-width: 480px) { .gc-beta-heading, .gc-beta-dialog form { padding: 16px; } .gc-beta-dialog :is(input[type=text], select, textarea) { font-size: 16px; } .gc-beta-heading h2 { font-size: 1.05rem; } }
+    @media (max-width: 480px) { .gc-beta-heading, .gc-beta-dialog fieldset, .gc-beta-dialog footer { padding: 16px; } .gc-beta-dialog :is(input[type=text], select, textarea) { font-size: 16px; } .gc-beta-heading h2 { font-size: 1.05rem; } }
 }
