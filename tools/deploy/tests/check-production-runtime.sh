@@ -282,4 +282,37 @@ mysql --defaults-file=/etc/mysql/fixture.cnf --batch --execute 'SELECT id,email,
 cmp -s /tmp/runtime-users-before-update.tsv /tmp/runtime-users-after-request.tsv
 sha256sum -c /tmp/runtime-original.sha256
 printf 'OK : runtime, mise a jour PHP, compte desactive sans doublon, TLS, authentification, worker et Reverb verifies ; site original inchange.\n'
+
+# SMTP selected in editable settings must not prevent a release while delivery stays blocked.
+runuser -u cofrac2-app -- php8.4 -r '
+    chdir("/var/www/cofrac2"); require "vendor/autoload.php";
+    $app=require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    $id=App\Models\User::where("admin",true)->sole()->id;
+    app(App\Services\ApplicationSettings::class)->update(["mail.mailer"=>"smtp"],$id);
+'
+runtime_check() { runuser -u cofrac2-app -- php8.4 "$APP/tools/deploy/production-runtime.php" --check; }
+runtime_check > /tmp/runtime-smtp-check.json
+cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- --check > /tmp/runtime-stdin-check.json
+cmp -s /tmp/runtime-smtp-check.json /tmp/runtime-stdin-check.json
+for action in --prepare --queue-probe; do
+    if cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- "$action" > /tmp/runtime-stdin-denied.log 2>&1; then exit 1; fi
+    grep -q 'Preparation runtime reservee au serveur V2' /tmp/runtime-stdin-denied.log
+done
+if cat "$APP/tools/deploy/production-runtime.php" | php8.4 -- --check > /tmp/runtime-root-denied.log 2>&1; then exit 1; fi
+grep -q 'Controle applicatif reserve au runtime dedie' /tmp/runtime-root-denied.log
+cp -p "$APP/bootstrap/cache/config.php" /tmp/runtime-delivery-cache.before.php
+for value in true null; do
+    php8.4 -r '
+        $config=require $argv[1]; $config["mail"]["delivery_enabled"]=json_decode($argv[2],true,32,JSON_THROW_ON_ERROR);
+        file_put_contents($argv[1],"<?php return ".var_export($config,true).";\n");
+    ' "$APP/bootstrap/cache/config.php" "$value"
+    if runtime_check > /tmp/runtime-delivery-denied.log 2>&1; then exit 1; fi
+    grep -q 'Livraison mail active ou verrou de livraison absent' /tmp/runtime-delivery-denied.log
+    if cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- --check > /tmp/runtime-delivery-stdin-denied.log 2>&1; then exit 1; fi
+    grep -q 'Livraison mail active ou verrou de livraison absent' /tmp/runtime-delivery-stdin-denied.log
+done
+cp -p /tmp/runtime-delivery-cache.before.php "$APP/bootstrap/cache/config.php"
+runtime_check > /tmp/runtime-smtp-restored.json
+sha256sum -c /tmp/runtime-before-update.sha256
+printf 'OK : SMTP conserve sans livraison, precontrole epingle en lecture seule, livraison active/absente et modes mutateurs refuses.\n'
 bash "$APP/tools/deploy/tests/check-production-release.sh"

@@ -24,13 +24,15 @@ try {
     $state = '/var/lib/cofrac2-production';
     $archive = '/srv/cofrac2-document-archive';
     $runtime = '/srv/cofrac2-runtime';
+    $action = $argv[1] ?? '';
+    // A pinned future revision can run its read-only preflight before the live checkout changes.
+    $readOnlyStdin = __FILE__ === 'Standard input code' && $action === '--check' && $argc === 2;
     if (PHP_SAPI !== 'cli' || PHP_VERSION_ID < 80401 || explode('.', gethostname())[0] !== 'ns365601'
-        || realpath(__FILE__) !== $root.'/tools/deploy/production-runtime.php' || ! function_exists('posix_geteuid')) {
+        || (! $readOnlyStdin && realpath(__FILE__) !== $root.'/tools/deploy/production-runtime.php') || ! function_exists('posix_geteuid')) {
         throw new RuntimeException('Preparation runtime reservee au serveur V2.');
     }
     require $root.'/vendor/autoload.php';
-    require __DIR__.'/lib/ProductionRuntimeBundle.php';
-    $action = $argv[1] ?? '';
+    require $root.'/tools/deploy/lib/ProductionRuntimeBundle.php';
     $env = Dotenv\Dotenv::parse(file_get_contents($root.'/.env'));
     foreach (['APP_ENV' => 'production', 'APP_DEBUG' => 'false', 'APP_URL' => 'https://cofrac2.geniuscontrole.com', 'APP_TIMEZONE' => 'Europe/Paris',
         'CRM_V2_ENABLED' => 'true', 'SIMULATION_MODE' => 'false', 'DB_CONNECTION' => 'mysql', 'DB_HOST' => '127.0.0.1',
@@ -189,8 +191,12 @@ try {
     $app = require $root.'/bootstrap/app.php';
     $app->make(Kernel::class)->bootstrap();
     Http::preventStrayRequests();
+    // SMTP settings are editable content; only the explicit delivery gate permits sending.
+    if (config('mail.delivery_enabled') !== false) {
+        throw new RuntimeException('Livraison mail active ou verrou de livraison absent. Aucun reglage modifie.');
+    }
     if (! app()->environment('production') || DB::connection()->getDatabaseName() !== 'cofrac2production'
-        || config('app.debug') || config('simulation.enabled') || ! config('crm.v2_enabled') || config('mail.default') !== 'log' || config('mail.delivery_enabled')
+        || config('app.debug') || config('simulation.enabled') || ! config('crm.v2_enabled')
         || config('services.smsfactor.enabled') || config('services.smsfactor.mode') !== 'simulate' || config('capcee.enabled')
         || config('services.global_plus.api_url') !== 'https://cee-api.test.globalplus.fr'
         || config('queue.connections.database.retry_after') <= 1800 || config('reverb.client.host') !== 'cofrac2.geniuscontrole.com') {
@@ -270,6 +276,6 @@ try {
         'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {
     $detail = get_class($exception) === RuntimeException::class ? ' '.$exception->getMessage() : '';
-    fwrite(STDERR, 'STOP : runtime V2 ('.get_class($exception).', '.basename($exception->getFile()).':'.$exception->getLine().').'.$detail." Aucun secret affiche.\n");
+    file_put_contents('php://stderr', 'STOP : runtime V2 ('.get_class($exception).', '.basename($exception->getFile()).':'.$exception->getLine().').'.$detail." Aucun secret affiche.\n");
     exit(1);
 }

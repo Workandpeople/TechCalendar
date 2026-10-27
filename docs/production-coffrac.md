@@ -1934,8 +1934,8 @@ autorise, sans droit d'execution automatique des collecteurs.
 
 Les modeles de mails actifs sont du contenu editable, pas une autorisation de
 livraison. Le controle runtime les accepte avant et apres la migration
-d'activation. Il conserve les verrous `MAIL_MAILER=log` et
-`MAIL_DELIVERY_ENABLED=false`, ainsi que les controles distincts du super-admin,
+d'activation. Il conserve le repli `.env` `MAIL_MAILER=log` et le verrou
+effectif strict `MAIL_DELIVERY_ENABLED=false`, ainsi que les controles distincts du super-admin,
 des portails externes et des historiques SMS/CAPCEE. Les comptes externes deja
 actives sont conserves et controles avec les memes regles que l'application :
 role externe sans administration, compte non supprime et organisation active de
@@ -1943,6 +1943,21 @@ type client/delegataire. Le controle ne cree ni n'active aucun compte et ne chan
 aucune permission ; son rapport indique le nombre de comptes externes actifs.
 Ne pas desactiver les modeles,
 supprimer des historiques ou modifier les comptes pour contourner un controle.
+
+Le transport mail effectif peut etre SMTP si ce choix a ete enregistre dans les
+parametres. Cela ne constitue pas une autorisation d'envoi : le controle runtime
+exige toujours `mail.delivery_enabled === false` et le garde-fou applicatif bloque
+les transports par defaut et personnalises. Un verrou absent ou actif est refuse.
+Ne pas effacer la configuration SMTP pour faire passer un deploiement.
+
+Un lanceur de correctif peut executer le `production-runtime.php` d'une revision
+Git explicitement epinglee via l'entree standard de `php8.4 -- --check`, sous le
+seul compte `cofrac2-app`. Les controles restent identiques a ceux du script
+installe (configuration, droits, base et documents) ; aucun service ni checkout
+n'est modifie. Les modes preparation et sonde de queue restent interdits par
+l'entree standard. Cette verification permet de valider une correction du controle
+avant de demander la maintenance, sans contourner l'ancien controle ni modifier
+les parametres pour le satisfaire.
 
 L'affichage detail des dossiers utilise un seul corps de commentaire : deux lignes
 visibles et un bouton Afficher plus uniquement si la hauteur reelle les depasse.
