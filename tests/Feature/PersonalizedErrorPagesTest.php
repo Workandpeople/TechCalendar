@@ -59,7 +59,7 @@ it('renders branded standalone error pages without sending automatically or expo
     expect($context['page'])->toBe('/__support-test/{status}')->and($context['status'])->toBe($status);
     expect(json_encode($context))->not->toContain('password=secret', 'SQL=personal', '?token');
     $this->delivery->shouldNotHaveReceived('send');
-})->with([400, 401, 403, 404, 405, 413, 419, 422, 429, 500, 502, 503, 504]);
+})->with([400, 401, 403, 405, 413, 419, 422, 429, 500, 502, 503, 504]);
 
 it('preserves native JSON errors and HTTP-specific headers', function () {
     $this->getJson('/__support-test/404')->assertNotFound()->assertJsonStructure(['message'])->assertDontSee('<html');
@@ -67,11 +67,26 @@ it('preserves native JSON errors and HTTP-specific headers', function () {
 });
 
 it('offers login from a 404 and redirects already connected users to their own workspace', function () {
-    $this->get('/__support-test/404')->assertNotFound()->assertSee('href="/login"', false)->assertSee('Se connecter');
+    foreach (['/__support-test/404', '/old-nonexistent-url'] as $url) {
+        $response = $this->get($url)->assertNotFound()->assertSee('href="/login"', false)->assertSee('Se connecter')
+            ->assertSee('Retour à mon espace')->assertDontSee('Envoyer au développeur')->assertDontSee('Référence')
+            ->assertDontSee('name="error_token"', false)->assertHeader('Cache-Control', 'no-store, private');
+        expect(supportErrorToken($response->getContent()))->toBe('');
+    }
+    $this->delivery->shouldNotHaveReceived('send');
     $this->get('/login')->assertOk();
     $user = User::factory()->create(['role' => 2, 'admin' => false]);
     $this->actingAs($user)->get('/login')->assertRedirect(route('dashboard'));
     $this->get(route('dashboard'))->assertRedirect(route('tech.planning'));
+});
+
+it('rejects 404 reports from pages opened before the change without sending or storing them', function () {
+    $context = app(ReportContext::class)->error(Request::create('/missing-page'), new RuntimeException('private'), 404);
+    $token = app(ReportContext::class)->seal($context);
+    $this->postJson(route('support.error'), ['error_token' => $token])->assertForbidden()
+        ->assertJsonPath('message', 'Les pages introuvables ne sont pas transmises au développeur.');
+    $this->delivery->shouldNotHaveReceived('send');
+    expect(is_dir($this->root))->toBeFalse();
 });
 
 it('sends only after an explicit click and deduplicates repeated error submissions', function () {
@@ -88,7 +103,7 @@ it('sends only after an explicit click and deduplicates repeated error submissio
 });
 
 it('refuses absent altered and expired diagnostic tokens', function () {
-    $token = supportErrorToken($this->get('/__support-test/404')->getContent());
+    $token = supportErrorToken($this->get('/__support-test/500')->getContent());
     $this->postJson(route('support.error'), [])->assertUnprocessable();
     $this->postJson(route('support.error'), ['error_token' => $token.'bad'])->assertForbidden();
     $this->travel(31)->minutes();

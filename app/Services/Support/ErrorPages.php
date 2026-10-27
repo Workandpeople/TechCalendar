@@ -17,7 +17,7 @@ final class ErrorPages
             return $response;
         }
         try {
-            $context = app(ReportContext::class)->error($request, $exception, $status);
+            $context = $status === 404 ? null : app(ReportContext::class)->error($request, $exception, $status);
             [$title, $description] = match ($status) {
                 401 => ['Connectez-vous pour continuer', 'Votre connexion est nécessaire pour accéder à cet espace.'],
                 403 => ['Cet accès n’est pas autorisé', 'Votre compte ne dispose pas des droits nécessaires pour cette page.'],
@@ -34,7 +34,7 @@ final class ErrorPages
             };
             $response->setContent(view('errors.application', [
                 'status' => $status, 'title' => $title, 'description' => $description,
-                'reference' => $context['id'], 'errorToken' => app(ReportContext::class)->seal($context),
+                'reference' => $context['id'] ?? null, 'errorToken' => $context ? app(ReportContext::class)->seal($context) : null,
             ])->render());
             $response->headers->remove('Content-Length');
             $response->headers->set('Cache-Control', 'no-store, private');

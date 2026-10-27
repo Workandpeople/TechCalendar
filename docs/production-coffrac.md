@@ -2353,6 +2353,10 @@ Les erreurs HTML Laravel hors debug ont une page Cofrac autonome, sans Vite,
 requete SQL ni layout metier. Le code HTTP, les erreurs JSON et les en-tetes
 comme Retry-After restent preserves. Le bouton « Envoyer au developpeur »
 necessite un clic et un diagnostic chiffre, authentifie et valable 30 minutes.
+Les 404 font exception : elles conservent les boutons de connexion et de retour
+a l'espace, mais aucun bouton de signalement, reference ou jeton de diagnostic
+n'est genere. Le serveur refuse aussi les anciens jetons de signalement 404
+encore ouverts. Les autres erreurs et le formulaire Beta restent disponibles.
 Son endpoint ne depend pas des sessions ou du middleware SQL, pour permettre
 le signalement d'une panne de base. Les pages statiques de maintenance Apache
 et les pannes empechant tout demarrage de PHP/Laravel restent hors de ce circuit.

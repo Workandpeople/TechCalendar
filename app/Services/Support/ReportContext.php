@@ -82,9 +82,11 @@ final class ReportContext
             abort_unless(($context['kind'] ?? null) === 'error' && Str::isUuid($context['id'] ?? '')
                 && ($context['expires_at'] ?? 0) >= now()->timestamp, 403);
 
-            return $context;
         } catch (Throwable) {
             abort(403, 'Ce diagnostic a expiré. Rechargez la page qui a rencontré une erreur.');
         }
+        abort_if((int) ($context['status'] ?? 0) === 404, 403, 'Les pages introuvables ne sont pas transmises au développeur.');
+
+        return $context;
     }
 }
