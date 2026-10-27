@@ -159,10 +159,9 @@ it('excludes retired services from the form and rejects their IDs', function () 
 });
 
 it('renders validation errors safely when submitted values have the wrong types', function () {
-    $this->actingAs($this->client)->from(route('client.dossiers.create'))->post(route('client.dossiers.store'), [
+    $this->actingAs($this->client)->followingRedirects()->from(route('client.dossiers.create'))->post(route('client.dossiers.store'), [
         ...$this->data, 'submission_id' => ['invalid'], 'company_name' => ['invalid'], 'service_ids' => 'invalid',
-    ])->assertSessionHasErrors(['submission_id', 'company_name', 'service_ids'])->assertRedirect(route('client.dossiers.create'));
-    $this->get(route('client.dossiers.create'))->assertOk()->assertSee('role="alert"', false);
+    ])->assertOk()->assertSee('role="alert"', false)->assertSee('value="Dupont"', false);
     expect(Dossier::count())->toBe(0);
 });
 

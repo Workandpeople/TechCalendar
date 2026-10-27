@@ -31,4 +31,9 @@ class ClientDossierRequest extends DossierRequest
     {
         return [...parent::attributes(), 'submission_id' => 'identifiant de transmission'];
     }
+
+    public function messages(): array
+    {
+        return ['submission_id.uuid' => 'Le formulaire a expiré ou est invalide. Rechargez la page avant de réessayer.'];
+    }
 }
