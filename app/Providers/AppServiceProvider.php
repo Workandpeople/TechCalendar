@@ -6,6 +6,9 @@ use App\Services\ApplicationSettings;
 use App\Services\FrenchMailNotifications;
 use App\Services\GlobalMailConfiguration;
 use App\Services\Simulation\SimulationSafety;
+use App\Services\Support\ErrorPages;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
@@ -32,6 +35,10 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
         FrenchMailNotifications::register();
+        $handler = $this->app->make(ExceptionHandler::class);
+        if ($handler instanceof Handler) {
+            $handler->respondUsing(static fn ($response, $exception, $request) => app(ErrorPages::class)->render($response, $exception, $request));
+        }
 
         Event::listen(MessageSending::class, static function (MessageSending $event): void {
             if (config('crm.v2_enabled') && ($address = config('mail.from.address'))) {

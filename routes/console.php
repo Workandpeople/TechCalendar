@@ -1,18 +1,20 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schedule;
 use App\Jobs\RunSystemTestsJob;
 use App\Models\SystemTestRun;
 use App\Services\CoffracAppointmentService;
 use App\Services\SystemHealthMonitor;
 use App\Services\TechnicianDailyRouteMetricService;
 use Carbon\Carbon;
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Schedule::command('support:prune')->dailyAt('03:30')->withoutOverlapping(10);
 
 Artisan::command('route-metrics:compute {--from=} {--to=}', function (TechnicianDailyRouteMetricService $routeMetrics): int {
     $from = $this->option('from')

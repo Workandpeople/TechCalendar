@@ -21,6 +21,7 @@ import { initCommentExcerpts } from './comment-excerpts';
 import { createBookingTravelTooltip } from './booking-travel-tooltip';
 import { initAdminSettings } from './admin-settings';
 import { confirmForcedPlacement } from './booking-force-placement';
+import { initBetaFeedback } from './beta-feedback';
 
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
@@ -47,6 +48,7 @@ initDossierService();
 initDossierMail();
 initDossierAddress();
 initAdminSettings();
+initBetaFeedback();
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,

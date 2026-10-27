@@ -17,6 +17,7 @@ use App\Http\Controllers\Planner\PlannerAppointmentMailController;
 use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
 use App\Http\Controllers\Planner\PlannerTrackingController;
+use App\Http\Controllers\SupportReportController;
 use App\Http\Controllers\Tech\TechAppointmentController;
 use App\Http\Controllers\Tech\TechPlanningController;
 use App\Http\Middleware\EnsureCrmV2Enabled;
@@ -24,6 +25,13 @@ use Illuminate\Support\Facades\Route;
 
 require __DIR__.'/crm.php';
 require __DIR__.'/clients.php';
+
+// This endpoint uses an encrypted, expiring error diagnostic instead of cookies or CSRF.
+// It must also work when database-backed sessions are unavailable.
+Route::post('/support/error', [SupportReportController::class, 'error'])
+    ->withoutMiddleware('web')->name('support.error');
+Route::post('/support/feedback', [SupportReportController::class, 'feedback'])
+    ->middleware('auth')->name('support.feedback');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])

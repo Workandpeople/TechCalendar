@@ -2346,3 +2346,45 @@ Le deploiement preserve les parametres SMTP enregistres, notamment le compte et
 le From autorises en .fr, et les modes mail/SMS. Aucun email de test ni reprise
 de message echoue n'est effectue. Le diagnostic SMTP precise que le droit
 d'expedition et la livraison ne sont pas testes par une simple authentification.
+
+### Pages d'erreur et retours Beta
+
+Les erreurs HTML Laravel hors debug ont une page Cofrac autonome, sans Vite,
+requete SQL ni layout metier. Le code HTTP, les erreurs JSON et les en-tetes
+comme Retry-After restent preserves. Le bouton « Envoyer au developpeur »
+necessite un clic et un diagnostic chiffre, authentifie et valable 30 minutes.
+Son endpoint ne depend pas des sessions ou du middleware SQL, pour permettre
+le signalement d'une panne de base. Les pages statiques de maintenance Apache
+et les pannes empechant tout demarrage de PHP/Laravel restent hors de ce circuit.
+
+Le bouton fixe Beta est propose aux comptes connectes, techniciens et portails
+compris. Il ouvre un formulaire bug/amelioration avec au maximum 3 captures
+PNG/JPEG/WebP de 4 Mio chacune et 6000 pixels de cote. Les fichiers sont valides
+cote serveur, renommes, stockes en prive hors du disque servi par HTTP, jamais
+publies. Les mails partent uniquement vers contact@lucas-dinnichert.fr avec les
+reglages SMTP globaux existants, pas avec une adresse fournie par le navigateur.
+Le transport jetable limite son attente reseau a 10 secondes sans changer les
+parametres en base ou le transport des autres emails.
+
+Les diagnostics automatiques contiennent une reference UUID, le code HTTP,
+la route sous forme de patron, les identifiants metier numeriques reconnus,
+l'heure, le type d'exception et des emplacements de code relatifs. Ni message
+brut d'exception, SQL, arguments de pile, contenu POST, cookies, parametres URL
+ou jeton de reinitialisation. Le formulaire Beta ajoute le texte et les captures
+choisis, l'identite du compte, le navigateur et les dimensions d'ecran ; un
+avertissement invite a ne pas joindre d'informations sensibles.
+
+Les recus sont conserves dans storage/app/support-reports, repertoires en 0700
+et fichiers en 0600, sans migration. Un verrou et la reference empechent les
+clics doubles/reessais identiques de declencher plusieurs envois normaux.
+Un refus SMTP conserve le rapport et les captures, annonce l'echec et permet
+un nouvel essai explicite. Les captures sont supprimees localement apres
+acceptation SMTP. Un mode desactive/simulation est annonce comme tel et n'est
+jamais rejoue automatiquement apres activation. Aucun email n'est envoye par
+le simple affichage d'une page d'erreur, ni par le deploiement.
+
+Limites : 10 tentatives par heure/compte Beta, 5 par heure/IP pour les erreurs
+publiques et 50 par heure au total pour celles-ci, via le cache fichier (pas SQL).
+La commande support:prune efface uniquement les rapports de plus de 30 jours ;
+elle est planifiee a 03:30 via le scheduler existant, sans changer les services.
+Ne pas purger ni rejouer les jobs mail existants pour activer cette fonctionnalite.

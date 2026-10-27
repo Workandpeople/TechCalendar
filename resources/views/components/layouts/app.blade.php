@@ -293,5 +293,6 @@
                 });
             }
         </script>
+        <x-beta-feedback />
     </body>
 </html>

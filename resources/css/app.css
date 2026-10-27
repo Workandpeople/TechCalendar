@@ -8,6 +8,7 @@
 @import './dossier-filters.css';
 @import './technician.css';
 @import './admin-settings.css';
+@import './beta-feedback.css';
 
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
