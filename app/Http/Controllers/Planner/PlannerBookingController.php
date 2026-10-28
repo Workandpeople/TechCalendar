@@ -2211,7 +2211,7 @@ class PlannerBookingController extends Controller
         $days = collect();
 
         for ($date = $startDate->copy(); $date->lt($endDate); $date->addDay()) {
-            if ($this->isBookableDay($date)) {
+            if ($this->isSuggestionDay($date)) {
                 $days->push($date->copy());
             }
         }
@@ -2274,7 +2274,7 @@ class PlannerBookingController extends Controller
         Carbon $preferredStartsAt,
         MapboxDrivingRouteService $drivingRoutes
     ): array {
-        if (! $this->isBookableDay($preferredStartsAt) || $preferredStartsAt->lt(now())) {
+        if (! $this->isSuggestionDay($preferredStartsAt) || $preferredStartsAt->lt(now())) {
             return [];
         }
 
@@ -2919,9 +2919,9 @@ class PlannerBookingController extends Controller
         return $startsAt->lt($endsAt) && $endsAt->diffInMinutes($startsAt, true) >= $breakDurationMinutes;
     }
 
-    private function isBookableDay(Carbon $date): bool
+    private function isSuggestionDay(Carbon $date): bool
     {
-        return ! $date->isSunday();
+        return ! $date->isSaturday() && ! $date->isSunday();
     }
 
     private function absenceOverlapForTechnician(int $technicianId, Carbon $startsAt, Carbon $endsAt): ?TechnicianAbsence

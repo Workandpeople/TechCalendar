@@ -1,6 +1,8 @@
 <?php
 
+use App\Mail\TechnicianAppointmentNotificationMail;
 use App\Models\Appointment;
+use App\Models\Department;
 use App\Models\Dossier;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
@@ -400,4 +402,57 @@ it('does not expose the booking recap to a technician without planning access', 
     extract(nativeBookingFixture());
     $this->actingAs($technician)->getJson(route('planner.book.crm-appointments.index'))->assertForbidden();
     Http::assertNothingSent();
+});
+
+it('never suggests weekends in v2 but keeps placed saturday appointments visible', function () {
+    Carbon::setTestNow('2026-10-29 09:00:00');
+    try {
+        config(['services.mapbox.token' => null]);
+        extract(nativeBookingFixture());
+        $technician->update(['address' => '1 rue du Test, 75001 Paris', 'department_code' => '75',
+            'latitude' => 48.85, 'longitude' => 2.35, 'day_start_time' => '07:00', 'day_end_time' => '21:00']);
+        Department::updateOrCreate(['code' => '75'], ['name' => 'Paris']);
+        $technician->departments()->attach('75');
+        $saturday = Appointment::create(['service_id' => $service->id, 'technician_id' => $technician->id,
+            'created_by' => $actor->id, 'customer_first_name' => 'RDV', 'customer_last_name' => 'Samedi',
+            'customer_phone' => '0600000000', 'address' => '1 rue du Test, 75001 Paris', 'latitude' => 48.85, 'longitude' => 2.35,
+            'starts_at' => '2026-10-31 10:00:00', 'ends_at' => '2026-10-31 11:00:00', 'duration_minutes' => 60, 'status' => Appointment::STATUS_SCHEDULED]);
+        $request = ['crm_appointment_id' => 'dossier-'.$operation->id];
+        $response = $this->actingAs($actor)->postJson(route('planner.book.analyze'), $request)->assertOk();
+        expect($response->json('suggestions'))->not->toBeEmpty();
+        foreach ($response->json('suggestions') as $suggestion) {
+            expect(Carbon::parse($suggestion['start'])->isWeekend())->toBeFalse();
+        }
+        $response = $this->postJson(route('planner.book.calendar-window'), [...$request,
+            'start' => '2026-10-26', 'end' => '2026-11-02', 'technician_ids' => [$technician->id]])->assertOk();
+        expect($response->json('suggestions'))->not->toBeEmpty();
+        foreach ($response->json('suggestions') as $suggestion) {
+            expect(Carbon::parse($suggestion['start'])->isWeekend())->toBeFalse();
+        }
+        expect(collect($response->json('events'))->pluck('id')->map(fn ($id) => (int) $id)->all())->toContain($saturday->id);
+        $this->postJson(route('planner.book.calendar-window'), [...$request,
+            'start' => '2026-10-31', 'end' => '2026-11-02', 'technician_ids' => [$technician->id]])->assertOk()
+            ->assertJsonCount(0, 'suggestions')->assertJsonCount(1, 'events');
+        expect($saturday->fresh()->starts_at->isSaturday())->toBeTrue();
+        Http::assertNothingSent();
+        Mail::assertNothingOutgoing();
+        Queue::assertNothingPushed();
+    } finally {
+        Carbon::setTestNow();
+    }
+});
+
+it('still allows explicit manual placement of a native dossier on saturday', function () {
+    Carbon::setTestNow('2026-10-29 09:00:00');
+    try {
+        extract(nativeBookingFixture());
+        $payload['starts_at'] = '2026-10-31T10:00:00+01:00';
+        $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertCreated();
+        expect(Appointment::sole()->starts_at->isSaturday())->toBeTrue();
+        Http::assertNothingSent();
+        Mail::assertQueued(TechnicianAppointmentNotificationMail::class);
+        Mail::assertNothingSent();
+    } finally {
+        Carbon::setTestNow();
+    }
 });

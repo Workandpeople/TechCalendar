@@ -1880,7 +1880,7 @@ it('analyzes a lot appointment request with the lot service', function () {
         ->assertJsonPath('technicians.0.name', $technician->full_name_with_departments);
 });
 
-it('includes saturday in booking slot suggestions', function () {
+it('only proposes weekday booking slots', function () {
     config(['services.mapbox.token' => null]);
     Carbon::setTestNow('2026-06-11 09:00:00');
 
@@ -1927,8 +1927,8 @@ it('includes saturday in booking slot suggestions', function () {
 
         expect($response->json('suggestions'))->not->toBeEmpty()
             ->and(collect($response->json('suggestions'))
-                ->contains(fn (array $suggestion): bool => Carbon::parse($suggestion['start'])->isSaturday()))
-            ->toBeTrue();
+                ->contains(fn (array $suggestion): bool => Carbon::parse($suggestion['start'])->isWeekend()))
+            ->toBeFalse();
 
         $firstSuggestionProps = $response->json('suggestions.0.extendedProps');
 

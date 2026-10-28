@@ -2733,3 +2733,8 @@ le controle echoue. Aucun email/SMS de test, worker rejoue ou Apache/MySQL parta
 modifie. Actualiser les onglets deja ouverts pour charger le moteur choisi.
 La demonstration `/local/calendar` et ses donnees fictives restent fermees en
 production ; le parametre public `?calendar=native` ne change pas la configuration.
+
+Les propositions automatiques de RDV sont generees du lundi au vendredi uniquement,
+a l'analyse initiale comme lors d'un changement de periode. Le samedi reste
+affiche pour les RDV deja places et les placements manuels ; aucun RDV existant
+n'est supprime ou deplace par cette regle. Aucune migration ou configuration requise.
