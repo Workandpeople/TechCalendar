@@ -2378,6 +2378,19 @@ ou jeton de reinitialisation. Le formulaire Beta ajoute le texte et les captures
 choisis, l'identite du compte, le navigateur et les dimensions d'ecran ; un
 avertissement invite a ne pas joindre d'informations sensibles.
 
+Pour les pages d'erreur, l'identifiant, le nom et l'email du compte deja charge
+dans le guard web sont figes dans le diagnostic chiffre. Aucune recherche SQL,
+relation ou lecture de session supplementaire n'est declenchee ; un visiteur
+non authentifie reste anonyme, meme s'il a saisi un email dans un formulaire.
+Le signalement conserve cette identite apres deconnexion et ignore les champs
+d'identite ajoutes par le navigateur. L'utilisateur est informe avant l'envoi.
+
+Un POST /login depuis une session externe deja ouverte doit etre redirige par
+le middleware guest, pas refuse par RestrictExternalAccounts. La route porte
+le nom stable login.store, meme avec route:cache. Les routes exactes login et
+mot de passe sont autorisees jusqu'au middleware guest ; les comptes desactives,
+les pages internes et le changement de mot de passe obligatoire restent proteges.
+
 Les recus sont conserves dans storage/app/support-reports, repertoires en 0700
 et fichiers en 0600, sans migration. Un verrou et la reference empechent les
 clics doubles/reessais identiques de declencher plusieurs envois normaux.
@@ -2493,9 +2506,10 @@ repli sur leurs coordonnees saisies manuellement. La prise de RDV affiche la
 societe cliente en premier. Le beneficiaire n'est jamais pris pour l'organisation
 cliente et aucune affectation n'est inferee depuis l'auteur ou l'email.
 
-L'oeil de toutes les demandes natives ouvre directement le dossier dans un
-nouvel onglet, premier placement comme replacement, sans declencher le clic
-de selection de la ligne. Les demandes historiques sans dossier natif gardent
+L'oeil de toutes les demandes natives ouvre directement le dossier dans l'onglet
+courant, premier placement comme replacement, sans declencher le clic
+de selection de la ligne. Le lien du recapitulatif garde aussi l'onglet courant.
+Les demandes historiques sans dossier natif gardent
 leur detail existant. Aucun import ni migration n'est requis.
 
 Validation locale : 2051 tests PHP, 281 tests JavaScript et build de production.
@@ -2663,3 +2677,26 @@ Le prochain lanceur vérifie le périmètre à l'aide du futur updater épinglé
 son mode `--check-scope` AVANT la maintenance. Le même garde-fou est réutilisé
 pendant l'application. Les tests refusent explicitement une configuration SQL
 ou un seeder non autorisé avant toute modification du serveur.
+
+### Lot independant : confirmations mail, navigation et signalements
+
+Les nouvelles confirmations du planning et du detail RDV ont un suivi persistant
+propre, y compris sans dossier lie : demande enregistree, attente, en cours,
+accepte par SMTP, echec, bloque ou resultat non confirme. Aucun ancien job n'est
+rejoue. Le bouton ne pretend plus que le mail est deja envoye lors de sa mise en
+file. Le resultat est consulte par GET, sans corps de mail ni exception brute,
+uniquement par les gerants/plannings/admins. Le suivi est borne a 10 demandes et
+60 actualisations, uniquement quand le panneau est visible. Changer de RDV ou
+fermer le detail annule le suivi precedent. Une tentative maximum evite les
+renvois automatiques ambigus ; la reception finale ne peut pas etre garantie.
+
+La migration additive 2026_10_28_200000_create_appointment_mail_deliveries_table
+cree uniquement le suivi des nouveaux emails. Aucun compte, droit, mot de passe,
+ancien email ou statut de dossier n'est modifie. SMTP reel et SMS simules restent
+configures comme avant. Les tests utilisent uniquement des transports en memoire.
+
+L'oeil et le lien de recapitulatif gardent l'onglet courant. Les commentaires
+s'affichent au survol/focus du nom uniquement, jamais du telephone ou de la ligne.
+Le lot conserve strictement FullCalendar et les endpoints/periodes de chargement
+existants. Les autres corrections locales (403 login et identite des signalements)
+font partie de ce premier lot, pas du remplacement du calendrier.

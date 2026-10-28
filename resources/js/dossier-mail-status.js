@@ -32,11 +32,11 @@ export function initDossierMailStatus(root = document, browser = window) {
             });
             if (!rows.length) {
                 const empty = root.createElement('li'); empty.className = 'text-xs text-slate-500';
-                empty.textContent = 'Aucune demande d’envoi pour ce dossier.'; rows.push(empty);
+                empty.textContent = panel.dataset.emptyLabel || 'Aucune demande d’envoi pour ce dossier.'; rows.push(empty);
             }
             list.replaceChildren(...rows);
         };
-        const canPoll = () => pending && visible && !root.hidden && !paused && polls < 60;
+        const canPoll = () => !!panel.dataset.statusUrl && pending && visible && !root.hidden && !paused && polls < 60;
         const schedule = (delay = 8000) => {
             browser.clearTimeout(timer);
             if (canPoll() && !controller) timer = browser.setTimeout(() => update(), delay);
@@ -46,7 +46,7 @@ export function initDossierMailStatus(root = document, browser = window) {
             controller?.abort();
         };
         const update = async (manual = false) => {
-            if (controller || root.hidden || paused || (!manual && !canPoll())) return;
+            if (!panel.dataset.statusUrl || controller || root.hidden || paused || (!manual && !canPoll())) return;
             browser.clearTimeout(timer);
             if (manual) polls = 0;
             polls++;
@@ -57,23 +57,39 @@ export function initDossierMailStatus(root = document, browser = window) {
             try {
                 const response = await browser.fetch(panel.dataset.statusUrl, { credentials: 'same-origin', cache: 'no-store',
                     headers: { Accept: 'application/json' }, signal: current.signal });
+                if (controller !== current) return;
                 if ([401, 403, 404].includes(response.status)) pending = false;
                 if (response.status === 429) delay = 30000;
                 if (!response.ok) throw new Error('Le suivi est temporairement indisponible. Aucun nouvel email n’a été envoyé.');
                 const data = await response.json();
+                if (controller !== current) return;
                 if (!Array.isArray(data.messages)) throw new Error('Réponse du suivi invalide.');
                 render(data.messages);
                 pending = data.messages.some(message => message.pending === true);
                 panel.dataset.pending = String(pending);
                 feedback.textContent = pending ? 'Actualisation automatique pendant le traitement.' : 'Suivi à jour.';
             } catch (error) {
-                if (error.name !== 'AbortError') feedback.textContent = error.message;
+                if (controller === current && error.name !== 'AbortError') feedback.textContent = error.message;
             } finally {
-                browser.clearTimeout(timeout); controller = null; refresh.disabled = false;
+                browser.clearTimeout(timeout);
+                if (controller !== current) return;
+                controller = null; refresh.disabled = false;
                 if (pending && polls >= 60) feedback.textContent = 'Le traitement se poursuit. Utilisez « Actualiser le suivi » pour vérifier le résultat.';
                 schedule(delay);
             }
         };
+        panel.addEventListener('cofrac:mail-status', event => {
+            pause(); controller = null; polls = 0;
+            panel.dataset.statusUrl = event.detail?.url || '';
+            const messages = event.detail?.messages;
+            pending = !!panel.dataset.statusUrl && (!Array.isArray(messages) || messages.some(message => message.pending === true));
+            panel.dataset.pending = String(pending);
+            render(Array.isArray(messages) ? messages : []);
+            feedback.textContent = pending ? 'Vérification du suivi…' : '';
+            refresh.disabled = !panel.dataset.statusUrl;
+            schedule(0);
+        });
+        refresh.disabled = !panel.dataset.statusUrl;
         refresh.addEventListener('click', () => update(true));
         root.addEventListener('visibilitychange', () => root.hidden ? pause() : schedule(0));
         browser.addEventListener('pagehide', () => { paused = true; pause(); });

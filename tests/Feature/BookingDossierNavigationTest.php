@@ -37,7 +37,7 @@ afterEach(function () {
     Queue::assertNothingPushed();
 });
 
-it('opens native dossier eyes directly in a new tab for a first booking or a replacement', function (bool $replacement) {
+it('opens native dossier eyes in the current tab for a first booking or a replacement', function (bool $replacement) {
     if ($replacement) {
         $tech = User::factory()->create(['role' => 2, 'admin' => false]);
         Appointment::forceCreate(['dossier_operation_id' => $this->operation->id, 'service_id' => $this->service->id,
@@ -53,8 +53,11 @@ it('opens native dossier eyes directly in a new tab for a first booking or a rep
     $eye = $xpath->query('//a[contains(@class,"crm-appointment-dossier-link")]')->item(0);
     expect($eye)->not->toBeNull()
         ->and($eye->getAttribute('href'))->toBe(route('v2.dossiers.show', $this->dossier, absolute: false))
-        ->and($eye->getAttribute('target'))->toBe('_blank')
-        ->and($eye->getAttribute('rel'))->toBe('noopener noreferrer');
+        ->and($eye->hasAttribute('target'))->toBeFalse()
+        ->and($eye->getAttribute('title'))->toBe('Voir le dossier');
+    $summaryLink = $xpath->query('//a[@data-booking-summary-link]')->item(0);
+    expect($summaryLink)->not->toBeNull()
+        ->and($summaryLink->hasAttribute('target'))->toBeFalse();
 })->with([false, true]);
 
 it('identifies booking requests by their client company and keeps the delegate separate', function () {

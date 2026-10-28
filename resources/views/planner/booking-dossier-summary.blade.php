@@ -1,7 +1,7 @@
 <section id="booking-dossier-summary" class="gc-card gc-booking-summary" data-booking-summary hidden aria-labelledby="booking-dossier-summary-title">
     <header class="gc-booking-summary-header">
         <div class="gc-booking-summary-heading"><span class="gc-booking-summary-icon"><x-nav-icon name="dossiers" /></span><div><p>Dossier sélectionné</p><h2 id="booking-dossier-summary-title">Informations du dossier</h2></div></div>
-        <div class="gc-booking-summary-actions"><span class="gc-status-pill gc-status-pill-neutral" data-booking-summary-field="status" hidden></span><a class="gc-btn-secondary" data-booking-summary-link hidden target="_blank" rel="noopener noreferrer"><x-nav-icon name="eye" />Ouvrir la fiche<span class="sr-only"> dans un nouvel onglet</span></a></div>
+        <div class="gc-booking-summary-actions"><span class="gc-status-pill gc-status-pill-neutral" data-booking-summary-field="status" hidden></span><a class="gc-btn-secondary" data-booking-summary-link hidden><x-nav-icon name="eye" />Ouvrir la fiche</a></div>
     </header>
     <dl class="gc-booking-summary-grid">
         <div><dt>Bénéficiaire</dt><dd data-booking-summary-field="beneficiary"></dd></div>

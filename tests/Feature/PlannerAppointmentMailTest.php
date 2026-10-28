@@ -2,14 +2,19 @@
 
 use App\Mail\MailTemplateMailable;
 use App\Models\Appointment;
+use App\Models\AppointmentMailDelivery;
 use App\Models\MailSender;
 use App\Models\MailTemplate;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\GlobalMailConfiguration;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\SentMessage;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Mailer\Exception\UnexpectedResponseException;
 
 uses(RefreshDatabase::class);
 
@@ -185,3 +190,77 @@ function plannerMailAppointment(User $planner): Appointment
         ],
     ]);
 }
+
+function trackedPlannerMail(): array
+{
+    config(['crm.v2_enabled' => true, 'mail.delivery_enabled' => true, 'mail.default' => 'smtp', 'simulation.enabled' => false]);
+    Mail::fake();
+    Http::preventStrayRequests();
+    app()->instance(GlobalMailConfiguration::class, Mockery::mock(GlobalMailConfiguration::class)->allows('refresh')->getMock());
+    $actor = User::factory()->create(['role' => 1, 'admin' => false]);
+
+    return [$actor, plannerMailAppointment($actor), ['recipient_email' => 'test@example.invalid', 'subject' => 'Confirmation {{ client_name }}', 'markdown_body' => 'Corps prive du mail']];
+}
+
+it('tracks a new planning confirmation without claiming reception or replaying it', function () {
+    [$actor, $appointment, $payload] = trackedPlannerMail();
+    $this->actingAs($actor)->postJson(route('planner.book.appointments.mail.send', $appointment), $payload)->assertOk()
+        ->assertJsonPath('messages.0.status', 'queued')->assertDontSee('Corps prive');
+    $delivery = AppointmentMailDelivery::sole();
+    $mail = Mail::queued(MailTemplateMailable::class)->sole();
+    expect($mail->appointmentMailDeliveryId)->toBe($delivery->id)->and($mail->tries)->toBe(1)->and($mail->afterCommit)->toBeTrue();
+    $transport = Mockery::mock(SentMessage::class);
+    $calls = 0;
+    $send = function () use (&$calls, $transport) {
+        $calls++;
+
+        return $transport;
+    };
+    $service = app(App\Services\AppointmentMailDelivery::class);
+    expect($service->deliver($delivery->id, $send))->toBe($transport);
+    $service->deliver($delivery->id, $send);
+    $mail->failed(new RuntimeException('late failure'));
+    expect($calls)->toBe(1)->and($delivery->fresh()->status)->toBe('sent');
+    $this->getJson(route('planner.book.appointments.mail.status', $appointment))->assertOk()->assertHeader('Cache-Control', 'no-store, private')
+        ->assertJsonPath('messages.0.status', 'sent')->assertJsonPath('messages.0.pending', false)->assertDontSee('Corps prive');
+    Mail::assertNothingSent();
+    Http::assertNothingSent();
+});
+
+it('distinguishes SMTP rejection, uncertainty, simulation and a disabled worker', function () {
+    [$actor, $appointment, $payload] = trackedPlannerMail();
+    $this->actingAs($actor)->postJson(route('planner.book.appointments.mail.send', $appointment), $payload)->assertOk();
+    $delivery = AppointmentMailDelivery::sole();
+    $service = app(App\Services\AppointmentMailDelivery::class);
+    expect(fn () => $service->deliver($delivery->id, fn () => throw new UnexpectedResponseException('PRIVATE SMTP', 550)))->toThrow(RuntimeException::class);
+    $this->getJson(route('planner.book.appointments.mail.status', $appointment))->assertOk()->assertJsonPath('messages.0.status', 'failed')->assertDontSee('PRIVATE SMTP');
+    $this->postJson(route('planner.book.appointments.mail.send', $appointment), $payload)->assertOk();
+    $second = AppointmentMailDelivery::latest('id')->first();
+    expect(fn () => $service->deliver($second->id, fn () => throw new RuntimeException('timeout')))->toThrow(RuntimeException::class);
+    expect($second->fresh()->status)->toBe('unknown');
+    $this->postJson(route('planner.book.appointments.mail.send', $appointment), $payload)->assertOk();
+    $third = AppointmentMailDelivery::latest('id')->first();
+    config(['mail.delivery_enabled' => false]);
+    $service->deliver($third->id, fn () => throw new LogicException('must not send'));
+    expect($third->fresh()->status)->toBe('blocked');
+    $this->postJson(route('planner.book.appointments.mail.send', $appointment), $payload)->assertOk()->assertJsonPath('messages.0.status', 'simulated');
+    Mail::assertQueuedCount(3);
+    Mail::assertNothingSent();
+});
+
+it('scopes bounded mail outcomes to the selected appointment and denies external and technician access', function () {
+    [$actor, $appointment] = trackedPlannerMail();
+    foreach (range(1, 12) as $number) {
+        AppointmentMailDelivery::create(['appointment_id' => $appointment->id, 'author_id' => $actor->id,
+            'recipient' => 'test@example.invalid', 'subject' => 'Sujet '.$number, 'status' => 'queued']);
+    }
+    $route = route('planner.book.appointments.mail.status', $appointment);
+    $this->actingAs($actor)->getJson($route)->assertOk()->assertJsonCount(10, 'messages');
+    $other = $appointment->replicate();
+    $other->save();
+    $this->getJson(route('planner.book.appointments.mail.status', $other))->assertOk()->assertJsonCount(0, 'messages');
+    $this->actingAs(User::factory()->create(['role' => 2]))->getJson($route)->assertForbidden();
+    $this->actingAs(User::factory()->create(['role' => User::ROLE_EXTERNAL, 'portal_enabled' => true]))->getJson($route)->assertForbidden();
+    auth()->logout();
+    $this->getJson($route)->assertUnauthorized();
+});

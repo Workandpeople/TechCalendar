@@ -22,7 +22,9 @@ class RestrictExternalAccounts
             $request->session()->regenerateToken();
             abort(403, 'Cet accès client est désactivé.');
         }
-        $accountRoute = $request->routeIs('dashboard', 'profile', 'logout', 'account.first-password.update', 'login', 'support.feedback');
+        // Let guest middleware redirect existing sessions instead of rejecting stale authentication forms.
+        $accountRoute = $request->routeIs('dashboard', 'profile', 'logout', 'account.first-password.update',
+            'login', 'login.store', 'password.request', 'password.email', 'password.reset', 'password.store', 'support.feedback');
         abort_unless($accountRoute || $request->routeIs('client.*'), 403);
         if ($user->must_change_password && ! $accountRoute) {
             return redirect()->route('profile');

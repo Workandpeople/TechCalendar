@@ -37,7 +37,7 @@ Route::post('/support/feedback', [SupportReportController::class, 'feedback'])
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
-    Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+    Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
 
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
@@ -177,6 +177,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/appointments', [PlannerBookingController::class, 'store'])->name('planner.book.appointments.store');
     Route::post('/planner/book/appointments/{appointment}/mail-preview', [PlannerAppointmentMailController::class, 'preview'])->name('planner.book.appointments.mail.preview');
     Route::post('/planner/book/appointments/{appointment}/mail', [PlannerAppointmentMailController::class, 'send'])->name('planner.book.appointments.mail.send');
+    Route::get('/planner/book/appointments/{appointment}/mail-status', [PlannerAppointmentMailController::class, 'status'])->middleware('throttle:60,1')->name('planner.book.appointments.mail.status');
     Route::get('/planner/tracking', [PlannerTrackingController::class, 'index'])->name('planner.tracking');
     Route::post('/planner/tracking/search', [PlannerTrackingController::class, 'search'])->name('planner.tracking.search');
     Route::get('/planner/tracking/coffrac/placed/status', [PlannerTrackingController::class, 'placedCoffracSyncStatus'])->name('planner.tracking.coffrac.placed.status');

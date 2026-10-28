@@ -331,6 +331,7 @@
                                     </aside>
                                 </div>
                             @endif
+                            @include('planner.partials.mail-delivery-status', ['mailStatusId' => 'tracking-mail-delivery'])
                         </div>
                     </section>
 
@@ -519,6 +520,10 @@
         const trackingCoffracRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
         const trackingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
         const trackingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
+        const trackingMailStatusUrlTemplate = @json(route('planner.book.appointments.mail.status', ['appointment' => '__APPOINTMENT__']));
+        const updateTrackingMailDelivery = (id, messages) => document.getElementById('tracking-mail-delivery')?.dispatchEvent(new CustomEvent('cofrac:mail-status', {
+            detail: { url: id ? trackingMailStatusUrlTemplate.replace('__APPOINTMENT__', id) : '', messages },
+        }));
         const trackingEventsUrl = @json(route('planner.tracking.events'));
         const trackingSearchUrl = @json($searchAppointmentsUrl);
         const trackingInitialCoffracSyncStatus = @json($coffracSyncStatus);
@@ -1222,6 +1227,7 @@
 
         const resetTrackingMailComposer = (event) => {
             trackingMailAppointmentId = event?.id || null;
+            updateTrackingMailDelivery(trackingMailAppointmentId);
             trackingMailSent = false;
             trackingMailPreviewAbortController?.abort();
             trackingMailPanel?.classList.add('hidden');
@@ -1871,6 +1877,7 @@
         };
 
         const closeTrackingAppointmentModal = () => {
+            updateTrackingMailDelivery(null);
             trackingDetailMapRenderRequestId++;
             trackingAppointmentModal.classList.add('hidden');
             trackingCurrentDetailEvent = null;
@@ -2745,8 +2752,9 @@
 
                 trackingMailSent = true;
                 setTrackingMailFieldsDisabled(true);
-                setTrackingMailStatus(payload.message || 'Mail envoyé.', 'success');
-                trackingMailSend.textContent = 'Mail envoyé';
+                setTrackingMailStatus(payload.message || 'Demande d’envoi enregistrée.', 'success');
+                trackingMailSend.textContent = 'Demande enregistrée';
+                updateTrackingMailDelivery(trackingMailAppointmentId, payload.messages);
             } catch (error) {
                 trackingMailSend.disabled = false;
                 trackingMailSend.textContent = 'Envoyer le mail';

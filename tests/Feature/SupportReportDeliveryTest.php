@@ -21,6 +21,7 @@ beforeEach(function () {
     copy($image->getRealPath(), $this->root.'/capture-1.png');
     $this->report = ['id' => (string) Str::uuid(), 'kind' => 'bug', 'title' => 'Un problème <b>signalé</b>',
         'message' => '<script>alert("untrusted")</script>', 'page' => '/v2/dossiers/{dossier}',
+        'actor_id' => 53, 'actor_name' => 'Camille <b>Martin</b>', 'actor_email' => 'camille@example.test',
         'screenshots' => [['name' => 'capture-1.png', 'mime' => 'image/png']]];
 });
 
@@ -42,8 +43,9 @@ it('uses only saved global SMTP settings and the fixed developer address with a 
     $message = $memory->getSymfonyTransport()->messages()->sole()->getOriginalMessage();
     expect($message->getTo()[0]->getAddress())->toBe('contact@lucas-dinnichert.fr')
         ->and($message->getFrom()[0]->getAddress())->toBe('contact@example.fr')
-        ->and($message->getHtmlBody())->toContain('lang="fr"', '&lt;script&gt;', '/images/logo.png')
+        ->and($message->getHtmlBody())->toContain('lang="fr"', '&lt;script&gt;', '/images/logo.png', 'Camille &lt;b&gt;Martin&lt;/b&gt;', 'camille@example.test')
         ->not->toContain('<script>', '<b>signalé</b>')
+        ->and($message->getTextBody())->toContain('Nom :', 'Email du compte :', 'camille@example.test')
         ->and($message->getAttachments()[0]->getFilename())->toBe('capture-1.png')
         ->and($message->getAttachments()[0]->getContentType())->toBe('image/png');
 });

@@ -16,7 +16,7 @@
             <input type="hidden" name="error_token" value="{{ $errorToken }}">
             <button type="submit">Envoyer au développeur</button>
         </form>
-        <p class="hint">Aucun envoi automatique. Le diagnostic ne contient ni mot de passe, ni cookie, ni contenu de formulaire. Ce lien d’envoi reste valable 30 minutes.</p>
+        <p class="hint">Aucun envoi automatique. Le nom et l’email du compte connecté, si disponibles, sont inclus pour pouvoir vous recontacter. Le diagnostic ne contient ni mot de passe, ni cookie, ni contenu de formulaire. Ce lien d’envoi reste valable 30 minutes.</p>
     </section>
     @endif
 @endsection

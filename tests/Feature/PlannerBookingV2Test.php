@@ -113,7 +113,7 @@ function nativeBookingFixture(string $status = 'PRISE DE RDV'): array
     return compact('actor', 'technician', 'service', 'dossier', 'operation', 'payload');
 }
 
-it('renders bold phones full postal codes and comment triggers only on name and phone', function () {
+it('renders bold phones full postal codes and comment triggers only on the name', function () {
     extract(nativeBookingFixture());
     $dossier->forceFill(['postal_code' => '01300'])->save();
     $response = $this->actingAs($actor)->get(route('planner.book'))->assertOk();
@@ -122,7 +122,8 @@ it('renders bold phones full postal codes and comment triggers only on name and 
     $xpath = new DOMXPath($dom);
     $row = $xpath->query('//*[@data-crm-id="dossier-'.$operation->id.'"]')->item(0);
     expect($row)->not->toBeNull();
-    expect($xpath->query('.//*[@data-crm-comments-trigger]', $row)->length)->toBe(2)
+    expect($xpath->query('.//*[@data-crm-comments-trigger]', $row)->length)->toBe(1)
+        ->and($xpath->query('.//*[contains(@class,"gc-booking-request-phone") and @data-crm-comments-trigger]', $row)->length)->toBe(0)
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-phone") and contains(@class,"font-bold")]', $row)->item(0)->textContent)->toBe('0600000000')
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-postal")]', $row)->item(0)->textContent)->toBe('CP 01300')
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-address") and @data-crm-comments-trigger]', $row)->length)->toBe(0);

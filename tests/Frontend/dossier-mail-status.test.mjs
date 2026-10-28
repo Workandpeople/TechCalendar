@@ -92,3 +92,18 @@ test('pauses on denied access and backs off on rate limits', async () => {
     assert.equal(mailStatusTone('failed'), 'bg-rose-100 text-rose-900');
     assert.equal(mailStatusTone('unknown'), 'bg-slate-100 text-slate-700');
 });
+
+test('appointment composers reuse the follow-up without sending or retaining a previous appointment', async () => {
+    const ui = fixture({ pending: false });
+    ui.panel.handlers['cofrac:mail-status']({ detail: { url: '/planner/book/appointments/8/mail-status' } });
+    ui.reply([{ status: 'queued', pending: true, label: 'En attente' }]);
+    await ui.tick(0);
+    assert.equal(ui.requests[0].url, '/planner/book/appointments/8/mail-status');
+    ui.panel.handlers['cofrac:mail-status']({ detail: { url: '/planner/book/appointments/9/mail-status', messages: [{ status: 'sent', pending: false, label: 'Envoyé' }] } });
+    assert.equal(ui.timers.size, 0);
+    assert.match(ui.text(), /Envoyé/);
+    ui.panel.handlers['cofrac:mail-status']({ detail: { url: '' } });
+    await ui.refresh.handlers.click();
+    assert.equal(ui.requests.length, 1);
+    assert.equal(ui.refresh.disabled, true);
+});

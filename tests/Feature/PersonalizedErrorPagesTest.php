@@ -4,8 +4,10 @@ use App\Models\User;
 use App\Services\Support\ReportContext;
 use App\Services\Support\SupportReportDelivery;
 use App\Services\Support\SupportReports;
+use Illuminate\Contracts\Auth\UserProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -121,6 +123,66 @@ it('accepts a valid error diagnostic without database-backed sessions or SQL acc
     } finally {
         DB::swap($database);
     }
+});
+
+it('snapshots the connected account identity without SQL or collecting submitted form data', function () {
+    $actor = User::factory()->make(['first_name' => 'Camille', 'last_name' => 'Martin', 'email' => 'camille@example.test']);
+    $actor->id = 53;
+    Auth::guard('web')->setUser($actor);
+    $request = Request::create('/login?token=NEVER-COLLECT', 'POST', [
+        'email' => 'submitted@example.test', 'password' => 'NEVER-COLLECT',
+    ]);
+    $database = app('db');
+    DB::shouldReceive('connection')->never();
+    try {
+        $context = app(ReportContext::class)->error($request, new RuntimeException('NEVER-COLLECT'), 403);
+        $token = app(ReportContext::class)->seal($context);
+        expect($context)->toMatchArray(['actor_id' => 53, 'actor_name' => 'Camille Martin', 'actor_email' => 'camille@example.test']);
+        expect(json_encode($context))->not->toContain('submitted@example.test', 'NEVER-COLLECT');
+        expect($token)->not->toContain('camille@example.test', 'Camille Martin');
+
+        Auth::guard('web')->forgetUser();
+        config(['session.driver' => 'database']);
+        $this->postJson(route('support.error'), ['error_token' => $token,
+            'actor_id' => 999, 'actor_name' => 'Fake user', 'actor_email' => 'forged@example.test'])
+            ->assertOk()->assertJsonPath('delivery', 'sent');
+        $this->delivery->shouldHaveReceived('send')->once()->withArgs(function (array $report) {
+            expect($report)->toMatchArray(['actor_id' => 53, 'actor_name' => 'Camille Martin', 'actor_email' => 'camille@example.test']);
+            expect(json_encode($report))->not->toContain('forged@example.test', 'Fake user', 'submitted@example.test', 'NEVER-COLLECT');
+
+            return true;
+        });
+    } finally {
+        DB::swap($database);
+    }
+});
+
+it('does not resolve a guest from the session or mistake a submitted email for an authenticated identity', function () {
+    Auth::guard('web')->forgetUser();
+    $provider = Mockery::mock(UserProvider::class);
+    $provider->shouldNotReceive('retrieveById');
+    Auth::guard('web')->setProvider($provider);
+    $request = Request::create('/login', 'POST', ['email' => 'unverified@example.test']);
+    $database = app('db');
+    DB::shouldReceive('connection')->never();
+    try {
+        $context = app(ReportContext::class)->error($request, new RuntimeException('private'), 500);
+        expect($context)->toMatchArray(['actor_id' => null, 'actor_name' => null, 'actor_email' => null]);
+        expect(json_encode($context))->not->toContain('unverified@example.test');
+    } finally {
+        DB::swap($database);
+    }
+});
+
+it('bounds and sanitizes the identity snapshot without publishing it on the error page', function () {
+    $actor = User::factory()->make(['first_name' => str_repeat('É', 300), 'last_name' => "Martin\r\nInjected", 'email' => "camille@example.test\r\nInjected"]);
+    $actor->id = 53;
+    $this->actingAs($actor);
+    $response = $this->get('/__support-test/500')->assertStatus(500)
+        ->assertSee('Le nom et l’email du compte connecté')->assertDontSee('camille@example.test');
+    $context = app(ReportContext::class)->open(supportErrorToken($response->getContent()));
+    expect(mb_strlen($context['actor_name']))->toBeLessThanOrEqual(255);
+    expect($context['actor_email'])->not->toContain("\r", "\n");
 });
 
 it('works without JavaScript and gives an honest receipt when mail cannot be delivered', function () {

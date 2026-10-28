@@ -294,6 +294,7 @@
                             </aside>
                         </div>
                     @endif
+                    @include('planner.partials.mail-delivery-status', ['mailStatusId' => 'booking-mail-delivery'])
                 </div>
             </div>
         </section>
@@ -457,7 +458,7 @@
                                 <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
                                 <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="{{ $companyName !== '' ? $companyName : $appointment['source'] }}">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
                             </div>
-                            <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
+                            <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
                             <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le {{ $createdAtLabel }}">Créé le {{ $createdAtLabel }}</p>
                             <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="{{ $appointment['address'] }}">{{ $appointment['address'] }}</p>
                             <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
@@ -474,7 +475,7 @@
                                     <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" title="RDV existant : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer le RDV</a>
                                 @endif
                                 @if ($appointment['dossier_summary']['dossier_url'] ?? null)
-                                    <a class="crm-appointment-dossier-link inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" href="{{ $appointment['dossier_summary']['dossier_url'] }}" target="_blank" rel="noopener noreferrer" title="Voir le dossier (nouvel onglet)" aria-label="Voir le dossier (nouvel onglet)">
+                                    <a class="crm-appointment-dossier-link inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" href="{{ $appointment['dossier_summary']['dossier_url'] }}" title="Voir le dossier" aria-label="Voir le dossier">
                                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                             <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                             <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1498,6 +1499,10 @@
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
         const bookingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
         const bookingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
+        const bookingMailStatusUrlTemplate = @json(route('planner.book.appointments.mail.status', ['appointment' => '__APPOINTMENT__']));
+        const updateBookingMailDelivery = (id, messages) => document.getElementById('booking-mail-delivery')?.dispatchEvent(new CustomEvent('cofrac:mail-status', {
+            detail: { url: id ? bookingMailStatusUrlTemplate.replace('__APPOINTMENT__', id) : '', messages },
+        }));
         const bookingCommentUrlTemplate = @json(route('planner.tracking.appointments.comment', ['appointment' => '__APPOINTMENT__']));
         const bookingProblemUrlTemplate = @json(route('planner.tracking.appointments.problem', ['appointment' => '__APPOINTMENT__']));
         const bookingAppointmentRefreshUrlTemplate = @json(route('planner.tracking.appointments.coffrac.refresh', ['appointment' => '__APPOINTMENT__']));
@@ -2017,11 +2022,11 @@
                 ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" title="RDV existant : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer le RDV</a>`
                 : '';
             const dossierUrl = appointment.dossier_summary?.dossier_url;
-            const detailLabel = dossierUrl ? 'Voir le dossier (nouvel onglet)' : 'Voir le détail du RDV';
+            const detailLabel = dossierUrl ? 'Voir le dossier' : 'Voir le détail du RDV';
             const detailTag = dossierUrl ? 'a' : 'button';
             const detailClass = dossierUrl ? 'crm-appointment-dossier-link' : 'crm-appointment-detail-button';
             const detailAttributes = dossierUrl
-                ? `href="${escapeHtml(dossierUrl)}" target="_blank" rel="noopener noreferrer"`
+                ? `href="${escapeHtml(dossierUrl)}"`
                 : `type="button" data-crm-detail-id="${escapeHtml(appointment.id)}"`;
 
             return `
@@ -2038,7 +2043,7 @@
                         <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
                         <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="${escapeHtml(companyName || appointment.source || '')}">${escapeHtml(companyName || appointment.source || '')}</p>
                     </div>
-                    <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
+                    <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
                     <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le ${escapeHtml(createdAtLabel)}">Créé le ${escapeHtml(createdAtLabel)}</p>
                     <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="${escapeHtml(appointment.address)}">${escapeHtml(appointment.address)}</p>
                     <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
@@ -4636,6 +4641,8 @@
 
         const resetConfirmationMailComposer = (data) => {
             confirmationMailAppointmentId = data?.appointment_id || null;
+            updateBookingMailDelivery(confirmationMailAppointmentId);
+            if (confirmationMailSend) confirmationMailSend.textContent = 'Envoyer le mail';
             confirmationMailSent = false;
             confirmationMailPanel?.classList.add('hidden');
             confirmationMailToggle && (confirmationMailToggle.textContent = 'Préparer un mail');
@@ -6545,8 +6552,9 @@
 
                 confirmationMailSent = true;
                 setConfirmationMailFieldsDisabled(true);
-                setConfirmationMailStatus(payload.message || 'Mail envoyé.', 'success');
-                confirmationMailSend.textContent = 'Mail envoyé';
+                setConfirmationMailStatus(payload.message || 'Demande d’envoi enregistrée.', 'success');
+                confirmationMailSend.textContent = 'Demande enregistrée';
+                updateBookingMailDelivery(confirmationMailAppointmentId, payload.messages);
             } catch (error) {
                 confirmationMailSend.disabled = false;
                 confirmationMailSend.textContent = 'Envoyer le mail';

@@ -27,7 +27,7 @@ test('initial and refreshed booking rows share the same responsive layout', () =
         assert.match(markup, /gc-booking-request-service min-w-0 flex-1 truncate/);
         assert.match(markup, /crm-appointment-detail-button inline-flex h-8 w-8 shrink-0/);
         assert.doesNotMatch(markup, /flex-wrap\b|md:grid-cols-/);
-        assert.equal((markup.match(/data-crm-comments-trigger/g) || []).length, 2);
+        assert.equal((markup.match(/data-crm-comments-trigger/g) || []).length, 1);
         assert.match(markup, /gc-booking-request-phone text-sm font-bold tabular-nums/);
         assert.match(markup, /gc-booking-request-postal shrink-0 whitespace-nowrap/);
     }
@@ -68,7 +68,7 @@ test('scheduled pending requests use a replacement link in the same row instead 
     const html = render({ id: 'dossier-1', dossier_id: 1, replace_appointment_id: 42, existing_appointment_at: '2026-10-27T10:00:00Z', dossier_summary: { dossier_url: '/v2/dossiers/1' } });
     assert.match(html, /href="\/planner\/appointments\/modify\?replace_appointment_id=42"/);
     assert.match(html, /Replacer le RDV/);
-    assert.match(html, /title="Voir le dossier \(nouvel onglet\)"/);
+    assert.match(html, /title="Voir le dossier"/);
     assert.doesNotMatch(source, /booking-replacements/);
     assert.match(source, /event\.target\.closest\('a, button'\)/);
     assert.match(source, /if \(event\.target !== card\) return/);
@@ -77,10 +77,13 @@ test('scheduled pending requests use a replacement link in the same row instead 
 test('new and replacement dossier eyes open the dossier directly without selecting the planning row', () => {
     for (const replace_appointment_id of [null, 42]) {
         const html = render({ id: 'dossier-1', replace_appointment_id, dossier_summary: { dossier_url: '/v2/dossiers/1' } });
-        assert.match(html, /<a href="\/v2\/dossiers\/1" target="_blank" rel="noopener noreferrer" class="crm-appointment-dossier-link/);
+        assert.match(html, /<a href="\/v2\/dossiers\/1" class="crm-appointment-dossier-link/);
+        assert.doesNotMatch(html, /target=|nouvel onglet/);
         assert.doesNotMatch(html, /data-crm-detail-id=/);
     }
-    assert.match(source, /href="\{\{ \$appointment\['dossier_summary'\]\['dossier_url'\] \}\}" target="_blank" rel="noopener noreferrer"/);
+    assert.match(source, /href="\{\{ \$appointment\['dossier_summary'\]\['dossier_url'\] \}\}" title="Voir le dossier"/);
+    const summary = readFileSync(new URL('../../resources/views/planner/booking-dossier-summary.blade.php', import.meta.url), 'utf8');
+    assert.doesNotMatch(summary, /target=|nouvel onglet/);
     assert.doesNotMatch(source, /window\.location\.assign\(appointment\.dossier_summary\.dossier_url\)/);
     assert.match(render({ id: 'legacy-1' }), /<button type="button" data-crm-detail-id="legacy-1"/);
 });

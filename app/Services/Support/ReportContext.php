@@ -36,11 +36,17 @@ final class ReportContext
                 $trace[] = ['file' => substr($file, strlen(base_path()) + 1), 'line' => (int) ($frame['line'] ?? 0)];
             }
         }
-        $actorId = null;
+        $actor = ['actor_id' => null, 'actor_name' => null, 'actor_email' => null];
         try {
             // Never query a failing database while rendering an error page.
-            if (Auth::guard('web')->hasUser()) {
-                $actorId = Auth::guard('web')->user()->getAuthIdentifier();
+            $guard = Auth::guard('web');
+            if ($guard->hasUser()) {
+                $user = $guard->user();
+                $actor = [
+                    'actor_id' => $user->getAuthIdentifier(),
+                    'actor_name' => $this->contactValue($user->full_name, 255),
+                    'actor_email' => $this->contactValue($user->email, 254),
+                ];
             }
         } catch (Throwable) {
         }
@@ -48,7 +54,7 @@ final class ReportContext
         return [
             'id' => (string) Str::uuid(), 'kind' => 'error', 'occurred_at' => now()->toIso8601String(),
             'expires_at' => now()->addMinutes(30)->timestamp, 'status' => $status,
-            'method' => $request->method(), 'actor_id' => $actorId,
+            'method' => $request->method(), ...$actor,
             'route' => $request->route()?->getName(), 'page' => $request->route() ? '/'.$request->route()->uri() : 'Route inconnue',
             'identifiers' => $request->route() ? $this->identifiers($request->route()) : [],
             'exception_class' => Str::before($origin::class, "\0"), 'trace' => $trace,
@@ -59,6 +65,13 @@ final class ReportContext
     public function seal(array $context): string
     {
         return Crypt::encryptString(json_encode($context, JSON_THROW_ON_ERROR));
+    }
+
+    private function contactValue(?string $value, int $limit): ?string
+    {
+        $value = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $value ?? '') ?? ''), 0, $limit);
+
+        return $value !== '' ? $value : null;
     }
 
     private function identifiers(Route $route): array

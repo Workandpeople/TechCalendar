@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\MailSender;
 use App\Models\MailTemplate;
+use App\Services\AppointmentMailDelivery;
 use App\Services\Crm\DossierMailDelivery;
 use App\Services\MailSenderMailerConfigurator;
 use App\Services\MailTemplateRenderer;
@@ -20,6 +21,8 @@ class MailTemplateMailable extends GloballyConfiguredMailable
     use Queueable, SerializesModels;
 
     public ?int $dossierMailActivityId = null;
+
+    public ?int $appointmentMailDeliveryId = null;
 
     public ?int $tries = null;
 
@@ -98,6 +101,9 @@ class MailTemplateMailable extends GloballyConfiguredMailable
      */
     public function send($mailer)
     {
+        if ($this->appointmentMailDeliveryId !== null) {
+            return app(AppointmentMailDelivery::class)->deliver($this->appointmentMailDeliveryId, fn () => $this->sendConfigured($mailer));
+        }
         if ($this->dossierMailActivityId !== null) {
             return app(DossierMailDelivery::class)->deliver($this->dossierMailActivityId, fn () => $this->sendConfigured($mailer));
         }
@@ -107,6 +113,9 @@ class MailTemplateMailable extends GloballyConfiguredMailable
 
     public function failed(?\Throwable $exception): void
     {
+        if ($this->appointmentMailDeliveryId !== null) {
+            app(AppointmentMailDelivery::class)->failed($this->appointmentMailDeliveryId);
+        }
         if ($this->dossierMailActivityId !== null) {
             app(DossierMailDelivery::class)->failed($this->dossierMailActivityId, $exception);
         }

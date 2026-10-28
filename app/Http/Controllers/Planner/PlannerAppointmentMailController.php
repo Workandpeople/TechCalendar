@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\MailTemplateMailable;
 use App\Models\Appointment;
 use App\Models\MailTemplate;
+use App\Services\AppointmentMailDelivery;
 use App\Services\AppointmentMailTemplateData;
 use App\Services\MailTemplateRenderer;
 use Illuminate\Http\JsonResponse;
@@ -16,6 +17,13 @@ use Illuminate\Validation\ValidationException;
 
 class PlannerAppointmentMailController extends Controller
 {
+    public function status(Request $request, Appointment $appointment, AppointmentMailDelivery $delivery): JsonResponse
+    {
+        abort_unless($this->canAccess($request), 403);
+
+        return response()->json(['messages' => $delivery->recent($appointment)])->header('Cache-Control', 'private, no-store');
+    }
+
     public function preview(
         Request $request,
         Appointment $appointment,
@@ -69,6 +77,12 @@ class PlannerAppointmentMailController extends Controller
         $this->ensureSelectedTemplateIsUsable($payload, $sourceTemplate);
 
         $template = $this->oneShotTemplate($payload['subject'], $payload['markdown_body'], $sourceTemplate);
+
+        if (config('crm.v2_enabled')) {
+            return response()->json(app(AppointmentMailDelivery::class)->queue($request->user(), $appointment,
+                $payload['recipient_email'], new MailTemplateMailable($template, $templateData->forAppointment($appointment))))
+                ->header('Cache-Control', 'private, no-store');
+        }
 
         Mail::to($payload['recipient_email'])->queue(
             new MailTemplateMailable($template, $templateData->forAppointment($appointment))
