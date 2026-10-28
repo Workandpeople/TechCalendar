@@ -56,7 +56,7 @@ function element() {
     };
 }
 
-function harness(routeBetween = async () => ({ distance_km: 12, duration_minutes: 25 })) {
+function harness(routeBetween = async () => ({ distance_km: 12, duration_minutes: 25 }), disclaimer = '') {
     const handlers = {}, timers = new Map(), calls = [];
     let timer = 0;
     const body = element();
@@ -66,7 +66,7 @@ function harness(routeBetween = async () => ({ distance_km: 12, duration_minutes
         setTimeout(fn, delay) { const id = ++timer; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id) };
     let events = [];
     const tooltip = createBookingTravelTooltip({ root, browser, routeBetween: (...args) => { calls.push(args); return routeBetween(...args); },
-        getEvents: () => events, getTechnician: () => ({ name: 'Fallback TECH' }) });
+        getEvents: () => events, getTechnician: () => ({ name: 'Fallback TECH' }), disclaimer });
     const run = delay => {
         const item = [...timers].find(([, entry]) => entry.delay === delay);
         if (!item) throw new Error(`No ${delay}ms timer`);
@@ -78,6 +78,16 @@ function harness(routeBetween = async () => ({ distance_km: 12, duration_minutes
 }
 
 const position = { clientX: 600, clientY: 200 };
+
+test('isolated demos clearly label fictitious distances as safe text without changing normal tooltips', () => {
+    const ui = harness(undefined, 'Démo locale : distances fictives <b>sans Mapbox</b>.');
+    ui.tooltip.show(position, appointment(1, 10, { is_suggestion: true }));
+    assert.match(ui.text(), /Démo locale : distances fictives <b>sans Mapbox<\/b>/);
+    assert.equal(ui.body.children[0].innerHTML, undefined);
+    const normal = harness();
+    normal.tooltip.show(position, appointment(1, 10, { is_suggestion: true }));
+    assert.doesNotMatch(normal.text(), /Démo locale/);
+});
 
 test('one tooltip shows the full technician name as safe text for suggestions and placed events', async () => {
     const ui = harness();

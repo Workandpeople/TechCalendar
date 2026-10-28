@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\LocalCalendarController;
 use App\Http\Controllers\Manager\ManagerDashboardController;
 use App\Http\Controllers\Manager\ManagerDelegataireController;
 use App\Http\Controllers\Manager\ManagerLotController;
@@ -26,6 +27,9 @@ use Illuminate\Support\Facades\Route;
 
 require __DIR__.'/crm.php';
 require __DIR__.'/clients.php';
+
+Route::get('/local/calendar', LocalCalendarController::class)
+    ->withoutMiddleware('web')->name('local.calendar');
 
 // This endpoint uses an encrypted, expiring error diagnostic instead of cookies or CSRF.
 // It must also work when database-backed sessions are unavailable.

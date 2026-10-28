@@ -16,6 +16,7 @@ validate_release_scope() {
             config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
             database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
             database/migrations/2026_10_28_200000_create_appointment_mail_deliveries_table.php) ;;
+            config/calendar.php|vite.config.js|tools/local/*) ;;
             *) stop 'changement hors perimetre applicatif du correctif.' ;;
         esac
     done < "$1"

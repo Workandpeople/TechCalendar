@@ -1359,9 +1359,7 @@
         </div>
     </div>
 
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
+    @include('planner.partials.calendar-engine', ['calendarLocales' => true])
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
@@ -4040,7 +4038,7 @@
             }
 
             const durationMinutes = requestDurationMinutes();
-            const technician = activeTechnicians[0];
+            const technician = activeTechnicians.find(technician => String(technician.id) === String(info.resource?.id)) || activeTechnicians[0];
             const draftEvent = {
                 id: `calendar-draft-${Date.now()}`,
                 title: `Placement | ${technician.name}`,
@@ -5667,6 +5665,7 @@
             }
         };
 
+        let pendingNativeCalendarRender = null;
         const renderCalendar = (events, suggestions = [], focusDate = null, shouldAutoFocus = true) => {
             const calendarElement = document.getElementById('booking-calendar');
             const preparedEvents = colorizedEvents(events, suggestions);
@@ -5685,7 +5684,13 @@
                 return;
             }
 
-            bookingCalendar = new FullCalendar.Calendar(calendarElement, {
+            const BookingCalendar = window.CofracNativeCalendar?.Calendar || window.FullCalendar?.Calendar;
+            if (!BookingCalendar) {
+                pendingNativeCalendarRender = [events, suggestions, focusDate, shouldAutoFocus];
+                return;
+            }
+            bookingCalendar = new BookingCalendar(calendarElement, {
+                nativeResources: () => selectedTechnicians().map(technician => ({ id: technician.id, name: technician.name })),
                 locale: 'fr',
                 initialView: 'timeGridWeek',
                 firstDay: 1,
@@ -5754,6 +5759,13 @@
                 bookingCalendar.gotoDate(calendarFocusDate);
             }
         };
+        window.addEventListener('cofrac:native-calendar-ready', () => {
+            if (pendingNativeCalendarRender) {
+                const args = pendingNativeCalendarRender;
+                pendingNativeCalendarRender = null;
+                renderCalendar(...args);
+            }
+        }, { once: true });
 
         const refreshBookingOutputs = async ({ fetchCalendar = false } = {}) => {
             if (!currentAppointmentRequest || !currentFilters) return;

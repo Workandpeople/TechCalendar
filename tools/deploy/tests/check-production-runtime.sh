@@ -72,7 +72,12 @@ case "$1" in
         case "$unit" in apache2.service|mysql.service) exit 0 ;; esac
         [ -f "$(pidfile "$unit")" ] && kill -0 "$(cat "$(pidfile "$unit")")" 2>/dev/null ;;
     daemon-reload) : ;;
-    reload) [ "$2" = apache2.service ]; /tmp/real-apache2ctl graceful ;;
+    reload)
+        case "$2" in
+            apache2.service) /tmp/real-apache2ctl graceful ;;
+            cofrac2-php-fpm.service) pkill -USR2 -P "$(cat "$(pidfile "$2")")" ;;
+            *) exit 91 ;;
+        esac ;;
     start)
         shift
         for unit in "$@"; do
@@ -318,3 +323,6 @@ printf 'OK : SMTP conserve sans livraison, precontrole epingle en lecture seule,
 bash "$APP/tools/deploy/tests/check-production-release.sh"
 bash "$APP/tools/deploy/tests/check-production-mail.sh"
 bash "$APP/tools/deploy/tests/check-production-domains.sh"
+if [ -f "$APP/tools/deploy/tests/check-production-calendar.sh" ]; then
+    bash "$APP/tools/deploy/tests/check-production-calendar.sh"
+fi

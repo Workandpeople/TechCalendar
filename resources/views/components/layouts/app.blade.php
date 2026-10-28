@@ -1,7 +1,7 @@
-@props(['crmNavigation' => false])
+@props(['crmNavigation' => false, 'workspaceRoute' => null])
 <!DOCTYPE html>
 @php
-    $workspace = \App\Support\WorkspaceUi::forRoute(request()->route()?->getName());
+    $workspace = \App\Support\WorkspaceUi::forRoute($workspaceRoute ?? request()->route()?->getName());
     $reverbClientConfig = [
         'key' => config('broadcasting.connections.reverb.key'),
         'host' => config('reverb.client.host') ?: config('broadcasting.connections.reverb.options.host'),

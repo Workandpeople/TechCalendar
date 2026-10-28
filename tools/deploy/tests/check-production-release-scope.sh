@@ -9,6 +9,8 @@ resources/js/dossier-mail-status.js
 routes/crm.php
 database/migrations/2026_10_28_200000_create_appointment_mail_deliveries_table.php
 config/admin.php
+config/calendar.php
+vite.config.js
 database/seeders/CoffracServiceAliasSeeder.php
 tools/deploy/update-production-release.sh
 FILES

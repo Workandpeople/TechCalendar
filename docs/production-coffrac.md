@@ -2700,3 +2700,36 @@ s'affichent au survol/focus du nom uniquement, jamais du telephone ou de la lign
 Le lot conserve strictement FullCalendar et les endpoints/periodes de chargement
 existants. Les autres corrections locales (403 login et identite des signalements)
 font partie de ce premier lot, pas du remplacement du calendrier.
+
+### Lot independant : calendrier sur mesure et retour arriere
+
+Le second commit change seulement le moteur des blocs de calendrier Prendre un
+RDV et Les RDV. L'aside, le header, les formulaires, cartes Mapbox, endpoints,
+fenetres de chargement et validations de placement restent ceux de l'application.
+Les cartes affichent beneficiaire, fiche, code postal/ville et technicien, avec
+les tooltips existants. Les fenetres sont centrees et defilables sur petit ecran.
+Le mode semaine groupe par heure ; les cartes s'adaptent au texte, les heures
+affichees et non leur hauteur representent la duree. Aucun glisser-deposer ajoute.
+
+La configuration `COFRAC_CALENDAR_ENGINE` vaut `fullcalendar` par defaut. Le lot 1
+conserve strictement le moteur existant. Apres le deploiement du lot 2 seulement :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/set-production-calendar.sh native
+```
+
+Pour revenir immediatement a l'ancien calendrier, en conservant TOUS les autres
+correctifs et TOUS les nouveaux RDV, sans rollback de code ou de base :
+
+```bash
+sudo bash /var/www/cofrac2/tools/deploy/set-production-calendar.sh fullcalendar
+```
+
+Le script sauvegarde la configuration privee et son marqueur, modifie uniquement
+la cle calendrier, recompile le cache et recharge gracieusement le seul PHP V2.
+Il conserve les autres valeurs .env octet pour octet, compare les reglages avant/
+apres, met a jour l'empreinte runtime et restaure la configuration precedente si
+le controle echoue. Aucun email/SMS de test, worker rejoue ou Apache/MySQL partage
+modifie. Actualiser les onglets deja ouverts pour charger le moteur choisi.
+La demonstration `/local/calendar` et ses donnees fictives restent fermees en
+production ; le parametre public `?calendar=native` ne change pas la configuration.

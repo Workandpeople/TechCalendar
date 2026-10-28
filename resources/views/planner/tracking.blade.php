@@ -454,9 +454,8 @@
         @include('planner.partials.tracking-edit')
     @endif
 
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+    @include('planner.partials.calendar-engine')
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <script>
@@ -2406,9 +2405,11 @@
 
         const initTrackingCalendar = () => {
             const calendarEl = document.getElementById('tracking-calendar');
-            if (!calendarEl || !window.FullCalendar || trackingCalendar) return;
+            const TrackingCalendar = window.CofracNativeCalendar?.Calendar || window.FullCalendar?.Calendar;
+            if (!calendarEl || !TrackingCalendar || trackingCalendar) return;
 
-            trackingCalendar = new window.FullCalendar.Calendar(calendarEl, {
+            trackingCalendar = new TrackingCalendar(calendarEl, {
+                nativeResources: () => technicianCheckboxes.filter(checkbox => checkbox.checked).map(checkbox => ({ id: checkbox.value, name: checkbox.dataset.name })),
                 initialView: 'timeGridWeek',
                 initialDate: trackingInitialDate || undefined,
                 locale: 'fr',
@@ -3077,6 +3078,7 @@ setTrackingDetailsStatus('Rendez-vous mis à jour.');
         });
 
         applyInitialTechnicianSelection();
+        window.addEventListener('cofrac:native-calendar-ready', initTrackingCalendar, { once: true });
         initTrackingCalendar();
         updateLegend();
         if (!@json((bool) config('crm.v2_enabled'))) subscribeTrackingCoffracSync();
