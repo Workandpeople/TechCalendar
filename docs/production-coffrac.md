@@ -2506,3 +2506,42 @@ et la selection de 187 societes utilise une seule requete de validation.
 Ces mesures locales sous PHP CLI 8.5 ne garantissent pas les latences en
 production sous PHP 8.4 ; aucune cause certaine de la saturation precedente
 n'est deduite de ce test. Les changements de calendrier restent exclus.
+
+### Reintroduction progressive : lot 3, commentaires et confirmations
+
+Base serveur requise : lot 2 (698e0fe9). Les filtres et requetes de selection
+des calendriers, les regles de disponibilite et les index restent inchanges.
+
+Clients et delegataires peuvent commenter dans toutes leurs categories
+accessibles, seulement si les droits de lecture ET d'ajout sont actifs.
+Les affectations, comptes desactives, categories fermees et dossiers supprimes
+restent controles. Aucun droit stocke n'est reecrit. Les notes internes restent
+privees, le depot de documents reste reserve aux clients et un commentaire
+simple ne change ni le statut ni le cycle de recontrole.
+
+Les confirmations reprennent l'email valide actuel du dossier avant les
+anciennes donnees du RDV. Les anciens formats gardent leur repli sur la premiere
+adresse valide ; aucune adresse fictive n'est inventee. Le chargement groupe
+des dossiers est deja assure par le serialiseur de documents du calendrier :
+aucune requete par RDV n'est ajoutee. Un test verifie une seule lecture des
+dossiers pour 1 et 30 RDV, sur les evenements et sur la recherche.
+
+Les RDV places de Prendre un RDV et des RDV utilisent le meme tooltip :
+technicien, fiche, adresse complete, beneficiaire, telephone et horaires.
+Affichage sur survol ou focus clavier, fermeture sur Echap, defilement,
+redimensionnement ou retrait de l'evenement. Le contenu est insere en texte,
+sans HTML execute. Ce tooltip n'appelle aucun service de trajet ; les
+propositions conservent leur apercu de trajets existant.
+
+Aucun import, seeder, migration, changement de configuration mail/SMS,
+activation de compte, remise a zero de droits ou reprise de job. Les tests
+empechent les appels externes et simulent les envois ; aucun message reel
+n'est expedie. Le filtrage des RDV annules/en probleme est reserve au lot 4.
+
+Validation locale : 2059 tests PHP (limite CLI de 512 Mio pour les fixtures de
+gros fichiers), 285 tests JavaScript, build isole sans .env et test navigateur.
+Sur les memes volumes synthetiques que le lot 2 : 144 mesures sequentielles et
+96 avec quatre processus simultanes, aucune erreur. Empreintes SQL et nombres
+de requetes identiques sur les 24 scenarios compares. Le test navigateur
+reutilise un seul tooltip sur 100 affichages, sans requete reseau ni execution
+de HTML injecte. Ces mesures locales ne garantissent pas les delais production.

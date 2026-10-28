@@ -50,7 +50,15 @@ class AppointmentMailTemplateData
 
     public function defaultRecipientEmail(Appointment $appointment): ?string
     {
-        $email = $this->firstFilledFromPayload($appointment, [
+        if (config('crm.v2_enabled') && $appointment->dossier_operation_id !== null) {
+            $appointment->loadMissing('dossierOperation.dossier');
+            $email = trim((string) $appointment->dossierOperation?->dossier?->email);
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $email;
+            }
+        }
+        $payload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
+        foreach ([
             'customer_email',
             'client_email',
             'email',
@@ -58,9 +66,14 @@ class AppointmentMailTemplateData
             'contact.email',
             'customer.email',
             'client.email',
-        ]);
+        ] as $key) {
+            $value = data_get($payload, $key);
+            if (is_string($value) && filter_var(trim($value), FILTER_VALIDATE_EMAIL)) {
+                return trim($value);
+            }
+        }
 
-        return $email && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+        return null;
     }
 
     /**

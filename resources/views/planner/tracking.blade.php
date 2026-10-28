@@ -842,38 +842,11 @@
         };
 
         const ensureTrackingAppointmentTooltip = () => {
-            if (trackingAppointmentTooltip) {
-                return trackingAppointmentTooltip;
-            }
-
-            trackingAppointmentTooltip = document.createElement('div');
-            trackingAppointmentTooltip.style.cssText = [
-                'position:fixed',
-                'z-index:90',
-                'display:none',
-                'pointer-events:none',
-                'max-width:360px',
-                'border-radius:16px',
-                'padding:12px 14px',
-                'background:#31424c',
-                'color:#ffffff',
-                'box-shadow:0 18px 45px rgba(15,23,42,.28)',
-                'font-size:12px',
-                'line-height:1.45',
-                'transform:translate(-50%, calc(-100% - 14px))',
-            ].join(';');
-            document.body.appendChild(trackingAppointmentTooltip);
-
-            return trackingAppointmentTooltip;
+            return trackingAppointmentTooltip ||= window.TechCalendarAppointmentTooltip.create();
         };
 
         const moveTrackingAppointmentTooltip = (event) => {
-            const tooltip = ensureTrackingAppointmentTooltip();
-            const safeLeft = Math.min(Math.max(event.clientX, 180), window.innerWidth - 180);
-            const safeTop = Math.max(event.clientY, 120);
-
-            tooltip.style.left = `${safeLeft}px`;
-            tooltip.style.top = `${safeTop}px`;
+            ensureTrackingAppointmentTooltip().move(event);
         };
 
         const trackingAppointmentServiceType = (props) => (
@@ -984,45 +957,12 @@
             event.title = value;
         };
 
-        const showTrackingAppointmentTooltip = (mouseEvent, calendarEvent) => {
-            const props = calendarEvent.extendedProps || {};
-            const tooltip = ensureTrackingAppointmentTooltip();
-            const serviceType = trackingAppointmentServiceType(props);
-            const serviceLabel = props.service_label || serviceType;
-            const fullAddress = trackingAppointmentFullAddress(props);
-            const timeRange = [formatDateTime(calendarEvent.start), formatDateTime(calendarEvent.end)]
-                .filter((value) => value && value !== '-')
-                .join(' → ');
-            const tooltipRow = (label, value) => value ? `
-                <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px;">
-                    <p style="color:rgba(255,255,255,.68);font-size:11px;text-transform:uppercase;letter-spacing:.08em;">${label}</p>
-                    <p style="margin-top:2px;font-weight:700;">${trackingEscapeHtml(value)}</p>
-                </div>
-            ` : '';
-
-            tooltip.innerHTML = `
-                <div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                        <p style="font-weight:800;letter-spacing:.02em;">${trackingEscapeHtml(props.technician_name || 'Technicien non renseigné')}</p>
-                        ${props.status === 'problem' ? '<span style="border-radius:9999px;background:rgba(255,247,237,.2);color:#fed7aa;padding:3px 8px;font-size:11px;font-weight:700;">Problème RDV</span>' : ''}
-                    </div>
-                    ${tooltipRow('RDV', serviceLabel || serviceType)}
-                    ${tooltipRow('Adresse', fullAddress)}
-                    ${tooltipRow('Client', [
-                        props.customer_name || calendarEvent.title || '-',
-                        props.customer_phone,
-                    ].filter(Boolean).join(' · '))}
-                    ${timeRange ? `<p style="margin-top:10px;color:rgba(255,255,255,.78);">${trackingEscapeHtml(timeRange)}</p>` : ''}
-                </div>
-            `;
-            tooltip.style.display = 'block';
-            moveTrackingAppointmentTooltip(mouseEvent);
+        const showTrackingAppointmentTooltip = (mouseEvent, calendarEvent, element) => {
+            ensureTrackingAppointmentTooltip().show(mouseEvent, calendarEvent, element);
         };
 
         const hideTrackingAppointmentTooltip = () => {
-            if (trackingAppointmentTooltip) {
-                trackingAppointmentTooltip.style.display = 'none';
-            }
+            trackingAppointmentTooltip?.hide();
         };
 
         const setTrackingDetailsStatus = (message, color = '#0f766e') => {
@@ -2571,13 +2511,27 @@
 	                        props.created_by_name ? `Créé par: ${props.created_by_name}` : null,
                         props.comment,
                     ].filter(Boolean).join(' - '));
+                    info.el.tabIndex = 0;
+                    const focus = () => {
+                        const box = info.el.getBoundingClientRect();
+                        showTrackingAppointmentTooltip({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
+                    };
+                    info.el._trackingAppointmentTooltipFocus = focus;
+                    info.el.addEventListener('focus', focus);
+                    info.el.addEventListener('blur', hideTrackingAppointmentTooltip);
+                },
+                eventWillUnmount: (info) => {
+                    info.el.removeEventListener('mousemove', info.el._trackingAppointmentTooltipMoveHandler);
+                    info.el.removeEventListener('focus', info.el._trackingAppointmentTooltipFocus);
+                    info.el.removeEventListener('blur', hideTrackingAppointmentTooltip);
+                    hideTrackingAppointmentTooltip();
                 },
                 eventMouseEnter: (info) => {
                     const moveHandler = (event) => moveTrackingAppointmentTooltip(event);
 
                     info.el._trackingAppointmentTooltipMoveHandler = moveHandler;
                     info.el.addEventListener('mousemove', moveHandler);
-                    showTrackingAppointmentTooltip(info.jsEvent, info.event);
+                    showTrackingAppointmentTooltip(info.jsEvent, info.event, info.el);
                 },
                 eventMouseLeave: (info) => {
                     const moveHandler = info.el._trackingAppointmentTooltipMoveHandler;

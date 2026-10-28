@@ -111,7 +111,7 @@ it('offers report access by default for delegates and non deleted categories for
     expect(app(PortalCategoryAccess::class)->effective($organisation))->toBe([]);
 })->with(['client', 'delegataire']);
 
-it('allows client documents in every visible state but comments only in non conformity', function () {
+it('allows client documents and authorized comments in every visible state', function () {
     $org = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'CLIENT', 'kind' => 'client', 'name' => 'Client', 'is_active' => true]);
     $client = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false, 'external_client_id' => $org->id,
         'portal_enabled' => true, 'must_change_password' => false,
@@ -123,14 +123,15 @@ it('allows client documents in every visible state but comments only in non conf
     foreach (['RDV VISITE', 'CONTROLE RT', 'RAPPORT GENIUS', 'RECONTROLE'] as $state) {
         $this->operation->forceFill(['legacy_status' => $state])->save();
         $this->get(route('client.dossiers.show', $this->dossier))->assertOk();
-        $this->postJson($comments, ['body' => 'Interdit'])->assertForbidden();
+        $this->postJson($comments, ['body' => 'Question client'])->assertRedirect();
         $this->postJson($upload, ['name' => 'Complément', 'document' => UploadedFile::fake()->image('doc.jpg')])->assertRedirect();
         expect($this->operation->fresh()->legacy_status)->toBe($state);
     }
     $this->operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->post($comments, ['body' => 'Correction client'])->assertRedirect();
     $this->post($upload, ['name' => 'Preuve', 'document' => UploadedFile::fake()->image('proof.jpg')])->assertRedirect();
-    expect($this->dossier->comments()->sole()->delegataire_visible)->toBeFalse();
+    expect($this->dossier->comments()->count())->toBe(5)
+        ->and($this->dossier->comments()->where('delegataire_visible', true)->exists())->toBeFalse();
     $this->operation->forceFill(['legacy_status' => null])->save();
     $this->get(route('client.dossiers.show', $this->dossier))->assertForbidden();
 });

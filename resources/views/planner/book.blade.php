@@ -1520,6 +1520,7 @@
         let currentCrmDetailAppointmentId = null;
         let bookingInitialCrmDetailComment = '';
         let bookingTravelTooltip = null;
+        let bookingPlacedTooltip = null;
         let bookingCrmAppointmentTooltip = null;
         let bookingCrmCommentTooltipTarget = null;
         let currentTechnicianColors = {};
@@ -3656,7 +3657,9 @@
             getEvents: () => bookingCalendar?.getEvents() || [],
             getTechnician: (id) => technicianById(id),
         });
-        const hideSuggestionTooltip = () => bookingTravelTooltip?.hide();
+        const tooltipForBookingEvent = (event) => event.extendedProps?.is_suggestion
+            ? ensureBookingTravelTooltip() : (bookingPlacedTooltip ||= window.TechCalendarAppointmentTooltip.create());
+        const hideSuggestionTooltip = () => { bookingTravelTooltip?.hide(); bookingPlacedTooltip?.hide(); };
 
         const addMinutes = (date, minutes) => new Date(date.getTime() + (Number(minutes || 0) * 60000));
 
@@ -5701,7 +5704,7 @@
                 },
                 eventContent: bookingCalendarEventContent,
                 eventMouseEnter: (info) => {
-                    const tooltip = ensureBookingTravelTooltip();
+                    const tooltip = tooltipForBookingEvent(info.event);
                     const moveHandler = (event) => tooltip.move(event);
                     info.el._bookingSuggestionTooltipMoveHandler = moveHandler;
                     info.el.addEventListener('mousemove', moveHandler);
@@ -5721,7 +5724,7 @@
                     info.el.tabIndex = 0;
                     const focus = () => {
                         const box = info.el.getBoundingClientRect();
-                        ensureBookingTravelTooltip().show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
+                        tooltipForBookingEvent(info.event).show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
                     };
                     info.el._bookingTravelFocus = focus;
                     info.el.addEventListener('focus', focus);

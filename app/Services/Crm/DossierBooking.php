@@ -230,6 +230,7 @@ class DossierBooking
             'last_name' => $dossier->company_name ?: ($dossier->last_name ?: $dossier->beneficiaryLabel()),
             'company_name' => $companies['client'] ?: $companies['delegataire'],
             'client_company_name' => $companies['client'], 'delegataire_company_name' => $companies['delegataire'],
+            'email' => $dossier->email, 'customer_email' => $dossier->email,
             'beneficiary_name' => $dossier->beneficiaryLabel(), 'site_name' => $dossier->site_name,
             'installer_name' => $dossier->installer_name, 'phone' => $dossier->phone ?? '',
             'address' => $this->address($dossier), 'address_line' => $dossier->address,
