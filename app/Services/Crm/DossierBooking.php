@@ -185,16 +185,14 @@ class DossierBooking
         $operation->loadMissing(['service', 'dossier.client', 'dossier.delegataire']);
         $dossier = $operation->dossier;
         $display = app(DossierTable::class);
+        $companies = $display->companies($dossier);
 
         return [
             'beneficiary' => $dossier->beneficiaryLabel(), 'email' => $dossier->email,
             'phone_numbers' => $display->phoneNumbers($dossier), 'address' => $display->address($dossier)['full'],
             'service' => $operation->service?->name ?: $operation->legacy_service_name,
             'status' => DossierStatusCatalog::describe($operation->legacy_status)['label'],
-            'client' => $dossier->client?->company_name ?: $dossier->client?->name
-                ?: ($dossier->client_contact['company_name'] ?? null) ?: ($dossier->client_contact['name'] ?? null),
-            'delegataire' => $dossier->delegataire?->company_name ?: $dossier->delegataire?->name
-                ?: ($dossier->delegataire_contact['company_name'] ?? null) ?: ($dossier->delegataire_contact['name'] ?? null),
+            'client' => $companies['client'], 'delegataire' => $companies['delegataire'],
             'site' => $dossier->site_name, 'installer' => $dossier->installer_name, 'lot' => $dossier->legacy_lot_name,
             'dossier_url' => route('v2.dossiers.show', $dossier, absolute: false),
         ];
@@ -216,6 +214,7 @@ class DossierBooking
             : substr($postalCode, 0, preg_match('/^9[78]/', $postalCode) ? 3 : 2);
         $service = $operation->service?->only(['id', 'name', 'type', 'average_duration_minutes']);
         $existingAppointment = $operation->appointments->first();
+        $companies = app(DossierTable::class)->companies($dossier);
 
         return [
             'id' => 'dossier-'.$operation->id,
@@ -229,7 +228,8 @@ class DossierBooking
             'created_at' => $dossier->created_at?->toIso8601String(),
             'first_name' => $dossier->company_name ? '' : ($dossier->first_name ?? ''),
             'last_name' => $dossier->company_name ?: ($dossier->last_name ?: $dossier->beneficiaryLabel()),
-            'company_name' => ($dossier->delegataire ?: $dossier->client)?->company_name ?: ($dossier->delegataire ?: $dossier->client)?->name,
+            'company_name' => $companies['client'] ?: $companies['delegataire'],
+            'client_company_name' => $companies['client'], 'delegataire_company_name' => $companies['delegataire'],
             'beneficiary_name' => $dossier->beneficiaryLabel(), 'site_name' => $dossier->site_name,
             'installer_name' => $dossier->installer_name, 'phone' => $dossier->phone ?? '',
             'address' => $this->address($dossier), 'address_line' => $dossier->address,

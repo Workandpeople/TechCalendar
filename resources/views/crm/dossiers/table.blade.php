@@ -75,8 +75,10 @@
                                         </button>
                                         @break
                                     @case('company')
-                                        @php($company = $dossier->delegataire ?: $dossier->client)
-                                        <span class="gc-dossier-cell-lines" title="{{ $company?->company_name ?: $company?->name }}">{{ $company?->company_name ?: $company?->name ?: '—' }}</span>
+                                        @php($companies = $table->companies($dossier))
+                                        @if ($companies['client'] !== '')<span class="gc-dossier-cell-lines font-semibold" data-company-client title="{{ $companies['client'] }}">{{ $companies['client'] }}</span>@endif
+                                        @if ($companies['delegataire'] !== '')<span class="gc-dossier-cell-lines {{ $companies['client'] !== '' ? 'gc-dossier-cell-muted' : '' }}" data-company-delegataire title="Délégataire : {{ $companies['delegataire'] }}">Délégataire : {{ $companies['delegataire'] }}</span>@endif
+                                        @if ($companies['client'] === '' && $companies['delegataire'] === '')<span class="gc-dossier-cell-muted">—</span>@endif
                                         @break
                                     @case('phone')
                                         <ul class="gc-dossier-phones" aria-label="Numéros de téléphone">

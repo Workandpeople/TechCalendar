@@ -1,5 +1,6 @@
 @php
     $selectedServices = \App\Services\Crm\DossierServiceFilter::ids($filters);
+    $selectedCompanies = \App\Services\Crm\DossierCompanyFilter::ids($filters);
     $visited = ($filters['status'] ?? null) === 'visited';
     $selectedPlanningUsers = $visited ? array_map('intval', $filters['planning_user_ids'] ?? []) : [];
     $advancedCount = collect(['department', 'section', 'planning', 'billing'])->filter(fn ($key) => filled($filters[$key] ?? null))->count()
@@ -19,10 +20,16 @@
             <div class="gc-dossier-search-input"><x-nav-icon name="search" /><input id="q" name="q" value="{{ $filters['q'] ?? '' }}" class="gc-input" type="search" maxlength="255" placeholder="Nom, adresse complète, téléphone…"></div>
         </div>
         <div>
-            <label for="delegataire_id" class="gc-label">Client ou délégataire</label>
-            <select id="delegataire_id" name="delegataire_id" class="gc-input" data-searchable>
-                <option value="">Tous les clients et délégataires</option>
-                @foreach ($delegataires as $delegataire)<option value="{{ $delegataire->id }}" @selected(($filters['delegataire_id'] ?? '') == $delegataire->id)>{{ $delegataire->company_name ?: $delegataire->name }}</option>@endforeach
+            <label for="company_ids" class="gc-label">Sociétés clientes et délégataires</label>
+            <select id="company_ids" name="company_ids[]" class="gc-input" multiple size="4" data-multi-select
+                data-empty-label="Toutes les sociétés" data-selected-label="sociétés sélectionnées"
+                data-search-label="Rechercher une société" data-options-label="Sociétés disponibles"
+                data-no-results-label="Aucune société ne correspond à la recherche.">
+                @foreach (\App\Models\ExternalDelegataire::KINDS as $kind => $label)
+                    <optgroup label="{{ $label }}">
+                        @foreach ($delegataires->where('kind', $kind) as $company)<option value="{{ $company->id }}" @selected(in_array($company->id, $selectedCompanies, true))>{{ $company->company_name ?: $company->name }}</option>@endforeach
+                    </optgroup>
+                @endforeach
             </select>
         </div>
         <div>

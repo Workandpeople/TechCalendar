@@ -98,12 +98,12 @@ final class DossierSpreadsheet
     private function values(Dossier $dossier, DossierTable $table): array
     {
         $modification = $table->modification($dossier);
+        $companies = $table->companies($dossier);
 
         return [$dossier->listing_lot, $dossier->created_at?->format('d/m/Y H:i'), $modification['date']?->format('d/m/Y H:i'),
             $modification['label'], $dossier->listingAppointment?->starts_at?->format('d/m/Y H:i'),
             $dossier->beneficiaryLabel(), $dossier->address, $dossier->postal_code, $dossier->city,
-            $dossier->client?->company_name ?: $dossier->client?->name ?: ($dossier->client_contact['company_name'] ?? $dossier->client_contact['name'] ?? ''),
-            $dossier->delegataire?->company_name ?: $dossier->delegataire?->name ?: ($dossier->delegataire_contact['company_name'] ?? $dossier->delegataire_contact['name'] ?? ''),
+            $companies['client'], $companies['delegataire'],
             $dossier->phone, $dossier->operations->map(fn ($op) => ($op->service?->name ?: $op->legacy_service_name).' : '.DossierStatusCatalog::describe($op->legacy_status)['label'])->implode("\n"),
             $dossier->listingAppointment?->technician?->full_name, $dossier->planningUser?->full_name, DossierBillingService::summary($dossier)['label'],
             DossierBillingService::firstMarkedAt($dossier)?->format('d/m/Y H:i')];

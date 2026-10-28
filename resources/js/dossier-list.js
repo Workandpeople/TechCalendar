@@ -2,8 +2,9 @@ import { initDossierAssignment } from './dossier-assignment.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
-const arrayFilterName = name => /^(service_ids|planning_user_ids)(?:\[\d*\])?$/.exec(name)?.[1];
+const filterNames = ['q', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const arrayFilterName = name => /^(service_ids|planning_user_ids|company_ids)(?:\[\d*\])?$/.exec(name)?.[1];
+const legacyArrayFilters = { service_ids: 'service_id', company_ids: 'delegataire_id' };
 
 function dossierArrayIds(entries, key, fallback) {
     const parameters = Array.from(entries);
@@ -16,12 +17,17 @@ export function dossierServiceIds(entries) {
     return dossierArrayIds(entries, 'service_ids', 'service_id');
 }
 
+export function dossierCompanyIds(entries) {
+    return dossierArrayIds(entries, 'company_ids', 'delegataire_id');
+}
+
 export function syncDossierFilters(form, url, browser) {
     for (const name of filterNames) {
         const input = form.elements.namedItem(name);
         if (!input) continue;
         if (input.multiple) {
-            const selected = new Set(name === 'service_ids[]' ? dossierServiceIds(url.searchParams) : dossierArrayIds(url.searchParams, 'planning_user_ids'));
+            const key = arrayFilterName(name);
+            const selected = new Set(dossierArrayIds(url.searchParams, key, legacyArrayFilters[key]));
             for (const option of input.options) option.selected = selected.has(option.value);
             input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
             continue;
@@ -39,7 +45,7 @@ export function dossierListUrl(base, entries, changes = {}) {
     url.hash = '';
     const multiple = new Map();
     const setMultiple = (key, values) => {
-        if (key === 'service_ids') url.searchParams.delete('service_id');
+        if (legacyArrayFilters[key]) url.searchParams.delete(legacyArrayFilters[key]);
         url.searchParams.delete(`${key}[]`);
         for (const value of [...new Set(values.map(value => String(value).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) url.searchParams.append(`${key}[]`, value);
     };
@@ -53,11 +59,14 @@ export function dossierListUrl(base, entries, changes = {}) {
         const key = arrayFilterName(name);
         if (key) { setMultiple(key, value === null || value === '' ? [] : Array.isArray(value) ? value : [value]); continue; }
         if (!filterNames.includes(name) && name !== 'page') continue;
-        if (name === 'service_id') url.searchParams.delete('service_ids[]');
+        const legacyKey = Object.keys(legacyArrayFilters).find(key => legacyArrayFilters[key] === name);
+        if (legacyKey) url.searchParams.delete(`${legacyKey}[]`);
         if (value === null || value === '') url.searchParams.delete(name);
         else url.searchParams.set(name, value);
     }
-    if (url.searchParams.has('service_id')) setMultiple('service_ids', [url.searchParams.get('service_id')]);
+    for (const [key, legacy] of Object.entries(legacyArrayFilters)) {
+        if (url.searchParams.has(legacy)) setMultiple(key, [url.searchParams.get(legacy)]);
+    }
     if (url.searchParams.get('status') !== 'visited') url.searchParams.delete('planning_user_ids[]');
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');

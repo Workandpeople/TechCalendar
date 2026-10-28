@@ -2469,3 +2469,40 @@ filtres multi-societes du lot retire restent exclus de cette livraison.
 Les tests de requetes et de confidentialite du serveur restent inchanges.
 Le deploiement cible seulement la revision de retour dd27c5ab ; ne pas rejouer
 les anciens paquets f55c17f5 ou leurs scripts de profils externes.
+
+### Reintroduction progressive : lot 2, societes et navigation
+
+Ce lot cible le lot 1 valide (410be80b) et conserve son attribution silencieuse
+et sa carte au clic. Il ne modifie pas les requetes des calendriers, les droits,
+les automatismes, les emails, les SMS, les index ou les services.
+
+Le filtre societes est multiple et recherchable, avec union client/delegataire
+puis intersection avec les autres filtres. Les liens historiques delegataire_id
+restent acceptes. Categories, pagination, historique de navigation et export
+conservent la selection. Les dossiers supprimes et les acces externes ne sont
+pas elargis par ce filtre.
+
+La validation d'existence se fait sur le tableau parent en une requete SQL,
+pas une par identifiant. La forme liste, le maximum de 250, les entiers positifs,
+les doublons et les identifiants inconnus restent controles. Des tests verifient
+ce budget pour 1, 25 et 187 societes, et l'absence de requete supplementaire
+lors de l'affichage des noms deja charges.
+
+La colonne Societe et les exports distinguent le client du delegataire, avec
+repli sur leurs coordonnees saisies manuellement. La prise de RDV affiche la
+societe cliente en premier. Le beneficiaire n'est jamais pris pour l'organisation
+cliente et aucune affectation n'est inferee depuis l'auteur ou l'email.
+
+L'oeil de toutes les demandes natives ouvre directement le dossier dans un
+nouvel onglet, premier placement comme replacement, sans declencher le clic
+de selection de la ligne. Les demandes historiques sans dossier natif gardent
+leur detail existant. Aucun import ni migration n'est requis.
+
+Validation locale : 2051 tests PHP, 281 tests JavaScript et build de production.
+Comparaison MySQL 8.0.46 sur donnees synthetiques (17624 dossiers, 19356 RDV,
+196151 activites) : 144 mesures sequentielles, 96 requetes avec quatre processus
+simultanes, aucune erreur. Les reponses JSON du calendrier restent identiques
+et la selection de 187 societes utilise une seule requete de validation.
+Ces mesures locales sous PHP CLI 8.5 ne garantissent pas les latences en
+production sous PHP 8.4 ; aucune cause certaine de la saturation precedente
+n'est deduite de ce test. Les changements de calendrier restent exclus.

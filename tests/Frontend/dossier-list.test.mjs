@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList, dossierCategoryScope, selectDossierCategory, setDossierLoadingState, dossierAssignmentAffectsListing, replaceDossierResults } from '../../resources/js/dossier-list.js';
+import { dossierListUrl, dossierServiceIds, dossierCompanyIds, syncDossierFilters, createDossierLoader, initDossierList, dossierCategoryScope, selectDossierCategory, setDossierLoadingState, dossierAssignmentAffectsListing, replaceDossierResults } from '../../resources/js/dossier-list.js';
 
 const base = 'https://example.test/v2/dossiers';
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -63,6 +63,38 @@ test('restores every selected service on history navigation and clears the visib
     syncDossierFilters(form, new URL(base), browser);
     assert.deepEqual(services.options.map(option => option.selected), [false, false, false]);
     assert.deepEqual(events, ['techcalendar:selection-sync', 'techcalendar:selection-sync', 'techcalendar:selection-sync']);
+});
+
+test('preserves multiple companies independently of services and accepts old single-company links', () => {
+    const entries = new URLSearchParams('company_ids[0]=12&company_ids[1]=15&service_ids[]=3&status=visited&delegataire_id=99');
+    const url = dossierListUrl(base, entries, { page: '2', sort: 'company' });
+    assert.deepEqual(url.searchParams.getAll('company_ids[]'), ['12', '15']);
+    assert.equal(url.searchParams.has('delegataire_id'), false);
+    assert.deepEqual(url.searchParams.getAll('service_ids[]'), ['3']);
+    assert.equal(url.searchParams.get('page'), '2');
+    assert.deepEqual(dossierCompanyIds(new URLSearchParams('delegataire_id=12')), ['12']);
+    assert.equal(dossierListUrl(base, new URLSearchParams('delegataire_id=12')).href,
+        dossierListUrl(base, new URLSearchParams('company_ids[]=12')).href);
+    const changed = dossierListUrl(base, url.searchParams, { status: 'report' });
+    assert.deepEqual(changed.searchParams.getAll('company_ids[]'), ['12', '15']);
+    const cleared = dossierListUrl(base, entries, { company_ids: [] });
+    assert.equal(cleared.searchParams.has('delegataire_id'), false);
+    assert.equal(cleared.searchParams.has('company_ids[]'), false);
+    assert.notEqual(dossierCategoryScope(url), dossierCategoryScope(cleared));
+});
+
+test('synchronizes multiple companies on back/forward navigation without affecting technical sheets', () => {
+    const events = [];
+    const companies = { multiple: true, options: ['12', '15', '18'].map(value => ({ value, selected: false })), dispatchEvent: event => events.push(event.type) };
+    const form = { elements: { namedItem: name => name === 'company_ids[]' ? companies : null } };
+    const browser = { CustomEvent: class { constructor(type) { this.type = type; } } };
+    syncDossierFilters(form, new URL(`${base}?company_ids[0]=12&company_ids[1]=18`), browser);
+    assert.deepEqual(companies.options.map(option => option.selected), [true, false, true]);
+    syncDossierFilters(form, new URL(`${base}?delegataire_id=15`), browser);
+    assert.deepEqual(companies.options.map(option => option.selected), [false, true, false]);
+    syncDossierFilters(form, new URL(base), browser);
+    assert.deepEqual(companies.options.map(option => option.selected), [false, false, false]);
+    assert.equal(events.length, 3);
 });
 
 test('keeps planning users independent of services through sorting pagination and export URLs in visited only', () => {
