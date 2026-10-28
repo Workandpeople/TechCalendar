@@ -128,3 +128,20 @@ test('rejects login html or incomplete success responses', async () => {
     ui.requests[0].resolve(response(200, { message: 'ok' })); await assertion;
     assert.equal(ui.timers.size, 0);
 });
+
+test('a stale read cannot undo a confirmed assignment or restore an old concurrency version', async () => {
+    const ui = fixture();
+    ui.select.value = '3';
+    const saving = ui.events.change({ target: ui.select });
+    ui.requests[0].resolve(response()); await saving;
+    ui.replace(); // Simulates a response started before the write committed.
+    assert.equal(ui.select.value, '3');
+    assert.equal(ui.cell.dataset.version, '2');
+    ui.cell.dataset.version = '3';
+    ui.cell.dataset.assignedId = '4';
+    ui.select.value = '4';
+    ui.rootEvents['techcalendar:dossiers-updated']();
+    assert.equal(ui.select.value, '4');
+    assert.equal(ui.cell.dataset.version, '3');
+    assert.equal(ui.feedback.textContent, '');
+});

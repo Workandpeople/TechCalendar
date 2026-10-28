@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList, dossierCategoryScope, selectDossierCategory, setDossierLoadingState } from '../../resources/js/dossier-list.js';
+import { dossierListUrl, dossierServiceIds, syncDossierFilters, createDossierLoader, initDossierList, dossierCategoryScope, selectDossierCategory, setDossierLoadingState, dossierAssignmentAffectsListing, replaceDossierResults } from '../../resources/js/dossier-list.js';
 
 const base = 'https://example.test/v2/dossiers';
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -305,4 +305,63 @@ test('passes the requested category to the immediate pending state and ignores a
     assert.equal(ui.events.some(event => event[0] === 'success'), false);
     ui.requests[1].resolve(response()); await settle();
     assert.equal(ui.events.at(-1)[2].href, latest.href);
+});
+
+test('keeps quiet refreshes visible and reserves skeletons for explicit navigation', () => {
+    const results = { hidden: false, setAttribute() {}, getBoundingClientRect() { throw new Error('No skeleton measurement'); } };
+    const skeleton = { hidden: true, style: {} };
+    setDossierLoadingState(results, skeleton, null, true, true);
+    assert.equal(skeleton.hidden, true);
+    assert.equal(results.hidden, false);
+    setDossierLoadingState(results, skeleton, null, false, true);
+    assert.equal(results.hidden, false);
+});
+
+test('requires a listing read only for assignment-dependent filters or sorting', () => {
+    for (const params of ['status=visited', 'status=visited&page=3&sort=modified_at', 'status=visited&q=Paris&planning=unlinked']) {
+        assert.equal(dossierAssignmentAffectsListing(new URL(`${base}?${params}`)), false);
+    }
+    for (const params of ['status=visited&sort=planning_user', 'status=visited&planning_user_ids[]=12', 'status=visited&planning_user_ids[0]=12']) {
+        assert.equal(dossierAssignmentAffectsListing(new URL(`${base}?${params}`)), true);
+    }
+});
+
+test('refreshes quietly on the same page but never hides pending navigation behind a write refresh', async () => {
+    const ui = fixture(), current = new URL(`${base}?status=visited&page=3`);
+    ui.loader.refresh(current, { quiet: true });
+    assert.equal(ui.events[0][2].quiet, true);
+    assert.equal(ui.events[0][2].scroll, false);
+    assert.equal(ui.loader.isLoading, true);
+    ui.requests[0].resolve(response()); await settle();
+    assert.equal(ui.loader.isLoading, false);
+    ui.loader.load(new URL(`${base}?status=report`), { delay: 300 });
+    ui.loader.refresh(current, { quiet: true });
+    assert.equal(ui.events.at(-1)[2].quiet, false);
+    assert.equal(ui.requests[1].url, `${base}?status=report`);
+    ui.requests[1].resolve(response()); await settle();
+    assert.equal(ui.loader.isLoading, false);
+});
+
+test('quiet replacements preserve height, focus and both page and table scroll positions', () => {
+    const assignment = { dataset: { assignmentId: '7' } };
+    const focused = { closest: selector => selector === '[data-planning-assignment]' ? assignment : null };
+    const focusCalls = [], scrollCalls = [];
+    const target = { focus: options => focusCalls.push(options) };
+    const table = { scrollLeft: 420 };
+    const ancestor = { scrollLeft: 2, scrollTop: 640, parentElement: null };
+    const results = { parentElement: ancestor, contains: node => node === focused, style: {},
+        getBoundingClientRect: () => ({ height: 720.1 }), querySelector: selector => selector === '.gc-dossier-table-scroll' ? table : target,
+        set innerHTML(value) { this.html = value; ancestor.scrollTop = 0; table.scrollLeft = 0; } };
+    replaceDossierResults(results, '<table>new</table>', { activeElement: focused }, {
+        scrollX: 0, scrollY: 500, CSS: { escape: value => value }, scrollTo: position => scrollCalls.push(position),
+    }, true);
+    assert.equal(results.style.minHeight, '721px');
+    assert.equal(results.html, '<table>new</table>');
+    assert.equal(table.scrollLeft, 420);
+    assert.equal(ancestor.scrollTop, 640);
+    assert.equal(ancestor.scrollLeft, 2);
+    assert.deepEqual(focusCalls, [{ preventScroll: true }]);
+    assert.deepEqual(scrollCalls, [{ left: 0, top: 500, behavior: 'instant' }]);
+    replaceDossierResults(results, '<table>other page</table>', {}, {}, false);
+    assert.equal(results.style.minHeight, '');
 });

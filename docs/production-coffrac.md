@@ -2444,3 +2444,28 @@ contournes. Un placement force est trace dans l'historique interne avec acteur,
 technicien precedent, rendez-vous en chevauchement et absences constatees.
 La liste des dossiers est rechargee en AJAX apres reaffectation, sans changer
 ses filtres ou sa page de pagination. Aucun nouvel import ou migration requis.
+
+### Reintroduction progressive : lot 1, interface uniquement
+
+Apres le retour applicatif dd27c5ab, ce premier lot ne modifie que l'interface
+de la liste des dossiers. Aucune requete serveur, regle de droits, migration,
+dependance ou configuration de service n'est changee.
+
+L'attribution du suivi planning met a jour la cellule et sa version a partir
+de la reponse PATCH. Aucun GET de liste n'est ajoute dans le cas courant.
+Un filtre ou tri dependant du responsable necessite encore une lecture AJAX,
+mais sans squelette ni masquage du tableau ; focus et positions de defilement
+sont conserves. Une lecture anterieure ne peut pas ecraser une attribution
+confirmee plus recente. Un echec incertain ne rejoue jamais automatiquement
+l'ecriture : une verification explicite est requise.
+
+La carte d'adresse s'ouvre uniquement au clic ou a l'activation clavier du
+bouton, jamais au simple survol ou focus. La vue initiale montre la France
+metropolitaine et la Corse ; un site hors de cette emprise l'etend. Une seule
+carte est reutilisee et les coordonnees deja chargees restent en cache local.
+
+Les changements de calendrier, les commentaires dans tous les etats et les
+filtres multi-societes du lot retire restent exclus de cette livraison.
+Les tests de requetes et de confidentialite du serveur restent inchanges.
+Le deploiement cible seulement la revision de retour dd27c5ab ; ne pas rejouer
+les anciens paquets f55c17f5 ou leurs scripts de profils externes.
