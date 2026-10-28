@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\CofracLabel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -27,7 +28,7 @@ class MailTemplate extends Model
 
     protected function casts(): array
     {
-        return [
+        return ['name' => CofracLabel::class, 'subject' => CofracLabel::class, 'markdown_body' => CofracLabel::class,
             'is_active' => 'boolean',
             'deleted_at' => 'datetime',
         ];

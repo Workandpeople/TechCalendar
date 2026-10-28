@@ -49,7 +49,7 @@ final class NativeCommunicationTemplates
                 continue;
             }
             $mapping[$row['id']] = DB::table('mail_templates')->insertGetId([
-                'name' => 'Coffrac #'.$row['id'].' - '.mb_substr(trim($subject), 0, 150),
+                'name' => 'Cofrac #'.$row['id'].' - '.mb_substr(trim($subject), 0, 150),
                 'slug' => 'coffrac-mail-'.$row['id'], 'subject' => $nativeSubject,
                 'markdown_body' => $markdown, 'is_active' => false, 'mail_sender_id' => null,
                 'created_at' => $this->timestamp($row['created_at'] ?? null), 'updated_at' => $this->timestamp($row['updated_at'] ?? null),

@@ -24,7 +24,7 @@
                     <select id="type" name="type" class="gc-input">
                         <option value="">Tous</option>
                         @foreach ($types as $type)
-                            <option value="{{ $type }}" @selected($filters['type'] === $type)>{{ $type }}</option>
+                            <option value="{{ $type }}" @selected($filters['type'] === $type)>{{ \App\Support\CofracText::normalize($type) }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -46,14 +46,14 @@
                             <th class="px-4 py-3 font-semibold">Type</th>
                             <th class="px-4 py-3 font-semibold">Nom de la prestation</th>
                             <th class="px-4 py-3 font-semibold">Temps moyen</th>
-                            @unless(config('crm.v2_enabled'))<th class="px-4 py-3 font-semibold">Alias Coffrac</th>@endunless
+                            @unless(config('crm.v2_enabled'))<th class="px-4 py-3 font-semibold">Alias Cofrac</th>@endunless
                             <th class="px-4 py-3 font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($services as $service)
                             <tr class="border-b last:border-b-0" style="border-color:var(--gc-border);">
-                                <td class="px-4 py-3">{{ $service->type }}</td>
+                                <td class="px-4 py-3">{{ $service->display_type }}</td>
                                 <td class="px-4 py-3">{{ $service->name }}</td>
                                 <td class="px-4 py-3">{{ $service->average_duration_minutes }} min</td>
 @unless(config('crm.v2_enabled'))

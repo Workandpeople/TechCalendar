@@ -10,7 +10,7 @@ class SeedPortalDemo extends Command
 {
     protected $signature = 'demo:seed-portals
         {--apply : Creer les deux comptes et leurs donnees fictives sans modifier l\'existant}
-        {--service= : Identifiant d\'une prestation COFFRAC active (premiere du catalogue par defaut)}';
+        {--service= : Identifiant d\'une prestation COFRAC active (premiere du catalogue par defaut)}';
 
     protected $description = 'Prepare deux espaces externes fictifs, uniquement dans une base de simulation V2.';
 

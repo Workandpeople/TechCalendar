@@ -3,15 +3,15 @@
         $bookingConnectorsEnabled = $bookingConnectorsEnabled ?? ! config('crm.v2_enabled');
         $coffracApiStatus = $coffracApiStatus ?? [
             'state' => 'unavailable',
-            'label' => 'API Coffrac indisponible',
-            'detail' => 'Statut API Coffrac inconnu.',
+            'label' => 'API Cofrac indisponible',
+            'detail' => 'Statut API Cofrac inconnu.',
             'count' => $crmAppointments->count(),
         ];
         $externalAppointmentSources = $externalAppointmentSources ?? [
             [
                 'key' => 'coffrac',
-                'label' => 'Coffrac',
-                'refresh_label' => 'Actualiser Coffrac',
+                'label' => 'Cofrac',
+                'refresh_label' => 'Actualiser Cofrac',
                 'enabled' => true,
                 'status' => $coffracApiStatus,
             ],
@@ -424,7 +424,7 @@
                     @foreach ($crmAppointments as $appointment)
                         @php
                             $companyName = trim((string) ($appointment['company_name'] ?? ''));
-                            $serviceDisplayType = trim((string) ($appointment['service']['type'] ?? $appointment['service_type'] ?? ''));
+                            $serviceDisplayType = \App\Support\CofracText::normalize(trim((string) ($appointment['service']['type'] ?? $appointment['service_type'] ?? '')));
                             $serviceDisplayName = trim((string) ($appointment['service']['name'] ?? $appointment['service_display_name'] ?? $appointment['service_name'] ?? ''));
                             $serviceBadgeLabel = trim(implode(' - ', array_filter([$serviceDisplayType, $serviceDisplayName])));
                             $postalCode = trim((string) ($appointment['postal_code'] ?? ''));
@@ -805,7 +805,7 @@
                                                         <p class="lot-processing-help lot-processing-physical-help {{ $defaultProcessingMode === 'physical' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:#be123c;">Adresse/GPS ou prestation incomplet: corrige le dossier avant placement sur place.</p>
                                                     @endunless
                                                     @if ($canContact)
-                                                        <p class="lot-processing-help lot-processing-contact-help {{ $defaultProcessingMode === 'contact' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:var(--gc-text-soft);">Téléphonique : commentaire et résultat uniquement, sans création Coffrac.</p>
+                                                        <p class="lot-processing-help lot-processing-contact-help {{ $defaultProcessingMode === 'contact' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:var(--gc-text-soft);">Téléphonique : commentaire et résultat uniquement, sans création Cofrac.</p>
                                                     @endif
                                                 </div>
 
@@ -864,7 +864,7 @@
                         <option value="">Sélectionner</option>
                         @foreach ($services as $service)
                             <option value="{{ $service->id }}">
-                                {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                {{ $service->display_type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
                             </option>
                         @endforeach
                     </select>
@@ -990,7 +990,7 @@
                                 <select id="booking_crm_detail_service_id" class="gc-input">
                                     <option value="">Prestation non renseignée</option>
                                     @foreach ($services as $service)
-                                        <option value="{{ $service->id }}">{{ $service->type }} - {{ $service->name }}</option>
+                                        <option value="{{ $service->id }}">{{ $service->display_type }} - {{ $service->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -1001,7 +1001,7 @@
                                     <button id="booking-crm-detail-save" type="submit" class="gc-btn-primary">Enregistrer</button>
                                     <span class="gc-help-tooltip">
                                         <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement de l’adresse">?</button>
-                                        <span class="gc-help-tooltip-content" role="tooltip">{{ $bookingConnectorsEnabled ? 'Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Coffrac quand le RDV vient de Coffrac.' : 'Enregistre l’adresse dans le dossier et recalcule sa position avec Mapbox pour préparer le placement.' }}</span>
+                                        <span class="gc-help-tooltip-content" role="tooltip">{{ $bookingConnectorsEnabled ? 'Sauvegarde l’adresse corrigée, relance le géocodage Mapbox, met à jour le point GPS et pousse la correction côté Cofrac quand le RDV vient de Cofrac.' : 'Enregistre l’adresse dans le dossier et recalcule sa position avec Mapbox pour préparer le placement.' }}</span>
                                     </span>
                                 </div>
                             </div>
@@ -1124,14 +1124,14 @@
                                         <option value="">Sélectionner une prestation</option>
                                         @foreach ($services as $service)
                                             <option value="{{ $service->id }}" data-duration="{{ $service->average_duration_minutes }}">
-                                                {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                                {{ $service->display_type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
                                             </option>
                                         @endforeach
                                     </select>
                                 </dd>
                             </div>
                             <div id="booking_detail_lot_alias_select_wrap" class="hidden">
-                                <dt style="color:var(--gc-text-soft);">Alias Coffrac</dt>
+                                <dt style="color:var(--gc-text-soft);">Alias Cofrac</dt>
                                 <dd class="mt-2">
                                     <select id="booking_detail_lot_alias_select" class="gc-input"></select>
                                     <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Override uniquement pour ce RDV, sans modifier l’alias global du lot.</p>
@@ -1998,7 +1998,7 @@
         const renderBookingCrmCard = (appointment) => {
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim();
             const companyName = (appointment.company_name || '').trim();
-            const serviceDisplayType = (appointment.service?.type || appointment.service_type || '').trim();
+            const serviceDisplayType = window.TechCalendarLabels.cofrac(appointment.service?.type || appointment.service_type || '').trim();
             const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
             const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ');
             const postalCode = String(appointment.postal_code ?? '').trim();
@@ -2088,7 +2088,7 @@
             const isSyncing = state === 'syncing';
 
             if (labelElement) {
-                labelElement.textContent = isSyncing ? 'Synchronisation Coffrac' : label;
+                labelElement.textContent = isSyncing ? 'Synchronisation Cofrac' : label;
             }
 
             if (progressLabel) {
@@ -2112,7 +2112,7 @@
                 pieces.push(`${progress}%`);
             }
 
-            pieces.push(apiStatus.stage || apiStatus.detail || apiStatus.label || 'Statut Coffrac inconnu.');
+            pieces.push(apiStatus.stage || apiStatus.detail || apiStatus.label || 'Statut Cofrac inconnu.');
 
             if (Number.isFinite(Number(apiStatus.count))) {
                 const totalCount = Number(apiStatus.count);
@@ -2191,12 +2191,12 @@
             bookingCrmRefreshButton.disabled = true;
             setBookingExternalSourceStatus('coffrac', {
                 state: 'syncing',
-                label: 'Synchronisation Coffrac en cours',
-                detail: 'Synchronisation Coffrac lancée...',
+                label: 'Synchronisation Cofrac en cours',
+                detail: 'Synchronisation Cofrac lancée...',
                 progress: 3,
-                stage: 'Synchronisation Coffrac lancée...',
+                stage: 'Synchronisation Cofrac lancée...',
             });
-            setBookingCrmRefreshStatus('Lancement de la synchronisation Coffrac...');
+            setBookingCrmRefreshStatus('Lancement de la synchronisation Cofrac...');
             startExternalSyncPolling();
 
             try {
@@ -2211,7 +2211,7 @@
                 const payload = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(payload.message || 'Actualisation Coffrac impossible.');
+                    throw new Error(payload.message || 'Actualisation Cofrac impossible.');
                 }
 
                 if (!payload.sync_queued || (payload.appointments || []).length > 0) {
@@ -2219,9 +2219,9 @@
                 } else {
                     setBookingExternalSourceStatus('coffrac', payload.coffrac_api_status || null);
                 }
-                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || payload.message || `${(payload.appointments || []).length} RDV Coffrac disponibles en local.`);
+                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || payload.message || `${(payload.appointments || []).length} RDV Cofrac disponibles en local.`);
             } catch (error) {
-                setBookingCrmRefreshStatus(error.message || 'Actualisation Coffrac impossible.', 'error');
+                setBookingCrmRefreshStatus(error.message || 'Actualisation Cofrac impossible.', 'error');
             } finally {
                 bookingCrmRefreshButton.disabled = false;
             }
@@ -2237,7 +2237,7 @@
             const payload = await response.json();
 
             if (!response.ok) {
-                throw new Error(payload.message || 'Rechargement des RDV Coffrac impossible.');
+                throw new Error(payload.message || 'Rechargement des RDV Cofrac impossible.');
             }
 
             renderBookingCrmAppointments(payload.appointments || [], payload.coffrac_api_status || null, {
@@ -2245,7 +2245,7 @@
             });
 
             if (!options.quiet) {
-                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || 'RDV Coffrac rechargés depuis la base locale.');
+                setBookingCrmRefreshStatus(bookingExternalStatusMessage(payload.coffrac_api_status) || 'RDV Cofrac rechargés depuis la base locale.');
             }
 
             return payload;
@@ -2279,7 +2279,7 @@
                         setBookingCrmRefreshStatus('La synchronisation est toujours en attente de démarrage. Vérifie que le worker de queue tourne bien.', 'error');
                     }
                 } catch (error) {
-                    setBookingCrmRefreshStatus(error.message || 'Impossible de relire le statut Coffrac.', 'error');
+                    setBookingCrmRefreshStatus(error.message || 'Impossible de relire le statut Cofrac.', 'error');
                 }
             }, 2500);
         };
@@ -2290,7 +2290,7 @@
                 try {
                     await loadBookingCrmAppointmentsFromLocal();
                 } catch (error) {
-                    setBookingCrmRefreshStatus(error.message || 'Rechargement des RDV Coffrac impossible.', 'error');
+                    setBookingCrmRefreshStatus(error.message || 'Rechargement des RDV Cofrac impossible.', 'error');
                 }
             }, 500);
         };
@@ -2302,8 +2302,8 @@
                 ? 'available'
                 : (payload.state === 'syncing' ? 'syncing' : 'unavailable');
             const label = state === 'available'
-                ? 'API Coffrac disponible'
-                : (state === 'syncing' ? 'Synchronisation Coffrac en cours' : 'API Coffrac indisponible');
+                ? 'API Cofrac disponible'
+                : (state === 'syncing' ? 'Synchronisation Cofrac en cours' : 'API Cofrac indisponible');
 
             setBookingExternalSourceStatus('coffrac', {
                 state,
@@ -3040,7 +3040,7 @@
 
                 if (!text) return;
 
-                const author = comment?.author_name || 'Coffrac';
+                const author = comment?.author_name || 'Cofrac';
                 const createdAt = formatExternalCommentDate(comment?.created_at);
 
                 items.push({
@@ -3145,7 +3145,7 @@
             }
 
             list.innerHTML = safeComments.map((comment) => {
-                const authorName = comment.author_name || 'Coffrac';
+                const authorName = comment.author_name || 'Cofrac';
                 const createdAt = formatExternalCommentDate(comment.created_at);
                 const text = comment.text || comment.comment || comment.body || '';
                 const privateBadge = comment.is_private
@@ -3340,7 +3340,7 @@
             currentCrmDetailAppointmentId = appointment.id;
             const customerName = `${appointment.last_name || ''} ${appointment.first_name || ''}`.trim() || 'Client';
             const companyName = (appointment.company_name || '').trim();
-            const serviceDisplayType = (appointment.service?.type || appointment.service_type || '').trim();
+            const serviceDisplayType = window.TechCalendarLabels.cofrac(appointment.service?.type || appointment.service_type || '').trim();
             const serviceDisplayName = (appointment.service?.name || appointment.service_display_name || appointment.service_name || '').trim();
             const serviceLabel = [serviceDisplayType, serviceDisplayName].filter(Boolean).join(' - ') || 'Prestation non renseignée';
             const addressParts = [
@@ -3668,7 +3668,7 @@
         const serviceById = (serviceId) => bookingServices.find((service) => String(service.id) === String(serviceId));
 
         const serviceLabel = (service) => service
-            ? `${service.type} - ${service.name}`
+            ? `${window.TechCalendarLabels.cofrac(service.type)} - ${service.name}`
             : 'Prestation non renseignée';
 
         const coffracAliasesForServiceId = (serviceId) => {
@@ -3698,7 +3698,7 @@
             select.innerHTML = '';
 
             if (!aliases.length) {
-                select.add(new Option('Aucun alias Coffrac disponible', ''));
+                select.add(new Option('Aucun alias Cofrac disponible', ''));
                 select.disabled = true;
                 return;
             }
@@ -3923,7 +3923,7 @@
         };
 
         const serviceLabelForRequest = () => currentAppointmentRequest?.service
-            ? `${currentAppointmentRequest.service.type} - ${currentAppointmentRequest.service.name}`
+            ? `${window.TechCalendarLabels.cofrac(currentAppointmentRequest.service.type)} - ${currentAppointmentRequest.service.name}`
             : 'Prestation non renseignée';
 
         const draftPropsForTechnician = (technician, startsAt) => {
@@ -4017,7 +4017,7 @@
 
         const openCalendarSlotModal = (info) => {
             if (!currentAppointmentRequest) {
-                showFeedback('Lance d’abord une recherche Coffrac ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
+                showFeedback('Lance d’abord une recherche Cofrac ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
                 return;
             }
 
@@ -4113,13 +4113,13 @@
 
             if (isCoffrac && bookingConnectorsEnabled) {
                 return {
-                    badge: 'Coffrac',
+                    badge: 'Cofrac',
                     className: 'gc-status-pill gc-status-pill-success shrink-0',
-                    origin: 'Coffrac',
+                    origin: 'Cofrac',
                     reference: props.external_reference || props.crm_appointment_id || '-',
                     summary: isSuggestion
-                        ? 'Demande Coffrac à placer. La validation doit mettre à jour le dossier côté Coffrac.'
-                        : 'RDV Coffrac déjà placé, avec synchronisation possible des documents et commentaires.',
+                        ? 'Demande Cofrac à placer. La validation doit mettre à jour le dossier côté Cofrac.'
+                        : 'RDV Cofrac déjà placé, avec synchronisation possible des documents et commentaires.',
                     globalPlus: 'Non concerné',
                 };
             }
@@ -5288,7 +5288,7 @@
                 return;
             }
 
-            showDetailStatus('Choisis une prestation avant de valider ce RDV Coffrac.', 'error');
+            showDetailStatus('Choisis une prestation avant de valider ce RDV Cofrac.', 'error');
         };
 
         const openBookingAppointmentModal = async (event) => {
@@ -5479,7 +5479,7 @@
             const activeTechnicians = selectedTechnicians();
             document.getElementById('analysis-title').textContent = `${activeTechnicians.length}/${technicians.length} technicien(s) affiche(s)`;
             const serviceLabel = crmAppointment.service
-                ? `${crmAppointment.service.type} - ${crmAppointment.service.name}`
+                ? `${window.TechCalendarLabels.cofrac(crmAppointment.service.type)} - ${crmAppointment.service.name}`
                 : null;
             const availabilityLabel = filters.preferred_starts_at
                 ? ` Creneau client: ${new Date(filters.preferred_starts_at).toLocaleString('fr-FR')}.`
@@ -5847,7 +5847,7 @@
                 return false;
             }
 
-            return analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Coffrac' : 'Dossier à placer');
+            return analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Cofrac' : 'Dossier à placer');
         };
         const lotProcessingSelectFor = (lotAppointmentId) => document.querySelector(`.lot-processing-mode-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
@@ -5984,7 +5984,7 @@
             }
 
             if (!currentAnalysisPayload) {
-                setTechnicianSearchStatus('Lance d’abord une analyse Coffrac ou manuelle.', 'error');
+                setTechnicianSearchStatus('Lance d’abord une analyse Cofrac ou manuelle.', 'error');
                 return;
             }
 
@@ -6699,7 +6699,7 @@
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
-                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                    throw new Error(firstError || payload.message || 'Mise à jour Cofrac impossible.');
                 }
 
                 renderBookingCrmAppointments(payload.appointments || bookingCrmAppointments, payload.coffrac_api_status || null);
@@ -6708,7 +6708,7 @@
                 renderCrmDetailDocuments(payload.appointment?.documents || []);
                 setBookingCrmDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
             } catch (error) {
-                setBookingCrmDetailDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', 'error');
+                setBookingCrmDetailDocumentsStatus(error.message || 'Mise à jour Cofrac impossible.', 'error');
             } finally {
                 bookingCrmDetailRefreshDocuments.disabled = false;
                 bookingCrmDetailRefreshDocuments.textContent = 'Mettre à jour';
@@ -6722,7 +6722,7 @@
 
             bookingDetailRefreshDocuments.disabled = true;
             bookingDetailRefreshDocuments.textContent = 'Mise à jour...';
-            setBookingDetailDocumentsStatus('Vérification du dossier Coffrac en cours...');
+            setBookingDetailDocumentsStatus('Vérification du dossier Cofrac en cours...');
 
             try {
                 const response = await fetch(bookingAppointmentRefreshUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
@@ -6737,7 +6737,7 @@
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
-                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                    throw new Error(firstError || payload.message || 'Mise à jour Cofrac impossible.');
                 }
 
                 const documents = payload.documents || [];
@@ -6748,7 +6748,7 @@
                 renderBookingDetailDocuments(documents);
                 setBookingDetailDocumentsStatus(payload.message || 'Documents mis à jour.', 'success');
             } catch (error) {
-                setBookingDetailDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', 'error');
+                setBookingDetailDocumentsStatus(error.message || 'Mise à jour Cofrac impossible.', 'error');
             } finally {
                 bookingDetailRefreshDocuments.disabled = false;
                 bookingDetailRefreshDocuments.textContent = 'Mettre à jour';
@@ -6861,7 +6861,7 @@
                     }
 
                     closeBookingAppointmentModal();
-                    showFeedback(payload.message || 'Problème RDV déclaré dans Coffrac.');
+                    showFeedback(payload.message || 'Problème RDV déclaré dans Cofrac.');
                     return;
                 }
 
@@ -6934,7 +6934,7 @@
 
             if (!serviceSelectWrap.classList.contains('hidden')) {
                 if (!serviceSelect.value) {
-                    showDetailStatus('Choisis une prestation avant de valider ce RDV Coffrac.', 'error');
+                    showDetailStatus('Choisis une prestation avant de valider ce RDV Cofrac.', 'error');
                     serviceSelect.focus();
                     return;
                 }

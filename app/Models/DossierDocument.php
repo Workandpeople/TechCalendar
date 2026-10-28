@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\CofracLabel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -16,7 +17,7 @@ class DossierDocument extends Model
 
     protected function casts(): array
     {
-        return ['client_visible' => 'boolean', 'delegataire_visible' => 'boolean', 'inspected_on' => 'date', 'issued_on' => 'date'];
+        return ['name' => CofracLabel::class, 'description' => CofracLabel::class, 'client_visible' => 'boolean', 'delegataire_visible' => 'boolean', 'inspected_on' => 'date', 'issued_on' => 'date'];
     }
 
     public function author(): BelongsTo

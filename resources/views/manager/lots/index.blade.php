@@ -350,18 +350,18 @@
                                     <option value="">Sélectionner</option>
                                     @foreach ($services as $service)
                                         <option value="{{ $service->id }}">
-                                            {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                            {{ $service->display_type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
                                         </option>
                                     @endforeach
                                 </select>
                             </div>
                             @unless(config('crm.v2_enabled'))
 <div>
-                                <label class="gc-label" for="lot_action_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                                <label class="gc-label" for="lot_action_coffrac_service_alias_id">Alias Cofrac du lot</label>
                                 <select id="lot_action_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                     <option value="">Sélectionner une prestation</option>
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac lors d’un RDV physique issu de ce lot.</p>
+                                <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Cofrac lors d’un RDV physique issu de ce lot.</p>
                             </div>
 @endunless
                             <div>
@@ -548,7 +548,7 @@
                                 @endforeach
                             </select>
                             @if ($delegataires->isEmpty())
-                                <p class="mt-1 text-xs" style="color:#9f1239;">{{ config('crm.v2_enabled') ? 'Aucun client actif. Ajoutez un client dans Clients et délégataires avant de créer le lot.' : 'Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Coffrac.' }}</p>
+                                <p class="mt-1 text-xs" style="color:#9f1239;">{{ config('crm.v2_enabled') ? 'Aucun client actif. Ajoutez un client dans Clients et délégataires avant de créer le lot.' : 'Aucun délégataire actif synchronisé. Va dans Gestion des délégataires puis récupère les données Cofrac.' }}</p>
                             @endif
                         </div>
                         <div>
@@ -566,18 +566,18 @@
                                 <option value="">Sélectionner</option>
                                 @foreach ($services as $service)
                                     <option value="{{ $service->id }}" @selected((string) old('service_id') === (string) $service->id)>
-                                        {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                        {{ $service->display_type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
                                     </option>
                                 @endforeach
                             </select>
                         </div>
                         @unless(config('crm.v2_enabled'))
 <div>
-                            <label class="gc-label" for="lot_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                            <label class="gc-label" for="lot_coffrac_service_alias_id">Alias Cofrac du lot</label>
                             <select id="lot_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                 <option value="">Sélectionner une prestation</option>
                             </select>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne l’intitulé exact attendu par Coffrac pour ce lot.</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Sélectionne l’intitulé exact attendu par Cofrac pour ce lot.</p>
                         </div>
 @endunless
                         <div id="lot-single-sampling-wrap">
@@ -962,7 +962,7 @@
             }
 
             if (!aliases.length) {
-                select.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
+                select.add(new Option('Aucun alias Cofrac pour cette prestation', ''));
                 select.disabled = true;
                 return;
             }
@@ -1020,7 +1020,7 @@
             lotActionDeleteSubmit.disabled = tracedCount > 0 && !canForceDeleteStartedLots;
             lotActionDeleteNote.textContent = tracedCount > 0
                 ? (canForceDeleteStartedLots
-                    ? `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression locale autorisée pour admin, sans modification Coffrac.`
+                    ? `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression locale autorisée pour admin, sans modification Cofrac.`
                     : `${placedCount} RDV placé(s) et ${contactProcessedCount} contact(s) traité(s) sur ${appointmentsCount}. Suppression bloquée pour conserver la traçabilité.`)
                 : `${appointmentsCount} RDV non placé(s) seront supprimés avec ce lot.`;
 

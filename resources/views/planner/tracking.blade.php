@@ -2,7 +2,7 @@
     @php
         $coffracSyncStatus = $coffracSyncStatus ?? [
             'state' => 'unavailable',
-            'label' => 'Statut Coffrac indisponible',
+            'label' => 'Statut Cofrac indisponible',
             'detail' => '',
             'progress' => 100,
             'stage' => '',
@@ -83,14 +83,14 @@
                             aria-hidden="true"
                         ></span>
                         <span data-tracking-coffrac-refresh-label>
-                            {{ $coffracSyncIsRunning ? 'Synchronisation en cours...' : 'Récupérer les RDV Coffrac placés' }}
+                            {{ $coffracSyncIsRunning ? 'Synchronisation en cours...' : 'Récupérer les RDV Cofrac placés' }}
                         </span>
                     </button>
                     <span
                         id="tracking-coffrac-placed-refresh-status"
                         class="{{ $coffracSyncIsRunning ? '' : 'hidden' }} text-sm"
                         style="color:var(--gc-text-soft);"
-                    >{{ $coffracSyncIsRunning ? ($coffracSyncStatus['stage'] ?? 'Synchronisation Coffrac en cours...') : '' }}</span>
+                    >{{ $coffracSyncIsRunning ? ($coffracSyncStatus['stage'] ?? 'Synchronisation Cofrac en cours...') : '' }}</span>
                 </div>
                 @endunless
             </div>
@@ -104,7 +104,7 @@
                         <select id="tracking_service_filter" class="gc-input">
                             <option value="">Toutes les prestations</option>
                             @foreach ($services as $service)
-                                <option value="{{ $service->id }}">{{ $service->type }} - {{ $service->name }}</option>
+                                <option value="{{ $service->id }}">{{ $service->display_type }} - {{ $service->name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -360,7 +360,7 @@
                                     <button id="tracking-save-details-btn" type="submit" class="gc-btn-primary">Enregistrer</button>
                                     <span class="gc-help-tooltip">
                                         <button type="button" class="gc-help-tooltip-button" aria-label="Aide sur l’enregistrement du RDV">?</button>
-                                        <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Coffrac quand le RDV vient de Coffrac.</span>
+                                        <span class="gc-help-tooltip-content" role="tooltip">Sauvegarde les modifications du RDV. Si l’adresse change, les coordonnées Mapbox sélectionnées sont utilisées et la correction est envoyée côté Cofrac quand le RDV vient de Cofrac.</span>
                                     </span>
                                 </div>
                             </div>
@@ -605,17 +605,17 @@
                 return {
                     badge: props.dossier_url ? 'Dossier local' : 'Historique',
                     className: 'gc-status-pill gc-status-pill-neutral shrink-0',
-                    origin: ['coffrac', 'coffrac_archive'].includes(source) ? 'Historique Coffrac repris' : 'TechCalendar',
-                    summary: 'Gestion native dans TechCalendar. Aucun échange avec l’ancien CRM Coffrac.',
+                    origin: ['coffrac', 'coffrac_archive'].includes(source) ? 'Historique Cofrac repris' : 'TechCalendar',
+                    summary: 'Gestion native dans TechCalendar. Aucun échange avec l’ancien CRM Cofrac.',
                 };
             }
 
             if (source === 'coffrac') {
                 return {
-                    badge: 'Coffrac',
+                    badge: 'Cofrac',
                     className: 'gc-status-pill gc-status-pill-success shrink-0',
-                    origin: 'Coffrac',
-                    summary: 'Les documents, commentaires et changements importants peuvent être resynchronisés avec Coffrac.',
+                    origin: 'Cofrac',
+                    summary: 'Les documents, commentaires et changements importants peuvent être resynchronisés avec Cofrac.',
                 };
             }
 
@@ -767,12 +767,12 @@
             count.textContent = `${safeComments.length} commentaire(s)`;
 
             if (safeComments.length === 0) {
-                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire existant récupéré depuis Coffrac.</p>';
+                list.innerHTML = '<p class="text-sm" style="color:var(--gc-text-soft);">Aucun commentaire existant récupéré depuis Cofrac.</p>';
                 return;
             }
 
             list.innerHTML = safeComments.map((comment) => {
-                const authorName = comment.author_name || 'Coffrac';
+                const authorName = comment.author_name || 'Cofrac';
                 const createdAt = trackingFormatExternalCommentDate(comment.created_at);
                 const text = comment.text || comment.comment || comment.body || '';
                 const privateBadge = comment.is_private
@@ -851,7 +851,7 @@
             ensureTrackingAppointmentTooltip().move(event);
         };
 
-        const trackingAppointmentServiceType = (props) => (
+        const trackingAppointmentServiceType = (props) => window.TechCalendarLabels.cofrac(
             props.service_type
             || String(props.service_label || 'RDV').split(' - ')[0]
             || 'RDV'
@@ -1024,7 +1024,7 @@
             if (trackingCoffracPlacedRefreshLabel) {
                 trackingCoffracPlacedRefreshLabel.textContent = isSyncing
                     ? 'Synchronisation en cours...'
-                    : 'Récupérer les RDV Coffrac placés';
+                    : 'Récupérer les RDV Cofrac placés';
             }
 
             const message = trackingCoffracStatusMessage(status);
@@ -1056,7 +1056,7 @@
                 const payload = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(payload.message || 'Statut Coffrac indisponible.');
+                    throw new Error(payload.message || 'Statut Cofrac indisponible.');
                 }
 
                 const status = payload.coffrac_api_status || {};
@@ -1074,7 +1074,7 @@
                 stopTrackingCoffracSyncPolling();
 
                 if (status.state === 'available') {
-                    setTrackingCoffracPlacedRefreshStatus(trackingCoffracStatusMessage(status) || 'Synchronisation Coffrac terminée.', '#0f766e');
+                    setTrackingCoffracPlacedRefreshStatus(trackingCoffracStatusMessage(status) || 'Synchronisation Cofrac terminée.', '#0f766e');
 
                     if (trackingCoffracSyncAwaitingCompletion || wasSyncing) {
                         refetchCalendar();
@@ -1083,18 +1083,18 @@
                     trackingCoffracSyncAwaitingCompletion = false;
                 } else {
                     trackingCoffracSyncAwaitingCompletion = false;
-                    setTrackingCoffracPlacedRefreshStatus(status.stage || status.detail || 'Synchronisation Coffrac interrompue.', '#9f1239');
+                    setTrackingCoffracPlacedRefreshStatus(status.stage || status.detail || 'Synchronisation Cofrac interrompue.', '#9f1239');
                 }
 
                 return status;
             } catch (error) {
-                setTrackingCoffracPlacedRefreshStatus('Impossible de lire l’état de la synchronisation Coffrac.', '#9f1239');
+                setTrackingCoffracPlacedRefreshStatus('Impossible de lire l’état de la synchronisation Cofrac.', '#9f1239');
 
                 if (trackingCoffracSyncAwaitingCompletion) {
                     renderTrackingCoffracPlacedRefreshButton({
                         state: 'syncing',
                         progress: 3,
-                        stage: 'Synchronisation Coffrac en cours, nouvelle tentative de lecture du statut...',
+                        stage: 'Synchronisation Cofrac en cours, nouvelle tentative de lecture du statut...',
                     });
                 }
 
@@ -2603,11 +2603,11 @@
             renderTrackingCoffracPlacedRefreshButton({
                 state: 'syncing',
                 progress: 3,
-                stage: 'Récupération des RDV Coffrac déjà placés lancée...',
+                stage: 'Récupération des RDV Cofrac déjà placés lancée...',
             });
             trackingCoffracSyncAwaitingCompletion = true;
             trackingCoffracLastStatusState = 'syncing';
-            setTrackingCoffracPlacedRefreshStatus('Synchro Coffrac lancée...', 'var(--gc-text-soft)');
+            setTrackingCoffracPlacedRefreshStatus('Synchro Cofrac lancée...', 'var(--gc-text-soft)');
             startTrackingCoffracSyncPolling();
 
             try {
@@ -2626,7 +2626,7 @@
                         renderTrackingCoffracPlacedRefreshButton(payload.coffrac_api_status);
                         trackingCoffracLastStatusState = payload.coffrac_api_status.state || trackingCoffracLastStatusState;
                         setTrackingCoffracPlacedRefreshStatus(
-                            trackingCoffracStatusMessage(payload.coffrac_api_status) || payload.message || 'Synchronisation Coffrac déjà en cours.',
+                            trackingCoffracStatusMessage(payload.coffrac_api_status) || payload.message || 'Synchronisation Cofrac déjà en cours.',
                             'var(--gc-text-soft)',
                         );
                         startTrackingCoffracSyncPolling();
@@ -2634,13 +2634,13 @@
                         return;
                     }
 
-                    throw new Error(payload.message || 'Récupération Coffrac impossible.');
+                    throw new Error(payload.message || 'Récupération Cofrac impossible.');
                 }
 
                 renderTrackingCoffracPlacedRefreshButton(payload.coffrac_api_status || {
                     state: 'syncing',
                     progress: 3,
-                    stage: payload.message || 'Synchronisation Coffrac en cours...',
+                    stage: payload.message || 'Synchronisation Cofrac en cours...',
                 });
                 trackingCoffracLastStatusState = (payload.coffrac_api_status || {}).state || trackingCoffracLastStatusState;
                 setTrackingCoffracPlacedRefreshStatus(
@@ -2653,7 +2653,7 @@
                 trackingCoffracSyncAwaitingCompletion = false;
                 trackingCoffracLastStatusState = 'unavailable';
                 renderTrackingCoffracPlacedRefreshButton({ state: 'unavailable' });
-                setTrackingCoffracPlacedRefreshStatus(error.message || 'Récupération Coffrac impossible.', '#9f1239');
+                setTrackingCoffracPlacedRefreshStatus(error.message || 'Récupération Cofrac impossible.', '#9f1239');
             }
         });
 
@@ -2761,7 +2761,7 @@
 
             trackingRefreshDocumentsButton.disabled = true;
             trackingRefreshDocumentsButton.textContent = 'Mise à jour...';
-            setTrackingDocumentsStatus('Vérification du dossier Coffrac en cours...');
+            setTrackingDocumentsStatus('Vérification du dossier Cofrac en cours...');
 
             try {
                 const response = await fetch(trackingCoffracRefreshUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
@@ -2776,7 +2776,7 @@
 
                 if (!response.ok) {
                     const firstError = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
-                    throw new Error(firstError || payload.message || 'Mise à jour Coffrac impossible.');
+                    throw new Error(firstError || payload.message || 'Mise à jour Cofrac impossible.');
                 }
 
                 const documents = payload.documents || [];
@@ -2792,7 +2792,7 @@
                 renderTrackingDetailDocuments(documents);
                 setTrackingDocumentsStatus(payload.message || 'Documents mis à jour.', '#0f766e');
             } catch (error) {
-                setTrackingDocumentsStatus(error.message || 'Mise à jour Coffrac impossible.', '#9f1239');
+                setTrackingDocumentsStatus(error.message || 'Mise à jour Cofrac impossible.', '#9f1239');
             } finally {
                 trackingRefreshDocumentsButton.disabled = false;
                 trackingRefreshDocumentsButton.textContent = 'Mettre à jour';

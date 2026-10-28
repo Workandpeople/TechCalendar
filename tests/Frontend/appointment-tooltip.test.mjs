@@ -31,7 +31,7 @@ test('shows technician service address beneficiary phone and French dates as saf
         extendedProps: { technician_name: 'Camille <img onerror=x>', service_label: 'COFFRAC - EQ 108',
             address: '12 rue Test', customer_name: 'Bénéficiaire <script>', customer_phone: '06 12 34 56 78' } }, trigger);
     assert.match(ui.text(), /Camille <img onerror=x>/);
-    for (const content of ['COFFRAC - EQ 108', '12 rue Test', 'Bénéficiaire <script>', '06 12 34 56 78', '30\/10\/2026']) {
+    for (const content of ['COFRAC - EQ 108', '12 rue Test', 'Bénéficiaire <script>', '06 12 34 56 78', '30\/10\/2026']) {
         assert.match(ui.text(), new RegExp(content));
     }
     assert.equal(ui.popup.innerHTML, undefined);

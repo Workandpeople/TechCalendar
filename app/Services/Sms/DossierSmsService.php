@@ -7,6 +7,7 @@ use App\Models\Dossier;
 use App\Models\DossierSms;
 use App\Models\User;
 use App\Services\Coffrac\LegacyTemplateText;
+use App\Support\CofracText;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -24,7 +25,7 @@ class DossierSmsService
 
     public function templates(): array
     {
-        // Reuse the archived models without importing or duplicating the Coffrac table.
+        // Reuse the archived models without importing or duplicating the Cofrac table.
         return DB::table('legacy_records')->where('source_table', 'sms_tempalte')->orderBy('source_id')->limit(100)
             ->get(['source_id', 'payload'])->map(function ($row): ?array {
                 $data = json_decode($row->payload, true);
@@ -40,8 +41,8 @@ class DossierSmsService
                     return null;
                 }
 
-                return ['id' => (int) $row->source_id, 'name' => filled($title) ? $title : 'Modèle #'.$row->source_id,
-                    'body' => $body];
+                return ['id' => (int) $row->source_id, 'name' => filled($title) ? CofracText::normalize($title) : 'Modèle #'.$row->source_id,
+                    'body' => CofracText::normalize($body)];
             })->filter()->values()->all();
     }
 

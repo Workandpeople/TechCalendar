@@ -13,6 +13,7 @@ use Throwable;
 class FirebaseCloudMessagingService
 {
     private const SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+
     private const TOKEN_URI = 'https://oauth2.googleapis.com/token';
 
     public function sendAppointmentNotification(Appointment $appointment, User $recipient, string $eventType): void
@@ -80,7 +81,7 @@ class FirebaseCloudMessagingService
     }
 
     /**
-     * @param array<string, mixed> $message
+     * @param  array<string, mixed>  $message
      */
     private function sendToToken(string $token, array $message): void
     {
@@ -95,11 +96,13 @@ class FirebaseCloudMessagingService
 
             if ($response->successful()) {
                 MobilePushToken::query()->where('token', $token)->update(['last_used_at' => now()]);
+
                 return;
             }
 
             if ($response->status() === 404 || str_contains($response->body(), 'UNREGISTERED')) {
                 MobilePushToken::query()->where('token', $token)->delete();
+
                 return;
             }
 
@@ -144,7 +147,7 @@ class FirebaseCloudMessagingService
     }
 
     /**
-     * @param array<string, mixed> $claims
+     * @param  array<string, mixed>  $claims
      */
     private function jwt(array $claims, string $privateKey): string
     {
@@ -215,7 +218,7 @@ class FirebaseCloudMessagingService
     {
         $customer = trim($appointment->customer_first_name.' '.$appointment->customer_last_name) ?: 'Client';
         $date = $appointment->starts_at?->format('d/m H:i') ?? 'date à confirmer';
-        $service = $appointment->service ? $appointment->service->type.' - '.$appointment->service->name : 'Prestation';
+        $service = $appointment->service ? $appointment->service->display_type.' - '.$appointment->service->name : 'Prestation';
 
         return sprintf('%s - %s - %s', $customer, $date, $service);
     }

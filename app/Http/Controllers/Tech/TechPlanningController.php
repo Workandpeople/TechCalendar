@@ -41,7 +41,7 @@ class TechPlanningController extends Controller
         return response()->json([
             'events' => $appointments->map(function (Appointment $appointment) use ($documentsByAppointment, $workspace): array {
                 $serviceLabel = $appointment->service
-                    ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
+                    ? sprintf('%s - %s', $appointment->service->display_type, $appointment->service->name)
                     : 'Prestation';
 
                 return [
@@ -83,7 +83,7 @@ class TechPlanningController extends Controller
         $refresh = $coffracAppointments->refreshAppointment($appointment);
 
         return response()->json([
-            'message' => 'Documents Coffrac mis à jour.',
+            'message' => 'Documents Cofrac mis à jour.',
             'documents' => $refresh['documents'],
             'status' => $refresh['status'],
             'remote_status_name' => $refresh['remote_status_name'],

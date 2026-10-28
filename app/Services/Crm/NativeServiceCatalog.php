@@ -7,7 +7,7 @@ use RuntimeException;
 
 class NativeServiceCatalog
 {
-    /** Reconcile the collected snapshot, without deleting old references or contacting Coffrac. */
+    /** Reconcile the collected snapshot, without deleting old references or contacting Cofrac. */
     public function reconcile(): array
     {
         if (! config('crm.v2_enabled')) {

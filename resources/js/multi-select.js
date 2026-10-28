@@ -18,10 +18,19 @@ export function initMultiSelects(root = document, browser = window) {
         button.id = `${select.id}-trigger`;
         button.setAttribute('aria-haspopup', 'dialog');
         button.setAttribute('aria-expanded', 'false');
+        const required = select.required;
+        if (required) button.setAttribute('aria-required', 'true');
+        const describedBy = select.getAttribute('aria-describedby');
+        if (describedBy) button.setAttribute('aria-describedby', describedBy);
         const labels = Array.from(select.labels || []);
         const label = labels.map(label => label.textContent.trim()).join(' ') || 'Fiches techniques';
         select.before(wrapper);
         wrapper.append(button, select);
+        let error;
+        const clearError = () => {
+            button.removeAttribute('aria-invalid');
+            if (error) error.hidden = true;
+        };
         for (const label of labels) label.htmlFor = button.id;
         let menu, search, options, count, clear;
         const close = (restore = false) => {
@@ -32,6 +41,7 @@ export function initMultiSelects(root = document, browser = window) {
         };
         const sync = () => {
             const summary = multiSelectSummary(select);
+            if (summary.count > 0 || select.disabled) clearError();
             button.textContent = summary.label;
             button.title = summary.title || summary.label;
             button.setAttribute('aria-label', `${label} : ${summary.label}`);
@@ -126,7 +136,28 @@ export function initMultiSelects(root = document, browser = window) {
         });
         select.addEventListener('change', sync);
         select.addEventListener('techcalendar:selection-sync', sync);
-        select.form?.addEventListener('reset', () => { close(); browser.setTimeout(sync, 0); });
+        select.form?.addEventListener('reset', () => { close(); clearError(); browser.setTimeout(sync, 0); });
+        if (required) {
+            // The visible trigger owns validation once the native select is hidden.
+            select.required = false;
+            select.form?.addEventListener('submit', event => {
+                if (select.disabled || multiSelectSummary(select).count > 0) return;
+                event.preventDefault();
+                if (!error) {
+                    error = root.createElement('p');
+                    error.id = `${select.id}-error`;
+                    error.className = 'mt-2 text-sm text-rose-800';
+                    error.setAttribute('role', 'alert');
+                    wrapper.append(error);
+                    button.setAttribute('aria-describedby', [describedBy, error.id].filter(Boolean).join(' '));
+                }
+                error.textContent = select.dataset.requiredMessage || 'Sélectionnez au moins une option.';
+                error.hidden = false;
+                button.setAttribute('aria-invalid', 'true');
+                button.focus({ preventScroll: true });
+                if (!menu) open();
+            });
+        }
         root.addEventListener('pointerdown', event => { if (menu && event.target !== button && !menu.contains(event.target)) close(); }, true);
         root.addEventListener('focusin', event => { if (menu && event.target !== button && !menu.contains(event.target)) close(); });
         root.addEventListener('scroll', event => { if (menu && !menu.contains(event.target)) close(); }, true);

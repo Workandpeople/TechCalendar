@@ -27,7 +27,7 @@ it('renders a one shot appointment mail preview with appointment data', function
 
     expect($response->json('html'))
         ->toContain('Bonjour Camille Martin')
-        ->toContain('COFFRAC - BAR TH 171')
+        ->toContain('COFRAC - BAR TH 171')
         ->toContain('12 rue de la Paix, 75002 Paris');
 });
 

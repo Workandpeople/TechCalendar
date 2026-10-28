@@ -112,7 +112,7 @@ abstract class CoffracProjector
                 $latitude = $longitude = null;
                 $this->issue('appointment_without_gps', $row['id']);
             }
-            // Current Coffrac relation chooses the highest RDV id, not the latest date.
+            // Current Cofrac relation chooses the highest RDV id, not the latest date.
             $active = $latest[$row['dossier_fiche']] === $row['id']
                 && in_array((int) $operation['status_id'], [2, 10], true) && (int) $dossier['status_id'] !== -1;
             $label = trim($dossier['client_name'] ?? '');
@@ -160,7 +160,7 @@ abstract class CoffracProjector
 
                 continue;
             }
-            $service ??= DB::table('services')->insertGetId(['type' => 'COFFRAC', 'name' => 'Occupation externe Coffrac (historique)',
+            $service ??= DB::table('services')->insertGetId(['type' => 'COFFRAC', 'name' => 'Occupation externe Cofrac (historique)',
                 'average_duration_minutes' => 60, 'created_at' => now(), 'updated_at' => now()]);
             $latitude = $this->coordinate($row['latitude'], 90);
             $longitude = $this->coordinate($row['longitude'], 180);
@@ -221,7 +221,7 @@ abstract class CoffracProjector
                     continue;
                 }
                 $batch[] = ['dossier_id' => $row['dossier_id'], 'author_id' => $this->users[$row['author_id']] ?? null,
-                    'kind' => $kind, 'body' => $row['text'] ?? $row['commentaire'] ?? 'Changement de statut Coffrac #'.($row['status_id'] ?? ''),
+                    'kind' => $kind, 'body' => $row['text'] ?? $row['commentaire'] ?? 'Changement de statut Cofrac #'.($row['status_id'] ?? ''),
                     'changed_fields' => $this->json(['source_table' => $table, 'source_id' => $row['id'], 'source_author_id' => $row['author_id'],
                         'is_private' => $row['is_private'] ?? null, 'source_status_id' => $row['status_id'] ?? null]),
                     'created_at' => $this->timestamp($row['created_at']), 'updated_at' => $this->timestamp($row['updated_at'])];

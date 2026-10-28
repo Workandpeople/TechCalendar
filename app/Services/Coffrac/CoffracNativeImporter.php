@@ -98,7 +98,7 @@ final class CoffracNativeImporter extends CoffracProjector
                 throw new RuntimeException('Email de compte ambigu, incompatible ou reserve au seeder.');
             }
             if (! in_array($row['type'], [1, 2, 3, 4, 5, 6, 7], true)) {
-                throw new RuntimeException('Profil Coffrac inconnu : correspondance explicite requise.');
+                throw new RuntimeException('Profil Cofrac inconnu : correspondance explicite requise.');
             }
             $emails[$email] = true;
         }
@@ -139,7 +139,7 @@ final class CoffracNativeImporter extends CoffracProjector
                     if ($planning === null) {
                         $this->issue('technician_sectors_pending_techcalendar_matching', $row['id']);
                     }
-                    // Explicit operator decision: all imported technicians receive every native Coffrac service.
+                    // Explicit operator decision: all imported technicians receive every native Cofrac service.
                     foreach ($this->services as $serviceId) {
                         $grants[] = ['user_id' => $this->users[$row['id']], 'service_id' => $serviceId,
                             'created_at' => now(), 'updated_at' => now()];

@@ -58,7 +58,7 @@ it('syncs coffrac delegataires into the local read only manager page', function 
         ->assertSee('Gestion des délégataires')
         ->assertSee('Oblige Contrôle')
         ->assertSee('delegataire@example.test')
-        ->assertSee('Récupérer depuis Coffrac')
+        ->assertSee('Récupérer depuis Cofrac')
         ->assertDontSee('Créer un délégataire')
         ->assertDontSee('Supprimer');
 });

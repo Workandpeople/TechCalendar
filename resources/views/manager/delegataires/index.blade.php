@@ -4,12 +4,12 @@
             <div>
                 <p class="text-sm" style="color: var(--gc-text-soft);">Gérant</p>
                 <h1 class="mt-1 text-2xl font-semibold" style="color: var(--gc-text);">Gestion des délégataires</h1>
-                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Référentiel des délégataires intégré à TechCalendar.' : 'Liste synchronisée depuis Coffrac. Les délégataires sont consultables uniquement ici.' }}</p>
+                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Référentiel des délégataires intégré à TechCalendar.' : 'Liste synchronisée depuis Cofrac. Les délégataires sont consultables uniquement ici.' }}</p>
             </div>
             @unless(config('crm.v2_enabled'))
             <form method="POST" action="{{ route('manager.delegataires.sync') }}">
                 @csrf
-                <button type="submit" class="gc-btn-primary">Récupérer depuis Coffrac</button>
+                <button type="submit" class="gc-btn-primary">Récupérer depuis Cofrac</button>
             </form>
             @endunless
         </div>
@@ -43,7 +43,7 @@
             <form method="GET" action="{{ route('manager.delegataires') }}" class="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div class="md:col-span-2">
                     <label class="gc-label" for="q">Recherche</label>
-                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom, société, email ou référence Coffrac" />
+                    <input id="q" name="q" type="search" value="{{ $filters['q'] }}" class="gc-input" placeholder="Nom, société, email ou référence Cofrac" />
                 </div>
                 <div>
                     <label class="gc-label" for="status">Statut</label>
@@ -65,7 +65,7 @@
                 <table class="min-w-full text-left text-sm">
                     <thead class="border-b" style="border-color:var(--gc-border);background:#f8f8f8;">
                         <tr>
-                            <th class="px-4 py-3 font-semibold">Référence Coffrac</th>
+                            <th class="px-4 py-3 font-semibold">Référence Cofrac</th>
                             <th class="px-4 py-3 font-semibold">Délégataire</th>
                             <th class="px-4 py-3 font-semibold">Email</th>
                             <th class="px-4 py-3 font-semibold">Téléphone</th>

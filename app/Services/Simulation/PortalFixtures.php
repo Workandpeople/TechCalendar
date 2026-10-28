@@ -69,7 +69,7 @@ class PortalFixtures
         $service = Service::query()->catalog()->where('type', Service::TYPE_COFFRAC)
             ->when($serviceId !== null, fn ($query) => $query->whereKey($serviceId))->orderBy('id')->first();
         if (! $service) {
-            throw new RuntimeException('Aucune prestation COFFRAC active disponible. Verifier le catalogue ou --service.');
+            throw new RuntimeException('Aucune prestation COFRAC active disponible. Verifier le catalogue ou --service.');
         }
 
         return ['existing' => false, 'service_id' => $service->id, 'service_name' => $service->name,

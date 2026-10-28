@@ -117,7 +117,7 @@
                         <div class="min-w-0 rounded-xl border p-4" style="border-color:var(--gc-border);">
                             <div class="flex min-w-0 items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <p class="break-words text-sm font-semibold" style="color:var(--gc-text);overflow-wrap:anywhere;">{{ $event->source }} · {{ $event->severity }}</p>
+                                    <p class="break-words text-sm font-semibold" style="color:var(--gc-text);overflow-wrap:anywhere;">{{ \App\Support\CofracText::normalize($event->source) }} · {{ $event->severity }}</p>
                                     <p class="mt-2 line-clamp-3 break-words text-sm" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">{{ $event->message }}</p>
                                     <p class="mt-2 break-words text-xs" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">Dernière occurrence: {{ $event->last_seen_at?->diffForHumans() }}</p>
                                 </div>
@@ -134,10 +134,10 @@
             <article class="gc-card min-w-0 p-5 xl:col-span-2">
                 <div class="mb-4 flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div class="min-w-0">
-                        <p class="text-sm" style="color:var(--gc-text-soft);">Coffrac</p>
+                        <p class="text-sm" style="color:var(--gc-text-soft);">Cofrac</p>
                         <h2 class="break-words text-lg font-semibold" style="color:var(--gc-text);">Laravel log distant</h2>
                         <p class="mt-1 max-w-3xl break-words text-sm" style="color:var(--gc-text-soft);overflow-wrap:anywhere;">
-                            Lecture sécurisée des dernières lignes du log Coffrac via l’API TechCalendar. Utile pour diagnostiquer les créations de dossiers et les passages en problème RDV.
+                            Lecture sécurisée des dernières lignes du log Cofrac via l’API TechCalendar. Utile pour diagnostiquer les créations de dossiers et les passages en problème RDV.
                         </p>
                     </div>
 
@@ -157,7 +157,7 @@
                             class="gc-btn-primary"
                             data-url="{{ route('admin.dashboard.coffrac.logs') }}"
                         >
-                            Charger les logs Coffrac
+                            Charger les logs Cofrac
                         </button>
                     </div>
                 </div>
@@ -312,7 +312,7 @@
                 loadButton.disabled = true;
                 outputBox.style.display = 'none';
                 outputBox.textContent = '';
-                setStatus('Chargement des logs Coffrac...', 'loading');
+                setStatus('Chargement des logs Cofrac...', 'loading');
 
                 try {
                     const response = await fetch(url.toString(), {
@@ -323,7 +323,7 @@
                     const payload = await response.json().catch(() => ({}));
 
                     if (!response.ok || payload.result === false) {
-                        throw new Error(payload.message || 'Impossible de récupérer les logs Coffrac.');
+                        throw new Error(payload.message || 'Impossible de récupérer les logs Cofrac.');
                     }
 
                     const data = payload.data || {};
@@ -333,10 +333,10 @@
                     const size = Number(data.size_bytes || 0).toLocaleString('fr-FR');
 
                     setStatus(`${data.line_count || 0} ligne(s) chargée(s) depuis ${data.file || 'laravel.log'} · ${size} octets · mis à jour ${updatedAt}`, 'ok');
-                    outputBox.textContent = data.text || 'Log Coffrac vide.';
+                    outputBox.textContent = data.text || 'Log Cofrac vide.';
                     outputBox.style.display = 'block';
                 } catch (error) {
-                    setStatus(error instanceof Error ? error.message : 'Erreur inconnue pendant le chargement des logs Coffrac.', 'error');
+                    setStatus(error instanceof Error ? error.message : 'Erreur inconnue pendant le chargement des logs Cofrac.', 'error');
                 } finally {
                     loadButton.disabled = false;
                 }

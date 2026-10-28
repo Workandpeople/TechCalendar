@@ -4,6 +4,7 @@ namespace App\Services\Crm;
 
 use App\Models\Dossier;
 use App\Models\User;
+use App\Support\CofracText;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -67,11 +68,11 @@ class CollectedDossierDocuments
         return [
             'id' => 'collected-'.$record->source_id,
             'source_id' => $record->source_id,
-            'name' => $name,
-            'description' => $source['comment'] ?? $source['description'] ?? $source['commentaire'] ?? null,
+            'name' => CofracText::normalize($name),
+            'description' => CofracText::normalize($source['comment'] ?? $source['description'] ?? $source['commentaire'] ?? null),
             'created_at' => $source['created_at'] ?? null,
             'author_id' => $source['author_id'] ?? null,
-            'author_name' => $authors[$source['author_id'] ?? ''] ?? (isset($source['author_id']) ? 'Auteur Coffrac #'.$source['author_id'] : 'Auteur non renseigné'),
+            'author_name' => $authors[$source['author_id'] ?? ''] ?? (isset($source['author_id']) ? 'Auteur Cofrac #'.$source['author_id'] : 'Auteur non renseigné'),
             'control_reference' => $source['reference_controle'] ?? null,
             'outcome' => $source['status'] ?? null,
             'inspected_on' => $source['date_rdv'] ?? null,
@@ -79,7 +80,7 @@ class CollectedDossierDocuments
             'url' => $path !== null ? route('v2.dossiers.collected-documents.download', [$record->dossier_id, $record->source_id]) : null,
             'previewable' => $path !== null && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['pdf', 'jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif'], true),
             'size' => $path !== null ? filesize($path) : null,
-            'scope' => 'Archive Coffrac',
+            'scope' => 'Archive Cofrac',
             'is_private' => ! $visibility['client_visible'],
             ...$visibility,
             'is_delegataire' => $visibility['delegataire_visible'],
@@ -96,7 +97,7 @@ class CollectedDossierDocuments
                 $source = $this->payload($record);
                 $name = trim((string) (($source['nom_societe'] ?? '') ?: ($source['name'] ?? '')));
 
-                return [$record->source_id => $name ?: 'Auteur Coffrac #'.$record->source_id];
+                return [$record->source_id => CofracText::normalize($name) ?: 'Auteur Cofrac #'.$record->source_id];
             })->all();
     }
 
@@ -135,7 +136,7 @@ class CollectedDossierDocuments
             DB::table('legacy_records')->where('id', $record->id)->update(['client_visible_override' => $visible,
                 'delegataire_visible_override' => $visible && ($delegataireVisible ?? $visible)]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_visibility',
-                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($visible, $visible && ($delegataireVisible ?? $visible))].' » pour le document Coffrac #'.$sourceId,
+                'body' => 'Accès « '.ContentAudience::LABELS[ContentAudience::key($visible, $visible && ($delegataireVisible ?? $visible))].' » pour le document Cofrac #'.$sourceId,
                 'changed_fields' => ['source_document_id' => $sourceId, 'client_visible' => $visible, 'delegataire_visible' => $visible && ($delegataireVisible ?? $visible)]]);
         });
     }
@@ -159,7 +160,7 @@ class CollectedDossierDocuments
             abort_unless($record, 404);
             DB::table('legacy_records')->where('id', $record->id)->update(['hidden_at' => now()]);
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
-                'body' => 'Document Coffrac #'.$sourceId.' retiré. Archive conservée pour traçabilité.']);
+                'body' => 'Document Cofrac #'.$sourceId.' retiré. Archive conservée pour traçabilité.']);
         });
     }
 

@@ -149,7 +149,7 @@ class ClientAccess
 
         return $dossier->comments()->getQuery()->where(function ($query) use ($user): void {
             $query->where($this->audienceColumn($user), true);
-            // Coffrac clients saw public comments; delegataires had no comment section.
+            // Cofrac clients saw public comments; delegataires had no comment section.
             if ($user->externalClient->kind === 'client') {
                 $query->orWhere(fn ($query) => $this->whereLegacyFlag($query->where('kind', 'legacy_comment')
                     ->whereNull('visibility_reviewed_at'), 'changed_fields->is_private', false));

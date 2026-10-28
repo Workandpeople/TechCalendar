@@ -86,7 +86,7 @@ class DossierController extends Controller
     {
         $dossier = $registry->create($request->user(), $request->validated());
 
-        return to_route('v2.dossiers.show', $dossier)->with('status', 'Dossier créé. Aucun envoi vers Coffrac ou Global+ n’a été effectué.');
+        return to_route('v2.dossiers.show', $dossier)->with('status', 'Dossier créé. Aucun envoi vers Cofrac ou Global+ n’a été effectué.');
     }
 
     public function show(Request $request, Dossier $dossier, DossierLinkedDocuments $linkedDocuments, CollectedDossierDocuments $collectedDocuments): View

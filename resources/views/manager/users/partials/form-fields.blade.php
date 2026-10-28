@@ -73,7 +73,7 @@
             @foreach ($services as $service)
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" class="gc-check service-checkbox" name="service_ids[]" value="{{ $service->id }}" data-service-checkbox="{{ $prefix }}" />
-                    <span>{{ $service->type }} - {{ $service->name }}</span>
+                    <span>{{ $service->display_type }} - {{ $service->name }}</span>
                 </label>
             @endforeach
         </div>

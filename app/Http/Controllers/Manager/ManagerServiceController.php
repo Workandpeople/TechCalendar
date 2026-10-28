@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\CoffracAppointmentService;
 use App\Services\ServiceDeletion;
+use App\Support\CofracText;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -116,6 +117,9 @@ class ManagerServiceController extends Controller
             'average_duration_minutes' => ['required', 'integer', 'min:5', 'max:1440'],
         ]);
 
+        $payload['name'] = CofracText::normalize($payload['name']);
+        $request->merge(['name' => $payload['name']]);
+
         $request->validate([
             'name' => [
                 Rule::unique('services', 'name')
@@ -175,7 +179,7 @@ class ManagerServiceController extends Controller
 
             if (isset($seen[$key])) {
                 throw ValidationException::withMessages([
-                    'external_aliases' => 'Un même alias Coffrac est renseigné plusieurs fois.',
+                    'external_aliases' => 'Un même alias Cofrac est renseigné plusieurs fois.',
                 ]);
             }
 
@@ -190,7 +194,7 @@ class ManagerServiceController extends Controller
 
             if ($exists) {
                 throw ValidationException::withMessages([
-                    'external_aliases' => "L'alias Coffrac \"{$alias['external_name']}\" est déjà lié à une autre prestation.",
+                    'external_aliases' => "L'alias Cofrac \"{$alias['external_name']}\" est déjà lié à une autre prestation.",
                 ]);
             }
         }

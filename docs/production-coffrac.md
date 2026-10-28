@@ -2590,3 +2590,42 @@ Reverb, sauvegarde/migrations, echec simule et reprise, politiques mail et
 deux domaines avec retour arriere. Aucun reseau externe ni identifiant reel.
 PHP local de test : 8.5 (limite CLI 512 Mio pour les gros fichiers de test) ;
 production 8.4 inchangee. Ces essais ne garantissent pas les latences serveur.
+
+### Nom Cofrac et sélection des prestations
+
+Le formulaire partagé de création (équipe et portail client) utilise une sélection
+multiple compacte, recherchable, avec une validation sur le bouton visible. Aucun
+chargement distant ni changement du contrat `service_ids[]` ou des autorisations.
+
+`cofrac:correct-labels` audite uniquement les champs de texte métier autorisés :
+prestations, noms affichés, modèles mail, documents, commentaires et historique
+natifs, y compris les lignes supprimées logiquement. Les archives brutes restent
+intactes : leur texte est normalisé à l'affichage. Les types et identifiants
+techniques historiques, clés de liaison, URLs, emails, chemins et fichiers ne
+sont pas renommés. Ne pas faire de remplacement global dans un dump SQL.
+
+Depuis `/var/www/cofrac2`, avec l'identité runtime et un environnement propre :
+
+```bash
+sudo -u cofrac2-app env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+  HOME=/var/lib/cofrac2-app php8.4 artisan cofrac:correct-labels --confirm-production
+sudo -u cofrac2-app env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+  HOME=/var/lib/cofrac2-app php8.4 artisan cofrac:correct-labels --apply --confirm-production
+```
+
+L'application affiche l'identifiant de sauvegarde, pas son contenu personnel.
+Préimages privées en `storage/app/private/cofrac-label-corrections/<uuid>.jsonl`
+(mode 0600, répertoire 0700), synchronisées avant chaque transaction de 250
+lignes au maximum. Pas de mise à jour d'`updated_at`, de statut, de droits, de
+mot de passe, d'événement Eloquent ou d'envoi. Une seconde exécution est sans
+effet. Retour arrière des seules valeurs non modifiées depuis :
+
+```bash
+sudo -u cofrac2-app env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+  HOME=/var/lib/cofrac2-app php8.4 artisan cofrac:correct-labels \
+  --restore=IDENTIFIANT_UUID_AFFICHE --confirm-production
+```
+
+Un conflit de restauration est signalé et n'écrase jamais une modification
+ultérieure. Le lanceur du paquet rouvre les deux domaines avant cette correction
+ponctuelle ; son éventuel échec ne remet pas le site en maintenance.

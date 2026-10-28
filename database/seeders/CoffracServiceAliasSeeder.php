@@ -78,7 +78,7 @@ class CoffracServiceAliasSeeder extends Seeder
     ];
 
     /**
-     * Ces libellés Coffrac restent non liés car la correspondance métier est ambiguë
+     * Ces libellés Cofrac restent non liés car la correspondance métier est ambiguë
      * ou aucune prestation TechCalendar cible n'existe encore.
      *
      * @var list<string>
@@ -147,12 +147,12 @@ class CoffracServiceAliasSeeder extends Seeder
             }
         }
 
-        $this->command?->info(sprintf('%d alias Coffrac synchronisé(s).', $createdOrUpdatedAliases));
+        $this->command?->info(sprintf('%d alias Cofrac synchronisé(s).', $createdOrUpdatedAliases));
 
         if ($missingTargets !== []) {
             $this->command?->warn('Prestations TechCalendar absentes, alias ignorés: '.implode(', ', $missingTargets));
         }
 
-        $this->command?->warn('Libellés Coffrac volontairement non liés: '.implode(', ', self::UNMAPPED_COFFRAC_SERVICES));
+        $this->command?->warn('Libellés Cofrac volontairement non liés: '.implode(', ', self::UNMAPPED_COFFRAC_SERVICES));
     }
 }

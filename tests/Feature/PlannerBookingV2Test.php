@@ -67,7 +67,7 @@ it('renders booking without collection connectors or remote calls in v2', functi
         ->assertSee('Global+')
         ->assertSee('const bookingConnectorsEnabled = false;', false)
         ->assertDontSee('id="booking-external-controls"', false)
-        ->assertDontSee('Actualiser Coffrac')
+        ->assertDontSee('Actualiser Cofrac')
         ->assertDontSee('Actualiser connecteur 2')
         ->assertDontSee('Actualiser connecteur 3')
         ->assertDontSee('RDV externes à placer');
@@ -338,7 +338,7 @@ it('keeps the legacy booking connectors available outside v2', function () {
     $this->actingAs($planner)->get(route('planner.book'))
         ->assertOk()
         ->assertSee('id="booking-external-controls"', false)
-        ->assertSee('Actualiser Coffrac')
+        ->assertSee('Actualiser Cofrac')
         ->assertSee('Actualiser connecteur 2')
         ->assertSee('Actualiser connecteur 3')
         ->assertSee('const bookingConnectorsEnabled = true;', false);

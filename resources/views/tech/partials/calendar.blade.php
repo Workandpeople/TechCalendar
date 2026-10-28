@@ -759,7 +759,7 @@
 
             techDocumentsRefreshButton.disabled = true;
             techDocumentsRefreshButton.textContent = 'Mise à jour...';
-            setTechDocumentsStatus('Vérification du dossier Coffrac en cours...');
+            setTechDocumentsStatus('Vérification du dossier Cofrac en cours...');
 
             try {
                 const response = await fetch(techCoffracRefreshUrlTemplate.replace('__APPOINTMENT_ID__', encodeURIComponent(selectedTechSheetEvent.id)), {

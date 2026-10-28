@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { cofracLabel } from '../../resources/js/cofrac-label.js';
 
 const source = readFileSync(new URL('../../resources/views/planner/book.blade.php', import.meta.url), 'utf8');
 const renderer = source.slice(source.indexOf('const renderBookingCrmCard ='), source.indexOf('const setBookingExternalSourceStatus ='));
@@ -11,6 +12,7 @@ const escape = source.slice(escapeStart, source.indexOf('const formatShortDate =
 function render(appointment, connectors = false) {
     return runInNewContext(`${escape}\n${renderer}\nrenderBookingCrmCard(appointment);`, {
         appointment,
+        window: { TechCalendarLabels: { cofrac: cofracLabel } },
         bookingConnectorsEnabled: connectors,
         bookingReplacementPageUrl: '/planner/appointments/modify',
         formatShortDateTime: () => '14/10/2026 12:00',
@@ -51,7 +53,7 @@ test('phone and postal values remain escaped in refreshed rows', () => {
 test('long service names stay complete in an escaped title without introducing markup', () => {
     const name = 'BAT EN 101 Isolation en rampant de toiture "test" <img src=x onerror=alert(1)>';
     const html = render({ id: 'dossier-1', service: { type: 'COFFRAC', name } });
-    assert.match(html, /title="COFFRAC - BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
+    assert.match(html, /title="COFRAC - BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
     assert.doesNotMatch(html, /<img/);
 });
 

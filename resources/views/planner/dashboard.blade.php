@@ -31,7 +31,7 @@
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">Coffrac</p>
+                    <p class="text-sm" style="color:var(--gc-text-soft);">Cofrac</p>
                     <h2 class="text-lg font-semibold" style="color:var(--gc-text);">RDV à placer</h2>
                     <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Clique sur une demande pour lancér directement la recherche de techniciens.</p>
                 </div>
@@ -47,7 +47,7 @@
             </div>
 
             <div id="dashboard-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
-                Aucun RDV Coffrac ne correspond à cette recherche.
+                Aucun RDV Cofrac ne correspond à cette recherche.
             </div>
 
             <div id="dashboard-crm-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -68,7 +68,7 @@
                         <div class="mt-3 flex flex-wrap gap-2">
                             <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] }}</span>
                             @if ($appointment['service'])
-                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ $appointment['service']['type'] }}</span>
+                                <span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">{{ \App\Support\CofracText::normalize($appointment['service']['type']) }}</span>
                             @else
                                 <span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Service à définir</span>
                             @endif

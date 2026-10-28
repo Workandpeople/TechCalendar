@@ -272,3 +272,12 @@ it('paginates documents comments and history independently', function () {
         ->assertViewHas('comments', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 3)
         ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 4);
 });
+
+it('renders a compact searchable multiple prestation picker with the original native payload', function () {
+    $response = $this->actingAs($this->manager)->get(route('v2.dossiers.create'))->assertOk();
+    $response->assertSee('id="dossier-service-ids"', false)->assertSee('name="service_ids[]"', false)
+        ->assertSee('data-multi-select', false)->assertSee('Rechercher par nom ou code…')
+        ->assertSee('BAR EN 101 · COFRAC')->assertDontSee('type="checkbox" name="service_ids[]"', false);
+    $this->withSession(['_old_input' => ['service_ids' => [(string) $this->service->id]]])
+        ->get(route('v2.dossiers.create'))->assertSee('value="'.$this->service->id.'" selected', false);
+});

@@ -10,7 +10,7 @@ Bonjour {{ $recipient->full_name }},
 
 **Téléphone :** {{ $appointment->customer_phone ?: 'Non renseigné' }}
 
-**Prestation :** {{ $appointment->service ? $appointment->service->type.' - '.$appointment->service->name : 'Non renseignée' }}
+**Prestation :** {{ $appointment->service ? $appointment->service->display_type.' - '.$appointment->service->name : 'Non renseignée' }}
 
 **Date :** {{ $appointment->starts_at?->format('d/m/Y') ?? 'Non renseignée' }}
 

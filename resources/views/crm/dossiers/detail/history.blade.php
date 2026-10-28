@@ -6,7 +6,7 @@
             @forelse ($activities as $activity)
                 <li>
                     <time class="text-xs font-semibold text-slate-600" datetime="{{ $activity->created_at?->toIso8601String() }}">{{ $activity->created_at?->format('d/m/Y H:i') }}</time>
-                    <p class="mt-1 text-xs text-slate-500">{{ $activity->author?->full_name ?: (str_starts_with($activity->kind, 'legacy_') ? 'Auteur Coffrac #'.($activity->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
+                    <p class="mt-1 text-xs text-slate-500">{{ $activity->author?->full_name ?: (str_starts_with($activity->kind, 'legacy_') ? 'Auteur Cofrac #'.($activity->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
                     <x-comment-body :body="$activity->body" class="mt-2 text-sm" />
                 </li>
             @empty

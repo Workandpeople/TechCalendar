@@ -1,3 +1,4 @@
+import { cofracLabel } from './cofrac-label';
 import { initSidebar } from './sidebar';
 import { initSidebarSections } from './sidebar-sections';
 import { initDossierComments } from './dossier-comments';
@@ -25,6 +26,7 @@ import { initBetaFeedback } from './beta-feedback';
 import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentAssignments } from './appointment-placement';
 import { createAppointmentTooltip } from './appointment-tooltip';
 
+window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
 window.TechCalendarBookingForce = { confirm: confirmForcedPlacement };

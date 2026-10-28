@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Casts\CofracLabel;
+use App\Support\CofracText;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -28,6 +30,7 @@ class Service extends Model
     protected function casts(): array
     {
         return [
+            'name' => CofracLabel::class,
             'average_duration_minutes' => 'integer',
         ];
     }
@@ -35,6 +38,11 @@ class Service extends Model
     public function technicians(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withTimestamps();
+    }
+
+    public function getDisplayTypeAttribute(): string
+    {
+        return CofracText::normalize($this->type) ?? '';
     }
 
     public function scopeCatalog($query)

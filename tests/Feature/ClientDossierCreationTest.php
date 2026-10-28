@@ -229,3 +229,10 @@ it('requires authentication to submit a client dossier', function () {
     $this->post(route('client.dossiers.store'), $this->data)->assertRedirect(route('login'));
     expect(Dossier::count())->toBe(0);
 });
+
+it('provides the same compact searchable prestation selector in the client space', function () {
+    $this->actingAs($this->client)->get(route('client.dossiers.create'))->assertOk()
+        ->assertSee('id="dossier-service-ids"', false)->assertSee('data-multi-select', false)
+        ->assertSee('Rechercher par nom ou code…')->assertSee('BAR EN 101 · COFRAC')
+        ->assertDontSee('type="checkbox" name="service_ids[]"', false);
+});

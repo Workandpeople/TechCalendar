@@ -8,7 +8,7 @@
             @forelse ($comments as $comment)
                 <li class="gc-dossier-comment gc-comment-row">
                     <div class="gc-comment-meta">
-                        <p>{{ $comment->author?->full_name ?: ($comment->kind === 'legacy_comment' ? 'Auteur Coffrac #'.($comment->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
+                        <p>{{ $comment->author?->full_name ?: ($comment->kind === 'legacy_comment' ? 'Auteur Cofrac #'.($comment->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
                         <time datetime="{{ $comment->created_at?->toIso8601String() }}">{{ $comment->created_at?->format('d/m/Y H:i') }}</time>
                     </div>
                     <x-comment-excerpt :body="$comment->body" />

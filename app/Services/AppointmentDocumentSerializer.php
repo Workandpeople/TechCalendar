@@ -57,7 +57,7 @@ class AppointmentDocumentSerializer
         return $this->normalize($documents, $appointment->external_source);
     }
 
-    /** Load shared dossier files once per calendar, never from the retired Coffrac connector. */
+    /** Load shared dossier files once per calendar, never from the retired Cofrac connector. */
     private function nativeDocumentsByAppointment(Collection $appointments): array
     {
         if ($appointments->isEmpty() || ! Gate::allows('viewAny', Dossier::class)) {

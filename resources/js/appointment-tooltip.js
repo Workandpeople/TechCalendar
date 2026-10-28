@@ -1,3 +1,5 @@
+import { cofracLabel } from './cofrac-label.js';
+
 export function appointmentTooltipAddress(props) {
     const address = String(props.address || '').trim();
     const locality = [props.postal_code, props.city].filter(Boolean).join(' ').trim();
@@ -36,7 +38,7 @@ export function createAppointmentTooltip({ root = document, browser = window } =
         const props = event.extendedProps || {};
         text(popup, props.technician_name || props.technician_full_name || 'Technicien non renseigné', 'font-weight:800;letter-spacing:.02em');
         if (props.status === 'problem') text(popup, 'Problème RDV', 'color:#fed7aa;font-weight:700');
-        for (const [label, value] of [['RDV', props.service_label || props.service_type || 'Prestation non renseignée'],
+        for (const [label, value] of [['RDV', cofracLabel(props.service_label || props.service_type || 'Prestation non renseignée')],
             ['Adresse', appointmentTooltipAddress(props)], ['Client', [props.customer_name || event.title, props.customer_phone].filter(Boolean).join(' · ')]]) {
             if (!value) continue;
             const row = root.createElement('div'); row.style.cssText = 'margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px';

@@ -95,7 +95,7 @@
                                 <option value="">Sélectionner</option>
                                 @foreach ($services as $service)
                                     <option value="{{ $service->id }}" @selected((int) $lot['service_id'] === (int) $service->id)>
-                                        {{ $service->type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
+                                        {{ $service->display_type }} - {{ $service->name }} ({{ $service->average_duration_minutes }} min)
                                     </option>
                                 @endforeach
                             </select>
@@ -103,11 +103,11 @@
 
                         @unless(config('crm.v2_enabled'))
 <div>
-                            <label class="gc-label" for="lot_detail_edit_coffrac_service_alias_id">Alias Coffrac du lot</label>
+                            <label class="gc-label" for="lot_detail_edit_coffrac_service_alias_id">Alias Cofrac du lot</label>
                             <select id="lot_detail_edit_coffrac_service_alias_id" name="coffrac_service_alias_id" class="gc-input disabled:cursor-not-allowed disabled:opacity-50" disabled>
                                 <option value="">Sélectionner une prestation</option>
                             </select>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Coffrac pour les RDV physiques issus de ce lot.</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Alias envoyé à Cofrac pour les RDV physiques issus de ce lot.</p>
                         </div>
 @endunless
 
@@ -224,7 +224,7 @@
                     <div class="max-w-3xl">
                         <p class="text-xs font-semibold uppercase tracking-[0.12em]" style="color:var(--gc-text-soft);">Documents du lot</p>
                         <h2 class="mt-1 text-2xl font-semibold" style="color:var(--gc-text);">Gérer les documents dossier par dossier</h2>
-                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Ajoute les pièces au bon dossier. Elles restent accessibles depuis le dossier natif et le rendez-vous, sans duplication.' : 'Ajoute les pièces au bon dossier. Les documents suivront automatiquement le RDV physique vers Coffrac.' }}</p>
+                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Ajoute les pièces au bon dossier. Elles restent accessibles depuis le dossier natif et le rendez-vous, sans duplication.' : 'Ajoute les pièces au bon dossier. Les documents suivront automatiquement le RDV physique vers Cofrac.' }}</p>
                     </div>
                     <div class="flex shrink-0 items-center gap-3">
                         <span id="lot-documents-counter" class="inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0 / 0</span>
@@ -292,7 +292,7 @@
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
                                                 <h4 class="text-lg font-semibold" style="color:var(--gc-text);">Documents du dossier</h4>
-                                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ce qui est déjà rattaché localement ou envoyé à Coffrac.</p>
+                                                <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">Ce qui est déjà rattaché localement ou envoyé à Cofrac.</p>
                                             </div>
                                             <span id="lot-documents-card-doc-count" class="inline-flex h-8 min-w-8 items-center justify-center rounded-full px-3 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">0</span>
                                         </div>
@@ -785,7 +785,7 @@
                         <div id="lot-physical-documents-list" class="mt-3 space-y-2"></div>
                         <div id="lot-physical-documents-dropzone" class="gc-document-dropzone mt-4 rounded-2xl border-2 border-dashed p-4 text-center transition">
                             <p class="text-sm font-semibold" style="color:var(--gc-text);">Déposer ou choisir des fichiers</p>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Stockage privé dans TechCalendar, sans envoi vers Coffrac.' : 'Ils partiront vers Coffrac dès que possible.' }}</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ config('crm.v2_enabled') ? 'Stockage privé dans TechCalendar, sans envoi vers Cofrac.' : 'Ils partiront vers Cofrac dès que possible.' }}</p>
                             <input id="lot_physical_documents_file_input" type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">
                         </div>
                         <form id="lot-physical-documents-upload-form" class="mt-3 hidden space-y-3">
@@ -1683,7 +1683,7 @@
             listElement.innerHTML = documents.map((document) => {
                 const meta = documentStatusMeta(document.status);
                 const remoteLink = document.remote_url
-                    ? `<a href="${escapeHtml(document.remote_url)}" target="_blank" rel="noopener" class="gc-link text-xs">Ouvrir côté Coffrac</a>`
+                    ? `<a href="${escapeHtml(document.remote_url)}" target="_blank" rel="noopener" class="gc-link text-xs">Ouvrir côté Cofrac</a>`
                     : '';
                 const visibilityBadge = document.is_private
                     ? '<span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" style="background:#fee2e2;color:#991b1b;">Privé</span>'
@@ -2067,7 +2067,7 @@
             }
 
             if (!aliases.length) {
-                lotDetailEditCoffracAliasId.add(new Option('Aucun alias Coffrac pour cette prestation', ''));
+                lotDetailEditCoffracAliasId.add(new Option('Aucun alias Cofrac pour cette prestation', ''));
                 lotDetailEditCoffracAliasId.disabled = true;
                 return;
             }

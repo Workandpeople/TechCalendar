@@ -28,7 +28,7 @@
                     @endforeach
                     @foreach ($legacyDocuments as $record)
                         @include('crm.dossiers.detail.document-row', [
-                            'name' => $record['name'], 'detail' => 'Archive Coffrac', 'description' => $record['description'],
+                            'name' => $record['name'], 'detail' => 'Archive Cofrac', 'description' => $record['description'],
                             'author' => $record['author_name'], 'date' => $record['created_at'],
                             'reportReference' => $record['control_reference'], 'reportDate' => $record['inspected_on'], 'issuedDate' => $record['issued_on'], 'outcome' => $record['outcome'],
                             'download' => $record['url'], 'preview' => $record['previewable'] ? $record['url'].'?preview=1' : null,

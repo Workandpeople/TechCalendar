@@ -642,7 +642,7 @@ class ManagerLotController extends Controller
 
         if (in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true)) {
             throw ValidationException::withMessages([
-                'name' => 'Ce document est déjà en cours d’envoi ou envoyé à Coffrac, son nom local ne peut plus être modifié.',
+                'name' => 'Ce document est déjà en cours d’envoi ou envoyé à Cofrac, son nom local ne peut plus être modifié.',
             ]);
         }
 
@@ -676,7 +676,7 @@ class ManagerLotController extends Controller
 
         if (in_array($document->status, [LotAppointmentDocument::STATUS_QUEUED, LotAppointmentDocument::STATUS_UPLOADED], true)) {
             throw ValidationException::withMessages([
-                'document' => 'Ce document est déjà en cours d’envoi ou envoyé à Coffrac. Il doit être retiré directement depuis Coffrac.',
+                'document' => 'Ce document est déjà en cours d’envoi ou envoyé à Cofrac. Il doit être retiré directement depuis Cofrac.',
             ]);
         }
 
@@ -1094,7 +1094,7 @@ class ManagerLotController extends Controller
         return $services
             ->map(fn (Service $service): array => [
                 'id' => (int) $service->id,
-                'label' => trim($service->type.' - '.$service->name),
+                'label' => trim($service->display_type.' - '.$service->name),
                 'aliases' => $service->externalAliases
                     ->map(fn (ExternalServiceAlias $alias): array => [
                         'id' => (int) $alias->id,
@@ -1125,7 +1125,7 @@ class ManagerLotController extends Controller
 
         if (! $alias) {
             throw ValidationException::withMessages([
-                'coffrac_service_alias_id' => 'Cet alias Coffrac ne correspond pas à la prestation sélectionnée.',
+                'coffrac_service_alias_id' => 'Cet alias Cofrac ne correspond pas à la prestation sélectionnée.',
             ]);
         }
 
@@ -1367,7 +1367,7 @@ class ManagerLotController extends Controller
             'type_label' => $lot->typeLabel(),
             'service_id' => $lot->service_id,
             'service_label' => $lot->service
-                ? $lot->service->type.' - '.$lot->service->name
+                ? $lot->service->display_type.' - '.$lot->service->name
                 : null,
             'coffrac_service_alias_id' => $lot->coffrac_service_alias_id,
             'coffrac_service_alias_label' => $lot->coffracServiceAlias?->external_name,
@@ -1735,8 +1735,8 @@ class ManagerLotController extends Controller
             'longitude' => $appointment->longitude,
             'service_id' => $appointment->service_id ?: $lot->service_id,
             'service_label' => $appointment->service
-                ? $appointment->service->type.' - '.$appointment->service->name
-                : ($lot->service ? $lot->service->type.' - '.$lot->service->name : null),
+                ? $appointment->service->display_type.' - '.$appointment->service->name
+                : ($lot->service ? $lot->service->display_type.' - '.$lot->service->name : null),
             'comment' => $appointment->comment,
             'status' => $appointment->status,
             'status_label' => $appointment->statusLabel(),
@@ -1771,7 +1771,7 @@ class ManagerLotController extends Controller
             'placed_at' => $appointment->appointment?->starts_at,
             'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
             'placed_service_label' => $appointment->appointment?->service
-                ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                ? $appointment->appointment->service->display_type.' - '.$appointment->appointment->service->name
                 : null,
             'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'manager.appointments'),
             'ai_confidence' => $appointment->ai_confidence,
@@ -1878,8 +1878,8 @@ class ManagerLotController extends Controller
         $queuedTargets = array_unique($queuedTargets);
 
         return match (true) {
-            in_array('coffrac', $queuedTargets, true) && in_array('global_plus', $queuedTargets, true) => 'Document ajouté. Envoi vers Coffrac et Global+ en arrière-plan.',
-            in_array('coffrac', $queuedTargets, true) => 'Document ajouté. Envoi vers Coffrac en arrière-plan.',
+            in_array('coffrac', $queuedTargets, true) && in_array('global_plus', $queuedTargets, true) => 'Document ajouté. Envoi vers Cofrac et Global+ en arrière-plan.',
+            in_array('coffrac', $queuedTargets, true) => 'Document ajouté. Envoi vers Cofrac en arrière-plan.',
             in_array('global_plus', $queuedTargets, true) => 'Document ajouté. Synchronisation Global+ en arrière-plan.',
             default => 'Document ajouté au dossier du lot.',
         };
@@ -2110,7 +2110,7 @@ class ManagerLotController extends Controller
             'type_label' => Lot::types()[$preview->type] ?? $preview->type,
             'service_id' => $preview->service_id,
             'service_label' => $preview->service
-                ? $preview->service->type.' - '.$preview->service->name
+                ? $preview->service->display_type.' - '.$preview->service->name
                 : null,
             'coffrac_service_alias_id' => $preview->coffrac_service_alias_id,
             'coffrac_service_alias_label' => $preview->coffracServiceAlias?->external_name,

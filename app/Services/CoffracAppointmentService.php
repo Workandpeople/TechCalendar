@@ -13,6 +13,8 @@ use App\Models\LotAppointment;
 use App\Models\LotAppointmentDocument;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Crm\DossierWorkflow;
+use App\Support\CofracText;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Client\PendingRequest;
@@ -80,7 +82,7 @@ class CoffracAppointmentService
                 if ($response->failed()) {
                     $payload = $response->json();
 
-                    throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les types de problème Coffrac.'));
+                    throw new RuntimeException($this->responseError(is_array($payload) ? $payload : null, 'Impossible de récupérer les types de problème Cofrac.'));
                 }
 
                 $problemTypes = collect($response->json('data', []))
@@ -93,7 +95,7 @@ class CoffracAppointmentService
                 return $problemTypes !== [] ? $problemTypes : $this->fallbackProblemTypes();
             });
         } catch (Throwable $exception) {
-            Log::warning('Impossible de récupérer les types de problème Coffrac.', [
+            Log::warning('Impossible de récupérer les types de problème Cofrac.', [
                 'message' => $exception->getMessage(),
             ]);
 
@@ -119,7 +121,7 @@ class CoffracAppointmentService
     public function recentLogs(int $lines = 250): array
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de récupérer les logs.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de récupérer les logs.');
         }
 
         $lineCount = max(1, min(1000, $lines));
@@ -128,13 +130,13 @@ class CoffracAppointmentService
         ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de récupérer les logs Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de récupérer les logs Cofrac.'));
         }
 
         $data = $response->json('data');
 
         if (! is_array($data)) {
-            throw new RuntimeException('Coffrac a répondu sans payload de logs exploitable.');
+            throw new RuntimeException('Cofrac a répondu sans payload de logs exploitable.');
         }
 
         $logLines = collect($data['lines'] ?? [])
@@ -177,7 +179,7 @@ class CoffracAppointmentService
         }
 
         if (! in_array($problemType, $this->problemTypeValues(), true)) {
-            throw new RuntimeException('Le type de problème RDV sélectionné n’est pas reconnu par Coffrac.');
+            throw new RuntimeException('Le type de problème RDV sélectionné n’est pas reconnu par Cofrac.');
         }
 
         $requiresRecall = $this->problemTypeRequiresRecall($problemType);
@@ -332,7 +334,7 @@ class CoffracAppointmentService
                 'appointments' => collect(),
                 'status' => $this->availabilityStatus(
                     'not_configured',
-                    'API Coffrac non configurée',
+                    'API Cofrac non configurée',
                     'COFFRAC_API_URL ou COFFRAC_API_TOKEN est absent.',
                     0,
                 ),
@@ -380,7 +382,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * Met à jour la copie locale d'une demande Coffrac avant placement dans TechCalendar.
+     * Met à jour la copie locale d'une demande Cofrac avant placement dans TechCalendar.
      *
      * @param  array{service_id?: int|null, address?: string|null, comment?: string|null}  $payload
      * @return array<string, mixed>|null
@@ -431,7 +433,7 @@ class CoffracAppointmentService
             $address = $this->addressCleaner->clean(trim((string) $payload['address']));
 
             if (! $address) {
-                throw new RuntimeException('Adresse obligatoire pour mettre à jour le RDV Coffrac.');
+                throw new RuntimeException('Adresse obligatoire pour mettre à jour le RDV Cofrac.');
             }
 
             $geocodedAddress = $this->geocodedAddress($address, $storedRequest);
@@ -485,7 +487,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * Déclare une demande Coffrac non encore placée en problème, puis met à jour
+     * Déclare une demande Cofrac non encore placée en problème, puis met à jour
      * sa copie locale pour la retirer des RDV à placer.
      *
      * @return array<string, mixed>|null
@@ -497,7 +499,7 @@ class CoffracAppointmentService
         }
 
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de signaler le problème RDV.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de signaler le problème RDV.');
         }
 
         $externalReference = $this->externalReferenceFromCrmId($id);
@@ -525,7 +527,7 @@ class CoffracAppointmentService
         ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Cofrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -552,7 +554,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * Synchronise les demandes Coffrac locales depuis l'API distante.
+     * Synchronise les demandes Cofrac locales depuis l'API distante.
      *
      * @return array{available: bool, message: string, count: int, pending_count: int, placed_count: int, problem_count: int}
      */
@@ -588,7 +590,7 @@ class CoffracAppointmentService
 
             return [
                 'available' => true,
-                'message' => 'Synchronisation Coffrac déjà en cours.',
+                'message' => 'Synchronisation Cofrac déjà en cours.',
                 'count' => $counts['total_count'],
                 ...$counts,
             ];
@@ -601,10 +603,10 @@ class CoffracAppointmentService
             $syncMode = $this->syncMode($status, $isIncrementalSync);
             $this->markSyncQueued(
                 $isPendingOnlySync
-                    ? 'Récupération des RDV à placer Coffrac en cours...'
+                    ? 'Récupération des RDV à placer Cofrac en cours...'
                     : ($isIncrementalSync
-                        ? 'Synchronisation incrémentale Coffrac en cours...'
-                        : 'Synchronisation complète Coffrac en cours...'),
+                        ? 'Synchronisation incrémentale Cofrac en cours...'
+                        : 'Synchronisation complète Cofrac en cours...'),
                 [
                     'mode' => $syncMode,
                     'remote_status' => $status,
@@ -613,7 +615,7 @@ class CoffracAppointmentService
                     'date_to' => $placedSyncWindow['to']?->toDateString(),
                 ],
             );
-            $this->markSyncProgress(5, 'Connexion à Coffrac...');
+            $this->markSyncProgress(5, 'Connexion à Cofrac...');
             $this->skippedRemoteAppointmentCount = 0;
 
             try {
@@ -631,10 +633,10 @@ class CoffracAppointmentService
                     ->values();
                 $this->markSyncProgress(38, sprintf(
                     $isPendingOnlySync
-                        ? 'Récupération Coffrac des RDV à placer terminée: %d demande(s) reçue(s).'
+                        ? 'Récupération Cofrac des RDV à placer terminée: %d demande(s) reçue(s).'
                         : ($isIncrementalSync
-                            ? 'Récupération Coffrac terminée: %d RDV modifié(s) reçu(s).'
-                            : 'Récupération Coffrac terminée: %d RDV reçu(s).'),
+                            ? 'Récupération Cofrac terminée: %d RDV modifié(s) reçu(s).'
+                            : 'Récupération Cofrac terminée: %d RDV reçu(s).'),
                     $remoteAppointments->count(),
                 ), [
                     'total' => $remoteAppointments->count(),
@@ -649,13 +651,13 @@ class CoffracAppointmentService
 
                 $message = $exception instanceof RuntimeException
                     ? $exception->getMessage()
-                    : 'Coffrac ne répond pas pour le moment.';
+                    : 'Cofrac ne répond pas pour le moment.';
                 $message = $this->syncMessage($message);
 
                 $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $message, [
                     'appointments_count' => 0,
                     'progress' => 100,
-                    'stage' => 'Synchronisation Coffrac en erreur.',
+                    'stage' => 'Synchronisation Cofrac en erreur.',
                 ]);
 
                 return [
@@ -676,7 +678,7 @@ class CoffracAppointmentService
                     $storedRequest = $this->persistRemoteAppointment($appointment);
                 } catch (Throwable $exception) {
                     $this->skippedRemoteAppointmentCount++;
-                    Log::warning('RDV Coffrac ignoré pendant la persistance locale.', [
+                    Log::warning('RDV Cofrac ignoré pendant la persistance locale.', [
                         'external_reference' => $appointment['id'] ?? null,
                         'remote_status_name' => $appointment['status_name'] ?? null,
                         'message' => $exception->getMessage(),
@@ -694,7 +696,7 @@ class CoffracAppointmentService
                 if ($processedAppointments === 1 || $processedAppointments === $totalRemoteAppointments || $processedAppointments % 5 === 0) {
                     $this->markSyncProgress(
                         40 + (int) floor(($processedAppointments / $totalRemoteAppointments) * 52),
-                        sprintf('Synchronisation locale Coffrac %d/%d...', $processedAppointments, $remoteAppointments->count()),
+                        sprintf('Synchronisation locale Cofrac %d/%d...', $processedAppointments, $remoteAppointments->count()),
                         [
                             'processed' => $processedAppointments,
                             'total' => $remoteAppointments->count(),
@@ -707,8 +709,8 @@ class CoffracAppointmentService
                 $remoteReferences = $stored->pluck('external_reference')->filter()->values();
 
                 $this->markSyncProgress(96, $isPendingOnlySync
-                    ? 'Suppression des demandes absentes du flux Coffrac à placer...'
-                    : 'Archivage des RDV absents du flux Coffrac...', [
+                    ? 'Suppression des demandes absentes du flux Cofrac à placer...'
+                    : 'Archivage des RDV absents du flux Cofrac...', [
                         'processed' => $remoteAppointments->count(),
                         'total' => $remoteAppointments->count(),
                     ]);
@@ -734,7 +736,7 @@ class CoffracAppointmentService
                     ]);
                 }
             } else {
-                $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Coffrac...', [
+                $this->markSyncProgress(96, 'Finalisation de la synchronisation incrémentale Cofrac...', [
                     'processed' => $remoteAppointments->count(),
                     'total' => $remoteAppointments->count(),
                 ]);
@@ -744,8 +746,8 @@ class CoffracAppointmentService
             $message = sprintf(
                 '%s: %d demande(s), %d placée(s), %d en problème.%s',
                 $isPendingOnlySync
-                    ? 'Récupération Coffrac des RDV à placer terminée'
-                    : ($isIncrementalSync ? 'Synchronisation incrémentale Coffrac terminée' : 'Synchronisation Coffrac terminée'),
+                    ? 'Récupération Cofrac des RDV à placer terminée'
+                    : ($isIncrementalSync ? 'Synchronisation incrémentale Cofrac terminée' : 'Synchronisation Cofrac terminée'),
                 $counts['pending_count'],
                 $counts['placed_count'],
                 $counts['problem_count'],
@@ -757,7 +759,7 @@ class CoffracAppointmentService
             $this->persistSyncState(ExternalApiSync::STATE_AVAILABLE, $message, [
                 'appointments_count' => $counts['total_count'],
                 'progress' => 100,
-                'stage' => $isPendingOnlySync ? 'Récupération des RDV à placer Coffrac terminée.' : 'Synchronisation Coffrac terminée.',
+                'stage' => $isPendingOnlySync ? 'Récupération des RDV à placer Cofrac terminée.' : 'Synchronisation Cofrac terminée.',
                 'processed' => $remoteAppointments->count(),
                 'total' => $remoteAppointments->count(),
                 'mode' => $syncMode,
@@ -920,13 +922,13 @@ class CoffracAppointmentService
         }
 
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de basculer le RDV en attente visite.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de basculer le RDV en attente visite.');
         }
 
         $externalReference = (string) ($crmAppointment['external_reference'] ?? '');
 
         if ($externalReference === '') {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $appointment->loadMissing('technician:id,email,first_name,last_name');
@@ -946,7 +948,7 @@ class CoffracAppointmentService
             if ($this->isMissingRemoteTechnicianError(is_array($payload) ? $payload : null)) {
                 $this->markStoredRequestAsLocallyPlacedPendingRemote($appointment, $externalReference);
 
-                Log::warning('RDV Coffrac placé localement sans bascule distante: technicien Coffrac introuvable.', [
+                Log::warning('RDV Cofrac placé localement sans bascule distante: technicien Cofrac introuvable.', [
                     'external_reference' => $externalReference,
                     'appointment_id' => $appointment->id,
                     'technician_email' => $appointment->technician?->email,
@@ -955,7 +957,7 @@ class CoffracAppointmentService
                 return;
             }
 
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de basculer le RDV Coffrac en attente visite.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de basculer le RDV Cofrac en attente visite.'));
         }
 
         $storedRequest = ExternalAppointmentRequest::query()
@@ -1001,7 +1003,7 @@ class CoffracAppointmentService
     private function createRemoteAppointmentFromLot(Appointment $appointment, array $crmAppointment): void
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de créer le dossier depuis le lot.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de créer le dossier depuis le lot.');
         }
 
         $appointment->loadMissing([
@@ -1011,14 +1013,14 @@ class CoffracAppointmentService
         ]);
 
         if (! $appointment->service) {
-            throw new RuntimeException('Prestation absente, impossible de créer le dossier Coffrac depuis le lot.');
+            throw new RuntimeException('Prestation absente, impossible de créer le dossier Cofrac depuis le lot.');
         }
 
         $requestPayload = $this->remoteLotCreationPayload($appointment, $crmAppointment);
         $response = $this->request()->post($this->endpoint('appointments'), $requestPayload);
 
         if ($response->failed()) {
-            Log::warning('Création du dossier Coffrac depuis un lot refusée.', [
+            Log::warning('Création du dossier Cofrac depuis un lot refusée.', [
                 'appointment_id' => $appointment->id,
                 'lot_id' => $requestPayload['lot_id'] ?? null,
                 'lot_appointment_id' => $requestPayload['lot_appointment_id'] ?? null,
@@ -1026,28 +1028,28 @@ class CoffracAppointmentService
                 'service_name' => $requestPayload['service_name'] ?? null,
                 'technician_email' => $requestPayload['technician_email'] ?? null,
                 'status' => $response->status(),
-                'message' => $this->responseErrorFromResponse($response, 'Erreur Coffrac.'),
+                'message' => $this->responseErrorFromResponse($response, 'Erreur Cofrac.'),
             ]);
 
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de créer le dossier Coffrac depuis le lot.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de créer le dossier Cofrac depuis le lot.'));
         }
 
         $remotePayload = $response->json('data');
 
         if (! is_array($remotePayload)) {
-            throw new RuntimeException('Coffrac a créé le dossier, mais la réponse API ne contient pas de dossier exploitable.');
+            throw new RuntimeException('Cofrac a créé le dossier, mais la réponse API ne contient pas de dossier exploitable.');
         }
 
         $externalReference = trim((string) ($remotePayload['id'] ?? ''));
 
         if ($externalReference === '') {
-            throw new RuntimeException('Coffrac a créé le dossier, mais la référence distante est absente.');
+            throw new RuntimeException('Cofrac a créé le dossier, mais la référence distante est absente.');
         }
 
         $remoteStatus = $this->normalizeRemoteStatus($remotePayload);
 
         if ($remoteStatus !== ExternalAppointmentRequest::STATUS_PLACED) {
-            Log::warning('Création du dossier Coffrac depuis un lot incomplète.', [
+            Log::warning('Création du dossier Cofrac depuis un lot incomplète.', [
                 'appointment_id' => $appointment->id,
                 'lot_id' => data_get($crmAppointment, 'external_payload.lot_id'),
                 'lot_appointment_id' => data_get($crmAppointment, 'external_payload.lot_appointment_id'),
@@ -1056,7 +1058,7 @@ class CoffracAppointmentService
                 'technician_email' => $appointment->technician?->email,
             ]);
 
-            throw new RuntimeException('Coffrac a créé le dossier, mais il n’est pas en RDV attente visite.');
+            throw new RuntimeException('Cofrac a créé le dossier, mais il n’est pas en RDV attente visite.');
         }
 
         $appointment->update([
@@ -1352,7 +1354,7 @@ class CoffracAppointmentService
     {
         if (config('crm.v2_enabled')) {
             if ($operation = $appointment->dossierOperation) {
-                app(\App\Services\Crm\DossierWorkflow::class)->recordProblem(auth()->user(), $operation,
+                app(DossierWorkflow::class)->recordProblem(auth()->user(), $operation,
                     is_array($problem) ? $problem : ['comment' => $problem]);
             }
 
@@ -1360,18 +1362,18 @@ class CoffracAppointmentService
         }
         if ($appointment->external_source !== self::SOURCE) {
             if ($this->isUnlinkedLotBackedAppointment($appointment)) {
-                throw new RuntimeException('Ce rendez-vous vient d’un lot, mais il n’est pas lié à un dossier Coffrac. Impossible de le passer en problème RDV côté Coffrac.');
+                throw new RuntimeException('Ce rendez-vous vient d’un lot, mais il n’est pas lié à un dossier Cofrac. Impossible de le passer en problème RDV côté Cofrac.');
             }
 
             return;
         }
 
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de signaler le problème RDV.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de signaler le problème RDV.');
         }
 
         if (! filled($appointment->external_reference)) {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $problemPayload = $this->normalizeProblemReportPayload($problem);
@@ -1382,7 +1384,7 @@ class CoffracAppointmentService
         ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de signaler le problème RDV dans Cofrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -1427,7 +1429,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * Corrige l’adresse du dossier source Coffrac quand l’adresse d’un RDV déjà placé
+     * Corrige l’adresse du dossier source Cofrac quand l’adresse d’un RDV déjà placé
      * est modifiée dans TechCalendar.
      *
      * @param  array{address?: string|null, latitude?: mixed, longitude?: mixed}  $payload
@@ -1444,13 +1446,13 @@ class CoffracAppointmentService
         $externalReference = trim((string) $appointment->external_reference);
 
         if ($externalReference === '') {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $address = $this->addressCleaner->clean(trim((string) ($payload['address'] ?? '')));
 
         if ($address === null || $address === '') {
-            throw new RuntimeException('Adresse obligatoire pour corriger le RDV Coffrac.');
+            throw new RuntimeException('Adresse obligatoire pour corriger le RDV Cofrac.');
         }
 
         $latitude = $this->coordinate($payload['latitude'] ?? null, -90, 90);
@@ -1491,13 +1493,13 @@ class CoffracAppointmentService
     private function pushAddressCorrection(string $externalReference, array $payload): ?ExternalAppointmentRequest
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible de corriger l’adresse du RDV.');
+            throw new RuntimeException('API Cofrac non configurée, impossible de corriger l’adresse du RDV.');
         }
 
         $externalReference = trim($externalReference);
 
         if ($externalReference === '') {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $response = $this->request()->patch(
@@ -1506,7 +1508,7 @@ class CoffracAppointmentService
         );
 
         if ($response->failed()) {
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de corriger l’adresse du RDV dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible de corriger l’adresse du RDV dans Cofrac.'));
         }
 
         $remotePayload = $response->json('data');
@@ -1596,17 +1598,17 @@ class CoffracAppointmentService
         bool $isPrivate = false,
     ): array {
         if ($appointment->external_source !== self::SOURCE) {
-            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
+            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Cofrac.');
         }
 
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée, impossible d’ajouter le document.');
+            throw new RuntimeException('API Cofrac non configurée, impossible d’ajouter le document.');
         }
 
         $externalReference = trim((string) $appointment->external_reference);
 
         if ($externalReference === '') {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $originalName = $file->getClientOriginalName() ?: 'document';
@@ -1640,13 +1642,13 @@ class CoffracAppointmentService
         }
 
         if ($response->failed()) {
-            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible d’ajouter le document dans Coffrac.'));
+            throw new RuntimeException($this->responseErrorFromResponse($response, 'Impossible d’ajouter le document dans Cofrac.'));
         }
 
         $remoteDocument = $response->json('data');
 
         if (! is_array($remoteDocument)) {
-            throw new RuntimeException('Coffrac n’a pas retourné le document ajouté.');
+            throw new RuntimeException('Cofrac n’a pas retourné le document ajouté.');
         }
 
         $document = $this->documentSerializer->normalize([$remoteDocument], self::SOURCE)[0] ?? $remoteDocument;
@@ -1657,26 +1659,26 @@ class CoffracAppointmentService
     }
 
     /**
-     * Recharge un dossier Coffrac précis et renvoie les documents/commentaires fraîchement synchronisés.
+     * Recharge un dossier Cofrac précis et renvoie les documents/commentaires fraîchement synchronisés.
      *
      * @return array{documents: array<int, array<string, mixed>>, comments: array<int, array<string, mixed>>, status: string|null, remote_status_name: string|null, fetched_at: string|null}
      */
     public function refreshAppointment(Appointment $appointment): array
     {
         if ($appointment->external_source !== self::SOURCE) {
-            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Coffrac.');
+            throw new RuntimeException('Ce rendez-vous n’est pas rattaché à Cofrac.');
         }
 
         $externalReference = trim((string) $appointment->external_reference);
 
         if ($externalReference === '') {
-            throw new RuntimeException('Référence Coffrac absente sur le rendez-vous.');
+            throw new RuntimeException('Référence Cofrac absente sur le rendez-vous.');
         }
 
         $storedRequest = $this->refreshStoredRequest($externalReference);
 
         if (! $storedRequest) {
-            throw new RuntimeException('Dossier Coffrac introuvable.');
+            throw new RuntimeException('Dossier Cofrac introuvable.');
         }
 
         $this->syncRemoteDocumentsIntoAppointment($appointment, $storedRequest);
@@ -1691,7 +1693,7 @@ class CoffracAppointmentService
     }
 
     /**
-     * Recharge une demande Coffrac à placer et renvoie la version locale à afficher.
+     * Recharge une demande Cofrac à placer et renvoie la version locale à afficher.
      *
      * @return array<string, mixed>|null
      */
@@ -1715,7 +1717,7 @@ class CoffracAppointmentService
     private function refreshStoredRequest(string $externalReference): ?ExternalAppointmentRequest
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée.');
+            throw new RuntimeException('API Cofrac non configurée.');
         }
 
         if ($this->isIgnoredExternalReference($externalReference)) {
@@ -1807,7 +1809,7 @@ class CoffracAppointmentService
             if (! $externalReference) {
                 $this->markSyncProgress(
                     min(35, 8 + ($pageIndex * 4)),
-                    sprintf('Récupération Coffrac: %d RDV reçu(s)...', $appointments->count()),
+                    sprintf('Récupération Cofrac: %d RDV reçu(s)...', $appointments->count()),
                     [
                         'processed' => $appointments->count(),
                         'total' => 0,
@@ -1903,7 +1905,7 @@ class CoffracAppointmentService
         }
 
         if ($response->failed()) {
-            $message = $this->responseErrorFromResponse($response, 'Impossible de récupérer les RDV Coffrac.');
+            $message = $this->responseErrorFromResponse($response, 'Impossible de récupérer les RDV Cofrac.');
 
             if (! $externalReference && $this->shouldSplitRemoteError($message)) {
                 return $this->splitRemoteAppointmentPage(
@@ -1928,7 +1930,7 @@ class CoffracAppointmentService
 
         if ($skippedCount > 0) {
             $this->skippedRemoteAppointmentCount += $skippedCount;
-            Log::warning('RDV Coffrac ignoré(s) par l’API distante pendant la synchronisation.', [
+            Log::warning('RDV Cofrac ignoré(s) par l’API distante pendant la synchronisation.', [
                 'offset' => $offset,
                 'limit' => $limit,
                 'skipped_count' => $skippedCount,
@@ -1955,7 +1957,7 @@ class CoffracAppointmentService
     ): array {
         if ($limit <= 1) {
             $this->skippedRemoteAppointmentCount++;
-            Log::warning('RDV Coffrac ignoré pendant la synchronisation.', [
+            Log::warning('RDV Cofrac ignoré pendant la synchronisation.', [
                 'offset' => $offset,
                 'limit' => $limit,
                 'message' => $reason,
@@ -1970,7 +1972,7 @@ class CoffracAppointmentService
         $firstLimit = max(1, intdiv($limit, 2));
         $secondLimit = $limit - $firstLimit;
 
-        Log::warning('Tranche Coffrac trop lourde, découpage automatique.', [
+        Log::warning('Tranche Cofrac trop lourde, découpage automatique.', [
             'status' => $status,
             'offset' => $offset,
             'limit' => $limit,
@@ -2114,7 +2116,7 @@ class CoffracAppointmentService
                 'technician_id' => $technician->id,
                 'created_by' => $creatorId,
                 'customer_first_name' => $request->customer_first_name ?: 'Client',
-                'customer_last_name' => $request->customer_last_name ?: 'Coffrac',
+                'customer_last_name' => $request->customer_last_name ?: 'Cofrac',
                 'customer_phone' => $this->phoneString($request->phone) ?: '',
                 'address' => $request->address ?: '',
                 'latitude' => (float) $request->latitude,
@@ -2194,12 +2196,12 @@ class CoffracAppointmentService
         return [
             'external_reference' => $externalReference,
             'status' => $this->normalizeRemoteStatus($appointment),
-            'source_label' => trim((string) ($appointment['source'] ?? 'Coffrac')) ?: 'Coffrac',
+            'source_label' => trim((string) ($appointment['source'] ?? 'Cofrac')) ?: 'Cofrac',
             'remote_status_name' => trim((string) ($appointment['status_name'] ?? '')) ?: null,
             'service_type' => trim((string) ($appointment['service_type'] ?? Service::TYPE_COFFRAC)) ?: null,
             'service_name' => trim((string) ($appointment['service_name'] ?? '')) ?: null,
             'customer_first_name' => trim((string) ($appointment['customer_first_name'] ?? 'Client')),
-            'customer_last_name' => trim((string) ($appointment['customer_last_name'] ?? 'Coffrac')),
+            'customer_last_name' => trim((string) ($appointment['customer_last_name'] ?? 'Cofrac')),
             'customer_name' => trim((string) ($appointment['customer_name'] ?? '')) ?: trim((string) (($appointment['customer_first_name'] ?? '').' '.($appointment['customer_last_name'] ?? ''))),
             'company_name' => $this->normalizedCompanyName($appointment),
             'phone' => $this->phoneString($appointment['phone'] ?? null),
@@ -2325,7 +2327,7 @@ class CoffracAppointmentService
         }
 
         if (! filled($address)) {
-            Log::info('RDV Coffrac conservé sans géocodage Mapbox: adresse absente.', [
+            Log::info('RDV Cofrac conservé sans géocodage Mapbox: adresse absente.', [
                 'external_reference' => $appointment['id'] ?? null,
             ]);
 
@@ -2338,7 +2340,7 @@ class CoffracAppointmentService
         try {
             $geocoding = $this->geocoder->geocode($address);
         } catch (Throwable $exception) {
-            Log::warning('Géocodage Mapbox ignoré pendant la synchronisation Coffrac.', [
+            Log::warning('Géocodage Mapbox ignoré pendant la synchronisation Cofrac.', [
                 'external_reference' => $appointment['id'] ?? null,
                 'address' => $address,
                 'message' => $exception->getMessage(),
@@ -2354,7 +2356,7 @@ class CoffracAppointmentService
         $longitude = $this->coordinate($geocoding['longitude'] ?? null, -180, 180);
 
         if ($address && ($latitude === null || $longitude === null)) {
-            Log::info('RDV Coffrac conservé sans coordonnées Mapbox.', [
+            Log::info('RDV Cofrac conservé sans coordonnées Mapbox.', [
                 'external_reference' => $appointment['id'] ?? null,
                 'address' => $address,
                 'warnings' => $geocoding['warnings'] ?? [],
@@ -2628,9 +2630,9 @@ class CoffracAppointmentService
             'remote_status_name' => $request->remote_status_name,
             'created_at' => $request->created_at?->toIso8601String(),
             'fetched_at' => $request->fetched_at?->toIso8601String(),
-            'source' => $request->source_label ?: 'Coffrac',
+            'source' => $request->source_label ?: 'Cofrac',
             'first_name' => $request->customer_first_name ?: 'Client',
-            'last_name' => $request->customer_last_name ?: 'Coffrac',
+            'last_name' => $request->customer_last_name ?: 'Cofrac',
             'company_name' => $request->company_name ?: trim((string) data_get($request->payload, 'company_name')) ?: null,
             'beneficiary_name' => trim((string) data_get($request->payload, 'beneficiary_name')) ?: null,
             'site_name' => trim((string) data_get($request->payload, 'site_name')) ?: null,
@@ -2686,7 +2688,7 @@ class CoffracAppointmentService
         $service ??= Service::query()
             ->where('type', $type)
             ->get(['id', 'type', 'name', 'average_duration_minutes'])
-            ->first(fn (Service $candidate): bool => ExternalServiceAlias::normalizeValue($candidate->name) === ExternalServiceAlias::normalizeValue($name));
+            ->first(fn (Service $candidate): bool => ExternalServiceAlias::normalizeValue(CofracText::normalize($candidate->name)) === ExternalServiceAlias::normalizeValue(CofracText::normalize($name)));
 
         return $service ? [
             'id' => $service->id,
@@ -2780,8 +2782,8 @@ class CoffracAppointmentService
         if (! $sync) {
             return $this->availabilityStatus(
                 'unavailable',
-                'API Coffrac non synchronisée',
-                'Aucune synchronisation Coffrac n’a encore été exécutée.',
+                'API Cofrac non synchronisée',
+                'Aucune synchronisation Cofrac n’a encore été exécutée.',
                 $count,
             );
         }
@@ -2796,17 +2798,17 @@ class CoffracAppointmentService
             ExternalApiSync::STATE_NOT_CONFIGURED => 'not_configured',
             default => 'unavailable',
         };
-        $label = $isStaleSync ? 'Synchronisation Coffrac interrompue' : match ($sync->state) {
-            ExternalApiSync::STATE_AVAILABLE => 'API Coffrac disponible',
-            ExternalApiSync::STATE_SYNCING => 'Synchronisation Coffrac en cours',
-            ExternalApiSync::STATE_NOT_CONFIGURED => 'API Coffrac non configurée',
-            default => 'API Coffrac indisponible',
+        $label = $isStaleSync ? 'Synchronisation Cofrac interrompue' : match ($sync->state) {
+            ExternalApiSync::STATE_AVAILABLE => 'API Cofrac disponible',
+            ExternalApiSync::STATE_SYNCING => 'Synchronisation Cofrac en cours',
+            ExternalApiSync::STATE_NOT_CONFIGURED => 'API Cofrac non configurée',
+            default => 'API Cofrac indisponible',
         };
         $lastSync = $sync->last_successful_at?->format('d/m/Y H:i');
         $metadata = $sync->metadata ?? [];
         $detail = $isStaleSync
-            ? 'La synchronisation Coffrac semble bloquée. Vérifie que le worker de queue est lancé puis relance une actualisation.'
-            : trim(($sync->message ?: 'Statut Coffrac inconnu.').($lastSync ? " Dernière synchro: {$lastSync}." : ''));
+            ? 'La synchronisation Cofrac semble bloquée. Vérifie que le worker de queue est lancé puis relance une actualisation.'
+            : trim(($sync->message ?: 'Statut Cofrac inconnu.').($lastSync ? " Dernière synchro: {$lastSync}." : ''));
 
         return $this->availabilityStatus(
             $state,
@@ -2824,7 +2826,7 @@ class CoffracAppointmentService
     /**
      * @param  array<string, mixed>  $metadata
      */
-    public function markSyncQueued(string $message = 'Synchronisation Coffrac en cours...', array $metadata = []): ExternalApiSync
+    public function markSyncQueued(string $message = 'Synchronisation Cofrac en cours...', array $metadata = []): ExternalApiSync
     {
         $sync = ExternalApiSync::query()->updateOrCreate(
             ['source' => self::SOURCE],
@@ -2906,7 +2908,7 @@ class CoffracAppointmentService
     {
         return $this->persistSyncState(ExternalApiSync::STATE_UNAVAILABLE, $this->syncMessage($message), [
             'progress' => 100,
-            'stage' => 'Synchronisation Coffrac en erreur.',
+            'stage' => 'Synchronisation Cofrac en erreur.',
         ]);
     }
 
@@ -2927,7 +2929,7 @@ class CoffracAppointmentService
     {
         $message = trim((string) preg_replace('/\s+/u', ' ', $message));
 
-        return Str::limit($message !== '' ? $message : 'Statut Coffrac indisponible.', self::SYNC_MESSAGE_MAX_LENGTH - 3, '...');
+        return Str::limit($message !== '' ? $message : 'Statut Cofrac indisponible.', self::SYNC_MESSAGE_MAX_LENGTH - 3, '...');
     }
 
     private function syncStaleMinutes(): int
@@ -3043,13 +3045,13 @@ class CoffracAppointmentService
 
         if ($plainBody !== '') {
             return sprintf(
-                '%s Coffrac a renvoyé HTTP %d sans JSON: %s',
+                '%s Cofrac a renvoyé HTTP %d sans JSON: %s',
                 $fallback,
                 $response->status(),
                 Str::limit($plainBody, self::SYNC_MESSAGE_MAX_LENGTH, '...'),
             );
         }
 
-        return sprintf('%s Coffrac a renvoyé HTTP %d sans détail exploitable.', $fallback, $response->status());
+        return sprintf('%s Cofrac a renvoyé HTTP %d sans détail exploitable.', $fallback, $response->status());
     }
 }

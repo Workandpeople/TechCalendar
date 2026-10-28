@@ -12,7 +12,7 @@
         </div>
         <p class="text-sm text-slate-600">Un seul marquage pour tout le dossier. Il reste conservé lors des changements d’état et bloque une seconde facturation. Ce suivi ne crée pas de facture et ne vaut pas paiement.</p>
         @if ($dossier->billing_review_required)
-            <div role="alert" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Un historique de facturation Coffrac nécessite une vérification. Toute nouvelle facturation est bloquée. Les preuves historiques restent conservées.</div>
+            <div role="alert" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Un historique de facturation Cofrac nécessite une vérification. Toute nouvelle facturation est bloquée. Les preuves historiques restent conservées.</div>
         @endif
         @if ($billingHistory->isNotEmpty())
             <p class="text-sm font-semibold">Déjà facturé</p>
@@ -21,7 +21,7 @@
                 <ul class="divide-y divide-slate-200">
                     @foreach ($billingHistory as $billing)
                         <li class="space-y-1 py-3 text-xs">
-                            <p>{{ $billing->source === 'native' ? 'Marqué le' : 'Historique Coffrac du' }} {{ $billing->marked_at?->format('d/m/Y H:i') ?: 'date non renseignée' }}@if ($billing->marker) · {{ $billing->marker->full_name }}@endif</p>
+                            <p>{{ $billing->source === 'native' ? 'Marqué le' : 'Historique Cofrac du' }} {{ $billing->marked_at?->format('d/m/Y H:i') ?: 'date non renseignée' }}@if ($billing->marker) · {{ $billing->marker->full_name }}@endif</p>
                             <p>Référence facture : {{ $billing->invoice_reference ?: 'Non renseignée' }}</p>
                         </li>
                     @endforeach

@@ -27,7 +27,7 @@ class MobileAppointmentRefreshController extends Controller
 
         if ($appointment->external_source !== CoffracAppointmentService::SOURCE || ! filled($appointment->external_reference)) {
             throw ValidationException::withMessages([
-                'appointment' => 'Ce rendez-vous n’est pas rattaché à un dossier Coffrac.',
+                'appointment' => 'Ce rendez-vous n’est pas rattaché à un dossier Cofrac.',
             ]);
         }
 
@@ -40,7 +40,7 @@ class MobileAppointmentRefreshController extends Controller
         }
 
         return response()->json([
-            'message' => 'Documents Coffrac mis à jour.',
+            'message' => 'Documents Cofrac mis à jour.',
             'documents' => $refresh['documents'],
             'status' => $refresh['status'],
             'remote_status_name' => $refresh['remote_status_name'],

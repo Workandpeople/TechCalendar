@@ -28,7 +28,7 @@ class MailTemplateRenderer
             'technician_name' => 'Lucas Tech',
             'technician_email' => 'lucas.tech@example.com',
             'service_label' => 'COFFRAC - BAR TH 171',
-            'service_type' => 'COFFRAC',
+            'service_type' => 'COFRAC',
             'service_name' => 'BAR TH 171',
             'appointment_date' => Carbon::now()->addDays(3)->format('d/m/Y'),
             'appointment_time' => '09:30',

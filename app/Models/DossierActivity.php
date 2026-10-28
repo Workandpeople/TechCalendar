@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\CofracLabel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ class DossierActivity extends Model
 
     protected function casts(): array
     {
-        return ['changed_fields' => 'array', 'client_visible' => 'boolean', 'delegataire_visible' => 'boolean', 'visibility_reviewed_at' => 'datetime', 'hidden_at' => 'datetime'];
+        return ['body' => CofracLabel::class, 'changed_fields' => 'array', 'client_visible' => 'boolean', 'delegataire_visible' => 'boolean', 'visibility_reviewed_at' => 'datetime', 'hidden_at' => 'datetime'];
     }
 
     public function author(): BelongsTo

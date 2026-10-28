@@ -16,11 +16,11 @@ class ExternalAppointmentSourceRegistry
         return [
             [
                 'key' => CoffracAppointmentService::SOURCE,
-                'label' => 'Coffrac',
-                'refresh_label' => 'Actualiser Coffrac',
-                'reset_label' => 'Réinitialiser Coffrac',
+                'label' => 'Cofrac',
+                'refresh_label' => 'Actualiser Cofrac',
+                'reset_label' => 'Réinitialiser Cofrac',
                 'enabled' => true,
-                'description' => 'Vide le cache local des RDV récupérés depuis Coffrac. Les RDV déjà créés dans TechCalendar ne sont pas supprimés.',
+                'description' => 'Vide le cache local des RDV récupérés depuis Cofrac. Les RDV déjà créés dans TechCalendar ne sont pas supprimés.',
             ],
             [
                 'key' => 'external_app_2',

@@ -42,7 +42,7 @@
                     <details class="rounded-xl border border-slate-200 p-4" @if(old('account_id') == $account->id) open @endif><summary class="flex cursor-pointer flex-wrap items-center justify-between gap-2"><span class="font-semibold">{{ $account->full_name }} <span class="text-sm font-normal text-slate-500">{{ $account->email }}</span></span><span class="text-sm">{{ $account->portal_enabled ? 'Accès actif' : 'Accès désactivé' }} · Modifier</span></summary>
                         @include('manager.clients.account', ['account' => $account])
                     </details>
-                @empty<p class="py-3 text-sm text-slate-500">Aucun accès créé. Les comptes Coffrac ne sont pas activés automatiquement.</p>@endforelse
+                @empty<p class="py-3 text-sm text-slate-500">Aucun accès créé. Les comptes Cofrac ne sont pas activés automatiquement.</p>@endforelse
                 {{ $accounts->links() }}
                 <details class="rounded-xl border border-slate-200 p-4" @if(old('account_id') === 'new') open @endif><summary class="cursor-pointer font-semibold">Créer un accès externe</summary>@include('manager.clients.account', ['account' => null])</details>
             </section>

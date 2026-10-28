@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalDelegataire;
 use App\Services\CoffracAppointmentService;
 use App\Services\CoffracDelegataireService;
+use App\Services\Crm\ClientAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,7 @@ class ManagerDelegataireController extends Controller
             ->assignable();
 
         if (config('crm.v2_enabled')) {
-            app(\App\Services\Crm\ClientAccess::class)->manage($request->user());
+            app(ClientAccess::class)->manage($request->user());
             $query->withCount('accounts')->when($filters['kind'] ?? null, fn ($q, $kind) => $q->where('kind', $kind));
         }
 
@@ -86,7 +87,7 @@ class ManagerDelegataireController extends Controller
         return redirect()
             ->route('manager.delegataires')
             ->with('status', sprintf(
-                'Délégataires Coffrac synchronisés : %d actif(s) reçu(s), %d désactivé(s), %d total en local.',
+                'Délégataires Cofrac synchronisés : %d actif(s) reçu(s), %d désactivé(s), %d total en local.',
                 $result['synced'],
                 $result['disabled'],
                 $result['total'],

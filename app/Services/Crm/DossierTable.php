@@ -206,7 +206,7 @@ class DossierTable
         }
 
         return ['date' => $activity->created_at, 'label' => $status
-            ? DossierStatusCatalog::describe($status)['label'] : 'Changement d’état Coffrac'];
+            ? DossierStatusCatalog::describe($status)['label'] : 'Changement d’état Cofrac'];
     }
 
     private function concat(string ...$parts): string

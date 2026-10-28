@@ -22,7 +22,7 @@ class CoffracDelegataireService
     public function sync(): array
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('API Coffrac non configurée.');
+            throw new RuntimeException('API Cofrac non configurée.');
         }
 
         $response = $this->request()->get($this->endpoint('delegataires'));
@@ -31,7 +31,7 @@ class CoffracDelegataireService
             $payload = $response->json();
             $message = is_array($payload) && filled($payload['message'] ?? null)
                 ? (string) $payload['message']
-                : 'Impossible de récupérer les délégataires Coffrac.';
+                : 'Impossible de récupérer les délégataires Cofrac.';
 
             throw new RuntimeException($message);
         }
@@ -83,7 +83,7 @@ class CoffracDelegataireService
     }
 
     /**
-     * @param array<string, mixed> $delegataire
+     * @param  array<string, mixed>  $delegataire
      * @return array{source:string,external_id:string,name:string,company_name:?string,email:?string,phone:?string,is_active:bool,payload:array<string,mixed>}
      */
     private function normalize(array $delegataire): array

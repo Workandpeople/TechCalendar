@@ -106,7 +106,7 @@ class PlannerTrackingController extends Controller
         if (! $coffracAppointments->isConfigured()) {
             return response()->json([
                 'sync_queued' => false,
-                'message' => 'API Coffrac non configurée.',
+                'message' => 'API Cofrac non configurée.',
             ], 422);
         }
 
@@ -115,12 +115,12 @@ class PlannerTrackingController extends Controller
         if (($currentStatus['state'] ?? null) === 'syncing') {
             return response()->json([
                 'sync_queued' => false,
-                'message' => $currentStatus['stage'] ?? 'Synchronisation Coffrac déjà en cours.',
+                'message' => $currentStatus['stage'] ?? 'Synchronisation Cofrac déjà en cours.',
                 'coffrac_api_status' => $currentStatus,
             ], 409);
         }
 
-        $coffracAppointments->markSyncQueued('Récupération des RDV Coffrac déjà placés lancée en arrière-plan...', [
+        $coffracAppointments->markSyncQueued('Récupération des RDV Cofrac déjà placés lancée en arrière-plan...', [
             'mode' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
             'remote_status' => CoffracAppointmentService::REMOTE_STATUS_PLACED,
         ]);
@@ -128,7 +128,7 @@ class PlannerTrackingController extends Controller
 
         return response()->json([
             'sync_queued' => true,
-            'message' => 'Récupération des RDV Coffrac déjà placés lancée. Le calendrier va se mettre à jour avec les données locales.',
+            'message' => 'Récupération des RDV Cofrac déjà placés lancée. Le calendrier va se mettre à jour avec les données locales.',
             'coffrac_api_status' => $coffracAppointments->currentSyncStatus(),
         ]);
     }
@@ -152,7 +152,7 @@ class PlannerTrackingController extends Controller
         }
 
         return response()->json([
-            'message' => 'Dossier Coffrac mis à jour.',
+            'message' => 'Dossier Cofrac mis à jour.',
             'documents' => $refresh['documents'],
             'comments' => $refresh['comments'],
             'status' => $refresh['status'],
@@ -328,7 +328,7 @@ class PlannerTrackingController extends Controller
         return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnician, $documentsByAppointment, $commentsByAppointment, $appointmentMailData): array {
             $technicianName = $appointment->technician?->full_name_with_departments ?? 'Technicien';
             $serviceLabel = $appointment->service
-                ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
+                ? sprintf('%s - %s', $appointment->service->display_type, $appointment->service->name)
                 : 'Prestation';
             $location = $this->extractLocationFromAddress($appointment->address);
             $previousAppointment = $appointmentsByTechnician

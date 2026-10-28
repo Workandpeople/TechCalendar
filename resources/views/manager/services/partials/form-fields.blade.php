@@ -3,7 +3,7 @@
         <label class="gc-label" for="{{ $prefix }}_type">Type</label>
         <select id="{{ $prefix }}_type" name="type" class="gc-input" required>
             @foreach ($types as $type)
-                <option value="{{ $type }}">{{ $type }}</option>
+                <option value="{{ $type }}">{{ \App\Support\CofracText::normalize($type) }}</option>
             @endforeach
         </select>
     </div>
@@ -21,14 +21,14 @@
 
 @unless(config('crm.v2_enabled'))
 <div>
-    <label class="gc-label" for="{{ $prefix }}_external_aliases">Alias Coffrac</label>
+    <label class="gc-label" for="{{ $prefix }}_external_aliases">Alias Cofrac</label>
     <textarea
         id="{{ $prefix }}_external_aliases"
         name="external_aliases"
         class="gc-input min-h-[120px]"
-        placeholder="Un libellé Coffrac par ligne. Exemple: RES EC 104 (01/01/25)"
+        placeholder="Un libellé Cofrac par ligne. Exemple: RES EC 104 (01/01/25)"
     >{{ old('external_aliases') }}</textarea>
-    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ces alias permettent de relier automatiquement les prestations reçues depuis Coffrac à cette prestation interne.</p>
+    <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Ces alias permettent de relier automatiquement les prestations reçues depuis Cofrac à cette prestation interne.</p>
 </div>
 
 @endunless

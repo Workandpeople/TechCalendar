@@ -19,7 +19,7 @@ class AppointmentMailTemplateData
 
         $customerName = trim($appointment->customer_first_name.' '.$appointment->customer_last_name);
         $serviceLabel = $appointment->service
-            ? trim($appointment->service->type.' - '.$appointment->service->name)
+            ? trim($appointment->service->display_type.' - '.$appointment->service->name)
             : 'Prestation non renseignée';
 
         return [
@@ -36,7 +36,7 @@ class AppointmentMailTemplateData
             'technician_name' => (string) ($appointment->technician?->full_name ?? ''),
             'technician_email' => (string) ($appointment->technician?->email ?? ''),
             'service_label' => $serviceLabel,
-            'service_type' => (string) ($appointment->service?->type ?? ''),
+            'service_type' => (string) ($appointment->service?->display_type ?? ''),
             'service_name' => (string) ($appointment->service?->name ?? ''),
             'appointment_date' => $appointment->starts_at?->format('d/m/Y') ?? '',
             'appointment_time' => $appointment->starts_at?->format('H:i') ?? '',

@@ -40,7 +40,7 @@
                     </div>
                 @endif
             @empty
-                <p class="mt-3 text-sm text-slate-500">Aucun rapport transmis. Les pièces internes et les anciens documents Coffrac ne sont jamais envoyés automatiquement.</p>
+                <p class="mt-3 text-sm text-slate-500">Aucun rapport transmis. Les pièces internes et les anciens documents Cofrac ne sont jamais envoyés automatiquement.</p>
             @endforelse
         </article>
     @endforeach

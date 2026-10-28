@@ -50,7 +50,7 @@ class DossierBillingService
                 throw ValidationException::withMessages(['billing' => 'Ce dossier est déjà facturé. Aucune seconde facturation n’a été enregistrée.']);
             }
             if ($dossier->billing_review_required) {
-                throw ValidationException::withMessages(['billing' => 'Un historique de facturation Coffrac doit être vérifié sur ce dossier. Nouvelle facturation bloquée.']);
+                throw ValidationException::withMessages(['billing' => 'Un historique de facturation Cofrac doit être vérifié sur ce dossier. Nouvelle facturation bloquée.']);
             }
             if ($dossier->version !== (int) $data['version']) {
                 throw ValidationException::withMessages(['version' => 'Le dossier a changé. Recharge la fiche avant de confirmer la facturation.']);

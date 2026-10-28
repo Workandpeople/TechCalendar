@@ -25,7 +25,7 @@ class LegacyClientReconciliation
                 $counts['organisations_a_creer']++;
                 if ($apply) {
                     $client = ExternalDelegataire::firstOrCreate(['source' => 'coffrac', 'external_id' => (string) $record->source_id], [
-                        'name' => mb_substr(trim((string) (($row['nom_societe'] ?? '') ?: ($row['name'] ?? ''))) ?: 'Client Coffrac #'.$record->source_id, 0, 190),
+                        'name' => mb_substr(trim((string) (($row['nom_societe'] ?? '') ?: ($row['name'] ?? ''))) ?: 'Client Cofrac #'.$record->source_id, 0, 190),
                         'company_name' => mb_substr((string) ($row['nom_societe'] ?? ''), 0, 190) ?: null,
                         'email' => filter_var($row['email'] ?? '', FILTER_VALIDATE_EMAIL) ? mb_substr($row['email'], 0, 190) : null,
                         'phone' => mb_substr((string) ($row['telephone'] ?? ''), 0, 60) ?: null,

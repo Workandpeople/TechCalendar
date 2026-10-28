@@ -11,7 +11,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Throwable;
 
-class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
+class SyncCoffracAppointmentsJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -28,9 +28,7 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
         public bool $incremental = true,
         public string $status = CoffracAppointmentService::REMOTE_STATUS_ALL,
         public int $pageSize = 0,
-    )
-    {
-    }
+    ) {}
 
     public function uniqueId(): string
     {
@@ -49,7 +47,7 @@ class SyncCoffracAppointmentsJob implements ShouldQueue, ShouldBeUnique
     public function failed(Throwable $exception): void
     {
         app(CoffracAppointmentService::class)->markSyncFailed(
-            'Synchronisation Coffrac interrompue: '.$exception->getMessage(),
+            'Synchronisation Cofrac interrompue: '.$exception->getMessage(),
         );
     }
 }

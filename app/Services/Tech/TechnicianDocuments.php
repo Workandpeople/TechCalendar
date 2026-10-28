@@ -45,7 +45,7 @@ class TechnicianDocuments
         $collected?->through(function ($record) use ($appointment): array {
             $file = $this->archive->describe($record);
 
-            return [...$file, 'label' => 'Archive Coffrac', 'date' => substr((string) $file['created_at'], 0, 10),
+            return [...$file, 'label' => 'Archive Cofrac', 'date' => substr((string) $file['created_at'], 0, 10),
                 'url' => $file['url'] ? $this->url($appointment, 'archive', $record->source_id) : null];
         });
 
@@ -58,7 +58,7 @@ class TechnicianDocuments
                 'url' => $this->url($appointment, 'lot', $document->id), 'previewable' => DocumentResponseHeaders::previewable($document->mime),
             ]);
 
-        return ['documentGroups' => ['Documents du dossier' => $native, 'Archives Coffrac' => $collected, 'Documents de lot' => $lots],
+        return ['documentGroups' => ['Documents du dossier' => $native, 'Archives Cofrac' => $collected, 'Documents de lot' => $lots],
             'documentCount' => ($native?->total() ?? 0) + ($collected?->total() ?? 0) + $lots->total(), 'documentSearch' => $search];
     }
 

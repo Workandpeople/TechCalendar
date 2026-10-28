@@ -1,8 +1,8 @@
 <?php
 
 use App\Jobs\SyncCoffracAppointmentsJob;
-use App\Models\Appointment;
 use App\Mail\TechnicianAppointmentNotificationMail;
+use App\Models\Appointment;
 use App\Models\Department;
 use App\Models\ExternalApiSync;
 use App\Models\ExternalAppointmentRequest;
@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\CoffracAppointmentService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -102,7 +103,7 @@ it('refreshes placed coffrac appointments from the tracking page', function () {
         ->assertJsonPath('coffrac_api_status.mode', CoffracAppointmentService::REMOTE_STATUS_PLACED);
 
     Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->incremental === false
-        && $job->status === \App\Services\CoffracAppointmentService::REMOTE_STATUS_PLACED);
+        && $job->status === CoffracAppointmentService::REMOTE_STATUS_PLACED);
 
     $this->assertDatabaseHas('external_api_syncs', [
         'source' => 'coffrac',
@@ -228,7 +229,7 @@ it('shows the placed coffrac refresh action on the manager appointments page', f
         ->assertOk()
         ->assertJsonPath('sync_queued', true);
 
-    Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->status === \App\Services\CoffracAppointmentService::REMOTE_STATUS_PLACED);
+    Queue::assertPushed(SyncCoffracAppointmentsJob::class, fn (SyncCoffracAppointmentsJob $job): bool => $job->status === CoffracAppointmentService::REMOTE_STATUS_PLACED);
 });
 
 it('reassigns a tracking appointment to another compatible technician', function () {
@@ -436,7 +437,7 @@ it('updates tracking appointment date duration and address', function () {
         ->and($stored->longitude)->toBe(4.832);
 
     Http::assertSentCount(1);
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'PATCH'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/4257/address'
         && $request->hasHeader('Authorization', 'Bearer secret-token')
         && $request['address'] === '20 Place Bellecour, 69002 Lyon, France'
@@ -831,7 +832,7 @@ it('searches tracking appointments and returns the modal event payload', functio
         ->and($appointments[0]['id'])->toBe($targetAppointment->id)
         ->and($appointments[0]['extendedProps']['customer_name'])->toBe('Alice Durand')
         ->and($appointments[0]['extendedProps']['technician_name'])->toContain('Paul Tech')
-        ->and($appointments[0]['extendedProps']['service_label'])->toBe('COFFRAC - Contrôle cible')
+        ->and($appointments[0]['extendedProps']['service_label'])->toBe('COFRAC - Contrôle cible')
         ->and($appointments[0]['extendedProps']['postal_code'])->toBe('69002')
         ->and($appointments[0]['extendedProps']['city'])->toBe('Lyon');
 });
@@ -1120,7 +1121,7 @@ it('reports a coffrac appointment problem and moves it to probleme rendez-vous',
         ->and($appointment->problem_reported_at)->not->toBeNull()
         ->and($appointment->comment)->toBe('Client absent au rendez-vous, à retraiter côté Coffrac.');
 
-    Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://coffrac.test/api/techcalendar/appointments/44/problem'
         && $request['comment'] === 'Client absent au rendez-vous, à retraiter côté Coffrac.'
         && $request['problem_type'] === CoffracAppointmentService::PROBLEM_TYPE_DOCUMENT);
@@ -1208,7 +1209,7 @@ it('refuses to report a lot appointment problem when it is not linked to coffrac
     expect($appointment->status)->toBe(Appointment::STATUS_SCHEDULED)
         ->and($appointment->problem_reported_at)->toBeNull();
 
-    Http::assertNotSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->method() === 'POST'
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST'
         && str_contains($request->url(), '/techcalendar/appointments/')
         && str_ends_with($request->url(), '/problem'));
     Mail::assertNothingQueued();

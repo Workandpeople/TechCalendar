@@ -49,18 +49,24 @@
                 @endforeach
             </div>
             @unless ($dossier->exists)
-                <fieldset class="gc-card p-5">
-                    <legend class="px-2 text-lg font-semibold">Prestations *</legend>
-                    <p class="mb-4 text-sm text-slate-500">Les prestations sélectionnées constituent les fiches du dossier. Elles ne créent pas encore de rendez-vous.</p>
-                    <div class="grid max-h-72 gap-2 overflow-y-auto md:grid-cols-2">
-                        @php($selectedServices = is_array(old('service_ids')) ? old('service_ids') : [])
-                        @forelse ($services as $service)
-                            <label class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50"><input type="checkbox" name="service_ids[]" value="{{ $service->id }}" @checked(in_array($service->id, $selectedServices))><span>{{ $service->name }} <span class="text-xs text-slate-500">{{ $service->type }}</span></span></label>
-                        @empty
-                            <p class="text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
-                        @endforelse
-                    </div>
-                </fieldset>
+                <section class="gc-card p-4 sm:p-5" aria-labelledby="dossier-services-label">
+                    <label id="dossier-services-label" for="dossier-service-ids" class="gc-label">Prestations *</label>
+                    @php($selectedServices = is_array(old('service_ids')) ? old('service_ids') : [])
+                    <select id="dossier-service-ids" name="service_ids[]" class="gc-input" multiple size="5" required
+                        data-multi-select data-empty-label="Choisir une prestation…" data-selected-label="prestations sélectionnées"
+                        data-search-label="Rechercher par nom ou code…" data-options-label="Prestations disponibles"
+                        data-no-results-label="Aucune prestation ne correspond à la recherche."
+                        data-required-message="Sélectionnez au moins une prestation."
+                        aria-describedby="dossier-services-help" @disabled($services->isEmpty())>
+                        @foreach ($services as $service)
+                            <option value="{{ $service->id }}" @selected(in_array($service->id, $selectedServices))>{{ $service->name }} · {{ $service->display_type }}</option>
+                        @endforeach
+                    </select>
+                    <p id="dossier-services-help" class="mt-2 text-xs text-slate-500">Plusieurs choix possibles. Le rendez-vous sera organisé ensuite.</p>
+                    @if ($services->isEmpty())
+                        <p class="mt-2 text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
+                    @endif
+                </section>
             @endunless
             <div class="gc-dialog-actions flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5">
                 <p class="text-sm text-slate-500">{{ $portalCreation ? '* Champs obligatoires. Aucun rendez-vous n’est fixé à cette étape.' : '* Champs obligatoires. Aucun appel aux CRM externes.' }}</p>

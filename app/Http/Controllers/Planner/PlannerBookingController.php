@@ -207,7 +207,7 @@ class PlannerBookingController extends Controller
         abort_if(config('crm.v2_enabled'), 410, 'La collecte par connecteur est désactivée en V2.');
 
         if ($coffracAppointments->isConfigured()) {
-            $coffracAppointments->markSyncQueued('Récupération des RDV à placer Coffrac lancée en arrière-plan...', [
+            $coffracAppointments->markSyncQueued('Récupération des RDV à placer Cofrac lancée en arrière-plan...', [
                 'mode' => CoffracAppointmentService::REMOTE_STATUS_PENDING,
                 'remote_status' => CoffracAppointmentService::REMOTE_STATUS_PENDING,
             ]);
@@ -219,8 +219,8 @@ class PlannerBookingController extends Controller
         return response()->json([
             'sync_queued' => $coffracAppointments->isConfigured(),
             'message' => $coffracAppointments->isConfigured()
-                ? 'Récupération des RDV à placer Coffrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
-                : 'API Coffrac non configurée.',
+                ? 'Récupération des RDV à placer Cofrac lancée. Les rendez-vous affichés correspondent aux dernières données déjà récupérées.'
+                : 'API Cofrac non configurée.',
             'appointments' => [],
             'coffrac_api_status' => $coffracPending['status'],
             'external_sources' => $this->externalAppointmentSources($coffracPending['status']),
@@ -279,7 +279,7 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Cofrac introuvable.');
 
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
 
@@ -314,12 +314,12 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Cofrac introuvable.');
 
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
 
         return response()->json([
-            'message' => 'Dossier Coffrac mis à jour.',
+            'message' => 'Dossier Cofrac mis à jour.',
             'appointment' => $appointment,
             'appointments' => $coffracPending['appointments'],
             'coffrac_api_status' => $coffracPending['status'],
@@ -351,12 +351,12 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        abort_if(! $appointment, 404, 'Demande de rendez-vous Coffrac introuvable.');
+        abort_if(! $appointment, 404, 'Demande de rendez-vous Cofrac introuvable.');
 
         $coffracPending = $coffracAppointments->pendingWithStatus(self::CRM_APPOINTMENT_LIST_LIMIT);
 
         return response()->json([
-            'message' => 'Problème RDV déclaré dans Coffrac.',
+            'message' => 'Problème RDV déclaré dans Cofrac.',
             'appointment' => $appointment,
             'appointments' => $coffracPending['appointments'],
             'coffrac_api_status' => $coffracPending['status'],
@@ -521,7 +521,7 @@ class PlannerBookingController extends Controller
                 ->when($replacementAppointment, fn ($query) => $query->whereKeyNot($replacementAppointment->id))
                 ->exists()) {
             throw ValidationException::withMessages([
-                'crm_appointment_id' => 'Ce RDV Coffrac a déjà été placé dans TechCalendar.',
+                'crm_appointment_id' => 'Ce RDV Cofrac a déjà été placé dans TechCalendar.',
             ]);
         }
 
@@ -1410,7 +1410,7 @@ class PlannerBookingController extends Controller
                     'type_label' => $lot->typeLabel(),
                     'service_id' => $lot->service_id,
                     'service_label' => $lot->service
-                        ? $lot->service->type.' - '.$lot->service->name
+                        ? $lot->service->display_type.' - '.$lot->service->name
                         : null,
                     'coffrac_service_alias_id' => $lot->coffrac_service_alias_id,
                     'coffrac_service_alias_label' => $lot->coffracServiceAlias?->external_name,
@@ -1475,8 +1475,8 @@ class PlannerBookingController extends Controller
                         'external_reference' => $appointment->external_reference,
                         'service_id' => $appointment->service_id ?: $lot->service_id,
                         'service_label' => $appointment->service
-                            ? $appointment->service->type.' - '.$appointment->service->name
-                            : ($lot->service ? $lot->service->type.' - '.$lot->service->name : null),
+                            ? $appointment->service->display_type.' - '.$appointment->service->name
+                            : ($lot->service ? $lot->service->display_type.' - '.$lot->service->name : null),
                         'status' => $appointment->status,
                         'status_label' => $appointment->statusLabel(),
                         'appointment_id' => $appointment->appointment_id,
@@ -1489,7 +1489,7 @@ class PlannerBookingController extends Controller
                         'placed_at' => $appointment->appointment?->starts_at,
                         'placed_technician_name' => $appointment->appointment?->technician?->full_name_with_departments,
                         'placed_service_label' => $appointment->appointment?->service
-                            ? $appointment->appointment->service->type.' - '.$appointment->appointment->service->name
+                            ? $appointment->appointment->service->display_type.' - '.$appointment->appointment->service->name
                             : null,
                         'tracking_url' => $this->trackingUrlForLotAppointment($appointment, 'planner.tracking'),
                         'can_contact' => $this->isPlaceableLotAppointment($appointment) && $lot->supportsContactProcessing(),
@@ -1579,7 +1579,7 @@ class PlannerBookingController extends Controller
 
             if (! $requestedAlias) {
                 throw ValidationException::withMessages([
-                    'lot_service_alias_id' => 'Cet alias Coffrac ne correspond pas à la prestation du lot.',
+                    'lot_service_alias_id' => 'Cet alias Cofrac ne correspond pas à la prestation du lot.',
                 ]);
             }
 
@@ -1977,7 +1977,7 @@ class PlannerBookingController extends Controller
             'beneficiary_address' => $lotAppointment->beneficiary_address,
             'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
             'beneficiary_city' => $lotAppointment->beneficiary_city,
-            'service_label' => $service ? $service->type.' - '.$service->name : null,
+            'service_label' => $service ? $service->display_type.' - '.$service->name : null,
             'appointment_id' => $lotAppointment->appointment_id,
             'global_plus_references_url' => route('planner.book.lots.appointments.global-plus.references', $lotAppointment),
             'global_plus_store_url' => route('planner.book.lots.appointments.global-plus.store', $lotAppointment),
@@ -2091,7 +2091,7 @@ class PlannerBookingController extends Controller
 
         return $appointments->map(function (Appointment $appointment) use ($appointmentsByTechnicianAndDay, $documentsByAppointment, $commentsByAppointment, $replacementAppointmentId): array {
             $serviceLabel = $appointment->service
-                ? $appointment->service->type.' - '.$appointment->service->name
+                ? $appointment->service->display_type.' - '.$appointment->service->name
                 : 'Prestation';
             $isReplacementTarget = $replacementAppointmentId !== null && (int) $appointment->id === $replacementAppointmentId;
             $sameDayAppointments = $appointmentsByTechnicianAndDay

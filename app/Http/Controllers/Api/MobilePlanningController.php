@@ -82,7 +82,7 @@ class MobilePlanningController extends Controller
     private function serializeAppointment(Appointment $appointment, array $documents): array
     {
         $serviceLabel = $appointment->service
-            ? sprintf('%s - %s', $appointment->service->type, $appointment->service->name)
+            ? sprintf('%s - %s', $appointment->service->display_type, $appointment->service->name)
             : 'Prestation';
         $location = $this->extractLocationFromAddress((string) $appointment->address);
 

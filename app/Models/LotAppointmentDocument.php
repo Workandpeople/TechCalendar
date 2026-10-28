@@ -45,7 +45,7 @@ class LotAppointmentDocument extends Model
         return [
             self::STATUS_PENDING => 'En attente',
             self::STATUS_QUEUED => 'Envoi en cours',
-            self::STATUS_UPLOADED => 'Envoyé à Coffrac',
+            self::STATUS_UPLOADED => 'Envoyé à Cofrac',
             self::STATUS_FAILED => 'Erreur',
         ];
     }

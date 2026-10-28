@@ -27,7 +27,7 @@ class MobileAppointmentDocumentController extends Controller
 
         if ($appointment->external_source !== CoffracAppointmentService::SOURCE || ! filled($appointment->external_reference)) {
             throw ValidationException::withMessages([
-                'document' => 'Ce rendez-vous n’est pas rattaché à un dossier Coffrac.',
+                'document' => 'Ce rendez-vous n’est pas rattaché à un dossier Cofrac.',
             ]);
         }
 
@@ -64,7 +64,7 @@ class MobileAppointmentDocumentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Document ajouté au dossier Coffrac.',
+            'message' => 'Document ajouté au dossier Cofrac.',
             'document' => $document,
         ]);
     }
