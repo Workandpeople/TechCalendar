@@ -60,7 +60,13 @@ try {
         throw new RuntimeException('Blocage mail non respecte.');
     }
     config(['mail.delivery_enabled' => true]);
-    $appointment = App\Models\Appointment::query()->firstOrFail();
+    $appointment = App\Models\Appointment::create(['service_id' => App\Models\Service::query()->firstOrFail()->id,
+        'technician_id' => App\Models\User::withTrashed()->where('role', 2)->firstOrFail()->id,
+        'created_by' => App\Models\User::query()->where('admin', true)->firstOrFail()->id,
+        'customer_first_name' => 'Fixture', 'customer_last_name' => 'Planning', 'customer_phone' => '0600000000',
+        'address' => 'Fixture uniquement', 'latitude' => 48.85, 'longitude' => 2.35,
+        'starts_at' => now()->addDay(), 'ends_at' => now()->addDay()->addMinutes(30),
+        'duration_minutes' => 30, 'status' => App\Models\Appointment::STATUS_SCHEDULED]);
     $planningDelivery = App\Models\AppointmentMailDelivery::create(['appointment_id' => $appointment->id,
         'recipient' => 'recipient@example.invalid', 'subject' => 'Fixture planning', 'status' => 'queued']);
     $planning = app(App\Services\AppointmentMailDelivery::class);
