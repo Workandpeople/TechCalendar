@@ -6491,6 +6491,7 @@
             confirmationMailToggle.textContent = isHidden ? 'Préparer un mail' : 'Masquer le mail';
 
             if (!isHidden) {
+                updateBookingMailDelivery(confirmationMailAppointmentId);
                 confirmationMailRecipient?.focus();
                 scheduleConfirmationMailPreview(0);
             }

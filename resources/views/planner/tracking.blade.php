@@ -2691,6 +2691,7 @@
             trackingMailToggle.textContent = isHidden ? 'Préparer un mail' : 'Masquer le mail';
 
             if (!isHidden) {
+                updateTrackingMailDelivery(trackingMailAppointmentId);
                 trackingMailRecipient?.focus();
                 scheduleTrackingMailPreview(0);
             }
