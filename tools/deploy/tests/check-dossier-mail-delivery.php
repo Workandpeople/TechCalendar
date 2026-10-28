@@ -59,6 +59,16 @@ try {
     if ($delivery->recent($dossier)[0]['status'] !== 'blocked') {
         throw new RuntimeException('Blocage mail non respecte.');
     }
+    config(['mail.delivery_enabled' => true]);
+    $appointment = App\Models\Appointment::query()->firstOrFail();
+    $planningDelivery = App\Models\AppointmentMailDelivery::create(['appointment_id' => $appointment->id,
+        'recipient' => 'recipient@example.invalid', 'subject' => 'Fixture planning', 'status' => 'queued']);
+    $planning = app(App\Services\AppointmentMailDelivery::class);
+    if ($planning->deliver($planningDelivery->id, fn () => $receipt) !== $receipt
+        || $planning->recent($appointment)[0]['status'] !== 'sent'
+        || $planning->deliver($planningDelivery->id, fn () => throw new RuntimeException('Renvoi interdit')) !== null) {
+        throw new RuntimeException('Suivi planning ou protection doublon MySQL incorrect.');
+    }
     Http::assertNothingSent();
     Mail::assertNothingOutgoing();
     Queue::assertNothingPushed();
