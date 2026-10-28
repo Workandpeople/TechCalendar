@@ -63,11 +63,22 @@ test('missing services and legacy GPS warnings keep compact accessible labels', 
 });
 
 test('scheduled pending requests use a replacement link in the same row instead of a hidden second list', () => {
-    const html = render({ id: 'dossier-1', dossier_id: 1, replace_appointment_id: 42, existing_appointment_at: '2026-10-27T10:00:00Z' });
+    const html = render({ id: 'dossier-1', dossier_id: 1, replace_appointment_id: 42, existing_appointment_at: '2026-10-27T10:00:00Z', dossier_summary: { dossier_url: '/v2/dossiers/1' } });
     assert.match(html, /href="\/planner\/appointments\/modify\?replace_appointment_id=42"/);
     assert.match(html, /Replacer le RDV/);
-    assert.match(html, /title="Voir le dossier"/);
+    assert.match(html, /title="Voir le dossier \(nouvel onglet\)"/);
     assert.doesNotMatch(source, /booking-replacements/);
     assert.match(source, /event\.target\.closest\('a, button'\)/);
     assert.match(source, /if \(event\.target !== card\) return/);
+});
+
+test('new and replacement dossier eyes open the dossier directly without selecting the planning row', () => {
+    for (const replace_appointment_id of [null, 42]) {
+        const html = render({ id: 'dossier-1', replace_appointment_id, dossier_summary: { dossier_url: '/v2/dossiers/1' } });
+        assert.match(html, /<a href="\/v2\/dossiers\/1" target="_blank" rel="noopener noreferrer" class="crm-appointment-dossier-link/);
+        assert.doesNotMatch(html, /data-crm-detail-id=/);
+    }
+    assert.match(source, /href="\{\{ \$appointment\['dossier_summary'\]\['dossier_url'\] \}\}" target="_blank" rel="noopener noreferrer"/);
+    assert.doesNotMatch(source, /window\.location\.assign\(appointment\.dossier_summary\.dossier_url\)/);
+    assert.match(render({ id: 'legacy-1' }), /<button type="button" data-crm-detail-id="legacy-1"/);
 });

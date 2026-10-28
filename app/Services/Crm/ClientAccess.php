@@ -86,17 +86,7 @@ class ClientAccess
 
     public function addComment(User $user, Dossier $dossier): bool
     {
-        return $this->viewDossier($user, $dossier) && $this->allows($user, 'add_comments')
-            && $this->isNonCompliant($dossier);
-    }
-
-    private function isNonCompliant(Dossier $dossier): bool
-    {
-        $statuses = DossierStatusCatalog::STATUSES['non_compliant']['values'];
-
-        return $dossier->relationLoaded('operations')
-            ? $dossier->operations->contains(fn ($operation) => in_array($operation->legacy_status, $statuses, true))
-            : $dossier->operations()->whereIn('legacy_status', $statuses)->exists();
+        return $this->viewDossier($user, $dossier) && $this->allows($user, 'add_comments');
     }
 
     public function dossiers(User $user): Builder

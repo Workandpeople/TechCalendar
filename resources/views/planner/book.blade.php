@@ -473,12 +473,21 @@
                                 @if ($appointment['replace_appointment_id'] ?? null)
                                     <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" title="RDV existant : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer le RDV</a>
                                 @endif
-                                <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="{{ ($appointment['replace_appointment_id'] ?? null) ? 'Voir le dossier' : 'Voir le détail du RDV' }}" aria-label="{{ ($appointment['replace_appointment_id'] ?? null) ? 'Voir le dossier' : 'Voir le détail du RDV' }}">
-                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                </button>
+                                @if ($appointment['dossier_summary']['dossier_url'] ?? null)
+                                    <a class="crm-appointment-dossier-link inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" href="{{ $appointment['dossier_summary']['dossier_url'] }}" target="_blank" rel="noopener noreferrer" title="Voir le dossier (nouvel onglet)" aria-label="Voir le dossier (nouvel onglet)">
+                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </a>
+                                @else
+                                    <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </button>
+                                @endif
                             </div>
                         </div>
                     @endforeach
@@ -1511,6 +1520,7 @@
         let currentCrmDetailAppointmentId = null;
         let bookingInitialCrmDetailComment = '';
         let bookingTravelTooltip = null;
+        let bookingPlacedTooltip = null;
         let bookingCrmAppointmentTooltip = null;
         let bookingCrmCommentTooltipTarget = null;
         let currentTechnicianColors = {};
@@ -2006,7 +2016,13 @@
             const replacementLink = appointment.replace_appointment_id
                 ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" title="RDV existant : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer le RDV</a>`
                 : '';
-            const detailLabel = appointment.replace_appointment_id ? 'Voir le dossier' : 'Voir le détail du RDV';
+            const dossierUrl = appointment.dossier_summary?.dossier_url;
+            const detailLabel = dossierUrl ? 'Voir le dossier (nouvel onglet)' : 'Voir le détail du RDV';
+            const detailTag = dossierUrl ? 'a' : 'button';
+            const detailClass = dossierUrl ? 'crm-appointment-dossier-link' : 'crm-appointment-detail-button';
+            const detailAttributes = dossierUrl
+                ? `href="${escapeHtml(dossierUrl)}" target="_blank" rel="noopener noreferrer"`
+                : `type="button" data-crm-detail-id="${escapeHtml(appointment.id)}"`;
 
             return `
                 <div
@@ -2030,12 +2046,12 @@
                         ${serviceBadge}
                         ${gpsBadge}
                         ${replacementLink}
-                        <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="${escapeHtml(appointment.id)}" title="${detailLabel}" aria-label="${detailLabel}">
+                        <${detailTag} ${detailAttributes} class="${detailClass} inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" title="${detailLabel}" aria-label="${detailLabel}">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
-                        </button>
+                        </${detailTag}>
                     </div>
                 </div>
             `;
@@ -3316,11 +3332,6 @@
         const openCrmAppointmentDetail = (crmId) => {
             const appointment = crmAppointmentById(crmId);
 
-            if (appointment?.replace_appointment_id && appointment.dossier_summary?.dossier_url) {
-                window.location.assign(appointment.dossier_summary.dossier_url);
-                return;
-            }
-
             if (!appointment || !bookingCrmDetailModal) {
                 showFeedback('Impossible de retrouver ce RDV dans les données locales.', 'error');
                 return;
@@ -3646,7 +3657,9 @@
             getEvents: () => bookingCalendar?.getEvents() || [],
             getTechnician: (id) => technicianById(id),
         });
-        const hideSuggestionTooltip = () => bookingTravelTooltip?.hide();
+        const tooltipForBookingEvent = (event) => event.extendedProps?.is_suggestion
+            ? ensureBookingTravelTooltip() : (bookingPlacedTooltip ||= window.TechCalendarAppointmentTooltip.create());
+        const hideSuggestionTooltip = () => { bookingTravelTooltip?.hide(); bookingPlacedTooltip?.hide(); };
 
         const addMinutes = (date, minutes) => new Date(date.getTime() + (Number(minutes || 0) * 60000));
 
@@ -5691,7 +5704,7 @@
                 },
                 eventContent: bookingCalendarEventContent,
                 eventMouseEnter: (info) => {
-                    const tooltip = ensureBookingTravelTooltip();
+                    const tooltip = tooltipForBookingEvent(info.event);
                     const moveHandler = (event) => tooltip.move(event);
                     info.el._bookingSuggestionTooltipMoveHandler = moveHandler;
                     info.el.addEventListener('mousemove', moveHandler);
@@ -5711,7 +5724,7 @@
                     info.el.tabIndex = 0;
                     const focus = () => {
                         const box = info.el.getBoundingClientRect();
-                        ensureBookingTravelTooltip().show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
+                        tooltipForBookingEvent(info.event).show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
                     };
                     info.el._bookingTravelFocus = focus;
                     info.el.addEventListener('focus', focus);
@@ -6862,6 +6875,12 @@
                     selectedCalendarEvent.setProp('backgroundColor', '#fff7ed');
                     selectedCalendarEvent.setProp('borderColor', '#f97316');
                     selectedCalendarEvent.setProp('textColor', '#9a3412');
+                    if (bookingForcePlacementEnabled) {
+                        const removedId = String(selectedCalendarEvent.id);
+                        currentCalendarEvents = currentCalendarEvents.filter(event => String(event.id) !== removedId);
+                        selectedCalendarEvent.remove();
+                        if (lastCalendarDateInfo) void refreshCalendarWindow(lastCalendarDateInfo, { force: true });
+                    }
                 }
 
                 bookingInitialDetailComment = payload.comment || problemPayload.comment;

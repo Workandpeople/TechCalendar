@@ -14,8 +14,7 @@ class MobilePlanningController extends Controller
 {
     public function __construct(
         private readonly AppointmentDocumentSerializer $documentSerializer,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -29,6 +28,7 @@ class MobilePlanningController extends Controller
         }
 
         $appointments = Appointment::query()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->with('service:id,type,name')
             ->where('technician_id', $technician->id)
             ->where('starts_at', '<=', $windowEnd)

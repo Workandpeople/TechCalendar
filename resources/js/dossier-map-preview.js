@@ -6,6 +6,11 @@ export function validMapPoint(point) {
         && (point.latitude !== 0 || point.longitude !== 0);
 }
 
+export function dossierOverviewBounds(point) {
+    return [[Math.min(-5.5, point.longitude), Math.min(41, point.latitude)],
+        [Math.max(9.8, point.longitude), Math.max(51.5, point.latitude)]];
+}
+
 export function initDossierMapPreview(root = document, browser = window) {
     const triggers = [...root.querySelectorAll('[data-dossier-map-url]')];
     if ((!triggers.length) && !root.querySelector?.('[data-dossier-list]')) return;
@@ -26,16 +31,11 @@ export function initDossierMapPreview(root = document, browser = window) {
     popup.append(heading, canvas, message);
     root.body.append(popup);
     let active = null;
-    let pinned = false;
-    let hovered = false;
-    let timer;
     let controller;
     let map;
     let marker;
     let generation = 0;
-    let restoringFocus = false;
     const cache = new Map();
-    const cancelHide = () => browser.clearTimeout(timer);
     const position = () => {
         if (!active) return;
         const rect = active.getBoundingClientRect();
@@ -45,24 +45,15 @@ export function initDossierMapPreview(root = document, browser = window) {
         popup.style.left = `${point.left}px`; popup.style.top = `${point.top}px`;
     };
     const hide = (restoreFocus = false) => {
-        cancelHide(); controller?.abort(); generation++;
+        controller?.abort(); generation++;
         const trigger = active;
         active?.setAttribute('aria-expanded', 'false');
-        active = null; pinned = false; hovered = false; popup.hidden = true;
+        active = null; popup.hidden = true;
         if (restoreFocus && trigger) {
-            restoringFocus = true;
             trigger.focus();
-            restoringFocus = false;
         }
     };
-    const scheduleHide = () => {
-        cancelHide();
-        timer = browser.setTimeout(() => {
-            if (!hovered && !pinned && root.activeElement !== active && !popup.contains(root.activeElement)) hide();
-        }, 1000);
-    };
     const show = async (trigger) => {
-        cancelHide();
         if (active === trigger) return;
         hide(); active = trigger;
         const current = ++generation;
@@ -93,7 +84,7 @@ export function initDossierMapPreview(root = document, browser = window) {
                 const center = [payload.coordinates.longitude, payload.coordinates.latitude];
                 if (!map) {
                     map = new browser.mapboxgl.Map({
-                        container: canvas, accessToken: token, style: 'mapbox://styles/mapbox/streets-v12', center, zoom: 14,
+                        container: canvas, accessToken: token, style: 'mapbox://styles/mapbox/streets-v12', center: [2.2, 46.4], zoom: 3,
                         interactive: true, dragRotate: false, pitchWithRotate: false,
                         locale: { 'NavigationControl.ZoomIn': 'Zoomer', 'NavigationControl.ZoomOut': 'D\u00e9zoomer' },
                     });
@@ -103,9 +94,11 @@ export function initDossierMapPreview(root = document, browser = window) {
                         if (active) message.textContent = 'Le fond de carte ne peut pas \u00eatre charg\u00e9. R\u00e9essaie dans un instant.';
                     });
                 } else {
-                    marker.setLngLat(center); map.jumpTo({ center, zoom: 14 });
+                    marker.setLngLat(center);
                 }
                 map.resize();
+                // Keep metropolitan France (including Corsica) visible; overseas sites extend the overview.
+                map.fitBounds(dossierOverviewBounds(payload.coordinates), { padding: 16, duration: 0, maxZoom: 5 });
             }
         } catch (error) {
             if (current !== generation || error.name === 'AbortError') return;
@@ -120,22 +113,15 @@ export function initDossierMapPreview(root = document, browser = window) {
         trigger.setAttribute('aria-controls', popup.id);
         trigger.setAttribute('aria-haspopup', 'dialog');
         trigger.setAttribute('aria-expanded', 'false');
-        trigger.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') show(trigger); });
-        trigger.addEventListener('pointerleave', scheduleHide);
-        trigger.addEventListener('focus', () => { if (!restoringFocus) show(trigger); });
-        trigger.addEventListener('blur', scheduleHide);
         trigger.addEventListener('click', () => {
-            if (active === trigger && pinned) hide();
-            else { show(trigger); pinned = true; }
+            if (active === trigger) hide();
+            else show(trigger);
         });
     });
     bind(triggers);
     root.addEventListener('techcalendar:dossiers-before-update', () => hide());
     root.addEventListener('techcalendar:dossiers-updated', () => bind(root.querySelectorAll('[data-dossier-map-url]')));
     close.addEventListener('click', () => hide(true));
-    popup.addEventListener('pointerenter', () => { hovered = true; cancelHide(); });
-    popup.addEventListener('pointerleave', () => { hovered = false; scheduleHide(); });
-    popup.addEventListener('focusout', scheduleHide);
     root.addEventListener('techcalendar:dossier-comments-open', () => hide());
     root.addEventListener('keydown', event => { if (event.key === 'Escape' && active) hide(popup.contains(root.activeElement)); });
     root.addEventListener('click', event => { if (!popup.contains(event.target) && !active?.contains(event.target)) hide(); });

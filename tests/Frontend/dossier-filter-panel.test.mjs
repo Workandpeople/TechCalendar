@@ -10,6 +10,8 @@ function fixture(values = {}) {
         fields[name].options = entries.map(([value, label]) => ({ value, label }));
     }
     const events = [];
+    fields['company_ids[]'] = { options: ['Société Alpha', 'Délégataire Bravo'].map((label, index) => ({ label, value: String(index + 12), selected: false })),
+        dispatchEvent: event => events.push(event.type) };
     fields['planning_user_ids[]'] = { options: ['Alice Martin', 'Bob Dupont'].map((label, index) => ({ label, value: String(index + 12), selected: false })),
         dispatchEvent: event => events.push(event.type) };
     fields['service_ids[]'] = { options: ['Fiche A', 'Fiche B'].map((label, index) => ({ label, value: String(index + 1), selected: false })),
@@ -84,6 +86,24 @@ test('clearing services synchronizes the widget without emitting duplicate chang
     assert.equal(ui.fields['service_ids[]'].options.some(option => option.selected), false);
     assert.deepEqual(ui.events, ['techcalendar:selection-sync']);
     assert.equal(ui.fields.q.value, 'Lyon');
+});
+
+test('summarizes and clears multiple companies without clearing services or other filters', () => {
+    const ui = fixture({ q: 'Paris', delegataire_id: '12', per_page: '50' });
+    ui.fields['company_ids[]'].options.forEach(option => { option.selected = true; });
+    ui.fields['service_ids[]'].options[0].selected = true;
+    const items = dossierFilterItems(ui.form);
+    const chip = items.find(item => item.key === 'companies');
+    assert.equal(chip.label, 'Sociétés : 2 sélectionnées');
+    assert.equal(chip.title, 'Sociétés : Société Alpha, Délégataire Bravo');
+    assert.equal(items.some(item => item.key === 'delegataire_id'), false);
+    clearDossierFilter(ui.form, 'companies', ui.browser);
+    assert.equal(ui.fields.delegataire_id.value, '');
+    assert.equal(ui.fields['company_ids[]'].options.some(option => option.selected), false);
+    assert.equal(ui.fields['service_ids[]'].options[0].selected, true);
+    assert.equal(ui.fields.q.value, 'Paris');
+    assert.equal(ui.fields.per_page.value, '50');
+    assert.deepEqual(ui.events, ['techcalendar:selection-sync']);
 });
 
 test('summarizes planning users only in visited and removes their chip without clearing services', () => {

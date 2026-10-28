@@ -2397,7 +2397,7 @@ Ne pas purger ni rejouer les jobs mail existants pour activer cette fonctionnali
 
 La gestion individuelle des droits est conservee. Le profil client ouvre la
 creation en prise de RDV, la lecture des pieces et commentaires partages, les
-commentaires en non-conformite, les depots libres et les lots attribues. Le
+commentaires dans tous les etats accessibles (si le droit est actif), les depots libres et les lots attribues. Le
 profil delegataire ouvre les lectures de documents, commentaires et lots ;
 creation, ajout de commentaires et depots sont desactives par defaut.
 
@@ -2444,3 +2444,64 @@ contournes. Un placement force est trace dans l'historique interne avec acteur,
 technicien precedent, rendez-vous en chevauchement et absences constatees.
 La liste des dossiers est rechargee en AJAX apres reaffectation, sans changer
 ses filtres ou sa page de pagination. Aucun nouvel import ou migration requis.
+
+### Suivi planning discret et carte au clic
+
+L'attribution du suivi planning met a jour la cellule et la version renvoyee
+par le serveur sans recharger la liste. Une lecture reste necessaire lorsqu'un
+filtre de responsables ou un tri sur le suivi planning est actif : elle se fait
+sans squelette, sans masquer les lignes et en conservant le focus, la hauteur
+du tableau et les defilements vertical et horizontal. Une recherche/navigation
+deja en cours reste prioritaire ; une ancienne reponse ne peut pas ecraser une
+affectation confirmee plus recente. Une erreur ne rejoue jamais l'ecriture.
+
+L'apercu de l'adresse s'ouvre uniquement au clic (ou activation clavier du
+bouton), pas au survol ni au simple focus. La carte cadre par defaut la France
+metropolitaine avec la Corse et le marqueur du dossier ; un site outre-mer
+etend ce cadre. Le zoom reste manuel. Les coordonnees sont toujours lues via
+l'endpoint authentifie existant et aucun geocodage n'est declenche au survol.
+
+### Filtre multi-societes et distinction client/delegataire
+
+Le filtre company_ids[] accepte plusieurs organisations et retourne les dossiers
+lies a l'une d'elles comme client OU delegataire, sans doublonner les lignes.
+Les categories, tris, changements de page et exports conservent la selection.
+Les anciens liens delegataire_id restent valides ; une selection company_ids
+explicite est prioritaire. Les droits d'acces aux dossiers ne sont pas elargis.
+
+Dans la colonne Societe, le client est affiche en premier et le delegataire
+reste identifie sur une ligne distincte. Les coordonnees saisies manuellement
+sont utilisees si aucune organisation n'est liee. Le tri et l'export reprennent
+les memes noms. Aucune affectation ni donnee metier n'est reecrite.
+
+### Retours planning, emails et commentaires du 28 octobre
+
+Dans la prise de RDV, l'oeil ouvre directement la fiche du dossier dans un
+nouvel onglet, pour un premier placement comme pour un replacement. La ligne
+reste dediee a la selection du dossier et au planning. Le detail modal
+historique reste disponible pour les demandes externes sans dossier natif.
+
+Les rendez-vous deja places utilisent le meme composant de survol dans
+Prendre un RDV et Les RDV : technicien, fiche, adresse, beneficiaire, telephone
+et horaires. Les propositions conservent leur apercu de trajets. Aucun calcul
+de trajet n'est declenche par le survol d'un rendez-vous deja place.
+
+Dans la file de prise de RDV, la societe cliente est prioritaire sur le
+delegataire, avec repli sur les coordonnees manuelles. La confirmation mail
+reprend en priorite l'email actuel du beneficiaire dans le dossier lie, puis
+une adresse valide du payload historique si necessaire. Aucun envoi automatique
+n'est ajoute ; le destinataire reste modifiable avant confirmation.
+
+Les calendriers V2 et les controles de chevauchement excluent les RDV en
+probleme, annules, lies a une prestation annulee/en probleme ou a un dossier
+supprime. Le retrait est immediat dans l'interface lors d'un signalement.
+Les donnees, l'historique du dossier, les preuves et les marquages de facturation
+ne sont pas supprimes ni modifies par ce filtre. La liste de suivi reste
+disponible pour rechercher un incident et replacer son rendez-vous.
+
+Sur autorisation du 28 octobre, les clients ET delegataires peuvent commenter
+dans tous les etats ouverts par leurs categories, a condition que les droits
+de lecture ET d'ajout de commentaires soient actifs. Les refus individuels,
+affectations, categories et audiences prive/client/partage restent appliques.
+Le depot de fichiers reste reserve aux clients et la demande de recontrole
+reste limitee a la non-conformite : commenter n'est pas demander un recontrole.
