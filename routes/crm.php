@@ -35,6 +35,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/adresse', [DossierAddressController::class, 'update'])->middleware('throttle:10,1')->name('dossiers.address.update');
     Route::post('/dossiers/{dossier}/email/apercu', [DossierMailController::class, 'preview'])->middleware('throttle:30,1')->name('dossiers.mail.preview');
     Route::post('/dossiers/{dossier}/email', [DossierMailController::class, 'store'])->middleware('throttle:10,1')->name('dossiers.mail.store');
+    Route::get('/dossiers/{dossier}/email/suivi', [DossierMailController::class, 'status'])->middleware('throttle:30,1,dossier-mail-status')->name('dossiers.mail.status');
     Route::get('/dossiers/{dossier}/carte', [DossierController::class, 'mapPreview'])->middleware('throttle:60,1')->name('dossiers.map');
     Route::get('/dossiers/{dossier}/capcee/suivi', [CapceeReportController::class, 'status'])->middleware('throttle:60,1')->name('capcee.status');
     Route::get('/dossiers/{dossier}/capcee/envois/{delivery}/pdf', [CapceeReportController::class, 'download'])->name('capcee.download');

@@ -39,7 +39,7 @@ class DossierRequest extends FormRequest
             'beneficiary_city' => ['nullable', 'string', 'max:190'],
             'installer_name' => ['nullable', 'string', 'max:190'],
             'installer_siren' => ['nullable', 'regex:/^[0-9]{9}$/'],
-            'service_ids' => [$dossier ? 'prohibited' : 'required', 'array', 'min:1', 'max:30'],
+            'service_ids' => [$dossier ? 'prohibited' : 'required', 'array', 'size:1'],
             'service_ids.*' => ['required', 'integer', 'distinct', 'exists:services,id'],
             'version' => [$dossier ? 'required' : 'prohibited', 'integer', 'min:1'],
         ];
@@ -61,8 +61,13 @@ class DossierRequest extends FormRequest
         return [
             'reference' => 'référence', 'company_name' => 'raison sociale',
             'last_name' => 'nom du bénéficiaire', 'address' => 'adresse du lieu d’inspection',
-            'city' => 'ville', 'installer_siren' => 'SIREN', 'service_ids' => 'prestations',
+            'city' => 'ville', 'installer_siren' => 'SIREN', 'service_ids' => 'fiche technique', 'service_ids.*' => 'fiche technique',
             'version' => 'version du dossier',
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['service_ids.size' => 'Sélectionnez une seule fiche technique par dossier.'];
     }
 }

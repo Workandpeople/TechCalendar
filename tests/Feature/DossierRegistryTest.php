@@ -77,10 +77,10 @@ it('renders the shared navigation and does not load legacy data as local dossier
     $this->get(route('v2.dossiers.create'))->assertOk()->assertSee('Nouveau dossier')->assertSee('BAR EN 101');
 });
 
-it('creates one dossier with multiple operations and no external side effects', function () {
+it('creates one dossier with exactly one fiche and no external side effects', function () {
     $second = Service::create(['name' => 'BAR EN 102', 'type' => 'COFFRAC', 'average_duration_minutes' => 90]);
     $delegataire = ExternalDelegataire::create(['source' => 'coffrac', 'external_id' => '42', 'name' => 'Délégataire test', 'is_active' => true]);
-    $data = [...$this->data, 'service_ids' => [$this->service->id, $second->id], 'delegataire_id' => $delegataire->id];
+    $data = [...$this->data, 'service_ids' => [$second->id], 'delegataire_id' => $delegataire->id];
     $this->actingAs($this->manager)->post(route('v2.dossiers.store'), [
         ...$data, 'created_by' => 999, 'source' => 'coffrac', 'source_reference' => 'fake',
     ])->assertRedirect(route('v2.dossiers.show', 1));
@@ -91,7 +91,7 @@ it('creates one dossier with multiple operations and no external side effects', 
         ->and($dossier->beneficiary_city)->toBe('Paris')
         ->and($dossier->city)->toBe('Lyon')
         ->and($dossier->delegataire_id)->toBe($delegataire->id)
-        ->and($dossier->operations()->count())->toBe(2)
+        ->and($dossier->operations()->count())->toBe(1)
         ->and($dossier->activities()->first()->kind)->toBe('created');
     Http::assertNothingSent();
     Mail::assertNothingOutgoing();
@@ -273,11 +273,29 @@ it('paginates documents comments and history independently', function () {
         ->assertViewHas('activities', fn ($rows) => $rows->currentPage() === 2 && $rows->count() === 4);
 });
 
-it('renders a compact searchable multiple prestation picker with the original native payload', function () {
+it('renders a searchable single fiche picker without changing the native payload', function () {
     $response = $this->actingAs($this->manager)->get(route('v2.dossiers.create'))->assertOk();
     $response->assertSee('id="dossier-service-ids"', false)->assertSee('name="service_ids[]"', false)
-        ->assertSee('data-multi-select', false)->assertSee('Rechercher par nom ou code…')
+        ->assertSee('data-searchable', false)->assertDontSee('data-multi-select', false)->assertSee('Rechercher par nom ou code…')
         ->assertSee('BAR EN 101 · COFRAC')->assertDontSee('type="checkbox" name="service_ids[]"', false);
     $this->withSession(['_old_input' => ['service_ids' => [(string) $this->service->id]]])
         ->get(route('v2.dossiers.create'))->assertSee('value="'.$this->service->id.'" selected', false);
+});
+
+it('rejects multiple fiches at HTTP and service level without changing historical dossiers', function () {
+    $second = Service::create(['type' => 'COFFRAC', 'name' => 'Autre fiche', 'average_duration_minutes' => 60]);
+    $payload = [...$this->data, 'service_ids' => [$this->service->id, $second->id]];
+    $this->actingAs($this->manager)->post(route('v2.dossiers.store'), $payload)->assertSessionHasErrors('service_ids');
+    expect(fn () => app(DossierRegistry::class)->create($this->manager, $payload))->toThrow(ValidationException::class);
+    expect(Dossier::count())->toBe(0)->and(DossierOperation::count())->toBe(0);
+    $dossier = app(DossierRegistry::class)->create($this->manager, $this->data);
+    $dossier->operations()->create(['service_id' => $second->id, 'source' => 'coffrac']);
+    $this->get(route('v2.dossiers.show', $dossier))->assertOk()->assertSee('Autre fiche')->assertSee('BAR EN 101');
+    expect($dossier->operations()->count())->toBe(2);
+});
+
+it('renders validation errors safely for a nested malformed fiche selection', function () {
+    $this->actingAs($this->manager)->from(route('v2.dossiers.create'))
+        ->post(route('v2.dossiers.store'), [...$this->data, 'service_ids' => [['invalid']]])->assertSessionHasErrors();
+    $this->get(route('v2.dossiers.create'))->assertOk()->assertSee('Choisir une fiche technique');
 });

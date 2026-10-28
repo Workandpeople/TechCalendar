@@ -2629,3 +2629,37 @@ sudo -u cofrac2-app env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
 Un conflit de restauration est signalé et n'écrase jamais une modification
 ultérieure. Le lanceur du paquet rouvre les deux domaines avant cette correction
 ponctuelle ; son éventuel échec ne remet pas le site en maintenance.
+
+### Une fiche par création et résultat des emails
+
+La création interne et client exige exactement une fiche technique, y compris
+pour un appel direct à `DossierRegistry`. Le champ reste recherchable et utilise
+`service_ids[]` avec un seul élément pour préserver le contrat existant. Aucun
+dossier ni rattachement historique n'est modifié ; le filtre des dossiers reste
+multisélection.
+
+Chaque NOUVEL email rédigé depuis la fiche dossier est rattaché à une activité
+interne privée. La confirmation indique l'enregistrement de la demande, pas la
+réception. Le suivi distingue attente, traitement, acceptation par le serveur,
+refus, blocage et résultat non confirmé. Les anciens jobs et activités non
+instrumentés restent « résultat non disponible » ; ils ne sont pas rejoués.
+Les corps de mail restent internes et ne sont jamais renvoyés par l'API de suivi.
+
+Le mailable utilise le transport global existant et les hooks natifs du worker.
+Les demandes suivies ont une tentative et un délai de 90 secondes : ni un job
+rejoué ni un timeout ambigu ne doivent émettre un doublon. Un mail accepté n'est
+jamais rétrogradé en échec par un callback tardif. Sans confirmation SMTP, le
+résultat reste indéterminé et un renvoi requiert une vérification humaine.
+Les autres mails et la réinitialisation des mots de passe gardent leur politique.
+
+Suivi : une requête indexée par dossier, 10 résultats, projection des seules clés
+JSON nécessaires. Actualisation toutes les 8 secondes uniquement tant qu'un
+mail est en attente et que la section/page est visible, maximum 60 vérifications.
+Un bouton permet une vérification supplémentaire sans renvoyer d'email. Pas de
+rechargement de page ni de squelette. Pas de nouvelle migration, de changement
+de droits ou de mode SMTP/SMS, ni d'envoi réel pendant les tests.
+
+Le prochain lanceur vérifie le périmètre à l'aide du futur updater épinglé et de
+son mode `--check-scope` AVANT la maintenance. Le même garde-fou est réutilisé
+pendant l'application. Les tests refusent explicitement une configuration SQL
+ou un seeder non autorisé avant toute modification du serveur.

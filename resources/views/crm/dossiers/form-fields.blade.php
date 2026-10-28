@@ -50,19 +50,19 @@
             </div>
             @unless ($dossier->exists)
                 <section class="gc-card p-4 sm:p-5" aria-labelledby="dossier-services-label">
-                    <label id="dossier-services-label" for="dossier-service-ids" class="gc-label">Prestations *</label>
+                    <label id="dossier-services-label" for="dossier-service-ids" class="gc-label">Fiche technique *</label>
                     @php($selectedServices = is_array(old('service_ids')) ? old('service_ids') : [])
-                    <select id="dossier-service-ids" name="service_ids[]" class="gc-input" multiple size="5" required
-                        data-multi-select data-empty-label="Choisir une prestation…" data-selected-label="prestations sélectionnées"
-                        data-search-label="Rechercher par nom ou code…" data-options-label="Prestations disponibles"
+                    @php($selectedServiceId = is_scalar($selectedServices[0] ?? null) ? (string) $selectedServices[0] : '')
+                    <select id="dossier-service-ids" name="service_ids[]" class="gc-input" required data-searchable
+                        data-search-label="Rechercher par nom ou code…"
                         data-no-results-label="Aucune prestation ne correspond à la recherche."
-                        data-required-message="Sélectionnez au moins une prestation."
                         aria-describedby="dossier-services-help" @disabled($services->isEmpty())>
+                        <option value="">Choisir une fiche technique…</option>
                         @foreach ($services as $service)
-                            <option value="{{ $service->id }}" @selected(in_array($service->id, $selectedServices))>{{ $service->name }} · {{ $service->display_type }}</option>
+                            <option value="{{ $service->id }}" @selected((string) $service->id === $selectedServiceId)>{{ $service->name }} · {{ $service->display_type }}</option>
                         @endforeach
                     </select>
-                    <p id="dossier-services-help" class="mt-2 text-xs text-slate-500">Plusieurs choix possibles. Le rendez-vous sera organisé ensuite.</p>
+                    <p id="dossier-services-help" class="mt-2 text-xs text-slate-500">Une fiche technique par dossier. Le rendez-vous sera organisé ensuite.</p>
                     @if ($services->isEmpty())
                         <p class="mt-2 text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
                     @endif

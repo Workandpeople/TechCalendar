@@ -208,6 +208,9 @@ class DossierRegistry
 
     private function persistCreation(User $actor, array $data): Dossier
     {
+        if (! is_array($data['service_ids'] ?? null) || count($data['service_ids']) !== 1) {
+            throw ValidationException::withMessages(['service_ids' => 'Sélectionnez une seule fiche technique pour ce dossier.']);
+        }
         $data = DossierContacts::fillMissingSnapshots($data);
         $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
 

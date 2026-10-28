@@ -34,6 +34,6 @@ class ClientDossierRequest extends DossierRequest
 
     public function messages(): array
     {
-        return ['submission_id.uuid' => 'Le formulaire a expiré ou est invalide. Rechargez la page avant de réessayer.'];
+        return [...parent::messages(), 'submission_id.uuid' => 'Le formulaire a expiré ou est invalide. Rechargez la page avant de réessayer.'];
     }
 }

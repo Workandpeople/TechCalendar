@@ -19,6 +19,7 @@ use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierDocumentIntake;
 use App\Services\Crm\DossierLinkedDocuments;
 use App\Services\Crm\DossierMail;
+use App\Services\Crm\DossierMailDelivery;
 use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\DossierPlanningAssignment;
 use App\Services\Crm\DossierRegistry;
@@ -117,6 +118,7 @@ class DossierController extends Controller
             ...app(DossierRegistry::class)->references(),
             'dossier' => $dossier,
             'mailTemplates' => app(DossierMail::class)->templates(),
+            'mailDeliveries' => $request->user()->can('update', $dossier) ? app(DossierMailDelivery::class)->recent($dossier) : [],
             'technicians' => User::query()->where('role', 2)->where('admin', false)->with('services:id')->orderBy('last_name')->get(['id', 'first_name', 'last_name']),
             'smsUnavailable' => $smsUnavailable,
             'smsMode' => app(SmsConfiguration::class)->mode(),

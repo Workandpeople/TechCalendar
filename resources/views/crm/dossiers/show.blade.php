@@ -30,6 +30,7 @@
             @foreach (['documents' => ['Documents', 'document'], 'commentaires' => ['Commentaires', 'comment'], 'synthese' => ['Dossier', 'dossiers'], 'prestations' => ['Statut et fiches', 'services'], 'facturation' => ['Facturation', 'check'], 'rendez-vous' => ['Rendez-vous', 'planning'], 'capcee' => ['CAPCEE', 'upload'], 'historique' => ['Historique', 'tracking']] as $id => [$label, $icon])
                 <a href="#{{ $id }}"><x-nav-icon :name="$icon" />{{ $label }}</a>
             @endforeach
+            @can('update', $dossier)<a href="#email-dossier"><x-nav-icon name="mail" />Emails</a>@endcan
         </nav>
         <div class="gc-dossier-columns">
             <div class="gc-dossier-main" aria-label="Documents, commentaires et informations du dossier">

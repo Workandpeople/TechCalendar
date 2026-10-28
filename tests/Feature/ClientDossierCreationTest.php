@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
 
@@ -59,10 +60,10 @@ it('offers a client-only form without organisation directories or internal contr
         ->assertDontSee('Gestion des données');
 });
 
-it('creates a dossier and all selected operations in prise de RDV for its own client', function () {
+it('creates a dossier with one fiche in prise de RDV for its own client', function () {
     $second = Service::create(['type' => 'COFFRAC', 'name' => 'BAR EN 102', 'average_duration_minutes' => 60]);
     $this->actingAs($this->client)->post(route('client.dossiers.store'), [
-        ...$this->data, 'service_ids' => [$this->service->id, $second->id],
+        ...$this->data, 'service_ids' => [$second->id],
     ])->assertSessionHasNoErrors()->assertRedirect(route('client.dossiers.show', 1));
 
     $dossier = Dossier::sole();
@@ -72,7 +73,7 @@ it('creates a dossier and all selected operations in prise de RDV for its own cl
         ->and($dossier->created_by)->toBe($this->client->id)
         ->and($dossier->company_name)->toBe('Bénéficiaire de la visite')
         ->and($dossier->source)->toBe('native')->and($dossier->source_reference)->toBeNull()
-        ->and($dossier->operations()->pluck('legacy_status')->all())->toBe(['PRISE DE RDV', 'PRISE DE RDV'])
+        ->and($dossier->operations()->pluck('legacy_status')->all())->toBe(['PRISE DE RDV'])
         ->and($dossier->activities()->sole()->author_id)->toBe($this->client->id)
         ->and($dossier->appointments()->count())->toBe(0)->and($dossier->billings()->count())->toBe(0);
 
@@ -232,7 +233,15 @@ it('requires authentication to submit a client dossier', function () {
 
 it('provides the same compact searchable prestation selector in the client space', function () {
     $this->actingAs($this->client)->get(route('client.dossiers.create'))->assertOk()
-        ->assertSee('id="dossier-service-ids"', false)->assertSee('data-multi-select', false)
+        ->assertSee('id="dossier-service-ids"', false)->assertSee('data-searchable', false)->assertDontSee('data-multi-select', false)
         ->assertSee('Rechercher par nom ou code…')->assertSee('BAR EN 101 · COFRAC')
         ->assertDontSee('type="checkbox" name="service_ids[]"', false);
+});
+
+it('rejects a forged multi fiche creation in the client portal and service', function () {
+    $second = Service::create(['type' => 'COFFRAC', 'name' => 'Autre fiche', 'average_duration_minutes' => 60]);
+    $data = [...$this->data, 'service_ids' => [$this->service->id, $second->id]];
+    $this->actingAs($this->client)->post(route('client.dossiers.store'), $data)->assertSessionHasErrors('service_ids');
+    expect(fn () => app(DossierRegistry::class)->createForClient($this->client, $data))->toThrow(ValidationException::class)
+        ->and(Dossier::count())->toBe(0);
 });

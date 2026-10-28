@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\MailSender;
 use App\Models\MailTemplate;
+use App\Services\Crm\DossierMailDelivery;
 use App\Services\MailSenderMailerConfigurator;
 use App\Services\MailTemplateRenderer;
 use Illuminate\Bus\Queueable;
@@ -17,6 +18,14 @@ use Illuminate\Queue\SerializesModels;
 class MailTemplateMailable extends GloballyConfiguredMailable
 {
     use Queueable, SerializesModels;
+
+    public ?int $dossierMailActivityId = null;
+
+    public ?int $tries = null;
+
+    public ?int $timeout = null;
+
+    public bool $failOnTimeout = false;
 
     public string $renderedSubject;
 
@@ -88,6 +97,22 @@ class MailTemplateMailable extends GloballyConfiguredMailable
      * @param  Factory|Mailer  $mailer
      */
     public function send($mailer)
+    {
+        if ($this->dossierMailActivityId !== null) {
+            return app(DossierMailDelivery::class)->deliver($this->dossierMailActivityId, fn () => $this->sendConfigured($mailer));
+        }
+
+        return $this->sendConfigured($mailer);
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        if ($this->dossierMailActivityId !== null) {
+            app(DossierMailDelivery::class)->failed($this->dossierMailActivityId, $exception);
+        }
+    }
+
+    private function sendConfigured($mailer)
     {
         if (config('crm.v2_enabled')) {
             // Also discard legacy sender choices serialized into jobs before this release.

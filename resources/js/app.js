@@ -1,3 +1,4 @@
+import { initDossierMailStatus } from './dossier-mail-status';
 import { cofracLabel } from './cofrac-label';
 import { initSidebar } from './sidebar';
 import { initSidebarSections } from './sidebar-sections';
@@ -53,6 +54,7 @@ initCapceeReports();
 initSelectMenus();
 initDossierService();
 initDossierMail();
+initDossierMailStatus();
 initDossierAddress();
 initAdminSettings();
 initBetaFeedback();

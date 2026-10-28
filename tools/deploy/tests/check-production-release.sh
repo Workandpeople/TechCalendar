@@ -19,7 +19,10 @@ printf '\n// Fixture export tooling update.\n' >> "$APP/tools/fixtures/collect-t
 printf '\n// Fixture export tooling update.\n' >> "$APP/tools/fixtures/prepare-techcalendar-export.php"
 printf '\n# Fixture export tooling update.\n' >> "$APP/tools/fixtures/fetch-techcalendar-internal-users.sh"
 printf '\0' >> "$APP/public/favicon.ico"
+printf '\n// Fixture approved naming-only update.\n' >> "$APP/config/admin.php"
+printf '\n// Fixture approved naming-only update.\n' >> "$APP/database/seeders/CoffracServiceAliasSeeder.php"
 git_app add resources/views/components/user-email-conflict.blade.php public/favicon.ico \
+    config/admin.php database/seeders/CoffracServiceAliasSeeder.php \
     tools/fixtures/collect-techcalendar-references.php tools/fixtures/prepare-techcalendar-export.php tools/fixtures/fetch-techcalendar-internal-users.sh
 git_app -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-schema-release >/dev/null
 REVISION=$(git_app rev-parse HEAD)

@@ -7,6 +7,25 @@ umask 077
 export LC_ALL=C
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 stop() { printf 'STOP : %s\n' "$1" >&2; exit 1; }
+validate_release_scope() {
+    while IFS= read -r file; do
+        case "$file" in
+            app/*|resources/*|routes/*|tests/*|docs/*|tools/deploy/*|lang/fr/passwords.php) ;;
+            public/favicon.ico|tools/fixtures/collect-techcalendar-references.php|tools/fixtures/prepare-techcalendar-export.php|tools/fixtures/fetch-techcalendar-internal-users.sh) ;;
+            config/admin.php|database/seeders/CoffracServiceAliasSeeder.php) ;;
+            config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
+            database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
+            *) stop 'changement hors perimetre applicatif du correctif.' ;;
+        esac
+    done < "$1"
+}
+# The pinned future updater can check its own guard before the live site enters maintenance.
+if [ "${1:-}" = --check-scope ]; then
+    [ "$#" = 2 ] && [ -f "$2" ] && [ ! -L "$2" ] && [ -r "$2" ] || stop 'liste de changements reguliere requise.'
+    validate_release_scope "$2"
+    printf 'Perimetre du correctif verifie avant maintenance.\n'
+    exit 0
+fi
 [ "${EUID:-$(id -u)}" = 0 ] && [ "$(hostname -s)" = ns365601 ] && [ "$#" = 3 ] \
     && [ "$1" = --apply ] && [[ "$3" =~ ^[a-f0-9]{64}$ ]] || stop 'Usage : sudo bash update-production-release.sh --apply PAQUET SHA256'
 APP=/var/www/cofrac2
@@ -86,16 +105,7 @@ php-fpm8.4 --test --fpm-config "$HERE/cofrac2-php-fpm.conf.example" > "$WORK/php
 git_app diff --quiet "$previous" "$REVISION" -- composer.json composer.lock package.json package-lock.json \
     || stop 'dependances modifiees : ce correctif ne les installe pas.'
 git_app diff --name-only "$previous" "$REVISION" > "$WORK/changed-files.txt"
-while IFS= read -r file; do
-    case "$file" in
-        app/*|resources/*|routes/*|tests/*|docs/*|tools/deploy/*|lang/fr/passwords.php) ;;
-        public/favicon.ico|tools/fixtures/collect-techcalendar-references.php|tools/fixtures/prepare-techcalendar-export.php|tools/fixtures/fetch-techcalendar-internal-users.sh) ;;
-        config/admin.php|database/seeders/CoffracServiceAliasSeeder.php) ;;
-        config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
-        database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
-        *) stop 'changement hors perimetre applicatif du correctif.' ;;
-    esac
-done < "$WORK/changed-files.txt"
+validate_release_scope "$WORK/changed-files.txt"
 for directory in app config routes resources tools database lang; do
     find "$APP/$directory" -type d -exec chgrp cofrac2-app {} + -exec chmod 2750 {} +
     find "$APP/$directory" -type f -exec chgrp cofrac2-app {} + -exec chmod u+rw,g=r,o= {} +

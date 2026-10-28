@@ -34,24 +34,47 @@ final class DossierMail
     {
         Gate::forUser($actor)->authorize('update', $dossier);
 
-        return DB::transaction(function () use ($actor, $dossier, $data): string {
-            $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
-            Gate::forUser($actor)->authorize('update', $dossier);
-            $template = $this->template($data);
-            $mailable = new MailTemplateMailable($template, $this->variables($dossier, $actor));
-            $simulated = ! config('mail.delivery_enabled') || config('simulation.enabled')
-                || app()->environment('demo') || in_array(config('mail.default'), ['log', 'array'], true);
-            if (! $simulated) {
-                Mail::to($data['recipient_email'])->queue($mailable->afterCommit());
-            }
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => $simulated ? 'mail_simulated' : 'mail_queued',
-                'body' => ($simulated ? 'Email simulé, sans livraison' : 'Email mis en file d’envoi').' à '.$data['recipient_email'].' : '.$mailable->renderedSubject,
-                'changed_fields' => ['recipient' => $data['recipient_email'], 'template_id' => $data['mail_template_id'] ?? null,
-                    'subject' => $mailable->renderedSubject, 'body' => $mailable->renderedMarkdown],
-                'client_visible' => false, 'delegataire_visible' => false]);
+        $activityId = null;
+        try {
+            return DB::transaction(function () use ($actor, $dossier, $data, &$activityId): string {
+                $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
+                Gate::forUser($actor)->authorize('update', $dossier);
+                $template = $this->template($data);
+                $mailable = new MailTemplateMailable($template, $this->variables($dossier, $actor));
+                $simulated = ! config('mail.delivery_enabled') || config('simulation.enabled')
+                    || app()->environment('demo') || in_array(config('mail.default'), ['log', 'array'], true);
+                $activity = $dossier->activities()->create(['author_id' => $actor->id, 'kind' => $simulated ? 'mail_simulated' : 'mail_queued',
+                    'body' => ($simulated ? 'Email simulé, sans livraison' : 'Email mis en file d’envoi').' à '.$data['recipient_email'].' : '.$mailable->renderedSubject,
+                    'changed_fields' => ['recipient' => $data['recipient_email'], 'template_id' => $data['mail_template_id'] ?? null,
+                        'subject' => $mailable->renderedSubject, 'body' => $mailable->renderedMarkdown,
+                        'delivery_status' => $simulated ? 'simulated' : 'queued'],
+                    'client_visible' => false, 'delegataire_visible' => false]);
+                $activityId = $activity->id;
+                if (! $simulated) {
+                    $mailable->dossierMailActivityId = $activityId;
+                    // No automatic replay: a timeout after SMTP acceptance must not create duplicate emails.
+                    $mailable->tries = 1;
+                    $mailable->timeout = 90;
+                    $mailable->failOnTimeout = true;
+                    Mail::to($data['recipient_email'])->queue($mailable->afterCommit());
+                }
 
-            return $simulated ? 'Simulation enregistrée : aucun email envoyé.' : 'Email mis en file d’envoi.';
-        });
+                return $simulated ? 'Simulation enregistrée : aucun email envoyé.'
+                    : 'Demande d’envoi enregistrée avec succès. Votre email sera envoyé automatiquement. Suivez son résultat dans la section « Envoyer un mail ».';
+            });
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            if ($activityId !== null) {
+                try {
+                    app(DossierMailDelivery::class)->queueFailed($activityId);
+                } catch (\Throwable $trackingException) {
+                    report($trackingException);
+                }
+            }
+            report($exception);
+            throw ValidationException::withMessages(['recipient_email' => 'La demande d’envoi n’a pas pu être enregistrée. Aucun succès d’envoi n’est confirmé.']);
+        }
     }
 
     private function template(array $data): MailTemplate
