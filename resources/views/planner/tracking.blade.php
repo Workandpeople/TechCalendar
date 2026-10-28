@@ -108,14 +108,16 @@
                             @endforeach
                         </select>
                     </div>
+                    @if (!config('crm.v2_enabled'))
                     <div>
-                            <label class="gc-label" for="tracking_status_filter">État du RDV</label>
+                        <label class="gc-label" for="tracking_status_filter">État du RDV</label>
                         <select id="tracking_status_filter" class="gc-input">
                             <option value="all">Tous les RDV</option>
                             <option value="active">RDV planifiés uniquement</option>
                             <option value="problem">Problèmes uniquement</option>
                         </select>
                     </div>
+                    @endif
                     <button id="tracking-reset-filters" type="button" class="gc-btn-soft">Réinitialiser</button>
                 </div>
             </div>
@@ -3046,6 +3048,10 @@ setTrackingDetailsStatus('Rendez-vous mis à jour.');
                 }
 
                 trackingInitialComment = payload.comment || problemPayload.comment;
+                if (trackingNativeDossiers) {
+                    trackingCalendarEventById(appointmentId)?.remove();
+                    refetchCalendar();
+                }
                 resetTrackingProblemSection();
                 updateTrackingCommentButtonVisibility();
                 status.style.color = '#92400e';

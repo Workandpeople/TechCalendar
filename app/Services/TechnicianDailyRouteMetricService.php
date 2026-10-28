@@ -20,12 +20,13 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param callable(int $processed, int $total): void|null $progressCallback
+     * @param  callable(int $processed, int $total): void|null  $progressCallback
      * @return Collection<int, TechnicianDailyRouteMetric>
      */
     public function ensureForPeriodWithProgress(Carbon $startDate, Carbon $endDate, ?callable $progressCallback = null): Collection
     {
         $appointments = Appointment::query()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->with('technician:id,first_name,last_name,address,latitude,longitude,day_start_time,day_end_time')
             ->whereBetween('starts_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
             ->whereHas('technician', fn ($query) => $query
@@ -71,6 +72,7 @@ class TechnicianDailyRouteMetricService
         }
 
         $appointments = Appointment::query()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->with('technician:id,first_name,last_name,address,latitude,longitude,day_start_time,day_end_time,role,admin')
             ->where('technician_id', $technician->id)
             ->whereBetween('starts_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
@@ -85,7 +87,7 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param Collection<int, Appointment> $appointments
+     * @param  Collection<int, Appointment>  $appointments
      */
     private function ensureForDay(Collection $appointments): ?TechnicianDailyRouteMetric
     {
@@ -134,7 +136,7 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param Collection<int, Appointment> $appointments
+     * @param  Collection<int, Appointment>  $appointments
      * @return array<int, array<string, mixed>>
      */
     private function routePoints(User $technician, Collection $appointments): array
@@ -162,7 +164,7 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param array<int, array{lat:float,lng:float}> $routePoints
+     * @param  array<int, array{lat:float,lng:float}>  $routePoints
      * @return array{distance_km:float,duration_minutes:int,source:string,legs:array<int,array{distance_km:float,duration_minutes:int,source:string}>}
      */
     private function calculateRoute(array $routePoints): array
@@ -181,7 +183,7 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param array<int, array{lat:float,lng:float}> $routePoints
+     * @param  array<int, array{lat:float,lng:float}>  $routePoints
      * @return array{distance_km:float,duration_minutes:int,source:string,legs:array<int,array{distance_km:float,duration_minutes:int,source:string}>}|null
      */
     private function calculateWithMapbox(array $routePoints, string $token): ?array
@@ -249,7 +251,7 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param array<int, array{lat:float,lng:float}> $routePoints
+     * @param  array<int, array{lat:float,lng:float}>  $routePoints
      * @return array{distance_km:float,duration_minutes:int,source:string,legs:array<int,array{distance_km:float,duration_minutes:int,source:string}>}
      */
     private function calculateWithHaversine(array $routePoints): array
@@ -282,8 +284,8 @@ class TechnicianDailyRouteMetricService
     }
 
     /**
-     * @param Collection<int, Appointment> $appointments
-     * @param array{legs:array<int,array{duration_minutes:int}>} $calculation
+     * @param  Collection<int, Appointment>  $appointments
+     * @param  array{legs:array<int,array{duration_minutes:int}>}  $calculation
      */
     private function calculateOvertimeMinutes(User $technician, Collection $appointments, array $calculation): int
     {

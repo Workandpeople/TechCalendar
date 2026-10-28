@@ -6875,6 +6875,12 @@
                     selectedCalendarEvent.setProp('backgroundColor', '#fff7ed');
                     selectedCalendarEvent.setProp('borderColor', '#f97316');
                     selectedCalendarEvent.setProp('textColor', '#9a3412');
+                    if (bookingForcePlacementEnabled) {
+                        const removedId = String(selectedCalendarEvent.id);
+                        currentCalendarEvents = currentCalendarEvents.filter(event => String(event.id) !== removedId);
+                        selectedCalendarEvent.remove();
+                        if (lastCalendarDateInfo) void refreshCalendarWindow(lastCalendarDateInfo, { force: true });
+                    }
                 }
 
                 bookingInitialDetailComment = payload.comment || problemPayload.comment;

@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\Crm\DossierStatusCatalog;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -37,6 +39,23 @@ class Appointment extends Model
     public const STATUS_PROBLEM = 'problem';
 
     public const STATUS_CANCELLED = 'cancelled';
+
+    public function scopeOnPlanning(Builder $query): Builder
+    {
+        $excluded = [...DossierStatusCatalog::STATUSES['problem']['values'], ...DossierStatusCatalog::STATUSES['cancelled']['values']];
+
+        // Keep history queries unchanged; only operational reads opt into this scope.
+        return $query->where('appointments.status', self::STATUS_SCHEDULED)
+            ->whereNull('appointments.deleted_at')
+            ->where(fn ($linked) => $linked->whereNull('appointments.dossier_operation_id')
+                ->orWhereExists(fn ($operation) => $operation->selectRaw('1')
+                    ->from('dossier_operations as planning_operation')
+                    ->join('dossiers as planning_dossier', 'planning_dossier.id', '=', 'planning_operation.dossier_id')
+                    ->whereColumn('planning_operation.id', 'appointments.dossier_operation_id')
+                    ->whereNull('planning_dossier.deleted_at')
+                    ->where(fn ($status) => $status->whereNull('planning_operation.legacy_status')
+                        ->orWhereNotIn('planning_operation.legacy_status', $excluded))));
+    }
 
     public function service(): BelongsTo
     {

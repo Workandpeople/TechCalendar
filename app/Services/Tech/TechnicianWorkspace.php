@@ -21,8 +21,7 @@ class TechnicianWorkspace
     {
         return Appointment::query()->where('technician_id', $user->id)
             ->whereIn('status', [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM])
-            ->when(config('crm.v2_enabled'), fn ($query) => $query->where(fn ($q) => $q->whereNull('dossier_operation_id')
-                ->orWhereHas('dossierOperation.dossier', fn ($dossier) => $dossier->whereNull('dossiers.deleted_at'))))
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->with(['service:id,type,name', 'dossierOperation.dossier']);
     }
 

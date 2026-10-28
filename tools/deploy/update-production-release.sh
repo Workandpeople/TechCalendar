@@ -91,6 +91,7 @@ while IFS= read -r file; do
         app/*|resources/*|routes/*|tests/*|docs/*|tools/deploy/*|lang/fr/passwords.php) ;;
         public/favicon.ico|tools/fixtures/collect-techcalendar-references.php|tools/fixtures/prepare-techcalendar-export.php|tools/fixtures/fetch-techcalendar-internal-users.sh) ;;
         config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
+        database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
         *) stop 'changement hors perimetre applicatif du correctif.' ;;
     esac
 done < "$WORK/changed-files.txt"
@@ -126,7 +127,8 @@ mv -- "$next_build" "$APP/public/build"
 next_build=
 printf 'Migrations V2 ciblees et recompilation des caches, sans seeder ni import...\n'
 for migration in 2026_10_25_110000_add_reversible_dossier_deletion 2026_10_25_120000_add_automatic_capcee_reports \
-    2026_10_26_100000_activate_existing_mail_templates 2026_10_26_110000_add_dossier_inspection_geocode; do
+    2026_10_26_100000_activate_existing_mail_templates 2026_10_26_110000_add_dossier_inspection_geocode \
+    2026_10_28_140000_add_appointment_planning_window_index; do
     app_cli artisan migrate --force --no-interaction --no-ansi --path="database/migrations/$migration.php" >> "$WORK/migrations.log" 2>&1 \
         || stop 'migration en echec ; consulter le journal prive, ne pas reinitialiser la base.'
 done

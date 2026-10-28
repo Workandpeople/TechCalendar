@@ -56,7 +56,7 @@ it('paginates past and future imported history without restoring deleted booking
         ->assertJsonPath('appointments.0.id', $history->id)->assertJsonPath('appointments.0.extendedProps.can_edit', false);
     $this->postJson(route('manager.appointments.search'), ['appointment_status' => 'active'])->assertOk()->assertJsonPath('total', 1);
     $this->postJson(route('planner.tracking.events'), ['technician_ids' => [$this->tech->id], 'start' => '2023-01-01', 'end' => '2023-02-01'])
-        ->assertOk()->assertJsonCount(1, 'events')->assertJsonPath('events.0.extendedProps.is_historical', true);
+        ->assertOk()->assertJsonCount(0, 'events');
     $this->postJson(route('planner.tracking.events'), ['technician_ids' => [$this->tech->id], 'start' => '2026-10-01', 'end' => '2026-11-01'])
         ->assertOk()->assertJsonPath('events.0.id', $this->appointment->id);
     expect($history->fresh()->trashed())->toBeTrue();

@@ -188,6 +188,7 @@ class PlannerTrackingController extends Controller
         }
 
         $appointmentsQuery = $this->appointmentDetailsQuery()
+            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->whereIn('technician_id', $technicianIds)
             ->where('starts_at', '<', Carbon::parse($payload['end']))
             ->where('ends_at', '>', Carbon::parse($payload['start']))

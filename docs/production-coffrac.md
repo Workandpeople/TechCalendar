@@ -2545,3 +2545,48 @@ Sur les memes volumes synthetiques que le lot 2 : 144 mesures sequentielles et
 de requetes identiques sur les 24 scenarios compares. Le test navigateur
 reutilise un seul tooltip sur 100 affichages, sans requete reseau ni execution
 de HTML injecte. Ces mesures locales ne garantissent pas les delais production.
+
+### Reintroduction progressive : lot 4, coherence du planning
+
+Base serveur requise : lot 3 (524c8905). Les lectures operationnelles optent
+dans un scope explicite, jamais un filtre global de modele : seuls les RDV
+planifies et non supprimes, non lies a une prestation annulee/en probleme ou
+a un dossier supprime, occupent le planning. Le controle est par prestation,
+pas par dossier entier. Les RDV planifies sans dossier et les statuts historiques
+non identifies restent visibles ; ils ne sont pas reclasses automatiquement.
+
+Le meme filtre s'applique aux calendriers de placement/suivi, aux conflits de
+creneaux, a l'agenda technicien web/mobile et aux prochains calculs de trajets.
+L'historique du dossier et la recherche des anciens RDV restent disponibles.
+Aucun RDV, liaison, document, commentaire ou statut stocke n'est supprime ou
+reecrit par ce correctif. Le mode V1 garde ses requetes et comportements.
+
+Un signalement de probleme retire immediatement le RDV du calendrier courant
+et recharge sa fenetre une fois. Le filtre de calendrier "Problemes uniquement"
+n'est plus propose en V2, puisqu'ils sont a traiter hors du planning actif.
+Le detail historique reste consultable via la recherche.
+
+La condition de rattachement utilise un EXISTS avec jointure sur les cles
+primaires, plutot que deux sous-requetes de relations imbriquees. La migration
+2026_10_28_140000_add_appointment_planning_window_index ajoute uniquement
+l'index appointments_planning_window_index (ends_at, starts_at, technician_id).
+Les mesures sans cet index retrouvent le mauvais choix de l'index de statut
+sur certaines fenetres ; l'index temporel rend la selection de periode selective.
+Creation, suppression et recreation de l'index sont testees sur MySQL 8.0.46.
+
+Le lanceur de mise a jour autorise cette seule migration supplementaire et
+l'execute apres sauvegarde, pendant la maintenance V2, avant la reouverture.
+Ne pas executer git pull ou des migrations manuelles avant le paquet scelle.
+Aucune modification de service partage, de configuration, de droit externe,
+de mot de passe ou de mode mail/SMS ; aucun message ni job n'est rejoue.
+
+Validation : 2070 tests PHP, 287 tests JavaScript, 240 mesures de parcours
+sequentiels/concurrents et 324 comparaisons ciblees de requetes sur MySQL 8.0.46.
+Les listes retenues par MySQL sont comparees a un filtrage PHP independant ;
+les plans testes utilisent l'index temporel puis les cles primaires de liaison.
+Les 9 fenetres techniciens/periode sont conformes, aucune erreur de parcours.
+Le test Docker complet passe : import synthetique, runtime dedie, TLS, queue,
+Reverb, sauvegarde/migrations, echec simule et reprise, politiques mail et
+deux domaines avec retour arriere. Aucun reseau externe ni identifiant reel.
+PHP local de test : 8.5 (limite CLI 512 Mio pour les gros fichiers de test) ;
+production 8.4 inchangee. Ces essais ne garantissent pas les latences serveur.
