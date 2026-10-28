@@ -90,6 +90,7 @@ while IFS= read -r file; do
     case "$file" in
         app/*|resources/*|routes/*|tests/*|docs/*|tools/deploy/*|lang/fr/passwords.php) ;;
         public/favicon.ico|tools/fixtures/collect-techcalendar-references.php|tools/fixtures/prepare-techcalendar-export.php|tools/fixtures/fetch-techcalendar-internal-users.sh) ;;
+        config/admin.php|database/seeders/CoffracServiceAliasSeeder.php) ;;
         config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
         database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
         *) stop 'changement hors perimetre applicatif du correctif.' ;;
