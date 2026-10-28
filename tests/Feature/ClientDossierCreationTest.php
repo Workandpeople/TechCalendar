@@ -113,7 +113,7 @@ it('ignores forged HTTP fields and does not expand access after creation', funct
     expect($dossier->client_id)->toBe($this->organisation->id)
         ->and($dossier->client_contact['email'])->toBe('organisation@example.test');
     $this->put(route('v2.dossiers.update', $dossier), ['version' => 1, 'city' => 'Paris'])->assertForbidden();
-    $this->post(route('client.dossiers.comments', $dossier), ['body' => 'Question sur ce dossier'])->assertRedirect();
+    $this->post(route('client.dossiers.comments', $dossier), ['body' => 'Not non-compliant'])->assertForbidden();
     $this->post(route('v2.dossiers.store'), $this->data)->assertForbidden();
 });
 

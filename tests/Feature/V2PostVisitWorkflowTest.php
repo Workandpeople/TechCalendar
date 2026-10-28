@@ -337,8 +337,7 @@ it('removes the uploaded file too if the response transaction fails after storin
 
 it('rejects responses outside non conformity and on archived lots', function (string $state) {
     $this->operation->forceFill(['legacy_status' => $state])->save();
-    $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Réponse'])
-        ->assertUnprocessable()->assertJsonValidationErrors('action');
+    $this->actingAs($this->client)->postJson($this->responseUrl, ['version' => 1, 'comment' => 'Réponse'])->assertForbidden();
     $this->operation->forceFill(['legacy_status' => 'NON CONFORMITES'])->save();
     $this->lot->update(['status' => Lot::STATUS_ARCHIVED]);
     $this->postJson($this->responseUrl, ['version' => 1, 'document' => UploadedFile::fake()->image('archived.jpg')])->assertUnprocessable();

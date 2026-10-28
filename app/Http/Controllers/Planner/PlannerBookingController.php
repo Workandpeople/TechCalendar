@@ -1188,7 +1188,6 @@ class PlannerBookingController extends Controller
         }
 
         return Appointment::query()
-            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->with([
                 'service:id,type,name',
                 'technician:id,first_name,last_name,department_code,role,latitude,longitude,address',

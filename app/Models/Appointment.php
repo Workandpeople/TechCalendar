@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\Crm\DossierStatusCatalog;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -39,17 +37,6 @@ class Appointment extends Model
     public const STATUS_PROBLEM = 'problem';
 
     public const STATUS_CANCELLED = 'cancelled';
-
-    public function scopeOnPlanning(Builder $query): Builder
-    {
-        $excluded = [...DossierStatusCatalog::STATUSES['problem']['values'], ...DossierStatusCatalog::STATUSES['cancelled']['values']];
-
-        return $query->where('appointments.status', self::STATUS_SCHEDULED)
-            ->where(fn ($linked) => $linked->whereNull('appointments.dossier_operation_id')
-                ->orWhereHas('dossierOperation', fn ($operation) => $operation
-                    ->where(fn ($status) => $status->whereNull('legacy_status')->orWhereNotIn('legacy_status', $excluded))
-                    ->whereHas('dossier', fn ($dossier) => $dossier->whereNull('dossiers.deleted_at'))));
-    }
 
     public function service(): BelongsTo
     {

@@ -31,7 +31,7 @@ it('separates primary criteria complementary filters and table preferences witho
         ->and($xpath->query($form.'//details[@data-dossier-advanced and not(@open)]')->length)->toBe(1)
         ->and($xpath->query($form.'//*[@data-filter-group]')->length)->toBe(3)
         ->and($xpath->query('//a[@data-dossier-section]')->length)->toBe(0);
-    foreach (['q', 'company_ids[]', 'service_ids[]'] as $name) {
+    foreach (['q', 'delegataire_id', 'service_ids[]'] as $name) {
         expect($xpath->query($form.'//*[@name="'.$name.'" and not(ancestor::details)]')->length)->toBe(1);
     }
     foreach (['department', 'section', 'planning', 'billing', 'date_field', 'date_from', 'date_to'] as $name) {

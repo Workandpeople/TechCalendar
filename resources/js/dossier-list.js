@@ -2,9 +2,8 @@ import { initDossierAssignment } from './dossier-assignment.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
-const arrayFilterName = name => /^(service_ids|planning_user_ids|company_ids)(?:\[\d*\])?$/.exec(name)?.[1];
-const legacyArrayFilters = { service_ids: 'service_id', company_ids: 'delegataire_id' };
+const filterNames = ['q', 'status', 'delegataire_id', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const arrayFilterName = name => /^(service_ids|planning_user_ids)(?:\[\d*\])?$/.exec(name)?.[1];
 
 function dossierArrayIds(entries, key, fallback) {
     const parameters = Array.from(entries);
@@ -17,17 +16,12 @@ export function dossierServiceIds(entries) {
     return dossierArrayIds(entries, 'service_ids', 'service_id');
 }
 
-export function dossierCompanyIds(entries) {
-    return dossierArrayIds(entries, 'company_ids', 'delegataire_id');
-}
-
 export function syncDossierFilters(form, url, browser) {
     for (const name of filterNames) {
         const input = form.elements.namedItem(name);
         if (!input) continue;
         if (input.multiple) {
-            const key = arrayFilterName(name);
-            const selected = new Set(dossierArrayIds(url.searchParams, key, legacyArrayFilters[key]));
+            const selected = new Set(name === 'service_ids[]' ? dossierServiceIds(url.searchParams) : dossierArrayIds(url.searchParams, 'planning_user_ids'));
             for (const option of input.options) option.selected = selected.has(option.value);
             input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
             continue;
@@ -45,7 +39,7 @@ export function dossierListUrl(base, entries, changes = {}) {
     url.hash = '';
     const multiple = new Map();
     const setMultiple = (key, values) => {
-        if (legacyArrayFilters[key]) url.searchParams.delete(legacyArrayFilters[key]);
+        if (key === 'service_ids') url.searchParams.delete('service_id');
         url.searchParams.delete(`${key}[]`);
         for (const value of [...new Set(values.map(value => String(value).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) url.searchParams.append(`${key}[]`, value);
     };
@@ -59,14 +53,11 @@ export function dossierListUrl(base, entries, changes = {}) {
         const key = arrayFilterName(name);
         if (key) { setMultiple(key, value === null || value === '' ? [] : Array.isArray(value) ? value : [value]); continue; }
         if (!filterNames.includes(name) && name !== 'page') continue;
-        const legacyKey = Object.keys(legacyArrayFilters).find(key => legacyArrayFilters[key] === name);
-        if (legacyKey) url.searchParams.delete(`${legacyKey}[]`);
+        if (name === 'service_id') url.searchParams.delete('service_ids[]');
         if (value === null || value === '') url.searchParams.delete(name);
         else url.searchParams.set(name, value);
     }
-    for (const [key, legacy] of Object.entries(legacyArrayFilters)) {
-        if (url.searchParams.has(legacy)) setMultiple(key, [url.searchParams.get(legacy)]);
-    }
+    if (url.searchParams.has('service_id')) setMultiple('service_ids', [url.searchParams.get('service_id')]);
     if (url.searchParams.get('status') !== 'visited') url.searchParams.delete('planning_user_ids[]');
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');
@@ -92,42 +83,14 @@ export function selectDossierCategory(categories, url) {
     });
 }
 
-export function setDossierLoadingState(results, skeleton, stage, pending, quiet = false) {
+export function setDossierLoadingState(results, skeleton, stage, pending) {
     if (skeleton) {
-        if (pending && !quiet && !results.hidden) skeleton.style.minHeight = `${Math.min(results.getBoundingClientRect().height, 1100)}px`;
-        skeleton.hidden = !pending || quiet;
-        results.hidden = pending && !quiet;
+        if (pending && !results.hidden) skeleton.style.minHeight = `${Math.min(results.getBoundingClientRect().height, 1100)}px`;
+        skeleton.hidden = !pending;
+        results.hidden = pending;
     }
     results.setAttribute('aria-busy', String(pending));
     stage?.setAttribute('aria-busy', String(pending));
-}
-
-export function dossierAssignmentAffectsListing(url) {
-    return url.searchParams.get('sort') === 'planning_user'
-        || dossierArrayIds(url.searchParams, 'planning_user_ids').length > 0;
-}
-
-export function replaceDossierResults(results, html, root, browser, quiet = false) {
-    if (!quiet) { results.innerHTML = html; results.style.minHeight = ''; return; }
-    const focus = root.activeElement;
-    const assignment = results.contains(focus) ? focus?.closest('[data-planning-assignment]') : null;
-    const appointment = results.contains(focus) ? focus?.closest('[data-appointment-editor]') : null;
-    const focusSelector = assignment ? `[data-assignment-id="${browser.CSS.escape(assignment.dataset.assignmentId)}"] [data-planning-assignee]`
-        : appointment ? `[data-appointment-editor="${browser.CSS.escape(appointment.dataset.appointmentEditor)}"] [name="technician_id"]` : null;
-    const scroll = [];
-    for (let node = results.parentElement; node; node = node.parentElement) {
-        scroll.push([node, node.scrollLeft, node.scrollTop]);
-    }
-    const tableLeft = results.querySelector('.gc-dossier-table-scroll')?.scrollLeft || 0;
-    const viewport = { left: browser.scrollX, top: browser.scrollY, behavior: 'instant' };
-    // Keep enough space when an assignment removes a row from the current filter.
-    results.style.minHeight = `${Math.ceil(results.getBoundingClientRect().height)}px`;
-    results.innerHTML = html;
-    const table = results.querySelector('.gc-dossier-table-scroll');
-    if (table) table.scrollLeft = tableLeft;
-    if (focusSelector) (results.querySelector(focusSelector) || results).focus({ preventScroll: true });
-    for (const [node, left, top] of scroll) { node.scrollLeft = left; node.scrollTop = top; }
-    browser.scrollTo(viewport);
 }
 
 // Cancel on input, not after the debounce: an older response must never overwrite newer filters.
@@ -137,9 +100,7 @@ export function createDossierLoader(browser, { pending, success, failure }) {
     let debounceTimer;
     let timeoutTimer;
     let lastRequest;
-    let loading = false;
     const cancel = () => {
-        loading = false;
         generation++;
         controller?.abort();
         browser.clearTimeout(debounceTimer);
@@ -148,7 +109,6 @@ export function createDossierLoader(browser, { pending, success, failure }) {
     const load = (url, options = {}) => {
         lastRequest = { url, options };
         cancel();
-        loading = true;
         const current = generation;
         pending(url, options);
         const run = async () => {
@@ -176,17 +136,13 @@ export function createDossierLoader(browser, { pending, success, failure }) {
                 if (current === generation && (error.name !== 'AbortError' || timedOut)) failure(error, url, options);
             } finally {
                 browser.clearTimeout(timeout);
-                if (current === generation) loading = false;
             }
         };
         if (options.delay) debounceTimer = browser.setTimeout(run, options.delay);
         else void run();
     };
-    const refresh = (fallback, { quiet = false } = {}) => load(lastRequest?.url || fallback, {
-        ...lastRequest?.options, delay: 0, scroll: false, categories: true,
-        quiet: quiet && (!lastRequest || lastRequest.url.href === fallback.href),
-    });
-    return { load, cancel, refresh, get isLoading() { return loading; } };
+    const refresh = fallback => load(lastRequest?.url || fallback, { ...lastRequest?.options, delay: 0, scroll: false, categories: true });
+    return { load, cancel, refresh };
 }
 
 export function initDossierList(root = document, browser = window) {
@@ -221,15 +177,14 @@ export function initDossierList(root = document, browser = window) {
         syncDossierFilters(form, url, browser);
         filterPanel.sync({ revealAdvanced });
     };
-    const busy = (value, quiet = false) => {
-        if (!quiet) feedback.hidden = false;
-        spinner.hidden = !value || quiet;
-        setDossierLoadingState(results, skeleton, stage, value, quiet);
+    const busy = (value) => {
+        feedback.hidden = false;
+        spinner.hidden = !value;
+        setDossierLoadingState(results, skeleton, stage, value);
         categories.setAttribute('aria-busy', String(value));
     };
     const loader = createDossierLoader(browser, {
         pending(url, options) {
-            if (options.quiet) { busy(true, true); errorBox.hidden = true; return; }
             focusWasInResults ||= results.contains(root.activeElement);
             root.dispatchEvent(new browser.CustomEvent('techcalendar:dossiers-before-update'));
             filterPanel.sync();
@@ -249,7 +204,7 @@ export function initDossierList(root = document, browser = window) {
             selectDossierCategory(categories, url);
             const activeCount = categories.querySelector('[aria-current="page"] .gc-dossier-category-count');
             if (activeCount) activeCount.textContent = payload.total.toLocaleString('fr-FR');
-            replaceDossierResults(results, payload.results, root, browser, options.quiet);
+            results.innerHTML = payload.results;
             filterPanel.sync();
             listing.querySelectorAll('[data-dossier-section]').forEach(link => {
                 const active = link.dataset.dossierSection === (url.searchParams.get('section') || '');
@@ -266,10 +221,10 @@ export function initDossierList(root = document, browser = window) {
                 if (options.history === 'replace') browser.history.replaceState(null, '', url.href);
                 else browser.history.pushState(null, '', url.href);
             }
-            busy(false, options.quiet);
+            busy(false);
             focusWasInResults = false;
-            if (!options.quiet) status.textContent = `${payload.total.toLocaleString('fr-FR')} dossier(s) trouvé(s).`;
-            if (restoreFocus && !options.quiet) {
+            status.textContent = `${payload.total.toLocaleString('fr-FR')} dossier(s) trouvé(s).`;
+            if (restoreFocus) {
                 const target = options.focus ? listing.querySelector(options.focus) : results;
                 (target || results).focus({ preventScroll: true });
             }
@@ -296,11 +251,8 @@ export function initDossierList(root = document, browser = window) {
         ...options, categories: dossierCategoryScope(url) !== dossierCategoryScope(renderedUrl),
     });
     const filterPanel = initDossierFilterPanel(form, categories, root, browser, () => load(formUrl()));
-    initDossierAssignment(listing, root, browser, ({ afterSave = false } = {}) => {
-        if (afterSave && !loader.isLoading && !dossierAssignmentAffectsListing(renderedUrl)) return;
-        loader.refresh(renderedUrl, { quiet: true });
-    });
-    root.addEventListener('techcalendar:appointment-assigned', () => loader.refresh(renderedUrl, { quiet: true }));
+    initDossierAssignment(listing, root, browser, () => loader.refresh(renderedUrl));
+    root.addEventListener('techcalendar:appointment-assigned', () => loader.refresh(renderedUrl));
     form.addEventListener('submit', event => {
         event.preventDefault();
         load(formUrl());

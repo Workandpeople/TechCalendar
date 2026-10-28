@@ -110,7 +110,6 @@ class DossierRegistry
     private function filteredQuery(array $filters): Builder
     {
         $serviceIds = DossierServiceFilter::ids($filters);
-        $companyIds = DossierCompanyFilter::ids($filters);
 
         return Dossier::query()
             ->when(($filters['status'] ?? null) === 'visited' && ! empty($filters['planning_user_ids']),
@@ -163,8 +162,7 @@ class DossierRegistry
             ->when(filled($filters['q'] ?? null), function ($query) use ($filters): void {
                 DossierSearch::apply($query, $filters['q']);
             })
-            ->when($companyIds !== [], fn ($query) => $query->where(fn ($party) => $party
-                ->whereIn('delegataire_id', $companyIds)->orWhereIn('client_id', $companyIds)))
+            ->when($filters['delegataire_id'] ?? null, fn ($query, $id) => $query->where(fn ($party) => $party->where('delegataire_id', $id)->orWhere('client_id', $id)))
             ->when($serviceIds !== [], fn ($query) => $query->whereHas('operations', fn ($operations) => $operations->whereIn('service_id', $serviceIds)))
             ->when(($filters['planning'] ?? null) === 'unlinked', fn ($query) => $query->whereDoesntHave('appointments'))
             ->when(($filters['planning'] ?? null) === 'upcoming', fn ($query) => $query->whereHas('appointments', fn ($rdv) => $rdv->where('status', Appointment::STATUS_SCHEDULED)->where('ends_at', '>', now())))

@@ -21,24 +21,10 @@ class DossierTable
 
     private const COLUMN_WEIGHTS = [
         'lot' => 9, 'created_at' => 8.5, 'modified_at' => 10, 'appointment_at' => 8,
-        'client' => 14, 'planning_user' => 13, 'address' => 23, 'company' => 13, 'phone' => 12, 'service' => 13, 'technician' => 8,
+        'client' => 14, 'planning_user' => 13, 'address' => 23, 'company' => 9, 'phone' => 12, 'service' => 13, 'technician' => 8,
     ];
 
     public function __construct(private readonly ImportedAddressCleaner $addressCleaner) {}
-
-    public function companies(Dossier $dossier): array
-    {
-        $names = [];
-        foreach (['client', 'delegataire'] as $role) {
-            $contact = $dossier->$role;
-            $snapshot = $dossier->{$role.'_contact'} ?? [];
-            $candidates = [$contact?->company_name, $contact?->name, $snapshot['company_name'] ?? null, $snapshot['name'] ?? null];
-            $names[$role] = collect($candidates)->filter(fn ($name) => is_string($name) && trim($name) !== '')
-                ->map(fn ($name) => trim($name))->first() ?? '';
-        }
-
-        return $names;
-    }
 
     public function address(Dossier $dossier): array
     {
@@ -162,7 +148,8 @@ class DossierTable
                 $query->orderBy('dossiers.address', $direction)->orderBy('dossiers.postal_code', $direction)->orderBy('dossiers.city', $direction);
                 break;
             case 'company':
-                $query->orderByRaw($this->companySortExpression().' '.$direction);
+                $query->orderBy(DB::table('external_delegataires')->selectRaw("COALESCE(NULLIF(company_name, ''), name)")
+                    ->whereRaw('id = COALESCE(dossiers.delegataire_id, dossiers.client_id)')->limit(1), $direction);
                 break;
             case 'phone': $query->orderBy('dossiers.phone', $direction);
                 break;
@@ -212,24 +199,5 @@ class DossierTable
     private function concat(string ...$parts): string
     {
         return DB::connection()->getDriverName() === 'sqlite' ? '('.implode(' || ', $parts).')' : 'CONCAT('.implode(', ', $parts).')';
-    }
-
-    private function companySortExpression(): string
-    {
-        $names = [];
-        foreach (['client', 'delegataire'] as $role) {
-            $organisation = DB::table('external_delegataires')->selectRaw("COALESCE(NULLIF(TRIM(company_name), ''), NULLIF(TRIM(name), ''))")
-                ->whereColumn('id', 'dossiers.'.$role.'_id')->limit(1);
-            $names[] = '('.$organisation->toSql().')';
-            foreach (['company_name', 'name'] as $field) {
-                $value = "JSON_EXTRACT(dossiers.{$role}_contact, '$.{$field}')";
-                if (DB::connection()->getDriverName() !== 'sqlite') {
-                    $value = 'JSON_UNQUOTE('.$value.')';
-                }
-                $names[] = "NULLIF(NULLIF(TRIM({$value}), ''), 'null')";
-            }
-        }
-
-        return 'COALESCE('.implode(', ', $names).')';
     }
 }

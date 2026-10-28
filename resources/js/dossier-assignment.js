@@ -53,16 +53,7 @@ export function initDossierAssignment(listing, root, browser, refresh) {
             select.value = cell.dataset.assignedId;
             select.disabled = true;
         } else {
-            // A read started before this write must not restore an older assignment.
-            if (state.saved && Number(cell.dataset.version) <= state.saved.version) {
-                cell.dataset.assignedId = String(state.saved.planning_user_id ?? '');
-                cell.dataset.version = String(state.saved.version);
-                select.value = cell.dataset.assignedId;
-            } else if (state.saved) {
-                states.delete(cell.dataset.assignmentId);
-                feedback.textContent = '';
-                return;
-            }
+            // The server-rendered select remains authoritative after a listing refresh.
             select.disabled = ![...select.options].some(option => !option.disabled && (option.value || cell.dataset.assignedId));
         }
         feedback.textContent = state.message;
@@ -77,13 +68,12 @@ export function initDossierAssignment(listing, root, browser, refresh) {
         const cell = select.closest('[data-planning-assignment]');
         const id = cell.dataset.assignmentId;
         if (states.get(id)?.pending || select.value === cell.dataset.assignedId) return;
-        const hadFocus = root.activeElement === select;
         states.set(id, { pending: true, value: select.value, message: 'Enregistrement…' });
         paintAll();
         try {
             const payload = await saveDossierAssignment(browser, cell.dataset.assignmentUrl,
                 root.querySelector('meta[name="csrf-token"]')?.content || '', select.value, cell.dataset.version);
-            states.set(id, { pending: false, saved: payload, message: payload.planning_user_id === null ? 'Affectation retirée.' : 'Affectation enregistrée.' });
+            states.set(id, { pending: false, message: payload.planning_user_id === null ? 'Affectation retirée.' : 'Affectation enregistrée.' });
             // Update any visible copy immediately, including one rendered during the write.
             listing.querySelectorAll('[data-planning-assignment]').forEach(current => {
                 if (current.dataset.assignmentId !== id) return;
@@ -91,16 +81,11 @@ export function initDossierAssignment(listing, root, browser, refresh) {
                 current.dataset.version = String(payload.version);
                 current.querySelector('[data-planning-assignee]').value = current.dataset.assignedId;
             });
-            paintAll();
-            refresh({ afterSave: true });
+            refresh();
         } catch (error) {
             states.set(id, { pending: false, error: true, message: error.message });
         } finally {
             paintAll();
-            if (hadFocus && root.activeElement === root.body) {
-                const current = [...listing.querySelectorAll('[data-planning-assignment]')].find(item => item.dataset.assignmentId === id);
-                current?.querySelector(states.get(id)?.error ? '[data-assignment-refresh]' : '[data-planning-assignee]')?.focus({ preventScroll: true });
-            }
         }
     });
     listing.addEventListener('click', event => {

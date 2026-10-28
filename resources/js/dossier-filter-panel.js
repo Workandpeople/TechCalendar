@@ -23,10 +23,7 @@ export function dossierFilterItems(form, statusLabels = {}) {
     if (value(form, 'status') && value(form, 'status') !== 'all') {
         add('status', `État : ${statusLabels[value(form, 'status')] || 'Catégorie sélectionnée'}`);
     }
-    const companies = Array.from(field(form, 'company_ids[]')?.options || []).filter(option => option.selected);
-    if (companies.length) add('companies', companies.length === 1 ? `Société : ${companies[0].label}` : `Sociétés : ${companies.length} sélectionnées`,
-        `Sociétés : ${companies.map(option => option.label).join(', ')}`);
-    else if (value(form, 'delegataire_id')) add('delegataire_id', `Client : ${selectedLabel(form, 'delegataire_id')}`);
+    if (value(form, 'delegataire_id')) add('delegataire_id', `Client : ${selectedLabel(form, 'delegataire_id')}`);
     const services = Array.from(field(form, 'service_ids[]')?.options || []).filter(option => option.selected);
     if (services.length) add('services', services.length === 1 ? `Fiche : ${services[0].label}` : `Fiches : ${services.length} sélectionnées`,
         `Fiches : ${services.map(option => option.label).join(', ')}`);
@@ -49,11 +46,10 @@ export function dossierFilterItems(form, statusLabels = {}) {
 }
 
 export function clearDossierFilter(form, key, browser) {
-    if (['services', 'planning_users', 'companies'].includes(key)) {
-        const select = field(form, { services: 'service_ids[]', planning_users: 'planning_user_ids[]', companies: 'company_ids[]' }[key]);
+    if (key === 'services' || key === 'planning_users') {
+        const select = field(form, key === 'services' ? 'service_ids[]' : 'planning_user_ids[]');
         for (const option of select?.options || []) option.selected = false;
         if (key === 'services' && field(form, 'service_id')) field(form, 'service_id').value = '';
-        if (key === 'companies' && field(form, 'delegataire_id')) field(form, 'delegataire_id').value = '';
         select?.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
         return true;
     }

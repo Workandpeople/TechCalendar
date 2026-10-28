@@ -188,7 +188,6 @@ class PlannerTrackingController extends Controller
         }
 
         $appointmentsQuery = $this->appointmentDetailsQuery()
-            ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->whereIn('technician_id', $technicianIds)
             ->where('starts_at', '<', Carbon::parse($payload['end']))
             ->where('ends_at', '>', Carbon::parse($payload['start']))
@@ -309,10 +308,7 @@ class PlannerTrackingController extends Controller
                 'technician' => fn ($query) => $query->withTrashed()->select('id', 'first_name', 'last_name', 'email', 'address', 'department_code', 'latitude', 'longitude', 'role'),
                 'technician.departments:code',
                 'creator:id,first_name,last_name',
-            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with([
-                'dossierOperation:id,dossier_id,inspected_on,control_submitted_at,control_validated_at',
-                'dossierOperation.dossier',
-            ]));
+            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,inspected_on,control_submitted_at,control_validated_at'));
     }
 
     /**

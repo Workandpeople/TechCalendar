@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Dossier;
-use App\Models\ExternalDelegataire;
 use App\Services\Crm\DossierTable;
 use App\Services\ImportedAddressCleaner;
 
@@ -55,19 +54,4 @@ it('handles missing address parts without inventing a street or location', funct
     $table = new DossierTable(new ImportedAddressCleaner);
     expect($table->address(new Dossier)['full'])->toBe('');
     expect($table->address(new Dossier(['city' => 'Paris']))['full'])->toBe('Paris');
-});
-
-it('keeps the client and delegate distinct with safe manual-name fallbacks', function () {
-    $table = new DossierTable(new ImportedAddressCleaner);
-    $dossier = new Dossier(['company_name' => 'Bénéficiaire, pas la société cliente',
-        'client_contact' => ['company_name' => '', 'name' => 'Société manuelle'],
-        'delegataire_contact' => ['company_name' => ['malformed'], 'name' => 'Délégataire manuel']]);
-    $dossier->setRelation('client', null)->setRelation('delegataire', null)->syncOriginal();
-    expect($table->companies($dossier))->toBe(['client' => 'Société manuelle', 'delegataire' => 'Délégataire manuel'])
-        ->and($dossier->getDirty())->toBeEmpty();
-    $dossier->setRelation('client', new ExternalDelegataire(['company_name' => ' ', 'name' => '10 Travaux']))
-        ->setRelation('delegataire', new ExternalDelegataire(['company_name' => 'Groupe distinct', 'name' => 'Contact']));
-    expect($table->companies($dossier))->toBe(['client' => '10 Travaux', 'delegataire' => 'Groupe distinct']);
-    $empty = (new Dossier(['company_name' => 'Bénéficiaire']))->setRelation('client', null)->setRelation('delegataire', null);
-    expect($table->companies($empty))->toBe(['client' => '', 'delegataire' => '']);
 });

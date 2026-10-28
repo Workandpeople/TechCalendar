@@ -35,7 +35,7 @@ class AppointmentSlotAvailability
 
     public function overlaps(int $technicianId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreId = null): Collection
     {
-        return Appointment::query()->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())->where('technician_id', $technicianId)
+        return Appointment::query()->where('technician_id', $technicianId)
             ->where('starts_at', '<', $end)->where('ends_at', '>', $start)
             ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
             ->get(['id', 'address', 'latitude', 'longitude', 'starts_at', 'ends_at']);
