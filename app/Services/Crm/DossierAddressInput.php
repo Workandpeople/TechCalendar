@@ -15,10 +15,10 @@ final class DossierAddressInput
         }
         $query = trim(implode(' ', array_filter([$cityOnly ? null : ($data['address'] ?? null), $data['postal_code'] ?? null, $data['city'] ?? null])));
         $geocoder = app(MapboxAddressGeocoder::class);
-        $result = $cityOnly ? $geocoder->geocodeCity($query) : $geocoder->geocode($query);
+        $result = $cityOnly ? $geocoder->geocodeCity($query, $data['mapbox_id'] ?? null) : $geocoder->geocode($query);
         if (! DossierLocation::point($result['latitude'] ?? null, $result['longitude'] ?? null)
             || (filled($data['mapbox_id'] ?? null) && $result['mapbox_id'] !== $data['mapbox_id'])) {
-            throw ValidationException::withMessages([$cityOnly ? 'city' : 'address' => 'Mapbox n’a pas confirmé cette localisation. Vérifiez la commune ou choisissez une nouvelle suggestion. Vos informations sont conservées.']);
+            throw ValidationException::withMessages([$cityOnly ? 'city' : 'address' => 'La localisation n’a pas pu être confirmée. Vérifiez la commune ou choisissez une nouvelle suggestion. Vos informations sont conservées.']);
         }
 
         return $result;

@@ -21,15 +21,17 @@ final class DossierAddressCorrection
         $this->checkVersion($dossier, (int) $data['version']);
         // Resolve on the server, outside the SQL transaction; never trust coordinates from the browser.
         $cityOnly = MapboxGeocodingMatch::isCityQuery($data['address_query'])
-            || preg_match('/^(place|postcode|locality)\./', $data['mapbox_id'] ?? '');
-        $result = $cityOnly ? $this->geocoder->geocodeCity(trim($data['address_query'])) : $this->geocoder->geocode(trim($data['address_query']));
+            || preg_match('/^(place|postcode|locality|commune)\./', $data['mapbox_id'] ?? '');
+        $result = $cityOnly ? $this->geocoder->geocodeCity(trim($data['address_query']), $data['mapbox_id'] ?? null) : $this->geocoder->geocode(trim($data['address_query']));
         if (! DossierLocation::point($result['latitude'] ?? null, $result['longitude'] ?? null)
             || (! $cityOnly && ($result['feature_type'] ?? null) !== 'address')
             || (filled($data['mapbox_id'] ?? null) && ($result['mapbox_id'] ?? null) !== $data['mapbox_id'])
             || (! $cityOnly && blank($result['street_address'] ?? null)) || blank($result['city'] ?? null)
             || mb_strlen($result['street_address']) > 500 || mb_strlen($result['city']) > 190
             || mb_strlen($result['postal_code'] ?? '') > 10) {
-            throw ValidationException::withMessages(['address_query' => 'Mapbox n’a pas pu localiser cette adresse. Sélectionnez une suggestion précise puis réessayez. L’adresse actuelle est conservée.']);
+            throw ValidationException::withMessages(['address_query' => $cityOnly
+                ? 'La commune et le code postal n’ont pas pu être confirmés. Choisissez la commune dans la liste puis réessayez. L’adresse actuelle est conservée.'
+                : 'Mapbox n’a pas pu localiser cette adresse. Sélectionnez une suggestion précise puis réessayez. L’adresse actuelle est conservée.']);
         }
 
         return DB::transaction(function () use ($actor, $dossier, $data, $result): Dossier {

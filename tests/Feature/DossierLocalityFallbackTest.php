@@ -27,10 +27,10 @@ beforeEach(function () {
     $this->client = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false, 'external_client_id' => $this->organisation->id,
         'portal_enabled' => true, 'portal_permissions' => ClientAccess::defaults('client')]);
     $this->service = Service::create(['name' => 'Test', 'type' => 'COFRAC', 'average_duration_minutes' => 45]);
-    $this->postcode = ['id' => 'postcode.test', 'place_type' => ['postcode'], 'text' => '01560', 'place_name' => '01560 Lescheroux, France',
-        'relevance' => 1, 'center' => [5.15, 46.4], 'context' => [['id' => 'place.test', 'text' => 'Lescheroux']]];
+    $this->commune = ['code' => '01212', 'nom' => 'Lescheroux', 'codesPostaux' => ['01560'],
+        'centre' => ['type' => 'Point', 'coordinates' => [5.15, 46.4]], 'departement' => ['nom' => 'Ain']];
     $this->payload = ['company_name' => 'Bénéficiaire', 'address' => 'Lieu-dit introuvable', 'postal_code' => '01560', 'city' => 'Lescheroux',
-        'address_precision' => 'city', 'mapbox_id' => 'postcode.test', 'service_ids' => [$this->service->id], 'submission_id' => (string) Str::uuid()];
+        'address_precision' => 'city', 'mapbox_id' => 'commune.01212_01560', 'service_ids' => [$this->service->id], 'submission_id' => (string) Str::uuid()];
 });
 
 afterEach(function () {
@@ -47,7 +47,7 @@ it('offers Mapbox and the locality fallback on both creation forms without sendi
 });
 
 it('creates a dossier at an explicitly approximate locality without losing the original address', function (bool $external) {
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$this->postcode]])]);
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
     $this->actingAs($external ? $this->client : $this->staff)->post(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'), $this->payload)
         ->assertRedirect()->assertSessionHasNoErrors();
     $dossier = Dossier::sole();
@@ -58,28 +58,28 @@ it('creates a dossier at an explicitly approximate locality without losing the o
     expect($selected['latitude'])->toBe(46.4)->and($selected['location_precision'])->toBe('city')
         ->and($selected['location_warning'])->toContain('approximative');
     Http::assertSentCount(1);
-    Http::assertSent(fn ($request) => $request['types'] === 'postcode' && str_contains($request->url(), rawurlencode('01560 Lescheroux')));
+    Http::assertSent(fn ($request) => $request['codePostal'] === '01560' && ! isset($request['access_token']));
 })->with([false, true]);
 
 it('allows an absent street only when the postal code and city are explicitly supplied', function () {
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$this->postcode]])]);
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
     $this->actingAs($this->client)->post(route('client.dossiers.store'), [...$this->payload, 'address' => ''])->assertSessionHasNoErrors();
     expect(Dossier::sole()->address)->toBe('Lescheroux')->and(DossierLocation::address(Dossier::sole()))->toBe('01560 Lescheroux');
 });
 
-it('rejects mismatched postal codes communes low relevance unsafe coordinates and unavailable Mapbox', function (string $failure) {
+it('rejects mismatched postal codes communes unsafe coordinates and unavailable commune service', function (string $failure) {
     $feature = match ($failure) {
-        'postal' => [...$this->postcode, 'text' => '75001'], 'city' => [...$this->postcode, 'context' => [['id' => 'place.test', 'text' => 'Paris']]],
-        'point' => [...$this->postcode, 'center' => [0, 0]], 'relevance' => [...$this->postcode, 'relevance' => .3],
-        default => $this->postcode,
+        'postal' => [...$this->commune, 'codesPostaux' => ['75001']], 'city' => [...$this->commune, 'nom' => 'Paris'],
+        'point' => [...$this->commune, 'centre' => ['type' => 'Point', 'coordinates' => [0, 0]]],
+        default => $this->commune,
     };
-    Http::fake(['api.mapbox.com/*' => $failure === 'unavailable' ? Http::response([], 503) : Http::response(['features' => [$feature]])]);
+    Http::fake(['geo.api.gouv.fr/communes*' => $failure === 'unavailable' ? Http::response([], 503) : Http::response([$feature])]);
     $this->actingAs($this->client)->postJson(route('client.dossiers.store'), $this->payload)->assertUnprocessable()->assertJsonValidationErrors('city');
     expect(Dossier::count())->toBe(0);
-})->with(['postal', 'city', 'point', 'relevance', 'unavailable']);
+})->with(['postal', 'city', 'point', 'unavailable']);
 
 it('offers locality suggestions without disclosing the token or permitting delegataires to create dossiers', function () {
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$this->postcode]])]);
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
     $url = route('client.dossiers.address.creation-suggestions', ['q' => '01560 Lescheroux', 'mode' => 'city']);
     $this->actingAs($this->client)->getJson($url)->assertOk()->assertJsonPath('suggestions.0.postal_code', '01560')
         ->assertJsonPath('suggestions.0.city', 'Lescheroux')->assertDontSee('fake-mapbox-token');
@@ -91,9 +91,9 @@ it('offers locality suggestions without disclosing the token or permitting deleg
 
 it('accepts postal code and city in the correction modal and preserves audit and existing appointments', function () {
     $dossier = Dossier::create(['reference' => 'CITY-CORRECTION', 'address' => 'Mauvaise adresse', 'city' => 'Paris']);
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$this->postcode]])]);
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
     $this->actingAs($this->staff)->patch(route('v2.dossiers.address.update', $dossier), ['version' => $dossier->fresh()->version,
-        'address_query' => '01560 Lescheroux', 'mapbox_id' => 'postcode.test'])->assertRedirect()->assertSessionHasNoErrors();
+        'address_query' => '01560 Lescheroux', 'mapbox_id' => 'commune.01212_01560'])->assertRedirect()->assertSessionHasNoErrors();
     expect($dossier->fresh()->inspection_geocode['precision'])->toBe('city')->and($dossier->fresh()->city)->toBe('Lescheroux')
         ->and($dossier->activities()->sole()->body)->toContain('approximative');
 });

@@ -31,10 +31,10 @@
             <input type="hidden" name="_form" value="address">
             <input type="hidden" name="version" value="{{ $dossier->version }}">
             <input type="hidden" name="mapbox_id" value="{{ old('mapbox_id') }}">
-            <p class="text-sm text-slate-600">Recherchez une adresse ou saisissez uniquement le code postal et la ville. Une commune seule donne une position approximative, pas l’adresse exacte.</p>
+            <p class="text-sm text-slate-600">Recherchez une adresse ou saisissez le code postal et la commune. Les communes sont vérifiées dans le référentiel public français ; leur centre donne une position approximative, pas l’adresse exacte.</p>
             <div><label class="gc-label" for="dossier-address-query">Adresse de l’intervention</label>
                 <input id="dossier-address-query" name="address_query" type="text" required minlength="3" maxlength="255" class="gc-input" value="{{ old('address_query', \App\Services\Crm\DossierLocation::address($dossier)) }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dossier-address-options" aria-describedby="dossier-address-status">
-                <ul id="dossier-address-options" class="gc-address-suggestions" role="listbox" aria-label="Adresses proposées par Mapbox" hidden></ul>
+                <ul id="dossier-address-options" class="gc-address-suggestions" role="listbox" aria-label="Adresses ou communes proposées" hidden></ul>
             </div>
             <p id="dossier-address-status" data-address-status role="status" aria-live="polite" class="text-xs text-slate-500">Saisissez au moins 3 caractères pour rechercher une adresse.</p>
             <p class="text-xs text-slate-500">Les rendez-vous déjà planifiés et l’historique sont conservés. Une localisation sur la commune reste approximative jusqu’à confirmation de l’adresse exacte.</p>

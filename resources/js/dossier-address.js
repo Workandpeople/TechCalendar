@@ -16,12 +16,12 @@ export function createAddressSearch(browser, { pending, success, failure }) {
                 if (response.status === 403) throw new Error('Vous n’avez plus accès à la modification de cette adresse.');
                 const data = await response.json();
                 if (current !== generation) return;
-                if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || 'Recherche Mapbox indisponible. Réessayez dans un instant.');
-                if (!Array.isArray(data.suggestions)) throw new Error('Réponse Mapbox invalide.');
+                if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || 'Recherche d’adresse ou de commune indisponible. Réessayez dans un instant.');
+                if (!Array.isArray(data.suggestions)) throw new Error('Réponse de recherche invalide.');
                 success(data.suggestions.filter(item => typeof item.id === 'string' && typeof item.label === 'string'));
             } catch (error) {
                 if (current === generation) failure(error.name === 'AbortError' ? 'La recherche a expiré. Réessayez.'
-                    : ['SyntaxError', 'TypeError'].includes(error.name) ? 'Recherche Mapbox indisponible. Réessayez dans un instant.' : error.message);
+                    : ['SyntaxError', 'TypeError'].includes(error.name) ? 'Recherche d’adresse ou de commune indisponible. Réessayez dans un instant.' : error.message);
             } finally { browser.clearTimeout(timeout); }
         }, 300);
     };
@@ -62,7 +62,7 @@ export function initDossierAddress(root = document, browser = window) {
             input.focus({ preventScroll: true });
         };
         const loader = createAddressSearch(browser, {
-            pending() { hide(); status.textContent = 'Recherche des adresses…'; },
+            pending() { hide(); status.textContent = 'Recherche des adresses et communes…'; },
             success(items) {
                 suggestions = items;
                 list.replaceChildren(...items.map((item, index) => {
@@ -77,7 +77,7 @@ export function initDossierAddress(root = document, browser = window) {
                 list.hidden = items.length === 0;
                 input.setAttribute('aria-expanded', String(items.length > 0));
                 highlighted = -1;
-                status.textContent = items.length ? `${items.length} adresse(s) proposée(s).` : 'Aucune adresse trouvée. Précisez le numéro, la voie et la commune.';
+                status.textContent = items.length ? `${items.length} adresse(s) ou commune(s) proposée(s).` : 'Aucun résultat. Précisez l’adresse ou le code postal et le nom de la commune.';
             },
             failure(message) { hide(); status.textContent = message; },
         });
@@ -113,7 +113,7 @@ export function initDossierAddress(root = document, browser = window) {
             if (input.value !== selectedLabel) identifier.value = '';
             loader.cancel(); hide();
             form.querySelector('[type="submit"]').disabled = true;
-            status.textContent = 'Validation et recalcul de la position avec Mapbox…';
+            status.textContent = 'Validation et recalcul de la position…';
         });
         dialog?.addEventListener('close', () => { loader.cancel(); hide(); });
         browser.addEventListener('pagehide', loader.cancel);
@@ -159,7 +159,7 @@ export function initCreationAddress(root = document, browser = window) {
             status.textContent = cityMode ? 'Commune sélectionnée. Position approximative, adresse exacte à confirmer.' : 'Adresse sélectionnée avec Mapbox.';
         };
         const loader = createAddressSearch(browser, {
-            pending() { hide(); status.textContent = 'Recherche Mapbox…'; },
+            pending() { hide(); status.textContent = cityMode ? 'Recherche de la commune…' : 'Recherche de l’adresse…'; },
             failure(message) { hide(); status.textContent = message; },
             success(items) {
                 suggestions = items; index = -1;

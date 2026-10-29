@@ -41,6 +41,7 @@ final class DossierLocation
             'latitude' => (float) $result['latitude'], 'longitude' => (float) $result['longitude'],
             'mapbox_id' => $result['mapbox_id'] ?? null, 'verified_at' => now()->toIso8601String(),
             'precision' => $result['precision'] ?? 'address',
+            'provider' => $result['provider'] ?? 'mapbox',
         ];
     }
 }

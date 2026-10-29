@@ -11,22 +11,6 @@ final class MapboxGeocodingMatch
         return (bool) preg_match('/^\s*[0-9]{5}[\s,]+[^0-9]+$/u', trim($query));
     }
 
-    public function acceptsCity(string $query, array $feature, array $parts): bool
-    {
-        if (! $this->validPoint($feature) || ! in_array($parts['feature_type'] ?? null, ['place', 'postcode', 'locality'], true)
-            || ! is_numeric($feature['relevance'] ?? null) || (float) $feature['relevance'] < 0.9 || blank($parts['city'] ?? null)) {
-            return false;
-        }
-        preg_match('/\b[0-9]{5}\b/', $query, $codes);
-        if ($codes && $codes[0] !== ($parts['postal_code'] ?? null)) {
-            return false;
-        }
-        $city = preg_replace('/\b[0-9]{5}\b|\bfrance\b/ui', '', $query) ?? '';
-        $city = $this->normalize($city);
-
-        return $city !== '' && $city === $this->normalize($parts['city']);
-    }
-
     public function accepts(string $query, array $feature, array $parts): bool
     {
         if (! $this->validPoint($feature)) {

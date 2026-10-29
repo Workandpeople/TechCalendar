@@ -167,15 +167,28 @@ test('creation fallback reveals postcode and city and selects an explicitly appr
     fields.city.handlers.input(); ui.run(300);
     assert.match(ui.requests[0].url, /mode=city/);
     assert.match(ui.requests[0].url, /01560/);
-    ui.requests[0].resolve(response([{ id: 'postcode.test', label: '<img onerror=alert(1)>', feature_type: 'postcode', postal_code: '01560', city: 'Lescheroux' }]));
+    ui.requests[0].resolve(response([{ id: 'commune.01212_01560', label: '<img onerror=alert(1)>', feature_type: 'place', postal_code: '01560', city: 'Lescheroux' }]));
     await settle();
     const option = elements['#creation-city-options'].children[0];
     assert.match(option.textContent, /<img/);
     option.handlers.click();
-    assert.equal(fields.mapbox_id.value, 'postcode.test');
+    assert.equal(fields.mapbox_id.value, 'commune.01212_01560');
     assert.equal(fields.address_precision.value, 'city');
     assert.equal(fields.address.value, 'Lieu-dit introuvable');
     assert.equal(elements['[data-address-approximate]'].hidden, false);
     fields.city.handlers.input();
     assert.equal(fields.mapbox_id.value, '');
+});
+
+test('keeps a canonical commune selection valid when the correction form is submitted', async () => {
+    const ui = editorFixture();
+    ui.input.value = '32380 BIVE'; ui.input.handlers.input(); ui.run(300);
+    ui.requests[0].resolve(response([{ id: 'commune.32055_32380', label: '32380 Bivès, Gers, France', feature_type: 'place' }]));
+    await settle();
+    ui.list.children[0].handlers.click();
+    assert.equal(ui.input.value, '32380 Bivès, Gers, France');
+    assert.match(ui.status.textContent, /Commune sélectionnée/);
+    ui.input.handlers.change();
+    ui.form.handlers.submit();
+    assert.equal(ui.identifier.value, 'commune.32055_32380');
 });

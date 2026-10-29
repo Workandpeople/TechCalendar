@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Crm;
 
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class DossierAddressRequest extends FormRequest
@@ -15,7 +16,7 @@ final class DossierAddressRequest extends FormRequest
     {
         return [
             'address_query' => ['required', 'string', 'min:3', 'max:255', 'not_regex:/[;\x00-\x1F\x7F]/'],
-            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:/^(address|place|locality|postcode)\.[a-zA-Z0-9_-]+$/D'],
+            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:'.MapboxAddressGeocoder::IDENTIFIER_PATTERN],
             'version' => ['required', 'integer', 'min:1'],
         ];
     }

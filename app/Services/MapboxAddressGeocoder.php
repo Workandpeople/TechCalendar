@@ -7,6 +7,8 @@ use Illuminate\Validation\ValidationException;
 
 class MapboxAddressGeocoder
 {
+    public const IDENTIFIER_PATTERN = '/^(?:(?:address|place|locality|postcode)\.[a-zA-Z0-9_-]+|commune\.[0-9A-Z]{5}_[0-9]{5})$/D';
+
     private const COUNTRIES = 'fr,gp,mq,gf,re,yt,pm,bl,mf,pf,nc,wf';
 
     public function geocode(?string $address): array
@@ -53,33 +55,20 @@ class MapboxAddressGeocoder
         }
     }
 
-    public function geocodeCity(string $query): array
+    public function geocodeCity(string $query, ?string $identifier = null): array
     {
-        $token = (string) config('services.mapbox.token');
-        if ($token === '') {
-            return $this->emptyResult('Token Mapbox absent.');
-        }
         try {
-            $response = Http::timeout(8)->get('https://api.mapbox.com/geocoding/v5/mapbox.places/'.rawurlencode(trim($query)).'.json', [
-                'access_token' => $token, 'country' => self::COUNTRIES, 'language' => 'fr', 'limit' => 5,
-                // A postal feature supplies both a verified postal code and its parent commune.
-                'types' => preg_match('/\b[0-9]{5}\b/', $query) ? 'postcode' : 'place,locality', 'autocomplete' => 'false',
-            ]);
-            $features = $response->ok() ? $response->json('features') : [];
-            foreach (is_array($features) ? $features : [] as $feature) {
-                if (is_array($feature) && app(MapboxGeocodingMatch::class)->acceptsCity($query, $feature, $this->addressParts($feature))) {
-                    return $this->result($feature, $query, 'city');
-                }
-            }
+            return app(FrenchCommuneGeocoder::class)->geocode($query, $identifier);
         } catch (\Throwable) {
-            // No guessed coordinates: leave the form intact for a new lookup.
+            return $this->emptyResult('Commune non confirmée. Vérifiez le code postal et le nom, puis choisissez la commune dans la liste.');
         }
-
-        return $this->emptyResult('Commune non localisée. Vérifiez le code postal et la ville, puis réessayez.');
     }
 
     public function suggestions(string $query, bool $cityOnly = false): array
     {
+        if ($cityOnly || MapboxGeocodingMatch::isCityQuery($query) || preg_match('/^[0-9]{5}$/D', trim($query))) {
+            return $this->communeSuggestions($query);
+        }
         $token = (string) config('services.mapbox.token');
         if ($token === '') {
             throw ValidationException::withMessages(['q' => 'La recherche d’adresse Mapbox n’est pas configurée.']);
@@ -87,18 +76,36 @@ class MapboxAddressGeocoder
         try {
             $response = Http::timeout(8)->get('https://api.mapbox.com/geocoding/v5/mapbox.places/'.rawurlencode(trim($query)).'.json', [
                 'access_token' => $token, 'country' => self::COUNTRIES, 'language' => 'fr',
-                'limit' => 5, 'types' => MapboxGeocodingMatch::isCityQuery($query) ? 'postcode' : ($cityOnly ? 'place,locality,postcode' : 'address,postcode,place,locality'), 'autocomplete' => 'true',
+                'limit' => 5, 'types' => 'address,postcode,place,locality', 'autocomplete' => 'true',
             ]);
             if (! $response->ok() || ! is_array($response->json('features'))) {
                 throw new \RuntimeException('Mapbox unavailable.');
             }
 
-            return collect($response->json('features'))->filter(fn ($feature) => is_array($feature)
-                && is_string($feature['id'] ?? null) && preg_match('/^(address|place|postcode|locality)\.[a-zA-Z0-9_-]+$/D', $feature['id'])
+            $addresses = collect($response->json('features'))->filter(fn ($feature) => is_array($feature)
+                && in_array('address', is_array($feature['place_type'] ?? null) ? $feature['place_type'] : [], true)
+                && is_string($feature['id'] ?? null) && preg_match('/^address\.[a-zA-Z0-9_-]+$/D', $feature['id'])
                 && is_string($feature['place_name'] ?? null) && trim($feature['place_name']) !== '')
                 ->take(5)->map(fn ($feature) => ['id' => $feature['id'], 'label' => $feature['place_name'], ...$this->addressParts($feature)])->values()->all();
+            if ($addresses !== [] || ! collect($response->json('features'))->contains(fn ($feature) => is_array($feature)
+                && array_intersect(['place', 'locality', 'postcode'], is_array($feature['place_type'] ?? null) ? $feature['place_type'] : []) !== [])) {
+                return $addresses;
+            }
+
+            return $this->communeSuggestions($query);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (\Throwable) {
             throw ValidationException::withMessages(['q' => 'La recherche Mapbox est momentanément indisponible. Réessayez dans un instant.']);
+        }
+    }
+
+    private function communeSuggestions(string $query): array
+    {
+        try {
+            return app(FrenchCommuneGeocoder::class)->suggestions($query);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages(['q' => 'La recherche de communes est momentanément indisponible. Réessayez dans un instant.']);
         }
     }
 
@@ -118,12 +125,12 @@ class MapboxAddressGeocoder
         ];
     }
 
-    private function result(array $feature, string $query, string $precision = 'address'): array
+    private function result(array $feature, string $query): array
     {
         return ['latitude' => (float) $feature['center'][1], 'longitude' => (float) $feature['center'][0],
             'formatted_address' => $feature['place_name'] ?? $query, 'mapbox_id' => $feature['id'] ?? null,
             'mapbox_confidence' => $feature['relevance'] ?? null, ...$this->addressParts($feature),
-            'precision' => $precision, 'warnings' => $precision === 'city' ? ['Position approximative : commune / code postal. Adresse exacte à confirmer avant la visite.'] : []];
+            'precision' => 'address', 'provider' => 'mapbox', 'warnings' => []];
     }
 
     private function emptyResult(string $warning): array

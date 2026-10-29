@@ -2889,3 +2889,31 @@ Contrat des types place/locality/postcode :
   inventee ni aucun rapprochement historique effectue automatiquement.
 - Aucune nouvelle migration, import, seeder ou activation d'envoi n'est necessaire.
   Les reglages de notifications et les modes mail/SMS sont conserves.
+
+### Correction de la recherche de communes (29 octobre 2026)
+
+Le filtre Mapbox `types=postcode` ne permettait pas de distinguer les communes
+partageant un meme code postal. La suggestion pouvait donc designer Saint-Clar
+au lieu de Bives, ou Saint-Trivier-de-Courtes au lieu de Lescheroux. Les libelles
+Mapbox complets avec departement/pays pouvaient ensuite echouer a la validation.
+
+- Les recherches explicites par code postal/commune utilisent desormais l'API
+  publique `https://geo.api.gouv.fr/communes`, sans compte ni nouvelle cle.
+  Les rues et adresses precises restent recherchees avec Mapbox.
+- Le nom saisi filtre la liste officielle des communes du code postal (accents,
+  casse et ponctuation normalises), jamais la seule zone postale representative.
+- Le choix est identifie par `commune.CODE_INSEE_CODE_POSTAL`. Il est confirme
+  cote serveur avant l'enregistrement, contre le nom et les codes postaux officiels.
+  L'identifiant reste dans le champ historique `mapbox_id` pour compatibilite ;
+  les nouvelles metadonnees precisent `provider=geo_api_gouv_fr` et `precision=city`.
+- Le point utilise est le centre de la commune, explicitement approximatif. Il ne
+  prouve jamais que deux RDV sont a moins de 1 km. Aucune adresse exacte n'est inventee.
+- Les listes publiques par code postal sont mises en cache 24 h ; pas d'appel
+  externe par ligne de planning ni geocodage en masse des anciens dossiers.
+  Les pannes HTTP ne sont pas mises en cache et ne changent aucune adresse sauvegardee.
+- Le serveur doit pouvoir joindre `geo.api.gouv.fr` en HTTPS. Le lanceur du paquet
+  verifie cet acces sur les deux exemples publics AVANT toute maintenance.
+- Aucun import, seeder, nouvelle migration, envoi de mail/SMS ou reinitialisation.
+  Les dossiers existants ne changent qu'apres validation explicite de leur adresse.
+
+Reference : [documentation officielle des communes](https://geo.api.gouv.fr/decoupage-administratif/communes).

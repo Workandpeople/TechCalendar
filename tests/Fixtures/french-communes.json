@@ -1,0 +1,74 @@
+[
+    {
+        "code": "01212",
+        "nom": "Lescheroux",
+        "codesPostaux": [
+            "01560"
+        ],
+        "centre": {
+            "type": "Point",
+            "coordinates": [
+                5.1573,
+                46.4089
+            ]
+        },
+        "departement": {
+            "code": "01",
+            "nom": "Ain"
+        }
+    },
+    {
+        "code": "01388",
+        "nom": "Saint-Trivier-de-Courtes",
+        "codesPostaux": [
+            "01560"
+        ],
+        "centre": {
+            "type": "Point",
+            "coordinates": [
+                5.0672,
+                46.458
+            ]
+        },
+        "departement": {
+            "code": "01",
+            "nom": "Ain"
+        }
+    },
+    {
+        "code": "32055",
+        "nom": "Bivès",
+        "codesPostaux": [
+            "32380"
+        ],
+        "centre": {
+            "type": "Point",
+            "coordinates": [
+                0.8087,
+                43.8317
+            ]
+        },
+        "departement": {
+            "code": "32",
+            "nom": "Gers"
+        }
+    },
+    {
+        "code": "32370",
+        "nom": "Saint-Clar",
+        "codesPostaux": [
+            "32380"
+        ],
+        "centre": {
+            "type": "Point",
+            "coordinates": [
+                0.7678,
+                43.896
+            ]
+        },
+        "departement": {
+            "code": "32",
+            "nom": "Gers"
+        }
+    }
+]

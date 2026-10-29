@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Crm;
 
 use App\Models\Dossier;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -36,7 +37,7 @@ class DossierRequest extends FormRequest
             'postal_code' => ['required_if:address_precision,city', 'nullable', 'string', 'max:10'],
             'city' => ['required', 'string', 'max:190', 'not_regex:/[;\x00-\x1F\x7F]/'],
             'address_precision' => ['sometimes', Rule::in(['address', 'city'])],
-            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:/^(address|place|locality|postcode)\.[a-zA-Z0-9_-]+$/D'],
+            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:'.MapboxAddressGeocoder::IDENTIFIER_PATTERN],
             'beneficiary_address' => ['nullable', 'string', 'max:500'],
             'beneficiary_postal_code' => ['nullable', 'string', 'max:10'],
             'beneficiary_city' => ['nullable', 'string', 'max:190'],
