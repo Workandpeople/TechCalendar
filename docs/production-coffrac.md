@@ -2839,3 +2839,30 @@ Les dates/heures restent celles de Paris, sans conversion implicite des anciens
 DATETIME. Une seule requete groupee charge au maximum un RDV par dossier de la
 page courante ; aucun chargement de tous les RDV ni requete par ligne. Les droits
 d'affectation et de categories restent inchanges. Aucune migration pour cet affichage.
+
+### Heure du calendrier et adresse non trouvee
+
+Le calendrier natif utilise Europe/Paris pour ses jours, heures, clics, plages,
+cartes et changements de mois, independamment du fuseau du navigateur. La saisie
+10:40 reste 10:40 en hiver et en ete, y compris avec un navigateur UTC. Aucune
+modification de l'horloge systeme, de MySQL ou des anciens RDV en base.
+
+Les formulaires de dossier internes et clients proposent la recherche Mapbox,
+avec temporisation et annulation des anciennes recherches. Adresse non trouvee
+affiche code postal et ville. Le texte de l'adresse initiale est conserve et
+une recherche serveur explicite valide la commune / zone postale. Le modal de
+correction accepte aussi code postal + ville et propose des communes. Les
+coordonnees du navigateur ne sont jamais acceptees comme preuve de localisation.
+
+La precision city est conservee dans inspection_geocode (JSON existant), et dans
+les nouveaux RDV correspondants. Le planning indique une position approximative
+et des trajets estimes. Deux centres de commune identiques ne permettent pas
+l'exception de chevauchement pour des adresses a moins d'un kilometre ; il reste
+possible de forcer explicitement le placement avec l'audit existant. Une commune
+non reconnue, une incoherence postale ou une panne Mapbox laisse le formulaire
+intact avec un message, sans position devinee. Aucun service de geocodage ne peut
+garantir 100 % de resultats. Aucun geocodage global de l'historique.
+
+Aucune nouvelle migration, aucun seeder, import, envoi ou changement mail/SMS.
+Contrat des types place/locality/postcode :
+[documentation Mapbox](https://docs.mapbox.com/api/search/geocoding-v5/).

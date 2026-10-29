@@ -15,7 +15,7 @@ import { initCapceeReports } from './capcee-reports';
 import { initSelectMenus } from './select-menu';
 import { initDossierService } from './dossier-service';
 import { initDossierMail } from './dossier-mail';
-import { initDossierAddress } from './dossier-address';
+import { initDossierAddress, initCreationAddress } from './dossier-address';
 import { initMultiSelects } from './multi-select';
 import { initDocumentUploadLimits } from './document-upload-limit';
 import { initBookingDossierSummary } from './booking-dossier-summary';
@@ -58,6 +58,7 @@ initDossierService();
 initDossierMail();
 initDossierMailStatus();
 initDossierAddress();
+initCreationAddress();
 initAdminSettings();
 initBetaFeedback();
 

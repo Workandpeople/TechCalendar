@@ -46,9 +46,12 @@ class DossierBooking
         $documents = app(CollectedDossierDocuments::class)->forDossiers($actor, collect([$operation->dossier]));
         $result = $this->serialize($operation, is_array($source) ? $source : [], Cache::get($this->mapCacheKey($operation->dossier))['coordinates'] ?? null, $documents[$operation->dossier_id] ?? []);
         if ($geocode) {
-            $point = app(DossierMapPreview::class)->coordinates($actor, $operation->dossier, forPlanning: true)['coordinates'];
+            $location = app(DossierMapPreview::class)->coordinates($actor, $operation->dossier, forPlanning: true);
+            $point = $location['coordinates'];
             $result['latitude'] = $point['latitude'] ?? null;
             $result['longitude'] = $point['longitude'] ?? null;
+            $result['location_precision'] = $location['precision'] ?? 'address';
+            $result['location_warning'] = ($location['precision'] ?? null) === 'city' ? $location['message'] : null;
         }
 
         return $result;
@@ -194,6 +197,8 @@ class DossierBooking
             'status' => DossierStatusCatalog::describe($operation->legacy_status)['label'],
             'client' => $companies['client'], 'delegataire' => $companies['delegataire'],
             'site' => $dossier->site_name, 'installer' => $dossier->installer_name, 'lot' => $dossier->legacy_lot_name,
+            'location_warning' => DossierLocation::coordinates($dossier) && ($dossier->inspection_geocode['precision'] ?? null) === 'city'
+                ? 'Position approximative : commune / code postal. Trajets estimés, adresse exacte à confirmer avant la visite.' : null,
             'dossier_url' => route('v2.dossiers.show', $dossier, absolute: false),
         ];
     }
@@ -223,7 +228,8 @@ class DossierBooking
             'existing_appointment_at' => $existingAppointment?->starts_at?->toIso8601String(),
             'dossier_summary' => $this->summary($operation),
             'source' => 'Dossier TechCalendar', 'external_source' => null,
-            'external_reference' => $dossier->reference, 'external_payload' => null,
+            'external_reference' => $dossier->reference, 'external_payload' => DossierLocation::coordinates($dossier) && ($dossier->inspection_geocode['precision'] ?? null) === 'city'
+                ? ['location_precision' => 'city'] : null,
             'status' => 'pending', 'remote_status_name' => $operation->legacy_status,
             'created_at' => $dossier->created_at?->toIso8601String(),
             'first_name' => $dossier->company_name ? '' : ($dossier->first_name ?? ''),

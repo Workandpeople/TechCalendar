@@ -31,9 +31,11 @@ class DossierRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:190'],
             'phone' => ['nullable', 'string', 'max:500'],
             'site_name' => ['nullable', 'string', 'max:190'],
-            'address' => ['required', 'string', 'max:500'],
-            'postal_code' => ['nullable', 'string', 'max:10'],
-            'city' => ['required', 'string', 'max:190'],
+            'address' => ['required_unless:address_precision,city', 'nullable', 'string', 'max:500', 'not_regex:/[;\x00-\x1F\x7F]/'],
+            'postal_code' => ['required_if:address_precision,city', 'nullable', 'string', 'max:10'],
+            'city' => ['required', 'string', 'max:190', 'not_regex:/[;\x00-\x1F\x7F]/'],
+            'address_precision' => ['sometimes', Rule::in(['address', 'city'])],
+            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:/^(address|place|locality|postcode)\.[a-zA-Z0-9_-]+$/D'],
             'beneficiary_address' => ['nullable', 'string', 'max:500'],
             'beneficiary_postal_code' => ['nullable', 'string', 'max:10'],
             'beneficiary_city' => ['nullable', 'string', 'max:190'],
@@ -43,6 +45,9 @@ class DossierRequest extends FormRequest
             'service_ids.*' => ['required', 'integer', 'distinct', 'exists:services,id'],
             'version' => [$dossier ? 'required' : 'prohibited', 'integer', 'min:1'],
         ];
+        if ($this->input('address_precision') === 'city') {
+            $rules['postal_code'][] = 'regex:/^[0-9]{5}$/';
+        }
         foreach (['client_contact', 'delegataire_contact'] as $contact) {
             $rules[$contact] = ['nullable', 'array:name,company_name,email,phone,address,postal_code,city'];
             foreach (['name' => 190, 'company_name' => 190, 'email' => 190, 'phone' => 60, 'address' => 500, 'postal_code' => 10, 'city' => 190] as $field => $length) {

@@ -1724,7 +1724,9 @@ class PlannerBookingController extends Controller
             $appointment->loadMissing('dossierOperation.dossier');
             if ($dossier = $appointment->dossierOperation?->dossier) {
                 Gate::authorize('update', $dossier);
-                $point = app(DossierMapPreview::class)->coordinates(auth()->user(), $dossier, forPlanning: true)['coordinates'];
+                $location = app(DossierMapPreview::class)->coordinates(auth()->user(), $dossier, forPlanning: true);
+                $point = $location['coordinates'];
+                $appointment->external_payload = [...($appointment->external_payload ?? []), 'location_precision' => $location['precision'] ?? 'address'];
                 $appointment->address = DossierLocation::address($dossier);
                 $appointment->latitude = $point['latitude'] ?? null;
                 $appointment->longitude = $point['longitude'] ?? null;

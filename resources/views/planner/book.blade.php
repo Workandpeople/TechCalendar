@@ -1633,6 +1633,7 @@
                 lot: appointment.external_payload?.lot_name,
                 delegataire: appointment.external_payload?.lot_delegataire,
                 ...appointment.dossier_summary,
+                location_warning: appointment.location_warning || appointment.dossier_summary?.location_warning,
             } : null;
             bookingDossierSummary.dataset.bookingSummary = JSON.stringify(summary);
             bookingDossierSummary.dispatchEvent(new CustomEvent('techcalendar:booking-summary-updated'));

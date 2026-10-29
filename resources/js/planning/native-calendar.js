@@ -1,6 +1,8 @@
-import { addCalendarDays, calendarDate, calendarFields, calendarRange, CALENDAR_MODES, dayKey, eventsDuring, normalizeCalendarEvent, timelineLayout } from './calendar-model.js';
+import { addCalendarDays, calendarDate, calendarFields, calendarRange, calendarMinute, CALENDAR_MODES, dayKey, eventsDuring, normalizeCalendarEvent, timelineLayout } from './calendar-model.js';
+import { APPOINTMENT_TIMEZONE, formatAppointmentDateTime, parseAppointmentDate } from '../appointment-date-time.js';
 
-const time = date => date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const time = date => formatAppointmentDateTime(date, { hour: '2-digit', minute: '2-digit' });
+const dateLabel = (date, options) => formatAppointmentDateTime(date, options);
 const palette = ['#1764d9', '#008574', '#bd5719', '#ac3e58', '#416b97', '#697512'];
 const tone = id => palette[[...String(id)].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length];
 
@@ -93,15 +95,18 @@ export class NativeCalendar {
 
     dateInfo() {
         const { currentStart: start, currentEnd: end } = this.view;
-        return { start, end, startStr: start.toISOString(), endStr: end.toISOString(), timeZone: 'local', view: this.view };
+        return { start, end, startStr: start.toISOString(), endStr: end.toISOString(), timeZone: APPOINTMENT_TIMEZONE, view: this.view };
     }
 
     notifyDates() { this.options.datesSet?.(this.dateInfo()); }
 
     navigate(direction) {
-        const date = new Date(this.date);
-        if (this.mode === 'dayGridMonth') date.setMonth(date.getMonth() + direction, 1);
-        else date.setDate(date.getDate() + direction * (this.mode === 'timeGridDay' ? 1 : 7));
+        let date = addCalendarDays(this.date, direction * (this.mode === 'timeGridDay' ? 1 : 7));
+        if (this.mode === 'dayGridMonth') {
+            const month = new Date(`${dayKey(this.date).slice(0, 7)}-01T12:00:00Z`);
+            month.setUTCMonth(month.getUTCMonth() + direction);
+            date = calendarDate(month.toISOString().slice(0, 10));
+        }
         this.gotoDate(date);
     }
 
@@ -209,9 +214,9 @@ export class NativeCalendar {
         const range = calendarRange(this.date, this.mode, this.options.hiddenDays || [0]);
         const events = eventsDuring(this.events, range.start, range.end);
         const placed = events.filter(event => !calendarFields(event).suggestion).length;
-        this.heading.textContent = this.mode === 'dayGridMonth' ? this.date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-            : this.mode === 'timeGridDay' ? this.date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-                : `${range.days[0].toLocaleDateString('fr-FR', { day: 'numeric' })} – ${range.days.at(-1).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        this.heading.textContent = this.mode === 'dayGridMonth' ? dateLabel(this.date, { month: 'long', year: 'numeric' })
+            : this.mode === 'timeGridDay' ? dateLabel(this.date, { weekday: 'long', day: 'numeric', month: 'long' })
+                : `${dateLabel(range.days[0], { day: 'numeric' })} – ${dateLabel(range.days.at(-1), { day: 'numeric', month: 'long', year: 'numeric' })}`;
         this.summary.textContent = `${placed} RDV placé${placed > 1 ? 's' : ''} · ${events.length - placed} proposition${events.length - placed > 1 ? 's' : ''} · ${this.resources(events).length} technicien(s)`;
         for (const button of this.views.children) button.setAttribute('aria-pressed', String(button.dataset.view === this.mode));
         this.zoomControls.hidden = this.mode !== 'timeGridDay';
@@ -309,7 +314,7 @@ export class NativeCalendar {
         board.style.setProperty('--nc-days', range.days.length);
         board.append(this.node('div', 'nc-corner', 'L’équipe / les jours'));
         for (const day of range.days) {
-            const heading = this.button(day.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading');
+            const heading = this.button(dateLabel(day, { weekday: 'short', day: '2-digit', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading');
             if (dayKey(day) === dayKey(new Date())) heading.dataset.today = 'true';
             board.append(heading);
         }
@@ -332,22 +337,22 @@ export class NativeCalendar {
         board.style.setProperty('--nc-days', range.days.length);
         board.append(this.node('div', 'nc-corner', 'Heure'));
         for (const day of range.days) {
-            const heading = this.button(day.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading');
+            const heading = this.button(dateLabel(day, { weekday: 'short', day: '2-digit', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading');
             if (dayKey(day) === dayKey(new Date())) heading.dataset.today = 'true';
             board.append(heading);
         }
         const resources = this.resources(events);
         const dayItems = range.days.map(day => this.dayEvents(events, day));
-        const firstHour = Math.min(7, ...events.map(event => event.start.getHours()));
-        const lastHour = Math.max(20, ...events.map(event => event.start.getHours()));
+        const firstHour = Math.min(7, ...events.map(event => Math.floor(calendarMinute(event.start) / 60)));
+        const lastHour = Math.max(20, ...events.map(event => Math.floor(calendarMinute(event.start) / 60)));
         for (let hour = firstHour; hour <= lastHour; hour++) {
             board.append(this.node('div', 'nc-hour-label', `${String(hour).padStart(2, '0')}:00`));
             range.days.forEach((day, index) => {
                 const cell = this.node('div', 'nc-hour-cell');
-                const items = dayItems[index].filter(event => event.start < day ? hour === firstHour : event.start.getHours() === hour);
+                const items = dayItems[index].filter(event => event.start < day ? hour === firstHour : Math.floor(calendarMinute(event.start) / 60) === hour);
                 this.appendDayEvents(cell, items, `hour|${dayKey(day)}|${hour}`);
                 if (items.length) cell.dataset.occupied = 'true';
-                if (this.options.dateClick && resources.length) cell.append(this.button('+', () => this.pickSlot(day, resources[0], hour * 60), 'nc-hour-add', `Choisir un horaire le ${day.toLocaleDateString('fr-FR')} vers ${hour} heures`));
+                if (this.options.dateClick && resources.length) cell.append(this.button('+', () => this.pickSlot(day, resources[0], hour * 60), 'nc-hour-add', `Choisir un horaire le ${dateLabel(day)} vers ${hour} heures`));
                 board.append(cell);
             });
         }
@@ -402,7 +407,7 @@ export class NativeCalendar {
         const list = this.node('div', 'nc-agenda');
         for (const day of range.days) {
             const section = this.node('section', 'nc-agenda-day');
-            section.append(this.node('h3', '', day.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })));
+            section.append(this.node('h3', '', dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })));
             const items = this.dayEvents(events, day);
             for (const event of items) section.append(this.card(event));
             if (!items.length) section.append(this.node('p', 'nc-empty-slot', 'Aucun rendez-vous ce jour.'));
@@ -416,8 +421,8 @@ export class NativeCalendar {
         board.style.setProperty('--nc-days', this.options.hiddenDays?.length === 0 ? 7 : range.days.length / 6);
         for (const day of range.days) {
             const section = this.node('section', 'nc-month-day');
-            if (day.getMonth() !== this.date.getMonth()) section.classList.add('nc-other-month');
-            section.append(this.button(day.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading'));
+            if (dayKey(day).slice(0, 7) !== dayKey(this.date).slice(0, 7)) section.classList.add('nc-other-month');
+            section.append(this.button(dateLabel(day, { weekday: 'short', day: 'numeric', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading'));
             const items = this.dayEvents(events, day);
             for (const event of items.slice(0, 3)) {
                 const fields = calendarFields(event);
@@ -439,7 +444,7 @@ export class NativeCalendar {
 
     pickSlot(day, resource, minute = 540) {
         const dialog = this.node('dialog', 'nc-slot-dialog');
-        dialog.append(this.node('h2', '', 'Choisir un horaire'), this.node('p', '', `${resource.name} · ${day.toLocaleDateString('fr-FR', { dateStyle: 'long' })}`));
+        dialog.append(this.node('h2', '', 'Choisir un horaire (heure de Paris)'), this.node('p', '', `${resource.name} · ${dateLabel(day, { dateStyle: 'long' })}`));
         const form = this.node('form');
         const label = this.node('label', '', 'Heure de début');
         const resourceLabel = this.node('label', '', 'Technicien');
@@ -451,8 +456,9 @@ export class NativeCalendar {
         resourceSelect.value = resource.id;
         resourceLabel.append(resourceSelect);
         const input = this.node('input');
-        input.type = 'time'; input.required = true; input.step = '900';
+        input.type = 'time'; input.required = true; input.step = '60';
         input.value = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+        input.addEventListener('input', () => input.setCustomValidity(''));
         label.append(input);
         const actions = this.node('div', 'nc-dialog-actions');
         const cancel = this.button('Annuler', () => dialog.close());
@@ -461,8 +467,9 @@ export class NativeCalendar {
         dialog.addEventListener('close', () => dialog.remove(), { once: true });
         form.addEventListener('submit', event => {
             event.preventDefault();
-            const [hours, minutes] = input.value.split(':').map(Number);
-            const date = new Date(day); date.setHours(hours, minutes, 0, 0);
+            const date = parseAppointmentDate(`${dayKey(day)}T${input.value}`);
+            if (!date) { input.setCustomValidity('Horaire invalide en heure de Paris.'); input.reportValidity(); return; }
+            input.setCustomValidity('');
             dialog.close(); this.toggleExpanded(false);
             const selectedResource = this.resources(this.events).find(candidate => candidate.id === resourceSelect.value) || resource;
             this.options.dateClick?.({ date, dateStr: date.toISOString(), allDay: false, resource: selectedResource, view: this.view, jsEvent: event });

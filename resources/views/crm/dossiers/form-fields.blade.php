@@ -36,6 +36,9 @@
                     <section class="gc-card p-5">
                         <h2 class="mb-4 text-lg font-semibold">{{ $label }}</h2>
                         @if ($label === 'Bénéficiaire')<p class="mb-4 text-sm text-slate-500">Renseigne au minimum la raison sociale ou le nom.</p>@endif
+                        @if ($label === 'Lieu d’inspection')
+                            @include('crm.dossiers.address-input', ['addressSuggestionsUrl' => $portalCreation ? route('client.dossiers.address.creation-suggestions') : route('v2.dossiers.address.creation-suggestions')])
+                        @else
                         <div class="grid gap-4 sm:grid-cols-2">
                             @foreach ($fields as $field => [$fieldLabel, $maxLength])
                                 <div class="{{ str_contains($field, 'address') || in_array($field, ['company_name', 'installer_name']) ? 'sm:col-span-2' : '' }}">
@@ -45,6 +48,7 @@
                                 </div>
                             @endforeach
                         </div>
+                        @endif
                     </section>
                 @endforeach
             </div>

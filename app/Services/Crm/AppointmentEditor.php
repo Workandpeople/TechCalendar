@@ -70,6 +70,7 @@ class AppointmentEditor
             $checks = app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end, [
                 'address' => $data['address'], 'latitude' => array_key_exists('latitude', $data) ? $data['latitude'] : $appointment->latitude,
                 'longitude' => array_key_exists('longitude', $data) ? $data['longitude'] : $appointment->longitude,
+                'external_payload' => $appointment->external_payload,
             ], $id);
             $conflicts = [...$conflicts, ...$checks['conflicts']];
             if ($conflicts !== [] && ! $forced) {

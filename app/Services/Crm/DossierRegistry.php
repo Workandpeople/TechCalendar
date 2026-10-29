@@ -199,7 +199,7 @@ class DossierRegistry
         $information = Arr::only($data, [
             'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',
             'address', 'postal_code', 'city', 'beneficiary_address', 'beneficiary_postal_code',
-            'beneficiary_city', 'installer_name', 'installer_siren', 'service_ids',
+            'beneficiary_city', 'installer_name', 'installer_siren', 'service_ids', 'address_precision', 'mapbox_id',
         ]);
 
         return $this->persistCreation($actor, [
@@ -219,13 +219,18 @@ class DossierRegistry
         }
         $data = DossierContacts::fillMissingSnapshots($data);
         $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
+        $geocode = app(DossierAddressInput::class)->resolve($data);
+        $data['address'] = $data['address'] ?? $data['city'];
 
         try {
-            return DB::transaction(function () use ($actor, $data): Dossier {
+            return DB::transaction(function () use ($actor, $data, $geocode): Dossier {
                 $dossier = Dossier::query()->create([
-                    ...Arr::except($data, ['service_ids']),
+                    ...Arr::except($data, ['service_ids', 'address_precision', 'mapbox_id']),
                     'source' => 'native', 'source_reference' => null, 'created_by' => $actor->id,
                 ]);
+                if ($geocode) {
+                    $dossier->forceFill(['inspection_geocode' => DossierLocation::metadata($dossier, $geocode)])->save();
+                }
                 foreach ($data['service_ids'] as $serviceId) {
                     $operation = $dossier->operations()->create(['service_id' => $serviceId]);
                     $operation->forceFill(['legacy_status' => DossierStatusCatalog::STATUSES['pending']['values'][0]])->save();
@@ -245,14 +250,21 @@ class DossierRegistry
     {
         Gate::forUser($actor)->authorize('update', $dossier);
         $data = DossierContacts::fillMissingSnapshots($data);
+        $geocode = app(DossierAddressInput::class)->resolve($data);
+        if (($data['address_precision'] ?? null) === 'city' && blank($data['address'] ?? null)) {
+            $data['address'] = $data['city'];
+        }
 
         try {
-            return DB::transaction(function () use ($actor, $dossier, $data): Dossier {
+            return DB::transaction(function () use ($actor, $dossier, $data, $geocode): Dossier {
                 $locked = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
                 if ($locked->version !== (int) $data['version']) {
                     throw ValidationException::withMessages(['version' => 'Ce dossier a été modifié entre-temps. Recharge la fiche avant de réessayer.']);
                 }
-                $locked->fill(Arr::except($data, ['version', 'service_ids']));
+                $locked->fill(Arr::except($data, ['version', 'service_ids', 'address_precision', 'mapbox_id']));
+                if ($geocode) {
+                    $locked->forceFill(['inspection_geocode' => DossierLocation::metadata($locked, $geocode)]);
+                }
                 $changed = array_keys($locked->getDirty());
                 if ($changed !== []) {
                     $locked->version++;

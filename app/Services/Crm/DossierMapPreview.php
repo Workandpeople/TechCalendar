@@ -21,7 +21,11 @@ class DossierMapPreview
             return ['coordinates' => null, 'message' => 'Adresse non renseignée.'];
         }
         if ($point = DossierLocation::coordinates($dossier)) {
-            return ['coordinates' => $point, 'message' => 'Position corrigée et vérifiée avec Mapbox.'];
+            $approximate = ($dossier->inspection_geocode['precision'] ?? null) === 'city';
+
+            return ['coordinates' => $point, 'precision' => $approximate ? 'city' : 'address', 'message' => $approximate
+                ? 'Position approximative : commune / code postal. Adresse exacte à confirmer avant la visite.'
+                : 'Position corrigée et vérifiée avec Mapbox.'];
         }
 
         if ($forPlanning) {

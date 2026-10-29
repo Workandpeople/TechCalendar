@@ -63,7 +63,7 @@ it('queries Mapbox for suggestions without exposing the token or mutating the do
     $this->getJson($this->suggestionsUrl.'?'.http_build_query(['q' => '8 rue Corrigée']))->assertOk()
         ->assertJsonPath('suggestions.0.id', 'address.123')->assertJsonCount(1, 'suggestions')
         ->assertDontSee('fixture-mapbox-token')->assertHeader('Cache-Control', 'no-store, private');
-    Http::assertSent(fn ($request) => $request['autocomplete'] === 'true' && $request['types'] === 'address'
+    Http::assertSent(fn ($request) => $request['autocomplete'] === 'true' && $request['types'] === 'address,postcode,place,locality'
         && $request['access_token'] === 'fixture-mapbox-token');
     expect($this->dossier->fresh()->getAttributes())->toBe($before);
 });

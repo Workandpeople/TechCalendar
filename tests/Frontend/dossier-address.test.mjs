@@ -136,3 +136,46 @@ test('submit validates manually edited text rather than a previously selected pl
     assert.equal(ui.submit.disabled, true);
     assert.match(ui.status.textContent, /recalcul/);
 });
+
+test('creation fallback reveals postcode and city and selects an explicitly approximate location safely', async () => {
+    const { initCreationAddress } = await import('../../resources/js/dossier-address.js');
+    const ui = browserFixture();
+    class Node {
+        constructor() { this.value = ''; this.handlers = {}; this.attrs = new Map(); this.children = []; this.hidden = false; }
+        addEventListener(name, fn) { this.handlers[name] = fn; }
+        setAttribute(key, value) { this.attrs.set(key, String(value)); }
+        removeAttribute(key) { this.attrs.delete(key); }
+        replaceChildren(...children) { this.children = children; }
+        focus() {} scrollIntoView() {} setCustomValidity(value) { this.validity = value; } reportValidity() {}
+        set innerHTML(value) { assert.fail('Unsafe HTML rendering'); }
+    }
+    const fields = Object.fromEntries(['address', 'postal_code', 'city', 'mapbox_id', 'address_precision'].map(key => [key, new Node()]));
+    fields.address.value = 'Lieu-dit introuvable'; fields.address_precision.value = 'address';
+    const form = new Node(); form.elements = fields;
+    const elements = Object.fromEntries(['[data-address-fallback]', '[data-address-locality]', '[data-address-approximate]', '[data-creation-address-status]', '#creation-address-options', '#creation-city-options'].map(selector => [selector, new Node()]));
+    elements['#creation-address-options'].id = 'address-options'; elements['#creation-city-options'].id = 'city-options';
+    const section = new Node(); section.dataset = { suggestionsUrl: '/espace-client/dossiers/adresse/suggestions' };
+    section.closest = () => form; section.contains = () => true; section.querySelector = selector => elements[selector];
+    initCreationAddress({ querySelectorAll: () => [section], createElement: () => new Node() }, ui.browser);
+    assert.equal(elements['[data-address-locality]'].hidden, true);
+    assert.equal(fields.city.disabled, true);
+    elements['[data-address-fallback]'].handlers.click();
+    assert.equal(elements['[data-address-locality]'].hidden, false);
+    assert.equal(fields.address.required, false);
+    assert.equal(fields.postal_code.required, true);
+    fields.postal_code.value = '01560'; fields.city.value = 'Lescheroux';
+    fields.city.handlers.input(); ui.run(300);
+    assert.match(ui.requests[0].url, /mode=city/);
+    assert.match(ui.requests[0].url, /01560/);
+    ui.requests[0].resolve(response([{ id: 'postcode.test', label: '<img onerror=alert(1)>', feature_type: 'postcode', postal_code: '01560', city: 'Lescheroux' }]));
+    await settle();
+    const option = elements['#creation-city-options'].children[0];
+    assert.match(option.textContent, /<img/);
+    option.handlers.click();
+    assert.equal(fields.mapbox_id.value, 'postcode.test');
+    assert.equal(fields.address_precision.value, 'city');
+    assert.equal(fields.address.value, 'Lieu-dit introuvable');
+    assert.equal(elements['[data-address-approximate]'].hidden, false);
+    fields.city.handlers.input();
+    assert.equal(fields.mapbox_id.value, '');
+});

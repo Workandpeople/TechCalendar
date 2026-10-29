@@ -16,6 +16,11 @@ class AppointmentSlotAvailability
 
     public function sameSite(array $location, Appointment $appointment): bool
     {
+        // Two commune centres are not proof of co-location or of a distance below 1 km.
+        if (($location['location_precision'] ?? $location['external_payload']['location_precision'] ?? null) === 'city'
+            || ($appointment->external_payload['location_precision'] ?? null) === 'city') {
+            return false;
+        }
         $address = $this->normalizeAddress($location['address'] ?? '');
         if ($address !== '' && $address === $this->normalizeAddress($appointment->address ?? '')) {
             return true;
@@ -38,7 +43,7 @@ class AppointmentSlotAvailability
         return Appointment::query()->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())->where('technician_id', $technicianId)
             ->where('starts_at', '<', $end)->where('ends_at', '>', $start)
             ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
-            ->get(['id', 'address', 'latitude', 'longitude', 'starts_at', 'ends_at']);
+            ->get(['id', 'address', 'latitude', 'longitude', 'starts_at', 'ends_at', 'external_payload']);
     }
 
     /** Called after locking the technician, inside the booking/edit transaction. */

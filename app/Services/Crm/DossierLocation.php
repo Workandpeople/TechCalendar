@@ -8,7 +8,9 @@ final class DossierLocation
 {
     public static function address(Dossier $dossier): string
     {
-        return trim(implode(', ', array_filter([$dossier->address, trim($dossier->postal_code.' '.$dossier->city)])));
+        $street = trim($dossier->address ?? '');
+
+        return trim(implode(', ', array_filter([$street === trim($dossier->city ?? '') ? null : $street, trim($dossier->postal_code.' '.$dossier->city)])));
     }
 
     public static function point(mixed $latitude, mixed $longitude): ?array
@@ -38,6 +40,7 @@ final class DossierLocation
             'address_hash' => hash('sha256', self::address($dossier)),
             'latitude' => (float) $result['latitude'], 'longitude' => (float) $result['longitude'],
             'mapbox_id' => $result['mapbox_id'] ?? null, 'verified_at' => now()->toIso8601String(),
+            'precision' => $result['precision'] ?? 'address',
         ];
     }
 }

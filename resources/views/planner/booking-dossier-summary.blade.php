@@ -15,4 +15,5 @@
         <div data-booking-summary-optional="installer" hidden><dt>Installateur</dt><dd data-booking-summary-field="installer"></dd></div>
         <div data-booking-summary-optional="lot" hidden><dt>Lot</dt><dd data-booking-summary-field="lot"></dd></div>
     </dl>
+    <p class="m-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900" data-booking-summary-optional="location_warning" hidden><span data-booking-summary-field="location_warning"></span></p>
 </section>

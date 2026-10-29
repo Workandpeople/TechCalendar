@@ -1,43 +1,47 @@
 import { cofracLabel } from '../cofrac-label.js';
+import { parseAppointmentDate, formatAppointmentInput } from '../appointment-date-time.js';
 
 export const CALENDAR_MODES = ['timeGridWeek', 'timeGridDay', 'dayGridMonth', 'listWeek', 'resourceWeek'];
 
 export function calendarDate(value) {
     if (value == null || value === '') return null;
-    let date;
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const [year, month, day] = value.split('-').map(Number);
-        date = new Date(year, month - 1, day);
-        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-    } else date = new Date(value);
-    return Number.isFinite(date.getTime()) ? date : null;
+    return parseAppointmentDate(value);
 }
 
 export function dayKey(date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return formatAppointmentInput(date).slice(0, 10);
+}
+
+export function calendarMinute(date) {
+    const input = formatAppointmentInput(date);
+    return Number(input.slice(11, 13)) * 60 + Number(input.slice(14, 16));
+}
+
+export function calendarDay(date) {
+    return calendarDate(dayKey(date));
 }
 
 export function addCalendarDays(value, count) {
-    const date = calendarDate(value);
-    date.setDate(date.getDate() + count);
-    return date;
+    const date = new Date(`${dayKey(calendarDate(value))}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + count);
+    return calendarDate(date.toISOString().slice(0, 10));
 }
 
 export function calendarRange(value, mode = 'timeGridWeek', hiddenDays = [0]) {
     const anchor = calendarDate(value);
     if (!anchor) throw new TypeError('Date de calendrier invalide.');
-    let start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    let start = calendarDay(anchor);
     let length = 1;
     if (mode === 'dayGridMonth') {
-        start.setDate(1);
-        start = addCalendarDays(start, -((start.getDay() + 6) % 7));
+        start = calendarDate(`${dayKey(start).slice(0, 7)}-01`);
+        start = addCalendarDays(start, -((new Date(`${dayKey(start)}T12:00:00Z`).getUTCDay() + 6) % 7));
         length = 42;
     } else if (mode !== 'timeGridDay') {
-        start = addCalendarDays(start, -((start.getDay() + 6) % 7));
+        start = addCalendarDays(start, -((new Date(`${dayKey(start)}T12:00:00Z`).getUTCDay() + 6) % 7));
         length = 7;
     }
     const days = Array.from({ length }, (_, index) => addCalendarDays(start, index))
-        .filter(day => mode === 'timeGridDay' || !hiddenDays.includes(day.getDay()));
+        .filter(day => mode === 'timeGridDay' || !hiddenDays.includes(new Date(`${dayKey(day)}T12:00:00Z`).getUTCDay()));
     return { start, end: addCalendarDays(start, length), days };
 }
 
@@ -74,10 +78,10 @@ export function eventsDuring(events, start, end) {
 }
 
 export function timelineLayout(events, day, { minMinute = 420, maxMinute = 1260, pixelsPerHour = 120, minCardWidth = 216, gap = 10 } = {}) {
-    const midnight = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const midnight = calendarDay(day);
     const tomorrow = addCalendarDays(midnight, 1);
     const items = eventsDuring(events, midnight, tomorrow);
-    const minute = date => date.getHours() * 60 + date.getMinutes();
+    const minute = calendarMinute;
     const spans = items.map(event => ({ event, start: event.start < midnight ? 0 : minute(event.start),
         end: event.end >= tomorrow ? 1440 : minute(event.end) }));
     const from = Math.max(0, Math.min(minMinute, ...spans.map(item => Math.floor(item.start / 60) * 60)));

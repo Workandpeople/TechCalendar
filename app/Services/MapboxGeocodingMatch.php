@@ -6,13 +6,30 @@ use Illuminate\Support\Str;
 
 final class MapboxGeocodingMatch
 {
+    public static function isCityQuery(string $query): bool
+    {
+        return (bool) preg_match('/^\s*[0-9]{5}[\s,]+[^0-9]+$/u', trim($query));
+    }
+
+    public function acceptsCity(string $query, array $feature, array $parts): bool
+    {
+        if (! $this->validPoint($feature) || ! in_array($parts['feature_type'] ?? null, ['place', 'postcode', 'locality'], true)
+            || ! is_numeric($feature['relevance'] ?? null) || (float) $feature['relevance'] < 0.9 || blank($parts['city'] ?? null)) {
+            return false;
+        }
+        preg_match('/\b[0-9]{5}\b/', $query, $codes);
+        if ($codes && $codes[0] !== ($parts['postal_code'] ?? null)) {
+            return false;
+        }
+        $city = preg_replace('/\b[0-9]{5}\b|\bfrance\b/ui', '', $query) ?? '';
+        $city = $this->normalize($city);
+
+        return $city !== '' && $city === $this->normalize($parts['city']);
+    }
+
     public function accepts(string $query, array $feature, array $parts): bool
     {
-        $center = $feature['center'] ?? null;
-        if (! is_array($center) || count($center) < 2 || ! is_numeric($center[0]) || ! is_numeric($center[1])
-            || ! is_finite((float) $center[0]) || ! is_finite((float) $center[1])
-            || abs((float) $center[0]) > 180 || abs((float) $center[1]) > 90
-            || ((float) $center[0] === 0.0 && (float) $center[1] === 0.0)) {
+        if (! $this->validPoint($feature)) {
             return false;
         }
         if (($parts['feature_type'] ?? null) !== 'address'
@@ -39,6 +56,19 @@ final class MapboxGeocodingMatch
 
         return $city === '' || $city === $matchedCity
             || str_starts_with($matchedCity, $city.' ') || str_starts_with($city, $matchedCity.' ');
+    }
+
+    private function validPoint(array $feature): bool
+    {
+        $center = $feature['center'] ?? null;
+        if (! is_array($center) || count($center) < 2 || ! is_numeric($center[0]) || ! is_numeric($center[1])
+            || ! is_finite((float) $center[0]) || ! is_finite((float) $center[1])
+            || abs((float) $center[0]) > 180 || abs((float) $center[1]) > 90
+            || ((float) $center[0] === 0.0 && (float) $center[1] === 0.0)) {
+            return false;
+        }
+
+        return true;
     }
 
     private function normalize(string $value): string

@@ -22,6 +22,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
     Route::get('/dossiers/export', DossierExportController::class)->middleware('throttle:5,1')->name('dossiers.export');
     Route::get('/dossiers/nouveau', [DossierController::class, 'create'])->name('dossiers.create');
+    Route::get('/dossiers/adresse/suggestions', [DossierAddressController::class, 'creationSuggestions'])->middleware('throttle:60,1')->name('dossiers.address.creation-suggestions');
     Route::get('/documents/{document}', [DossierController::class, 'download'])->name('documents.download');
     Route::patch('/documents/{document}/partage', [DossierController::class, 'shareDocument'])->name('documents.sharing');
     Route::patch('/dossiers/{dossier}/commentaires/{comment}/partage', [DossierController::class, 'shareComment'])->whereNumber('comment')->name('dossiers.comments.sharing');

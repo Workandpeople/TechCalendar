@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Crm\ClientManagementController;
 use App\Http\Controllers\Crm\ClientPortalController;
+use App\Http\Controllers\Crm\DossierAddressController;
 use App\Http\Middleware\EnsureClientPortal;
 use App\Http\Middleware\EnsureCrmV2Enabled;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,7 @@ Route::middleware(['auth', EnsureCrmV2Enabled::class])->group(function (): void 
     Route::prefix('espace-client')->name('client.')->middleware(EnsureClientPortal::class)->controller(ClientPortalController::class)->group(function (): void {
         Route::get('/', 'index')->name('dossiers');
         Route::get('/dossiers/nouveau', 'create')->name('dossiers.create');
+        Route::get('/dossiers/adresse/suggestions', [DossierAddressController::class, 'creationSuggestions'])->middleware('throttle:60,1')->name('dossiers.address.creation-suggestions');
         Route::post('/dossiers', 'store')->middleware('throttle:15,1')->name('dossiers.store');
         Route::get('/dossiers/{dossier}', 'show')->name('dossiers.show');
         Route::post('/dossiers/{dossier}/comments', 'comment')->middleware('throttle:30,1')->name('dossiers.comments');
