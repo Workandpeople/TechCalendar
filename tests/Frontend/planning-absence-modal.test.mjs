@@ -25,10 +25,12 @@ function fixture() {
     dialog.open = false;
     dialog.showModal = () => { dialog.open = true; };
     dialog.close = () => { dialog.open = false; dialog.emit('close'); };
-    const calls = [], events = [];
+    const calls = [], events = [], handlers = {};
+    const fields = { date: { value: '2026-10-29' }, period: { value: 'day' } };
+    nodes.form.elements = { namedItem: name => fields[name] };
     let reloads = 0;
     const ui = {
-        nodes, dialog, calls, events,
+        nodes, dialog, calls, events, handlers, fields,
         technicians: [{ id: 10, label: '<img onerror=alert(1)>' }, { id: 20, label: 'Camille TEST (75)' }],
         response: { ok: true, status: 201, json: async () => ({ count: 2, absences: [{ id: 1 }, { id: 2 }], message: 'Deux blocages créés.' }) },
         get reloads() { return reloads; },
@@ -42,7 +44,7 @@ function fixture() {
         AbortController,
         FormData: class { get(name) { return { date: '2026-11-02', period: 'morning', reason: 'Formation', _token: 'csrf-token' }[name]; } },
         CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
-        window: { location: { reload: () => reloads++ }, dispatchEvent: event => events.push(event) },
+        window: { location: { reload: () => reloads++ }, dispatchEvent: event => events.push(event), addEventListener: (name, handler) => { handlers[name] = handler; } },
         fetch: async (url, options) => {
             calls.push({ url, options });
             if (options.method === 'POST') return typeof ui.response === 'function' ? ui.response() : ui.response;
@@ -167,4 +169,19 @@ test('aborts a stale options request on close and reloads active technicians on 
     assert.equal(ui.calls.length, 2);
     assert.equal(ui.nodes.submit.disabled, true);
     assert.match(ui.nodes.technicians.textContent, /Aucun technicien actif/);
+});
+
+test('calendar toolbar opens the existing modal with its Paris date and active selection, then restores focus', async () => {
+    const ui = fixture();
+    const trigger = element();
+    ui.handlers['planning:absence-open']({ detail: { date: '2026-11-02', period: 'morning', technician_ids: [20, 999], trigger } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(ui.dialog.open, true);
+    assert.equal(ui.fields.date.value, '2026-11-02');
+    assert.equal(ui.fields.period.value, 'morning');
+    assert.equal(ui.nodes.technicians.children[0].children[0].checked, false);
+    assert.equal(ui.nodes.technicians.children[1].children[0].checked, true);
+    assert.match(ui.nodes.count.textContent, /^1 sélectionné/);
+    ui.nodes.close.emit('click');
+    assert.equal(trigger.focused, true);
 });

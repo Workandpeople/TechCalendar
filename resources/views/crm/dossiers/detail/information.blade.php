@@ -5,7 +5,7 @@
     </header>
     <div class="gc-dossier-panel-body">
         <dl class="gc-dossier-information">
-            <div><dt>Numéro de lot</dt><dd>{{ $dossier->legacy_lot_name ?: 'Non renseigné' }}</dd></div>
+            <div><dt>Numéro de lot</dt><dd>{{ $dossier->listing_lot ?: 'Non renseigné' }}</dd></div>
         </dl>
         <h3 class="gc-dossier-subtitle"><x-nav-icon name="users" />Bénéficiaire</h3>
         <dl class="gc-dossier-information">

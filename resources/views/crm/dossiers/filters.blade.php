@@ -3,7 +3,7 @@
     $selectedCompanies = \App\Services\Crm\DossierCompanyFilter::ids($filters);
     $visited = ($filters['status'] ?? null) === 'visited';
     $selectedPlanningUsers = $visited ? array_map('intval', $filters['planning_user_ids'] ?? []) : [];
-    $advancedCount = collect(['department', 'section', 'planning', 'billing'])->filter(fn ($key) => filled($filters[$key] ?? null))->count()
+    $advancedCount = collect(['department', 'section', 'planning', 'billing', 'lot'])->filter(fn ($key) => filled($filters[$key] ?? null))->count()
         + (filled($filters['date_from'] ?? null) || filled($filters['date_to'] ?? null) ? 1 : 0);
 @endphp
 <form id="dossier-filters" method="GET" action="{{ route('v2.dossiers.index') }}" data-dossier-filters class="gc-dossier-filter-panel" aria-labelledby="dossier-filters-heading">
@@ -67,6 +67,7 @@
             </fieldset>
             <fieldset class="gc-dossier-filter-group" data-filter-group="activity">
                 <legend><x-nav-icon name="check" />Suivi du dossier</legend>
+                <div><label for="lot" class="gc-label">Numéro de lot</label><input id="lot" name="lot" class="gc-input" value="{{ $filters['lot'] ?? '' }}" maxlength="256" placeholder="Tout ou partie du numéro"></div>
                 <div><label for="planning" class="gc-label">Rendez-vous</label><select id="planning" name="planning" class="gc-input"><option value="">Tous les dossiers</option>@foreach (['unlinked' => 'Sans RDV actif lié', 'upcoming' => 'RDV à venir ou en cours', 'problem' => 'Avec un problème RDV'] as $value => $label)<option value="{{ $value }}" @selected(($filters['planning'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
                 <div><label for="billing" class="gc-label">Facturation</label><select id="billing" name="billing" class="gc-input"><option value="">Tous les dossiers</option>@foreach (['unbilled' => 'Non facturés', 'invoiced' => 'Facturés', 'review' => 'Historique à vérifier'] as $value => $label)<option value="{{ $value }}" @selected(($filters['billing'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
                 <p class="gc-dossier-filter-help">La facturation est indépendante de l’état du dossier.</p>

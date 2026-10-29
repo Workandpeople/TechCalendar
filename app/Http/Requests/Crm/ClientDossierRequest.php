@@ -16,7 +16,7 @@ class ClientDossierRequest extends DossierRequest
     {
         $rules = parent::rules();
         foreach (array_keys($rules) as $field) {
-            if (in_array($field, ['reference', 'client_id', 'delegataire_id', 'version'], true)
+            if (in_array($field, ['reference', 'client_id', 'delegataire_id', 'version', 'legacy_lot_name'], true)
                 || str_starts_with($field, 'client_contact') || str_starts_with($field, 'delegataire_contact')) {
                 unset($rules[$field]);
             }

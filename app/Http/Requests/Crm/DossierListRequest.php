@@ -19,6 +19,7 @@ class DossierListRequest extends FormRequest
     {
         return [
             'q' => ['nullable', 'string', 'max:255'],
+            'lot' => ['nullable', 'string', 'max:256'],
             'delegataire_id' => ['nullable', 'integer', 'exists:external_delegataires,id'],
             'company_ids' => ['bail', 'nullable', 'array', 'list', 'max:250', 'exists:external_delegataires,id'],
             'company_ids.*' => ['required', 'integer', 'min:1', 'distinct'],

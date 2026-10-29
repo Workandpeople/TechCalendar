@@ -154,3 +154,25 @@ test('event source updates remain available to the existing booking and tracking
     calendar.addEventSource([event('new', '2026-10-28T09:00', '2026-10-28T10:00')]);
     assert.equal(calendar.getEvents().length, 1);
 });
+
+test('calendar actions remain in the toolbar when expanded and receive their own trigger', () => {
+    class Node {
+        constructor() { this.children = []; this.dataset = {}; this.handlers = {}; this.classList = { add() {}, toggle() {} }; }
+        append(...children) { this.children.push(...children); }
+        replaceChildren(...children) { this.children = children; }
+        setAttribute() {} addEventListener(type, handler) { this.handlers[type] = handler; }
+    }
+    for (const authorized of [true, false]) {
+        const calendar = Object.create(NativeCalendar.prototype);
+        let click;
+        calendar.document = { createElement: () => new Node() };
+        calendar.browser = { addEventListener() {} }; calendar.element = new Node(); calendar.controller = new AbortController();
+        calendar.options = { events: [], customButtons: authorized ? { absence: { text: 'Bloquer une demi-journée', click: (...args) => { click = args; } } } : {} };
+        calendar.draw = () => {}; calendar.notifyDates = () => {};
+        calendar.render(); calendar.toggleExpanded(true);
+        const action = calendar.toolbar.children.find(node => node.dataset.calendarAction === 'absence');
+        assert.equal(Boolean(action), authorized);
+        if (action) { const event = {}; action.handlers.click(event); assert.equal(click[0], event); assert.equal(click[1], action); }
+        assert.equal(calendar.element.children[0], calendar.toolbar);
+    }
+});

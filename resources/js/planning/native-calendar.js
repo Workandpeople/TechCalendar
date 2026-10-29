@@ -64,6 +64,12 @@ export class NativeCalendar {
         }
         this.expandButton = this.button('Agrandir', () => this.toggleExpanded(), 'nc-expand');
         this.toolbar.append(navigation, this.heading, this.views, this.expandButton);
+        for (const [name, action] of Object.entries(this.options.customButtons || {})) {
+            if (typeof action.click !== 'function') continue;
+            const button = this.button(action.text || name, event => action.click(event, button), 'nc-action');
+            button.dataset.calendarAction = name;
+            this.toolbar.append(button);
+        }
         if (typeof this.options.events === 'function') this.toolbar.append(this.button('Actualiser', () => this.refetchEvents()));
         this.subbar = this.node('div', 'nc-subbar');
         this.summary = this.node('p', 'nc-summary');

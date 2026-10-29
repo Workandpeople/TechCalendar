@@ -70,10 +70,10 @@ it('cycles ascending descending and neutral while retaining filters and resettin
 
 it('adapts columns to dossier state but allows showing everything', function () {
     $table = app(DossierTable::class);
-    expect($table->columns(['status' => 'pending']))->not->toHaveKeys(['appointment_at', 'technician'])
+    expect($table->columns(['status' => 'pending']))->toHaveKey('appointment_at')->not->toHaveKey('technician')
         ->and($table->columns(['status' => 'invoiced']))->not->toHaveKey('phone')
         ->and($table->columns(['status' => 'pending', 'all_columns' => true]))->toBe(DossierTable::COLUMNS);
-    $this->get(route('v2.dossiers.index', ['status' => 'pending']))->assertOk()->assertDontSee('data-column="appointment_at"', false);
+    $this->get(route('v2.dossiers.index', ['status' => 'pending']))->assertOk()->assertSee('data-column="appointment_at"', false);
     $this->get(route('v2.dossiers.index', ['status' => 'pending', 'all_columns' => 1]))->assertOk()->assertSee('data-column="appointment_at"', false);
 });
 

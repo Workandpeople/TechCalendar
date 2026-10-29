@@ -19,6 +19,9 @@ class ClientPortal
         $allowed = $this->access->categoryKeys($actor);
         abort_if(filled($filters['status'] ?? null) && ! in_array($filters['status'], $allowed, true), 403);
         $query = $this->access->dossiers($actor);
+        if (filled($filters['lot'] ?? null)) {
+            DossierLotReference::filter($query, $filters['lot']);
+        }
         if (filled($filters['q'] ?? null)) {
             DossierSearch::apply($query, $filters['q'], ['reference', 'company_name', 'last_name', 'first_name', 'legacy_lot_name', 'address', 'postal_code', 'city']);
         }
@@ -41,16 +44,14 @@ class ClientPortal
         }
 
         $now = now(AppointmentDateTime::TIMEZONE)->format('Y-m-d H:i:s');
-        $unplannedStates = array_merge(...array_map(fn ($key) => DossierStatusCatalog::STATUSES[$key]['values'], ['pending', 'problem', 'cancelled']));
+        DossierLotReference::select($query->select('dossiers.*'));
 
-        return ['dossiers' => $query->with(['operations.service', 'appointments' => function ($appointments) use ($now, $unplannedStates): void {
-            $appointments->withTrashed()->select(['appointments.id', 'appointments.starts_at', 'appointments.ends_at', 'appointments.deleted_at'])
-                ->where('appointments.status', Appointment::STATUS_SCHEDULED)->whereNotNull('appointments.starts_at')
-                ->where(fn ($operation) => $operation->whereNull('dossier_operations.legacy_status')
-                    ->orWhereNotIn('dossier_operations.legacy_status', $unplannedStates))
-                ->where(fn ($current) => $current->whereNull('appointments.deleted_at')->orWhere(fn ($archive) => $archive
-                    ->where('appointments.external_source', 'coffrac_archive')->where('appointments.ends_at', '<', $now)))
-                ->orderByRaw('CASE WHEN appointments.deleted_at IS NULL THEN 0 ELSE 1 END')
+        return ['dossiers' => $query->with(['operations.service', 'appointments' => function ($appointments) use ($now): void {
+            $appointments->withTrashed()->select(['appointments.id', 'appointments.starts_at', 'appointments.ends_at', 'appointments.deleted_at', 'appointments.status',
+                'dossier_operations.legacy_status as listing_operation_status'])
+                ->whereIn('appointments.status', [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM, Appointment::STATUS_CANCELLED])
+                ->whereNotNull('appointments.starts_at')
+                ->orderByRaw('CASE WHEN appointments.deleted_at IS NULL AND appointments.status = ? THEN 0 WHEN appointments.deleted_at IS NULL THEN 1 ELSE 2 END', [Appointment::STATUS_SCHEDULED])
                 ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN 0 ELSE 1 END', [$now])
                 ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN appointments.starts_at END ASC', [$now])
                 ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')
@@ -63,6 +64,7 @@ class ClientPortal
     public function dossier(User $actor, Dossier $dossier): array
     {
         Gate::forUser($actor)->authorize('view', $dossier);
+        $dossier->setAttribute('listing_lot', DossierLotReference::value($dossier));
         $dossier->load('operations.service');
         $documents = $this->access->allows($actor, 'documents')
             ? $dossier->documents()->where($this->access->audienceColumn($actor), true)->latest('id')->paginate(15, ['*'], 'documents_page')->fragment('client-documents') : null;

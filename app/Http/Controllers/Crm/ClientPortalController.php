@@ -27,6 +27,7 @@ class ClientPortalController extends Controller
     public function index(Request $request, ClientPortal $portal)
     {
         $filters = $request->validate(['q' => ['nullable', 'string', 'max:255'],
+            'lot' => ['nullable', 'string', 'max:256'],
             'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))]]);
 
         return view('client.dossiers', $portal->dossiers($request->user(), $filters));

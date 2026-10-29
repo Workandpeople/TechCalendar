@@ -31,6 +31,7 @@ class DossierRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:190'],
             'phone' => ['nullable', 'string', 'max:500'],
             'site_name' => ['nullable', 'string', 'max:190'],
+            'legacy_lot_name' => ['sometimes', 'nullable', 'string', 'max:256', 'not_regex:/[\x00-\x1F\x7F]/'],
             'address' => ['required_unless:address_precision,city', 'nullable', 'string', 'max:500', 'not_regex:/[;\x00-\x1F\x7F]/'],
             'postal_code' => ['required_if:address_precision,city', 'nullable', 'string', 'max:10'],
             'city' => ['required', 'string', 'max:190', 'not_regex:/[;\x00-\x1F\x7F]/'],

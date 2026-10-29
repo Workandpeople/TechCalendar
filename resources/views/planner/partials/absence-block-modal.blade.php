@@ -72,6 +72,7 @@
                 let completed = false;
                 let loadRequest = null;
                 let maxTechnicians = 200;
+                let opener = find('open');
                 const selected = () => rows.filter(({ checkbox }) => checkbox.checked);
                 const updateSelection = () => {
                     const count = selected().length;
@@ -95,7 +96,7 @@
                     const query = find('search').value.trim().toLocaleLowerCase('fr');
                     rows.forEach(({ label, element }) => { element.hidden = !label.toLocaleLowerCase('fr').includes(query); });
                 };
-                const loadTechnicians = async () => {
+                const loadTechnicians = async (presetIds = []) => {
                     loadRequest?.abort();
                     const controller = new AbortController();
                     loadRequest = controller;
@@ -120,6 +121,7 @@
                             checkbox.type = 'checkbox';
                             checkbox.name = 'technician_ids[]';
                             checkbox.value = technician.id;
+                            checkbox.checked = presetIds.includes(String(technician.id));
                             checkbox.addEventListener('change', updateSelection);
                             const label = document.createElement('span');
                             label.textContent = technician.label;
@@ -138,19 +140,26 @@
                         if (!controller.signal.aborted) updateSelection();
                     }
                 };
-                find('open').addEventListener('click', () => {
+                const openDialog = (detail = {}) => {
                     if (dialog.open || saving) return;
+                    opener = typeof detail.trigger?.focus === 'function' ? detail.trigger : find('open');
+                    const date = form.elements.namedItem('date');
+                    const period = form.elements.namedItem('period');
+                    if (typeof detail.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(detail.date)) date.value = detail.date;
+                    if (['day', 'morning', 'afternoon'].includes(detail.period)) period.value = detail.period;
                     errors.hidden = true;
                     completed = false;
                     fields.disabled = false;
                     submit.hidden = false;
                     find('reload').hidden = true;
                     dialog.showModal();
-                    loadTechnicians();
-                });
+                    loadTechnicians(Array.isArray(detail.technician_ids) ? detail.technician_ids.map(String) : []);
+                };
+                find('open').addEventListener('click', () => openDialog());
+                window.addEventListener('planning:absence-open', event => openDialog(event.detail || {}));
                 find('close').addEventListener('click', () => { if (!saving) dialog.close(); });
                 dialog.addEventListener('cancel', (event) => { if (saving) event.preventDefault(); });
-                dialog.addEventListener('close', () => { loadRequest?.abort(); find('open').focus(); });
+                dialog.addEventListener('close', () => { loadRequest?.abort(); opener.focus(); });
                 find('reload').addEventListener('click', () => window.location.reload());
                 find('search').addEventListener('input', filterRows);
                 find('select-visible').addEventListener('click', () => {

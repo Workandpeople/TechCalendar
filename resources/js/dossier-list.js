@@ -3,7 +3,7 @@ import { initDossierArchiving } from './dossier-archiving.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
-const filterNames = ['q', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const filterNames = ['q', 'lot', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
 const arrayFilterName = name => /^(service_ids|planning_user_ids|company_ids)(?:\[\d*\])?$/.exec(name)?.[1];
 const legacyArrayFilters = { service_ids: 'service_id', company_ids: 'delegataire_id' };
 
@@ -315,11 +315,14 @@ export function initDossierList(root = document, browser = window) {
         load(formUrl());
     });
     const search = form.elements.namedItem('q');
-    search.addEventListener('compositionstart', () => { composing = true; loader.cancel(); busy(false); focusWasInResults = false; selectDossierCategory(categories, renderedUrl); status.textContent = ''; });
-    search.addEventListener('compositionend', () => { composing = false; load(formUrl(), { delay: 300 }); });
-    search.addEventListener('input', () => { if (!composing) load(formUrl(), { delay: 300 }); });
+    const textFilters = [search, form.elements.namedItem('lot')].filter(Boolean);
+    for (const input of textFilters) {
+        input.addEventListener('compositionstart', () => { composing = true; loader.cancel(); busy(false); focusWasInResults = false; selectDossierCategory(categories, renderedUrl); status.textContent = ''; });
+        input.addEventListener('compositionend', () => { composing = false; load(formUrl(), { delay: 300 }); });
+        input.addEventListener('input', () => { if (!composing) load(formUrl(), { delay: 300 }); });
+    }
     form.addEventListener('change', event => {
-        if (event.target !== search) load(formUrl());
+        if (!textFilters.includes(event.target)) load(formUrl());
     });
     listing.addEventListener('change', event => {
         if (event.target.matches('[data-dossier-page-size]')) {

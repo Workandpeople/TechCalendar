@@ -17,7 +17,7 @@
                 <h1>{{ $dossier->beneficiaryLabel() }}</h1>
                 <p class="gc-portal-address"><x-nav-icon name="location" /><span>{{ $dossier->address }}<br>{{ $dossier->postal_code }} {{ $dossier->city }}</span></p>
                 <div class="gc-portal-meta">
-                    @if ($dossier->legacy_lot_name)<span><x-nav-icon name="lots" />{{ $dossier->legacy_lot_name }}</span>@endif
+                    @if ($dossier->listing_lot)<span><x-nav-icon name="lots" />{{ $dossier->listing_lot }}</span>@endif
                     @if ($dossier->created_at)<span>Ouvert le {{ $dossier->created_at->format('d/m/Y') }}</span>@endif
                 </div>
             </div>

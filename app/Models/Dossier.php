@@ -15,7 +15,7 @@ class Dossier extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'reference', 'source', 'source_reference', 'delegataire_id', 'client_id', 'client_contact', 'delegataire_contact', 'created_by',
+        'reference', 'source', 'source_reference', 'legacy_lot_name', 'delegataire_id', 'client_id', 'client_contact', 'delegataire_contact', 'created_by',
         'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',
         'address', 'postal_code', 'city', 'beneficiary_address',
         'beneficiary_postal_code', 'beneficiary_city', 'installer_name', 'installer_siren',

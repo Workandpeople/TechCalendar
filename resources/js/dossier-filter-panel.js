@@ -1,4 +1,4 @@
-const advancedKeys = ['department', 'section', 'planning', 'billing'];
+const advancedKeys = ['department', 'section', 'planning', 'billing', 'lot'];
 const field = (form, name) => form.elements.namedItem(name);
 const value = (form, name) => String(field(form, name)?.value || '').trim();
 const selectedLabel = (form, name) => Array.from(field(form, name)?.options || [])
@@ -20,6 +20,7 @@ export function dossierFilterItems(form, statusLabels = {}) {
     const items = [];
     const add = (key, label, title = label) => items.push({ key, label, title, advanced: advancedKeys.includes(key) || key === 'dates' });
     if (value(form, 'q')) add('q', `Recherche : ${value(form, 'q')}`);
+    if (value(form, 'lot')) add('lot', `Lot : ${value(form, 'lot')}`);
     if (value(form, 'status') && value(form, 'status') !== 'all') {
         add('status', `État : ${statusLabels[value(form, 'status')] || 'Catégorie sélectionnée'}`);
     }

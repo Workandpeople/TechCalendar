@@ -8,6 +8,11 @@
                 <input type="hidden" name="version" value="{{ old('version', $dossier->version) }}">
             @endif
             @unless ($portalCreation)
+            <section class="gc-card p-5">
+                <label for="legacy_lot_name" class="gc-label">Numéro de lot (facultatif)</label>
+                <input id="legacy_lot_name" name="legacy_lot_name" class="gc-input" value="{{ is_scalar(old('legacy_lot_name', $dossier->legacy_lot_name)) ? old('legacy_lot_name', $dossier->legacy_lot_name) : '' }}" maxlength="256" aria-describedby="dossier-lot-help">
+                <p id="dossier-lot-help" class="mt-2 text-xs text-slate-500">Référence affichée et recherchable. Si elle est vide, le nom du lot déjà rattaché est utilisé. Ce champ ne change pas les rattachements ni les droits d’accès.</p>
+            </section>
             <div class="grid gap-6 xl:grid-cols-2">
                 @include('crm.dossiers.contact-fields', ['role' => 'client'])
                 @include('crm.dossiers.contact-fields', ['role' => 'delegataire'])

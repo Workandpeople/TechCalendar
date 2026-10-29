@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { dossierFilterItems, clearDossierFilter, initDossierFilterPanel } from '../../resources/js/dossier-filter-panel.js';
 
 function fixture(values = {}) {
-    const fields = Object.fromEntries(['q', 'status', 'delegataire_id', 'department', 'section', 'planning', 'billing', 'date_field', 'date_from', 'date_to', 'sort', 'direction', 'per_page', 'all_columns']
+    const fields = Object.fromEntries(['q', 'lot', 'status', 'delegataire_id', 'department', 'section', 'planning', 'billing', 'date_field', 'date_from', 'date_to', 'sort', 'direction', 'per_page', 'all_columns']
         .map(name => [name, { value: values[name] || '', focus() { this.focused = true; } }]));
     for (const [name, entries] of Object.entries({ delegataire_id: [['12', 'Organisation test']], department: [['75', '75 · Paris']],
         section: [['sav', 'SAV']], planning: [['problem', 'Avec un problème RDV']], billing: [['invoiced', 'Facturés']] })) {
@@ -189,4 +189,13 @@ test('keeps existing chip nodes and focus through repeated pending and success s
     assert.equal(ui.chips.children[0], focused);
     assert.equal(focused.focused, true);
     assert.equal(focused.children[0].textContent, 'Facturation : Facturés');
+});
+
+test('lot filtering has a safe removable chip and is counted as a complementary filter', () => {
+    const ui = fixture({ lot: 'LOT <test> %_' });
+    const item = dossierFilterItems(ui.form).find(item => item.key === 'lot');
+    assert.equal(item.label, 'Lot : LOT <test> %_');
+    assert.equal(item.advanced, true);
+    assert.equal(clearDossierFilter(ui.form, 'lot', ui.browser), true);
+    assert.equal(ui.fields.lot.value, '');
 });

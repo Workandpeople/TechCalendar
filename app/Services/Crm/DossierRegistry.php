@@ -119,6 +119,7 @@ class DossierRegistry
         $companyIds = DossierCompanyFilter::ids($filters);
 
         return Dossier::query()
+            ->when(filled($filters['lot'] ?? null), fn ($query) => DossierLotReference::filter($query, $filters['lot']))
             ->when(($filters['status'] ?? null) === 'visited' && ! empty($filters['planning_user_ids']),
                 fn ($query) => $query->whereIn('dossiers.planning_user_id', $filters['planning_user_ids']))
             ->when($filters['department'] ?? null, fn ($query, $code) => DossierSections::department($query, $code))
@@ -134,7 +135,8 @@ class DossierRegistry
                 };
                 if (($filters['date_field'] ?? 'created') === 'appointment') {
                     $query->whereHas('appointments', function ($appointments) use ($range, $filters, $serviceIds): void {
-                        $appointments->withTrashed()->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive'));
+                        $appointments->withTrashed()->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive')
+                            ->orWhere('appointments.status', Appointment::STATUS_CANCELLED));
                         $range($appointments, 'appointments.starts_at');
                         $appointments->whereHas('dossierOperation', function ($operation) use ($filters, $serviceIds): void {
                             $operation->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));

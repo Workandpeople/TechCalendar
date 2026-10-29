@@ -2415,6 +2415,14 @@
             if (!calendarEl || !TrackingCalendar || trackingCalendar) return;
 
             trackingCalendar = new TrackingCalendar(calendarEl, {
+                @can('create', \App\Models\TechnicianAbsence::class)
+                customButtons: { blockAbsence: { text: 'Bloquer une demi-journée', click: (event, button) => {
+                    window.dispatchEvent(new CustomEvent('planning:absence-open', { detail: {
+                        date: window.TechCalendarDateTime.formatAppointmentInput(trackingCalendar.getDate()).slice(0, 10),
+                        period: 'morning', technician_ids: technicianCheckboxes.filter(checkbox => checkbox.checked).map(checkbox => checkbox.value), trigger: button,
+                    } }));
+                } } },
+                @endcan
                 nativeResources: () => technicianCheckboxes.filter(checkbox => checkbox.checked).map(checkbox => ({ id: checkbox.value, name: checkbox.dataset.name })),
                 initialView: 'timeGridWeek',
                 initialDate: trackingInitialDate || undefined,
@@ -2430,7 +2438,7 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek',
+                    right: '@can('create', \App\Models\TechnicianAbsence::class)blockAbsence @endcan dayGridMonth,timeGridWeek,timeGridDay,listWeek',
                 },
                 titleFormat: {
                     year: 'numeric',

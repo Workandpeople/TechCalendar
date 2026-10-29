@@ -81,7 +81,7 @@ class DossierTable
                 unset($columns['planning_user']);
             }
             if (in_array($filters['status'] ?? null, ['pending', 'cancelled'], true)) {
-                unset($columns['appointment_at'], $columns['technician']);
+                unset($columns['technician']);
             }
             if (in_array($filters['status'] ?? null, ['invoiced', 'cancelled'], true)) {
                 unset($columns['phone']);
@@ -103,7 +103,8 @@ class DossierTable
     {
         $appointment = DB::table('appointments')->join('dossier_operations', 'dossier_operations.id', '=', 'appointments.dossier_operation_id')
             ->whereColumn('dossier_operations.dossier_id', 'dossiers.id')
-            ->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive'));
+            ->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive')
+                ->orWhere('appointments.status', Appointment::STATUS_CANCELLED));
         $serviceIds = DossierServiceFilter::ids($filters);
         if ($serviceIds !== []) {
             $appointment->whereIn('dossier_operations.service_id', $serviceIds);
@@ -133,14 +134,9 @@ class DossierTable
             ->orderByRaw("CASE WHEN $future THEN appointments.starts_at END ASC", $bindings)
             ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')->limit(1);
 
-        $lot = DB::table('lot_appointments')->join('lots', 'lots.id', '=', 'lot_appointments.lot_id')
-            ->join('appointments', 'appointments.id', '=', 'lot_appointments.appointment_id')
-            ->join('dossier_operations', 'dossier_operations.id', '=', 'appointments.dossier_operation_id')
-            ->whereColumn('dossier_operations.dossier_id', 'dossiers.id')
-            ->orderByDesc('lot_appointments.id')->select('lots.name')->limit(1);
         $query->select('dossiers.*')
-            ->selectSub((clone $appointment)->select('appointments.id'), 'listing_appointment_id')
-            ->selectRaw("COALESCE(NULLIF(dossiers.legacy_lot_name, ''), (".$lot->toSql().')) AS listing_lot', $lot->getBindings());
+            ->selectSub((clone $appointment)->select('appointments.id'), 'listing_appointment_id');
+        DossierLotReference::select($query);
 
         $sort = $filters['sort'] ?? null;
         $direction = ($filters['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc';

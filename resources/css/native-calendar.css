@@ -17,6 +17,7 @@
 .nc-views .nc-button { border-color: transparent; background: transparent; }
 .nc-views .nc-button[aria-pressed='true'] { color: #fff; background: #1764d9; box-shadow: 0 2px 4px #174a9325; }
 .nc-expand { color: #1764d9; }
+.nc-action { color: #075f58; background: #e4f8f3; border-color: #9fdacf; }
 .nc-subbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 0 20px 14px; font-size: 12px; color: var(--nc-muted); }
 .nc-summary { margin: 0; }
 .nc-zoom > span { margin-right: 6px; }

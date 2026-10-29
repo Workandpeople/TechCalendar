@@ -118,7 +118,8 @@ it('prefers a retained native visit over an obsolete historical copy', function 
 it('does not present a retained scheduled slot as confirmed after a manual return to an unplanned state', function (string $status) {
     ($this->newAppointment)($this->dossier, '2026-11-03 16:30:00');
     $this->dossier->operations()->first()->forceFill(['legacy_status' => $status])->save();
-    $this->actingAs($this->external)->get(route('client.dossiers'))->assertOk()->assertSee('Aucun RDV confirmé')->assertDontSee('03/11/2026');
+    $this->actingAs($this->external)->get(route('client.dossiers'))->assertOk()->assertSee('03/11/2026')->assertSee('16:30')->assertDontSee('RDV prévu')
+        ->assertSee($status === 'DOSSIER ANNULE' ? 'RDV annulé' : 'Ancien créneau');
 })->with(['PRISE DE RDV', 'PROBLÈME RENDEZ-VOUS', 'DOSSIER ANNULE']);
 
 it('shows a clear placeholder for a dossier without an appointment', function () {
@@ -179,4 +180,27 @@ it('loads one appointment per dossier in a single bounded eager query without la
             expect(array_key_exists($field, $dossier->appointments->first()->getAttributes()))->toBeFalse();
         }
     }
+});
+
+it('retains date visibility in every accessible category for both kinds of external accounts', function (string $kind, string $state, string $key) {
+    $this->organisation->update(['kind' => $kind, 'portal_categories' => [$key]]);
+    $this->dossier->operations()->first()->forceFill(['legacy_status' => $state])->save();
+    ($this->newAppointment)($this->dossier, '2026-11-03 16:30:00');
+    $this->actingAs($this->external)->get(route('client.dossiers', ['status' => $key]))->assertOk()
+        ->assertSee('Date RDV')->assertSee('03/11/2026')->assertSee('16:30');
+})->with(['client', 'delegataire'])->with([
+    ['PRISE DE RDV', 'pending'], ['PROBLÈME RENDEZ-VOUS', 'problem'], ['RDV ATTENTE VISITE', 'awaiting_visit'],
+    ['RDV VISITE', 'visited'], ['CONTROLE RT', 'rt_control'], ['NON CONFORMITES', 'non_compliant'],
+    ['RECONTROLE', 'recontrol'], ['RAPPORT GENIUS', 'report'], ['DOSSIER ANNULE', 'cancelled'],
+]);
+
+it('retains cancelled and problem appointment dates but never calls them confirmed', function (string $status) {
+    ($this->newAppointment)($this->dossier, '2026-11-03 16:30:00', ['status' => $status]);
+    $this->actingAs($this->external)->get(route('client.dossiers'))->assertOk()->assertSee('03/11/2026')->assertDontSee('RDV prévu');
+})->with([Appointment::STATUS_CANCELLED, Appointment::STATUS_PROBLEM]);
+
+it('labels deleted native appointments as historical without returning their private data', function () {
+    ($this->newAppointment)($this->dossier, '2026-11-03 16:30:00', ['deleted_at' => now()]);
+    $this->actingAs($this->external)->get(route('client.dossiers'))->assertOk()->assertSee('03/11/2026')->assertSee('Date historique')
+        ->assertDontSee('RDV prévu')->assertDontSee('PRIVATE APPOINTMENT COMMENT');
 });

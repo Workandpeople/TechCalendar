@@ -2866,3 +2866,26 @@ garantir 100 % de resultats. Aucun geocodage global de l'historique.
 Aucune nouvelle migration, aucun seeder, import, envoi ou changement mail/SMS.
 Contrat des types place/locality/postcode :
 [documentation Mapbox](https://docs.mapbox.com/api/search/geocoding-v5/).
+
+### Agenda et listes externes : dates et references de lot
+
+- L'action « Bloquer une demi-journee » est disponible dans la barre du calendrier,
+  y compris agrandi, sur la prise de RDV et les RDV. Elle reutilise le modal et
+  les controles d'autorisation/conflit existants, avec la date Paris affichee et
+  les techniciens coches preselectionnes. Le choix journee/matin/apres-midi reste
+  modifiable ; aucun RDV n'est deplace ou supprime pour creer une absence.
+- La colonne Date RDV reste presente dans toutes les categories des listes internes
+  et externes. Cote portail, un seul RDV est charge par dossier et par page : RDV
+  actif prioritaire, puis ancien creneau si aucun actif n'existe. Les dates annulees,
+  a replanifier ou historiques sont identifiees comme telles, jamais confirmees.
+  Les categories et affectations autorisees restent obligatoires.
+- Le numero de lot reprend le libelle importe/saisi, sinon le lot effectivement
+  rattache a un RDV du dossier. Le meme calcul sert aux listes, fiches et exports.
+  Un filtre textuel dedie existe en interne et cote portail, avec recherche
+  litterale des caracteres `%` et `_`, pagination et perimetre d'acces conserves.
+- Le formulaire interne propose « Numero de lot (facultatif) » pour saisir/corriger
+  la reference affichee. Il ne cree pas de lot et ne change aucun rattachement ou
+  droit d'acces ; vider ce champ reutilise le lot deja lie. Aucune reference n'est
+  inventee ni aucun rapprochement historique effectue automatiquement.
+- Aucune nouvelle migration, import, seeder ou activation d'envoi n'est necessaire.
+  Les reglages de notifications et les modes mail/SMS sont conserves.

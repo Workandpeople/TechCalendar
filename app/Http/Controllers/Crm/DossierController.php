@@ -18,6 +18,7 @@ use App\Services\Crm\CollectedDossierDocuments;
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierDocumentIntake;
 use App\Services\Crm\DossierLinkedDocuments;
+use App\Services\Crm\DossierLotReference;
 use App\Services\Crm\DossierMail;
 use App\Services\Crm\DossierMailDelivery;
 use App\Services\Crm\DossierMapPreview;
@@ -94,6 +95,7 @@ class DossierController extends Controller
     public function show(Request $request, Dossier $dossier, DossierLinkedDocuments $linkedDocuments, CollectedDossierDocuments $collectedDocuments): View
     {
         Gate::authorize('view', $dossier);
+        $dossier->setAttribute('listing_lot', DossierLotReference::value($dossier));
         if ($dossier->trashed()) {
             return view('crm.dossiers.archived', [
                 'dossier' => $dossier->load('operations.service'),

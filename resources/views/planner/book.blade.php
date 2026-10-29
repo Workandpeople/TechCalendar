@@ -5730,6 +5730,14 @@
                 return;
             }
             bookingCalendar = new BookingCalendar(calendarElement, {
+                @can('create', \App\Models\TechnicianAbsence::class)
+                customButtons: { blockAbsence: { text: 'Bloquer une demi-journée', click: (event, button) => {
+                    window.dispatchEvent(new CustomEvent('planning:absence-open', { detail: {
+                        date: window.TechCalendarDateTime.formatAppointmentInput(bookingCalendar.getDate()).slice(0, 10),
+                        period: 'morning', technician_ids: selectedTechnicians().map(technician => technician.id), trigger: button,
+                    } }));
+                } } },
+                @endcan
                 nativeResources: () => selectedTechnicians().map(technician => ({ id: technician.id, name: technician.name })),
                 locale: 'fr',
                 initialView: 'timeGridWeek',
@@ -5743,7 +5751,7 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'timeGridWeek,dayGridMonth',
+                    right: '@can('create', \App\Models\TechnicianAbsence::class)blockAbsence @endcan timeGridWeek,dayGridMonth',
                 },
                 buttonText: {
                     today: 'Aujourd hui',
