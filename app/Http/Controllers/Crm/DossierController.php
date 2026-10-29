@@ -59,6 +59,7 @@ class DossierController extends Controller
                 'categories' => $includeCategories ? view('crm.dossiers.categories', $data)->render() : null,
                 'results' => view('crm.dossiers.results', $data)->render(),
                 'total' => $data['dossiers']->total(),
+                'page' => $data['dossiers']->currentPage(),
             ])->header('Cache-Control', 'private, no-store');
         }
 

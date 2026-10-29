@@ -27,7 +27,7 @@ class MapboxAddressGeocoder
                 ->get('https://api.mapbox.com/geocoding/v5/mapbox.places/'.rawurlencode((string) $address).'.json', [
                     'access_token' => $token,
                     'country' => self::COUNTRIES,
-                    'limit' => 1,
+                    'limit' => 5,
                     'types' => 'address,place,postcode,locality',
                     'language' => 'fr',
                     'autocomplete' => 'false',
@@ -37,20 +37,17 @@ class MapboxAddressGeocoder
                 return $this->emptyResult('Mapbox n’a pas pu géocoder l’adresse.');
             }
 
-            $feature = $response->json('features.0');
+            $features = $response->json('features');
+            $feature = collect(is_array($features) ? $features : [])
+                ->filter(fn ($candidate) => is_array($candidate)
+                    && app(MapboxGeocodingMatch::class)->accepts((string) $address, $candidate, $this->addressParts($candidate)))
+                ->first();
 
             if (! is_array($feature)) {
-                return $this->emptyResult('Aucun résultat Mapbox pour cette adresse.');
+                return $this->emptyResult('Adresse non localisée avec suffisamment de précision. Vérifiez la rue, le code postal et la ville ; aucune position approximative n’est utilisée pour le planning.');
             }
 
-            $center = $feature['center'] ?? null;
-
-            if (! is_array($center) || count($center) < 2 || ! is_numeric($center[0]) || ! is_numeric($center[1])
-                || ! is_finite((float) $center[0]) || ! is_finite((float) $center[1])
-                || abs((float) $center[0]) > 180 || abs((float) $center[1]) > 90
-                || ((float) $center[0] === 0.0 && (float) $center[1] === 0.0)) {
-                return $this->emptyResult('Coordonnées Mapbox absentes.');
-            }
+            $center = $feature['center'];
 
             return [
                 'latitude' => (float) $center[1],

@@ -90,11 +90,16 @@ class DossierPolicy
 
     public function delete(User $user, Dossier $dossier): bool
     {
-        return ! $dossier->trashed() && $this->viewAny($user) && ($user->admin || $user->role === 0);
+        return ! $dossier->trashed() && $this->manageArchiving($user);
+    }
+
+    public function manageArchiving(User $user): bool
+    {
+        return $this->viewAny($user) && ($user->admin || $user->role === 0);
     }
 
     public function restore(User $user, Dossier $dossier): bool
     {
-        return $dossier->trashed() && $this->viewAny($user) && ($user->admin || $user->role === 0);
+        return $dossier->trashed() && $this->manageArchiving($user);
     }
 }

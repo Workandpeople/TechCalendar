@@ -234,7 +234,27 @@ export class NativeCalendar {
         return heading;
     }
 
-    card(event) {
+    suggestionContent(event, showTechnician = true) {
+        const props = event.extendedProps || {};
+        const content = this.node('span', 'nc-suggestion-content');
+        const label = this.node('span', 'nc-suggestion-label');
+        const icon = this.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.setAttribute('fill', 'none');
+        const path = this.document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z');
+        path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', '1.5');
+        icon.append(path);
+        label.append(icon, this.node('span', '', 'Suggestion'));
+        content.append(label, this.node('span', 'nc-suggestion-time', `${time(event.start)} – ${time(event.end)}`));
+        const technician = props.technician_full_name || props.technician_name;
+        if (showTechnician && technician) content.append(this.node('span', 'nc-suggestion-technician', technician));
+        return content;
+    }
+
+    card(event, showTechnician = true) {
         const fields = calendarFields(event);
         const card = this.button('', jsEvent => {
             this.toggleExpanded(false);
@@ -243,6 +263,12 @@ export class NativeCalendar {
         card.dataset.eventId = event.id;
         card.dataset.suggestion = String(fields.suggestion);
         card.style.setProperty('--nc-tone', tone(fields.technicianId));
+        if (fields.suggestion) {
+            card.append(this.suggestionContent(event, showTechnician));
+            card.title = `Suggestion, ${time(event.start)} à ${time(event.end)}, ${fields.technician}`;
+            card.setAttribute('aria-label', card.title);
+            return this.mountEvent(card, event);
+        }
         const duration = Math.round((event.end - event.start) / 60000);
         const head = this.node('span', 'nc-event-head');
         head.append(this.node('strong', '', `${time(event.start)} – ${time(event.end)}`), this.node('span', 'nc-duration', `${duration} min`));
@@ -250,9 +276,9 @@ export class NativeCalendar {
         location.append(this.node('b', '', fields.postal), this.node('span', '', fields.city || fields.address));
         card.append(head, this.node('strong', 'nc-customer', fields.customer), this.node('span', 'nc-service', fields.service), location,
             this.node('span', 'nc-technician', fields.technician));
-        if (fields.suggestion || fields.historical) card.append(this.node('span', 'nc-event-state', fields.suggestion ? 'Créneau proposé' : 'Historique · lecture seule'));
+        if (fields.historical) card.append(this.node('span', 'nc-event-state', 'Historique · lecture seule'));
         card.title = [fields.customer, fields.service, fields.technician, fields.address, fields.postal, fields.city].filter(Boolean).join(' · ');
-        card.setAttribute('aria-label', `${time(event.start)} à ${time(event.end)}, ${card.title}${fields.suggestion ? ', créneau proposé' : ''}`);
+        card.setAttribute('aria-label', `${time(event.start)} à ${time(event.end)}, ${card.title}`);
         return this.mountEvent(card, event);
     }
 
@@ -268,11 +294,11 @@ export class NativeCalendar {
 
     dayEvents(events, day) { return eventsDuring(events, day, addCalendarDays(day, 1)); }
 
-    appendDayEvents(cell, events, key) {
+    appendDayEvents(cell, events, key, showTechnician = true) {
         const placed = events.filter(event => !calendarFields(event).suggestion);
         const suggestions = events.filter(event => calendarFields(event).suggestion);
         const visibleSuggestions = this.expandedCells.has(key) ? suggestions : suggestions.slice(0, 2);
-        for (const event of [...placed, ...visibleSuggestions].sort((a, b) => a.start - b.start)) cell.append(this.card(event));
+        for (const event of [...placed, ...visibleSuggestions].sort((a, b) => a.start - b.start)) cell.append(this.card(event, showTechnician));
         if (suggestions.length > visibleSuggestions.length) cell.append(this.button(`+ ${suggestions.length - visibleSuggestions.length} créneaux`, () => {
             this.expandedCells.add(key); this.draw();
         }, 'nc-more'));
@@ -292,7 +318,7 @@ export class NativeCalendar {
             board.append(this.resourceLabel(resource, items));
             for (const day of range.days) {
                 const cell = this.node('div', 'nc-day-cell');
-                this.appendDayEvents(cell, this.dayEvents(items, day), `${resource.id}|${dayKey(day)}`);
+                this.appendDayEvents(cell, this.dayEvents(items, day), `${resource.id}|${dayKey(day)}`, false);
                 if (this.options.dateClick) cell.append(this.button('+ Choisir un horaire', () => this.pickSlot(day, resource), 'nc-add-slot'));
                 else if (!cell.children.length) cell.append(this.node('span', 'nc-empty-slot', 'Aucun rendez-vous'));
                 board.append(cell);
@@ -349,7 +375,7 @@ export class NativeCalendar {
             row.style.height = `${layout.lanes * laneHeight + 26}px`;
             row.style.backgroundSize = `${this.zoom}px 100%`;
             for (const item of layout.placements) {
-                const card = this.card(item.event);
+                const card = this.card(item.event, false);
                 card.style.left = `${item.left + 6}px`;
                 card.style.top = `${item.lane * laneHeight + 12}px`;
                 card.style.width = `${item.width - 10}px`;
@@ -395,9 +421,14 @@ export class NativeCalendar {
             const items = this.dayEvents(events, day);
             for (const event of items.slice(0, 3)) {
                 const fields = calendarFields(event);
-                const button = this.button(`${time(event.start)} · ${fields.customer}`, jsEvent => {
+                const button = this.button(fields.suggestion ? '' : `${time(event.start)} · ${fields.customer}`, jsEvent => {
                     this.toggleExpanded(false); this.options.eventClick?.({ event, el: button, jsEvent, view: this.view });
                 }, 'nc-month-event');
+                button.dataset.suggestion = String(fields.suggestion);
+                if (fields.suggestion) {
+                    button.append(this.suggestionContent(event));
+                    button.setAttribute('aria-label', `Suggestion, ${time(event.start)} à ${time(event.end)}, ${fields.technician}`);
+                }
                 section.append(this.mountEvent(button, event));
             }
             if (items.length > 3) section.append(this.button(`+ ${items.length - 3} RDV`, () => this.changeView('timeGridDay', day), 'nc-more'));

@@ -1,6 +1,8 @@
 @php
     $columns = $table->columns($filters);
     $columnShares = $table->columnShares($filters);
+    $canArchive = auth()->user()->can('manageArchiving', \App\Models\Dossier::class);
+    $canSelect = $canArchive && ($filters['status'] ?? null) === 'problem';
 @endphp
 <section class="overflow-hidden rounded-2xl border border-slate-200" aria-label="Résultats de recherche">
     <div class="gc-dossier-results-toolbar border-b border-slate-200 bg-white px-4 py-3">
@@ -11,17 +13,30 @@
             @include('crm.dossiers.page-size', ['paginator' => $dossiers])
         </div>
     </div>
+    @if ($canSelect)
+        <div class="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3" data-dossier-batch-url="{{ route('v2.dossiers.batch') }}" data-batch-limit="{{ \App\Services\Crm\DossierArchiving::MAX_BATCH_SIZE }}">
+            <span class="text-sm" role="status" aria-live="polite"><strong data-dossier-selection-count>0</strong> dossier(s) sélectionné(s)</span>
+            <button type="button" class="gc-btn-secondary" data-dossier-batch-action="cancel" disabled>Annuler la sélection</button>
+            <button type="button" class="gc-btn-danger" data-dossier-batch-action="delete" disabled>Supprimer la sélection</button>
+            <p class="w-full text-xs text-slate-500">Sélection limitée à cette page, {{ \App\Services\Crm\DossierArchiving::MAX_BATCH_SIZE }} dossiers maximum. Aucun traitement automatique des anciens dossiers.</p>
+            <label class="gc-label w-full">Motif (facultatif)<input type="text" data-dossier-batch-reason maxlength="1000" class="gc-input" placeholder="Motif conservé dans l’historique interne"></label>
+        </div>
+    @endif
     <div class="gc-dossier-table-scroll" tabindex="0" role="region" aria-label="Tableau des dossiers">
         <table class="gc-dossier-table {{ count($columns) < 10 ? 'gc-dossier-table-compact' : '' }} {{ isset($columns['planning_user']) ? 'gc-dossier-table-assignment' : '' }}">
             <colgroup>
                 <col class="gc-dossier-col-action">
+                @if ($canSelect)<col class="gc-dossier-col-selection">@endif
                 @foreach ($columns as $key => $label)
                     <col class="gc-dossier-col-{{ $key }}" style="width: {{ number_format($columnShares[$key] * 100, 6, '.', '') }}%">
                 @endforeach
+                @if ($canArchive)<col class="gc-dossier-col-delete">@endif
             </colgroup>
             <thead><tr>
                 <th scope="col" class="gc-dossier-action"><span class="sr-only">Voir le dossier</span></th>
+                @if ($canSelect)<th scope="col"><input type="checkbox" data-dossier-select-page aria-label="Sélectionner les dossiers en problème RDV de cette page"></th>@endif
                 @foreach ($columns as $key => $label)@include('crm.dossiers.table-heading')@endforeach
+                @if ($canArchive)<th scope="col" class="gc-dossier-delete"><span class="sr-only">Supprimer le dossier</span></th>@endif
             </tr></thead>
             <tbody>
                 @forelse ($dossiers as $dossier)
@@ -34,6 +49,9 @@
                         <td class="gc-dossier-action"><a class="gc-dossier-open" aria-label="Ouvrir le dossier {{ $dossier->beneficiaryLabel() }}" title="Ouvrir le dossier" href="{{ route('v2.dossiers.show', $dossier) }}">
                             <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                         </a></td>
+                        @if ($canSelect)
+                            <td>@can('delete', $dossier)<input type="checkbox" data-dossier-select data-id="{{ $dossier->id }}" data-version="{{ $dossier->version }}" aria-label="Sélectionner le dossier {{ $dossier->reference }}">@endcan</td>
+                        @endif
                         @foreach ($columns as $key => $label)
                             <td data-column="{{ $key }}">
                                 @switch($key)
@@ -107,9 +125,14 @@
                                 @endswitch
                             </td>
                         @endforeach
+                        @if ($canArchive)
+                            <td class="gc-dossier-delete">@can('delete', $dossier)
+                                <button type="button" class="gc-link text-sm text-red-700" data-dossier-delete-url="{{ route('v2.dossiers.destroy', $dossier) }}" data-version="{{ $dossier->version }}" data-reference="{{ $dossier->reference }}" aria-label="Supprimer le dossier {{ $dossier->reference }}">Supprimer</button>
+                            @endcan</td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="{{ count($columns) + 1 }}" class="text-center">Aucun dossier ne correspond à ces filtres.</td></tr>
+                    <tr><td colspan="{{ count($columns) + 1 + (int) $canSelect + (int) $canArchive }}" class="text-center">Aucun dossier ne correspond à ces filtres.</td></tr>
                 @endforelse
             </tbody>
         </table>

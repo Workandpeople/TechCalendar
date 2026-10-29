@@ -2738,3 +2738,104 @@ Les propositions automatiques de RDV sont generees du lundi au vendredi uniqueme
 a l'analyse initiale comme lors d'un changement de periode. Le samedi reste
 affiche pour les RDV deja places et les placements manuels ; aucun RDV existant
 n'est supprime ou deplace par cette regle. Aucune migration ou configuration requise.
+
+### Retours planning du 29 octobre 2026
+
+- Suggestions conservees, mais compactes et neutres : icone, mention Suggestion,
+  horaire et technicien. Aucun beneficiaire, adresse ou fiche copie sur ces cases.
+  Selection et infobulles trajets restent disponibles ; les vrais RDV gardent
+  leurs informations. Le badge fiche des demandes a placer passe sur plusieurs
+  lignes si necessaire au lieu de devenir `C...`.
+- Les heures de saisie sont des heures Europe/Paris. Les ISO avec offset ou UTC
+  sont convertis avant stockage dans les colonnes DATETIME historiques locales.
+  L'offset saisonnier est explicite dans les retours JSON. Les heures inexistantes
+  au passage a l'heure d'ete sont refusees. Aucune reecriture des anciens RDV : un
+  ancien decalage doit etre verifie et corrige explicitement, jamais devine.
+- Pour un dossier selectionne a placer/replacer, un point historique non valide
+  n'est plus une preuve de bonne localisation. Le geocodage controle le type
+  adresse, la pertinence, le code postal et la ville fournis ; les points de ville
+  ou de code postal seuls ne servent plus a proposer un technicien ou un trajet.
+  Le controle est limite au dossier choisi, avec le cache court existant, sans
+  geocoder toute la liste ni reecrire les archives. Une adresse non localisee
+  reste dans les demandes, mais demande correction avant analyse. Les corrections
+  d'adresse deja validees sur le dossier sont prioritaires.
+- Les trois techniciens qualifies les plus proches sont inclus en plus des
+  techniciens couvrant le secteur. Comptes externes, inactifs et points GPS invalides
+  sont exclus. Les distances de secours sont indiquees a vol d'oiseau, avec duree
+  estimee, pas comme un itineraire routier Mapbox.
+- Un bouton de blocage ouvre une saisie de date et de periode (journee, matin avant
+  12 h, apres-midi a partir de 12 h), avec plusieurs techniciens actifs. Le lot est
+  atomique, limite a 200 techniciens, verrouille comme le placement de RDV, et refuse
+  les conflits absence/RDV sans ecraser d'evenement. Aucun mail n'est envoye.
+- Le bouton Supprimer reste a droite des dossiers ; l'oeil reste a gauche.
+  La categorie Probleme RDV permet annulation/suppression de la selection de la
+  page (100 dossiers maximum), avec confirmation, protection de version et audit.
+  La suppression groupee refuse les dossiers contenant aussi d'autres etats actifs
+  ou finalises. L'annulation ne touche que les prestations en probleme RDV.
+  Suppression reversible, documents, RDV historiques et facturation conserves.
+  Aucun nettoyage automatique des anciens dossiers et aucune execution en production
+  lors du deploiement. Aucune migration de schema sur ce lot.
+
+L'integration des RDV MAR apres travaux est volontairement en attente de la
+documentation API. Ils ne sont pas encore inclus dans les disponibilites ; ne pas
+presenter le planning comme exhaustif tant que cette connexion n'est pas validee.
+Les tests ne font aucun appel API ni envoi reel.
+
+Contrat utilise pour distinguer adresse, ville, pertinence et contexte postal :
+[documentation officielle Mapbox Geocoding](https://docs.mapbox.com/api/search/geocoding-v5/).
+
+### Profil et notifications des comptes externes
+
+Le menu du compte propose Mon profil au-dessus de Deconnexion, pour les clients
+et delegataires comme pour l'equipe interne. La page affiche les informations du
+compte, son organisation et permet de modifier prenom, nom et telephone. L'email
+de connexion, les droits et l'organisation ne sont pas modifiables en libre-service.
+Le mot de passe se change avec verification du mot de passe actuel, confirmation,
+rotation du remember_token et suppression des autres sessions SQL enregistrees.
+Le parcours obligatoire de premiere connexion reste distinct et ne peut pas etre
+contourne par les formulaires du profil. La page est privee et non mise en cache.
+
+Le fonctionnement historique a ete verifie dans la copie locale du code Cofrac :
+ConfigController::configPartenairePost, config/list-partenair.blade.php et
+DossierController::statusChanged/addComment. L'ancien choix des statuts et des
+commentaires est repris dans une preference par compte, et non dans une liste
+d'identifiants modifiant chaque statut global. Une option de nouveau document
+partage est egalement disponible. Aucun changement de droits de consultation.
+
+Migration requise : 2026_10_29_150000_add_portal_notification_preferences_to_users.php.
+La nouvelle colonne JSON users.portal_notification_preferences est nullable.
+Tous les comptes restent sans notification automatique tant que leur titulaire
+n'a pas enregistre et active ses preferences. Aucun backfill des abonnements,
+rejeu d'historique, seed ou envoi pendant cette migration ou l'enregistrement.
+Les comptes internes conservent leurs preferences technicien existantes ; les
+nouveaux reglages de notification sont reserves aux comptes externes actifs.
+
+Evenements : changement vers un statut choisi parmi les categories accessibles,
+nouveau commentaire partage et nouveau document natif partage. Les observateurs
+couvrent les ecritures Eloquent natives, y compris les automatismes de workflow ;
+les imports/archives via query builder ne rejouent pas les notifications. Une
+extension de partage notifie seulement la nouvelle audience. Les ajouts de
+l'utilisateur lui-meme et les actions privees ne le notifient pas.
+
+L'envoi utilise SendPortalNotification et le worker habituel apres le commit
+de la transaction externe. Chaque job ne transporte que des identifiants et le
+type d'evenement. Avant l'envoi, relire les preferences, les droits, l'affectation,
+la categorie et la visibilite ; ignorer un evenement supprime ou devenu interdit.
+Les emails sont en francais, sans texte de commentaire ni piece jointe, avec un
+lien authentifie vers le dossier. La configuration mail globale et ses verrous
+de livraison/simulation restent prioritaires. Aucun canal SMS ou push ajoute.
+Appliquer la migration et renouveler le worker avec le deploiement normal ; ne
+pas utiliser queue:retry all pour activer cette fonctionnalite.
+
+### Dates de RDV dans la liste des dossiers externes
+
+Les clients et delegataires voient la date et la plage horaire directement dans
+Mes dossiers : colonne Date RDV sur ordinateur, sous le beneficiaire sur mobile.
+Le prochain RDV courant est prioritaire, sinon le dernier RDV enregistre ; une
+ancienne visite importee et archivee est explicitement indiquee Date historique.
+Les creneaux annules, en probleme, supprimes hors archive historique et les
+prestations revenues en prise de RDV ne sont pas presentes comme confirmes.
+Les dates/heures restent celles de Paris, sans conversion implicite des anciens
+DATETIME. Une seule requete groupee charge au maximum un RDV par dossier de la
+page courante ; aucun chargement de tous les RDV ni requete par ligne. Les droits
+d'affectation et de categories restent inchanges. Aucune migration pour cet affichage.

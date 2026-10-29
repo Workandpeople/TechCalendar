@@ -40,7 +40,23 @@ class ClientPortal
             });
         }
 
-        return ['dossiers' => $query->with('operations.service')->latest('id')->paginate(25)->withQueryString(),
+        $now = now(AppointmentDateTime::TIMEZONE)->format('Y-m-d H:i:s');
+        $unplannedStates = array_merge(...array_map(fn ($key) => DossierStatusCatalog::STATUSES[$key]['values'], ['pending', 'problem', 'cancelled']));
+
+        return ['dossiers' => $query->with(['operations.service', 'appointments' => function ($appointments) use ($now, $unplannedStates): void {
+            $appointments->withTrashed()->select(['appointments.id', 'appointments.starts_at', 'appointments.ends_at', 'appointments.deleted_at'])
+                ->where('appointments.status', Appointment::STATUS_SCHEDULED)->whereNotNull('appointments.starts_at')
+                ->where(fn ($operation) => $operation->whereNull('dossier_operations.legacy_status')
+                    ->orWhereNotIn('dossier_operations.legacy_status', $unplannedStates))
+                ->where(fn ($current) => $current->whereNull('appointments.deleted_at')->orWhere(fn ($archive) => $archive
+                    ->where('appointments.external_source', 'coffrac_archive')->where('appointments.ends_at', '<', $now)))
+                ->orderByRaw('CASE WHEN appointments.deleted_at IS NULL THEN 0 ELSE 1 END')
+                ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN 0 ELSE 1 END', [$now])
+                ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN appointments.starts_at END ASC', [$now])
+                ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')
+                // Grouped eager limit: one appointment per dossier, only for this page.
+                ->limit(1);
+        }])->latest('id')->paginate(25)->withQueryString(),
             'filters' => $filters, 'categories' => $categories];
     }
 

@@ -26,6 +26,7 @@ import { confirmForcedPlacement } from './booking-force-placement';
 import { initBetaFeedback } from './beta-feedback';
 import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentAssignments } from './appointment-placement';
 import { createAppointmentTooltip } from './appointment-tooltip';
+import * as appointmentDateTime from './appointment-date-time';
 
 window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
@@ -33,6 +34,7 @@ window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
 window.TechCalendarBookingForce = { confirm: confirmForcedPlacement };
 window.TechCalendarAppointments = { request: requestAppointmentPlacement, confirm: confirmAppointmentAction };
 window.TechCalendarAppointmentTooltip = { create: createAppointmentTooltip };
+window.TechCalendarDateTime = appointmentDateTime;
 initAppointmentAssignments();
 initCommentMarkup();
 initCommentExcerpts();

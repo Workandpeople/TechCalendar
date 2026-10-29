@@ -16,6 +16,7 @@ validate_release_scope() {
             config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
             database/migrations/2026_10_28_140000_add_appointment_planning_window_index.php) ;;
             database/migrations/2026_10_28_200000_create_appointment_mail_deliveries_table.php) ;;
+            database/migrations/2026_10_29_150000_add_portal_notification_preferences_to_users.php) ;;
             config/calendar.php|vite.config.js|tools/local/*) ;;
             *) stop 'changement hors perimetre applicatif du correctif.' ;;
         esac
@@ -141,7 +142,8 @@ next_build=
 printf 'Migrations V2 ciblees et recompilation des caches, sans seeder ni import...\n'
 for migration in 2026_10_25_110000_add_reversible_dossier_deletion 2026_10_25_120000_add_automatic_capcee_reports \
     2026_10_26_100000_activate_existing_mail_templates 2026_10_26_110000_add_dossier_inspection_geocode \
-    2026_10_28_140000_add_appointment_planning_window_index 2026_10_28_200000_create_appointment_mail_deliveries_table; do
+    2026_10_28_140000_add_appointment_planning_window_index 2026_10_28_200000_create_appointment_mail_deliveries_table \
+    2026_10_29_150000_add_portal_notification_preferences_to_users; do
     app_cli artisan migrate --force --no-interaction --no-ansi --path="database/migrations/$migration.php" >> "$WORK/migrations.log" 2>&1 \
         || stop 'migration en echec ; consulter le journal prive, ne pas reinitialiser la base.'
 done

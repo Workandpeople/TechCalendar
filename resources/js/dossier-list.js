@@ -1,4 +1,5 @@
 import { initDossierAssignment } from './dossier-assignment.js';
+import { initDossierArchiving } from './dossier-archiving.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
@@ -171,7 +172,14 @@ export function createDossierLoader(browser, { pending, success, failure }) {
                 const payload = await response.json();
                 if ((typeof payload.categories !== 'string' && !(options.categories === false && payload.categories === null)) || typeof payload.results !== 'string'
                     || !Number.isInteger(payload.total) || payload.total < 0) throw new Error('Invalid listing response');
-                if (current === generation) success(payload, url, options);
+                if (payload.page !== undefined && (!Number.isInteger(payload.page) || payload.page < 1)) throw new Error('Invalid listing page');
+                if (current === generation) {
+                    const rendered = new URL(url.href);
+                    if (payload.page === 1) rendered.searchParams.delete('page');
+                    else if (payload.page !== undefined) rendered.searchParams.set('page', String(payload.page));
+                    lastRequest = { url: rendered, options };
+                    success(payload, rendered, options);
+                }
             } catch (error) {
                 if (current === generation && (error.name !== 'AbortError' || timedOut)) failure(error, url, options);
             } finally {
@@ -301,6 +309,7 @@ export function initDossierList(root = document, browser = window) {
         loader.refresh(renderedUrl, { quiet: true });
     });
     root.addEventListener('techcalendar:appointment-assigned', () => loader.refresh(renderedUrl, { quiet: true }));
+    initDossierArchiving(listing, root, browser, () => loader.refresh(renderedUrl, { quiet: true }));
     form.addEventListener('submit', event => {
         event.preventDefault();
         load(formUrl());

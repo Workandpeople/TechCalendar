@@ -288,6 +288,23 @@ test('refreshes counters after a planning write even if the previous request onl
     assert.equal(ui.events.at(-1)[0], 'success');
 });
 
+test('uses the corrected server page after a deletion while preserving filters and subsequent refreshes', async () => {
+    const ui = fixture();
+    const requested = new URL(`${base}?status=problem&page=3&q=Paris&sort=client`);
+    ui.loader.load(requested);
+    ui.requests[0].resolve(response({ ...payload, page: 2 })); await settle();
+    const corrected = ui.events.at(-1)[2];
+    assert.equal(corrected.searchParams.get('page'), '2');
+    assert.equal(corrected.searchParams.get('status'), 'problem');
+    assert.equal(corrected.searchParams.get('q'), 'Paris');
+    assert.equal(corrected.searchParams.get('sort'), 'client');
+    ui.loader.refresh(corrected, { quiet: true });
+    assert.equal(ui.requests[1].url, corrected.href);
+    assert.equal(ui.events.at(-1)[2].quiet, true);
+    ui.requests[1].resolve(response({ ...payload, page: 1 })); await settle();
+    assert.equal(ui.events.at(-1)[2].searchParams.has('page'), false);
+});
+
 test('selects the requested category immediately and can restore the last rendered category on failure', () => {
     const links = ['all', 'pending', 'visited'].map(category => ({
         dataset: { category }, current: undefined,

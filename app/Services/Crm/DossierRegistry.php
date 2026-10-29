@@ -31,14 +31,20 @@ class DossierRegistry
     {
         $query = $this->matchingQuery($actor, $filters);
 
-        return app(DossierTable::class)->apply($query, $filters)->with([
+        $query = app(DossierTable::class)->apply($query, $filters)->with([
             'client', 'delegataire', 'operations.service', 'operations.billing', 'planningUser:id,first_name,last_name,deleted_at',
             'latestStatusChange',
             'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
             'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
                 ->orderByDesc('created_at')->orderByDesc('id')->limit(3),
-        ])->withCount(['appointments', 'comments'])
-            ->paginate($filters['per_page'] ?? 10)->withQueryString();
+        ])->withCount(['appointments', 'comments']);
+        $dossiers = $query->paginate($filters['per_page'] ?? 10);
+        if ($dossiers->currentPage() > $dossiers->lastPage()) {
+            // A deletion can remove the last page; reuse the count and keep the active filters.
+            $dossiers = $query->paginate($dossiers->perPage(), ['*'], 'page', $dossiers->lastPage(), $dossiers->total());
+        }
+
+        return $dossiers->withQueryString();
     }
 
     public function matchingQuery(User $actor, array $filters): Builder

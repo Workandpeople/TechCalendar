@@ -50,6 +50,7 @@
                 <x-nav-icon name="plus" /> RDV manuel
             </button>
         </x-workspace-heading>
+        @include('planner.partials.absence-block-modal')
         <ol class="gc-workflow-guide" aria-label="Parcours de prise de rendez-vous">
             <li><span class="gc-workspace-step" aria-hidden="true">1</span><div><strong>Choisir un dossier</strong><p>Une demande à placer ou un dossier issu d’un lot.</p></div></li>
             <li><span class="gc-workspace-step" aria-hidden="true">2</span><div><strong>Trouver un créneau</strong><p>Comparez les techniciens, disponibilités et trajets.</p></div></li>
@@ -464,15 +465,18 @@
                             <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
                                 <span class="gc-booking-request-postal shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $locationBadgeLabel }}</span>
                                 @if ($serviceBadgeLabel !== '')
-                                    <span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="{{ $serviceBadgeLabel }}">{{ $serviceBadgeLabel }}</span>
+                                    <span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="{{ $serviceBadgeLabel }}">
+                                        @if ($serviceDisplayType !== '')<span class="gc-booking-request-service-type">{{ $serviceDisplayType }}</span>@endif
+                                        @if ($serviceDisplayName !== '')<span class="gc-booking-request-service-name">{{ $serviceDisplayName }}</span>@endif
+                                    </span>
                                 @else
-                                    <span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>
+                                    <span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>
                                 @endif
                                 @if ($bookingConnectorsEnabled && (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null)))
-                                    <span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>
+                                    <span class="gc-booking-request-gps min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>
                                 @endif
                                 @if ($appointment['replace_appointment_id'] ?? null)
-                                    <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" title="RDV existant : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer le RDV</a>
+                                    <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer / horaire</a>
                                 @endif
                                 @if ($appointment['dossier_summary']['dossier_url'] ?? null)
                                     <a class="crm-appointment-dossier-link inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" href="{{ $appointment['dossier_summary']['dossier_url'] }}" title="Voir le dossier" aria-label="Voir le dossier">
@@ -1207,7 +1211,7 @@
 
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
-                                <label class="gc-label" for="booking_detail_starts_at">Date et heure</label>
+                                <label class="gc-label" for="booking_detail_starts_at">Date et heure (heure de Paris)</label>
                                 <input id="booking_detail_starts_at" type="datetime-local" class="gc-input" />
                             </div>
                             <div>
@@ -1364,6 +1368,19 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <style>
+        #booking-crm-grid .gc-booking-request-actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: .4rem .5rem; }
+        #booking-crm-grid .gc-booking-request-service { grid-column: 1 / 3; grid-row: 1; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+        #booking-crm-grid .gc-booking-request-service-type { display: block; font-weight: 700; }
+        #booking-crm-grid .gc-booking-request-service-name { display: block; }
+        #booking-crm-grid .gc-booking-request-postal { grid-column: 1; grid-row: 2; }
+        #booking-crm-grid .crm-appointment-replace-link { grid-column: 2; grid-row: 2; justify-self: start; white-space: normal; }
+        #booking-crm-grid .gc-booking-request-gps { grid-column: 1 / 3; }
+        #booking-crm-grid :is(.crm-appointment-dossier-link, .crm-appointment-detail-button) { grid-column: 3; grid-row: 1 / 3; }
+        #booking-crm-grid :is(.crm-appointment-replace-link, .crm-appointment-dossier-link, .crm-appointment-detail-button):focus-visible { outline: 2px solid var(--gc-accent); outline-offset: 2px; }
+        @container (min-width: 56rem) {
+            #booking-crm-grid .gc-booking-request-row { grid-template-columns: minmax(9rem, 1.05fr) minmax(7.5rem, .7fr) minmax(8.5rem, .85fr) minmax(10rem, 1.2fr) minmax(17rem, 1.5fr); }
+        }
+
         .gc-booking-force-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
         .gc-booking-force-dialog::backdrop { background: #0f172a99; }
         .booking-lot-details > summary::-webkit-details-marker {
@@ -1385,6 +1402,13 @@
             padding: 3px 5px;
             overflow: hidden;
         }
+
+        #booking-calendar .appointment-suggestion { border-width: 1px !important; box-shadow: none; }
+        #booking-calendar .booking-calendar-suggestion { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 7px; padding: 3px 5px; font-size: 11px; line-height: 1.35; font-weight: 500; }
+        #booking-calendar .booking-calendar-suggestion-label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-weight: 650; }
+        #booking-calendar .booking-calendar-suggestion-label svg { width: 13px; height: 13px; flex: none; }
+        #booking-calendar .booking-calendar-suggestion-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+        #booking-calendar .booking-calendar-suggestion-technician { flex-basis: 100%; font-size: 10px; overflow-wrap: anywhere; }
 
         #booking-calendar .booking-calendar-event-content.has-travel-badges {
             padding-top: 3px;
@@ -1771,7 +1795,7 @@
         const formatShortDate = (value) => {
             if (!value) return '-';
 
-            return new Date(value).toLocaleDateString('fr-FR');
+            return window.TechCalendarDateTime.formatAppointmentDateTime(value);
         };
 
         const formatShortDateTime = (value) => {
@@ -1783,7 +1807,7 @@
                 return String(value);
             }
 
-            return date.toLocaleString('fr-FR', {
+            return window.TechCalendarDateTime.formatAppointmentDateTime(value, {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
@@ -2011,13 +2035,13 @@
             const hasCoordinates = appointment.latitude != null && appointment.longitude != null
                 && Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
             const serviceBadge = serviceLabel
-                ? `<span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="${escapeHtml(serviceLabel)}">${escapeHtml(serviceLabel)}</span>`
-                : '<span class="gc-booking-request-service min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>';
+                ? `<span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="${escapeHtml(serviceLabel)}">${serviceDisplayType ? `<span class="gc-booking-request-service-type">${escapeHtml(serviceDisplayType)}</span>` : ''}${serviceDisplayName ? `<span class="gc-booking-request-service-name">${escapeHtml(serviceDisplayName)}</span>` : ''}</span>`
+                : '<span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>';
             const gpsBadge = hasCoordinates || !bookingConnectorsEnabled
                 ? ''
-                : '<span class="min-w-0 truncate rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>';
+                : '<span class="gc-booking-request-gps min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>';
             const replacementLink = appointment.replace_appointment_id
-                ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" title="RDV existant : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer le RDV</a>`
+                ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer / horaire</a>`
                 : '';
             const dossierUrl = appointment.dossier_summary?.dossier_url;
             const detailLabel = dossierUrl ? 'Voir le dossier' : 'Voir le détail du RDV';
@@ -3641,19 +3665,24 @@
             return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
         };
 
-        const formatRouteDuration = (minutes) => {
-            const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
+        const isFallbackRoute = (source) => source === 'fallback' || source === 'estimation interne';
+
+        const formatRouteDuration = (minutes, source = '') => {
+            if (minutes == null || minutes === '' || !Number.isFinite(Number(minutes)) || Number(minutes) < 0) return 'Durée indisponible';
+            const safeMinutes = Math.round(Number(minutes));
             const hours = Math.floor(safeMinutes / 60);
             const remainingMinutes = safeMinutes % 60;
-
-            if (hours === 0) {
-                return `${remainingMinutes} min`;
-            }
-
-            return remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`;
+            const duration = hours === 0 ? `${remainingMinutes} min`
+                : (remainingMinutes > 0 ? `${hours}h${String(remainingMinutes).padStart(2, '0')}` : `${hours}h`);
+            return `${isFallbackRoute(source) ? 'Durée estimée : ' : ''}${duration}`;
         };
 
-        const formatRouteDistance = (distanceKm) => `${Number(distanceKm || 0).toFixed(1)} km`;
+        const formatRouteDistance = (distanceKm, source = '') => {
+            if (distanceKm == null || distanceKm === '' || !Number.isFinite(Number(distanceKm)) || Number(distanceKm) < 0) return 'Distance indisponible';
+            const unit = isFallbackRoute(source) ? 'km à vol d’oiseau'
+                : (source === 'mapbox' || source === 'Mapbox voiture' ? 'km voiture' : 'km');
+            return `${Number(distanceKm).toFixed(1)} ${unit}`;
+        };
 
         const ensureBookingTravelTooltip = () => bookingTravelTooltip ||= window.TechCalendarBookingTravel.create({
             routeBetween: fetchRouteBetween,
@@ -3790,11 +3819,7 @@
             .filter((item) => selectedTechnicianIds.has(String(item.extendedProps?.technician_id || '')));
 
         const parseCalendarDate = (value) => {
-            if (!value) return null;
-
-            const date = value instanceof Date ? value : new Date(value);
-
-            return Number.isNaN(date.getTime()) ? null : date;
+            return window.TechCalendarDateTime.parseAppointmentDate(value);
         };
 
         const calendarTimeLabel = (value) => {
@@ -3802,7 +3827,7 @@
 
             if (!date) return '-';
 
-            return date.toLocaleTimeString('fr-FR', {
+            return window.TechCalendarDateTime.formatAppointmentDateTime(date, {
                 hour: '2-digit',
                 minute: '2-digit',
             });
@@ -3817,8 +3842,8 @@
                 badges.push({
                     key: `${suggestion.id}-previous`,
                     kind: 'before',
-                    label: `← ${formatRouteDuration(props.travel_to_minutes)}`,
-                    title: `RDV précédent → proposition de ${suggestionTime} · ${formatRouteDistance(props.travel_to_distance_km)} · ${formatRouteDuration(props.travel_to_minutes)}`,
+                    label: `← ${formatRouteDuration(props.travel_to_minutes, props.route_source)}`,
+                    title: `RDV précédent → proposition de ${suggestionTime} · ${formatRouteDistance(props.travel_to_distance_km, props.route_source)} · ${formatRouteDuration(props.travel_to_minutes, props.route_source)}`,
                 });
             }
 
@@ -3826,8 +3851,8 @@
                 badges.push({
                     key: `${suggestion.id}-next`,
                     kind: 'after',
-                    label: `${formatRouteDuration(props.travel_after_minutes)} →`,
-                    title: `Proposition de ${suggestionTime} → RDV suivant · ${formatRouteDistance(props.travel_after_distance_km)} · ${formatRouteDuration(props.travel_after_minutes)}`,
+                    label: `${formatRouteDuration(props.travel_after_minutes, props.route_source)} →`,
+                    title: `Proposition de ${suggestionTime} → RDV suivant · ${formatRouteDistance(props.travel_after_distance_km, props.route_source)} · ${formatRouteDuration(props.travel_after_minutes, props.route_source)}`,
                 });
             }
 
@@ -4010,7 +4035,12 @@
             const technicianId = document.getElementById('booking_detail_technician_select').value;
 
             if (startValue) {
-                selectedCalendarEvent.start = new Date(startValue);
+                const startsAt = window.TechCalendarDateTime.parseAppointmentDate(startValue);
+                if (!startsAt) {
+                    showDetailStatus('Horaire invalide ou inexistant en Europe/Paris (changement d\'heure).', 'error');
+                    return;
+                }
+                selectedCalendarEvent.start = startsAt;
                 selectedCalendarEvent.end = addMinutes(selectedCalendarEvent.start, durationMinutes);
             }
 
@@ -4024,10 +4054,11 @@
                 return;
             }
 
-            const startsAt = new Date(info.date);
+            let startsAt = new Date(info.date);
 
             if (info.allDay) {
-                startsAt.setHours(8, 0, 0, 0);
+                const day = window.TechCalendarDateTime.formatAppointmentInput(startsAt).slice(0, 10);
+                startsAt = window.TechCalendarDateTime.parseAppointmentDate(`${day}T08:00`);
             }
 
             const activeTechnicians = bookingForcePlacementEnabled ? selectedTechnicians() : selectedAvailableTechnicians(startsAt);
@@ -4078,11 +4109,11 @@
                     </div>
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Distance</p>
-                        <p class="mt-1 font-medium">${Number(route.distance_km || 0).toFixed(1)} km</p>
+                        <p class="mt-1 font-medium">${escapeHtml(formatRouteDistance(route.distance_km, route.source))}</p>
                     </div>
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Temps estime</p>
-                        <p class="mt-1 font-medium">${escapeHtml(formatRouteDuration(route.duration_minutes))}</p>
+                        <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Durée</p>
+                        <p class="mt-1 font-medium">${escapeHtml(formatRouteDuration(route.duration_minutes, route.source))}</p>
                     </div>
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.08em]" style="color:var(--gc-text-soft);">Calcul</p>
@@ -4351,8 +4382,8 @@
                                 <p class="mt-1 truncate font-medium">${escapeHtml(segment.from.name)} → ${escapeHtml(segment.to.name)}</p>
                             </div>
                             <div class="shrink-0 text-right">
-                                <p class="font-semibold">${Number(segment.route?.distance_km || 0).toFixed(1)} km</p>
-                                <p class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(formatRouteDuration(segment.route?.duration_minutes))}</p>
+                                <p class="font-semibold">${escapeHtml(formatRouteDistance(segment.route?.distance_km, segment.route?.source))}</p>
+                                <p class="text-xs" style="color:var(--gc-text-soft);">${escapeHtml(formatRouteDuration(segment.route?.duration_minutes, segment.route?.source))}</p>
                             </div>
                         </button>
                     `;
@@ -4559,19 +4590,16 @@
         };
 
         const formatDateTimeForInput = (value) => {
-            if (!value) return '';
-            const date = new Date(value);
-            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-            return offsetDate.toISOString().slice(0, 16);
+            return window.TechCalendarDateTime.formatAppointmentInput(value);
         };
 
         const formatDateTimeForConfirmation = (value) => {
             if (!value) return '-';
 
-            return new Intl.DateTimeFormat('fr-FR', {
+            return window.TechCalendarDateTime.formatAppointmentDateTime(value, {
                 dateStyle: 'full',
                 timeStyle: 'short',
-            }).format(new Date(value));
+            });
         };
 
         const confirmationMailUrl = (template, appointmentId) => template.replace('__APPOINTMENT__', encodeURIComponent(appointmentId));
@@ -5159,7 +5187,7 @@
         const showPlacementConfirmation = (data, payload, event) => {
             const props = event?.extendedProps || {};
             const technician = technicianById(payload.technician_id);
-            const startsAt = payload.starts_at || event?.start || null;
+            const startsAt = data.appointment?.start || payload.starts_at || event?.start || null;
             const isReplacement = Boolean(payload.replace_appointment_id);
 
             calendarWindowAbortController?.abort();
@@ -5487,7 +5515,7 @@
                 ? `${window.TechCalendarLabels.cofrac(crmAppointment.service.type)} - ${crmAppointment.service.name}`
                 : null;
             const availabilityLabel = filters.preferred_starts_at
-                ? ` Creneau client: ${new Date(filters.preferred_starts_at).toLocaleString('fr-FR')}.`
+                ? ` Creneau client: ${window.TechCalendarDateTime.formatAppointmentDateTime(filters.preferred_starts_at, { dateStyle: 'short', timeStyle: 'short' })}.`
                 : '';
             document.getElementById('analysis-subtitle').textContent = filters.service_required
                 ? `Département ${filters.department_code} + prestation ${serviceLabel}.${availabilityLabel}`
@@ -5523,8 +5551,8 @@
                                 <h3 class="font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</h3>
                                 <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">${escapeHtml(technician.phone || 'Téléphone non renseigné')}</p>
                                 <div class="mt-2 flex flex-wrap gap-2">
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_distance_km)} km voiture</span>
-                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(technician.driving_duration_minutes)} min</span>
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(formatRouteDistance(technician.driving_distance_km, technician.route_source))}</span>
+                                    <span class="rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(formatRouteDuration(technician.driving_duration_minutes, technician.route_source))}</span>
                                     ${coverageBadge}
                                     ${absenceBadges}
                                 </div>
@@ -5551,6 +5579,17 @@
 
         const bookingCalendarEventContent = (info) => {
             const props = info.event.extendedProps || {};
+            if (props.is_suggestion) {
+                const hours = info.timeText || [info.event.start, info.event.end].filter(Boolean).map(calendarTimeLabel).join(' – ');
+                const technician = props.technician_full_name || props.technician_name || '';
+                return {
+                    html: `<div class="booking-calendar-suggestion">
+                        <span class="booking-calendar-suggestion-label"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" stroke="currentColor" stroke-width="1.5"/></svg>Suggestion</span>
+                        ${hours ? `<span class="booking-calendar-suggestion-time">${escapeHtml(hours)}</span>` : ''}
+                        ${technician ? `<span class="booking-calendar-suggestion-technician">${escapeHtml(technician)}</span>` : ''}
+                    </div>`,
+                };
+            }
             const badges = Array.isArray(props.booking_travel_badges) ? props.booking_travel_badges : [];
             const badgesHtml = badges.length > 0
                 ? `<div class="booking-calendar-event-badges">${badges.map((badge) => `
@@ -5590,7 +5629,7 @@
                         ...(event.extendedProps || {}),
                         booking_travel_badges: travelBadges,
                     },
-                    backgroundColor: isSuggestion ? `${color}26` : color,
+                    backgroundColor: isSuggestion ? `${color}0a` : color,
                     borderColor: isReplacementTarget ? '#faff00' : color,
                     textColor: isSuggestion ? color : '#ffffff',
                     classNames: [
@@ -5734,6 +5773,11 @@
                 },
                 eventDidMount: (info) => {
                     info.el.tabIndex = 0;
+                    if (info.event.extendedProps?.is_suggestion) {
+                        const props = info.event.extendedProps;
+                        info.el.setAttribute('aria-label', ['Suggestion', calendarTimeLabel(info.event.start), calendarTimeLabel(info.event.end), props.technician_full_name || props.technician_name].filter(Boolean).join(' · '));
+                        info.el.removeAttribute('title');
+                    }
                     const focus = () => {
                         const box = info.el.getBoundingClientRect();
                         tooltipForBookingEvent(info.event).show({ clientX: box.left + box.width / 2, clientY: box.top }, info.event, info.el);
@@ -5779,6 +5823,26 @@
                 await refreshCalendarWindow(lastCalendarDateInfo, { force: true });
             }
         };
+
+        const refreshBookingAfterAbsence = async (event) => {
+            const createdAbsences = Array.isArray(event.detail?.absences) ? event.detail.absences : [];
+            currentTechnicians.forEach((technician) => {
+                const created = createdAbsences.filter(absence => absence?.id != null && String(absence.technician_id) === String(technician.id));
+                if (!created.length) return;
+
+                const byId = new Map(technicianAbsences(technician).map(absence => [String(absence.id), absence]));
+                created.forEach(absence => byId.set(String(absence.id), absence));
+                technician.absences = [...byId.values()];
+            });
+            if (currentAppointmentRequest && currentFilters) {
+                renderTechnicians(currentTechnicians, currentAppointmentRequest, currentFilters);
+            }
+            if (lastCalendarDateInfo && currentAnalysisPayload && bookingCalendar) {
+                hideSuggestionTooltip();
+                await refreshCalendarWindow(lastCalendarDateInfo, { force: true });
+            }
+        };
+        window.addEventListener('planning:absences-created', refreshBookingAfterAbsence);
 
         const analyzeAppointment = async (payload, sourceLabel = 'RDV', { scrollToResults = true } = {}) => {
             clearBookingAnalysisContext();
@@ -5962,7 +6026,7 @@
                     <article class="flex items-center justify-between gap-3 rounded-xl border p-3" style="border-color:var(--gc-border);">
                         <div class="min-w-0">
                             <p class="truncate text-sm font-semibold" style="color:var(--gc-text);">${escapeHtml(technician.name)}</p>
-                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(technician.driving_distance_km)} km · ${escapeHtml(technician.driving_duration_minutes)} min · ${coverageLabel}${escapeHtml(absenceLabel)}</p>
+                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">${escapeHtml(formatRouteDistance(technician.driving_distance_km, technician.route_source))} · ${escapeHtml(formatRouteDuration(technician.driving_duration_minutes, technician.route_source))} · ${coverageLabel}${escapeHtml(absenceLabel)}</p>
                         </div>
                         <button
                             type="button"
@@ -6970,12 +7034,13 @@
             // An earlier confirmation must never be reused by a normal placement.
             delete payload.force_placement;
             delete payload.force_confirmed;
-            if (!payload.technician_id || !payload.starts_at || !Number.isFinite(new Date(payload.starts_at).getTime())
+            if (!payload.technician_id || !window.TechCalendarDateTime.parseAppointmentDate(payload.starts_at)
                 || !Number.isInteger(Number(payload.duration_minutes)) || Number(payload.duration_minutes) < 30 || Number(payload.duration_minutes) > 480) {
                 showDetailStatus('Choisis un technicien, une date et une durée de 30 à 480 minutes.', 'error');
                 return;
             }
 
+            payload.starts_at = window.TechCalendarDateTime.serializeAppointmentInput(payload.starts_at);
             bookingPlacementBusy = true;
             button.disabled = true;
             if (forceButton) forceButton.disabled = true;

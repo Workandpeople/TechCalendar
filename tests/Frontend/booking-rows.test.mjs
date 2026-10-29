@@ -24,7 +24,8 @@ test('initial and refreshed booking rows share the same responsive layout', () =
     for (const markup of [initial, render({ id: 'dossier-1' })]) {
         assert.match(markup, /crm-appointment-card gc-booking-request-row/);
         assert.match(markup, /gc-booking-request-actions flex min-w-0 flex-nowrap/);
-        assert.match(markup, /gc-booking-request-service min-w-0 flex-1 truncate/);
+        assert.match(markup, /gc-booking-request-service min-w-0 rounded-lg/);
+        assert.doesNotMatch(markup, /gc-booking-request-service[^"\n]*\btruncate\b/);
         assert.match(markup, /crm-appointment-detail-button inline-flex h-8 w-8 shrink-0/);
         assert.doesNotMatch(markup, /flex-wrap\b|md:grid-cols-/);
         assert.equal((markup.match(/data-crm-comments-trigger/g) || []).length, 1);
@@ -50,17 +51,23 @@ test('phone and postal values remain escaped in refreshed rows', () => {
     assert.doesNotMatch(html, /<img|<script/);
 });
 
-test('long service names stay complete in an escaped title without introducing markup', () => {
+test('type and long fiche names stay visible on separate wrapping lines and remain escaped', () => {
     const name = 'BAT EN 101 Isolation en rampant de toiture "test" <img src=x onerror=alert(1)>';
     const html = render({ id: 'dossier-1', service: { type: 'COFFRAC', name } });
     assert.match(html, /title="COFRAC - BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
+    assert.match(html, /gc-booking-request-service-type">COFRAC<\/span>/);
+    assert.match(html, /gc-booking-request-service-name">BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
+    assert.match(source, /\.gc-booking-request-service \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/);
+    assert.match(source, /\.gc-booking-request-service-type \{[^}]*display: block;/);
+    assert.match(source, /\.gc-booking-request-service-name \{[^}]*display: block;/);
+    assert.match(source, /minmax\(17rem, 1\.5fr\)/);
     assert.doesNotMatch(html, /<img/);
 });
 
 test('missing services and legacy GPS warnings keep compact accessible labels', () => {
     const html = render({ id: 'coffrac-1' }, true);
     assert.match(html, /title="Service non renseigné"/);
-    assert.match(html, /truncate[^>]*title="GPS à recalculer"/);
+    assert.match(html, /gc-booking-request-gps[^>]*title="GPS à recalculer"/);
     assert.doesNotMatch(render({ id: 'dossier-1' }), /GPS à recalculer/);
 });
 
@@ -68,6 +75,9 @@ test('scheduled pending requests use a replacement link in the same row instead 
     const html = render({ id: 'dossier-1', dossier_id: 1, replace_appointment_id: 42, existing_appointment_at: '2026-10-27T10:00:00Z', dossier_summary: { dossier_url: '/v2/dossiers/1' } });
     assert.match(html, /href="\/planner\/appointments\/modify\?replace_appointment_id=42"/);
     assert.match(html, /Replacer le RDV/);
+    assert.match(html, />Replacer \/ horaire<\/a>/);
+    assert.match(html, /aria-label="Replacer le RDV ou modifier l’horaire"/);
+    assert.match(html, /title="Replacer le RDV ou modifier l’horaire · RDV actuel : 14\/10\/2026 12:00"/);
     assert.match(html, /title="Voir le dossier"/);
     assert.doesNotMatch(source, /booking-replacements/);
     assert.match(source, /event\.target\.closest\('a, button'\)/);

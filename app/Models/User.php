@@ -69,6 +69,7 @@ class User extends Authenticatable
         return [
             'external_client_id' => 'integer',
             'portal_permissions' => 'array',
+            'portal_notification_preferences' => 'array',
             'portal_enabled' => 'boolean',
             'role' => 'integer',
             'admin' => 'boolean',

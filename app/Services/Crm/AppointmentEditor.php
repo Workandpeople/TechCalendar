@@ -59,8 +59,9 @@ class AppointmentEditor
                 $data['latitude'] = $data['latitude'] ?? null;
                 $data['longitude'] = $data['longitude'] ?? null;
             }
-            $start = Carbon::parse($data['starts_at']);
+            $start = AppointmentDateTime::parse($data['starts_at']);
             $end = $start->copy()->addMinutes($data['duration_minutes']);
+            AppointmentDateTime::assertStorableRange($start, $end);
             if ($appointment->dossierOperation && ($technicianId !== $appointment->technician_id
                 || $serviceId !== $appointment->service_id || ! $start->equalTo($appointment->starts_at)
                 || ! $end->equalTo($appointment->ends_at) || $data['address'] !== $appointment->address)) {

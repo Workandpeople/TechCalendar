@@ -13,7 +13,7 @@ class DossierMapPreview
 {
     public function __construct(private readonly MapboxAddressGeocoder $geocoder) {}
 
-    public function coordinates(User $actor, Dossier $dossier): array
+    public function coordinates(User $actor, Dossier $dossier, bool $forPlanning = false): array
     {
         Gate::forUser($actor)->authorize('view', $dossier);
         $address = DossierLocation::address($dossier);
@@ -22,6 +22,11 @@ class DossierMapPreview
         }
         if ($point = DossierLocation::coordinates($dossier)) {
             return ['coordinates' => $point, 'message' => 'Position corrigée et vérifiée avec Mapbox.'];
+        }
+
+        if ($forPlanning) {
+            // Imported GPS points are not proof of an address match. Check only the selected dossier.
+            return $this->geocodedCoordinates($address, 'planning-location-v2:'.$dossier->id.':'.hash('sha256', $address));
         }
 
         $appointment = $dossier->appointments()->withTrashed()->whereNotNull('latitude')->whereNotNull('longitude')
@@ -46,6 +51,11 @@ class DossierMapPreview
 
         $key = 'dossier-map-preview:'.$dossier->id.':'.hash('sha256', $address);
 
+        return $this->geocodedCoordinates($address, $key);
+    }
+
+    private function geocodedCoordinates(string $address, string $key): array
+    {
         return Cache::remember($key, now()->addMinutes(5), function () use ($address): array {
             $result = $this->geocoder->geocode($address);
             $point = $this->point($result['latitude'] ?? null, $result['longitude'] ?? null);

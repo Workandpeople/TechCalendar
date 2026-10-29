@@ -23,6 +23,7 @@
                 <button type="button" data-dossier-retry class="mt-2 font-semibold underline">Réessayer</button>
             </div>
         </div>
+        @include('crm.dossiers.archiving-actions')
         <div data-dossier-stage aria-busy="false">
             @include('crm.dossiers.skeleton')
             <div data-dossier-results class="space-y-6" aria-busy="false" tabindex="-1">

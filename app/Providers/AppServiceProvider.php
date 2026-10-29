@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\DossierActivity;
+use App\Models\DossierDocument;
+use App\Models\DossierOperation;
+use App\Observers\PortalNotificationObserver;
 use App\Services\ApplicationSettings;
 use App\Services\FrenchMailNotifications;
 use App\Services\GlobalMailConfiguration;
@@ -35,6 +39,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
         FrenchMailNotifications::register();
+        foreach ([DossierActivity::class, DossierDocument::class, DossierOperation::class] as $model) {
+            $model::observe(PortalNotificationObserver::class);
+        }
         $handler = $this->app->make(ExceptionHandler::class);
         if ($handler instanceof Handler) {
             $handler->respondUsing(static fn ($response, $exception, $request) => app(ErrorPages::class)->render($response, $exception, $request));

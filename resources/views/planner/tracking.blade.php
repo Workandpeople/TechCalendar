@@ -12,6 +12,7 @@
 
     <div class="space-y-6">
         <x-workspace-heading :title="$title ?? 'Les RDV'" :eyebrow="$section ?? 'Planning'" description="Sélectionnez vos techniciens, puis consultez leurs rendez-vous en calendrier ou en liste. Ouvrez un RDV pour le consulter ou le modifier." />
+        @include('planner.partials.absence-block-modal')
 
         <section class="gc-card p-5">
             <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -168,7 +169,7 @@
                 <div class="gc-appointment-modal-actions">
                     @if(config('crm.v2_enabled'))
                         <button type="button" id="tracking-delete-appointment" class="gc-btn-danger" hidden>Supprimer le RDV</button>
-                        <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier</button>
+                        <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier le RDV / horaire</button>
                     @endif
                     <button type="button" id="tracking-detail-close" class="gc-btn-secondary">Fermer</button>
                     <p id="tracking-delete-status" role="status" class="text-xs text-rose-700"></p>
@@ -343,7 +344,7 @@
 
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div>
-                                    <label class="gc-label" for="tracking_detail_starts_at">Date et heure</label>
+                                    <label class="gc-label" for="tracking_detail_starts_at">Date et heure (heure de Paris)</label>
                                     <input id="tracking_detail_starts_at" type="datetime-local" class="gc-input" required />
                                 </div>
                                 <div>
@@ -578,7 +579,7 @@
         const formatDateTime = (value) => {
             if (!value) return '-';
 
-            return new Date(value).toLocaleString('fr-FR', {
+            return window.TechCalendarDateTime.formatAppointmentDateTime(value, {
                 weekday: 'short',
                 day: '2-digit',
                 month: '2-digit',
@@ -589,12 +590,7 @@
         };
 
         const formatDateTimeLocalInput = (value) => {
-            if (!value) return '';
-
-            const date = new Date(value);
-            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-
-            return offsetDate.toISOString().slice(0, 16);
+            return window.TechCalendarDateTime.formatAppointmentInput(value);
         };
 
         const setText = (id, value) => {
@@ -2376,6 +2372,16 @@
             if (trackingCalendar) trackingCalendar.refetchEvents();
         };
 
+        const refreshTrackingAfterAbsence = () => {
+            hideTrackingAppointmentTooltip();
+            refetchCalendar();
+            const listPanel = document.getElementById('tracking-list-panel');
+            if (listPanel && !listPanel.classList.contains('hidden')) {
+                void runTrackingAppointmentSearch(trackingSearchPage);
+            }
+        };
+        window.addEventListener('planning:absences-created', refreshTrackingAfterAbsence);
+
         const applyTechnicianFilter = () => {
             const query = technicianFilterInput.value.trim().toLowerCase();
 
@@ -2855,7 +2861,7 @@
 
             try {
                 const payload = await window.TechCalendarAppointments.request(trackingDetailsUrlTemplate.replace('__APPOINTMENT__', appointmentId), {
-                    starts_at: startsAt, duration_minutes: Number(durationMinutes), address,
+                    starts_at: window.TechCalendarDateTime.serializeAppointmentInput(startsAt), duration_minutes: Number(durationMinutes), address,
                     latitude: latitude === '' ? null : Number(latitude), longitude: longitude === '' ? null : Number(longitude),
                     ...Object.fromEntries(['customer_first_name', 'customer_last_name', 'customer_phone', 'technician_id', 'service_id', 'comment', 'updated_at']
                         .map(key => [key, document.getElementById(`tracking_edit_${key}`)])

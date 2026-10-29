@@ -46,7 +46,7 @@ class DossierBooking
         $documents = app(CollectedDossierDocuments::class)->forDossiers($actor, collect([$operation->dossier]));
         $result = $this->serialize($operation, is_array($source) ? $source : [], Cache::get($this->mapCacheKey($operation->dossier))['coordinates'] ?? null, $documents[$operation->dossier_id] ?? []);
         if ($geocode) {
-            $point = app(DossierMapPreview::class)->coordinates($actor, $operation->dossier)['coordinates'];
+            $point = app(DossierMapPreview::class)->coordinates($actor, $operation->dossier, forPlanning: true)['coordinates'];
             $result['latitude'] = $point['latitude'] ?? null;
             $result['longitude'] = $point['longitude'] ?? null;
         }

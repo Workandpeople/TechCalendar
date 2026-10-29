@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Account\FirstLoginPasswordController;
+use App\Http\Controllers\Account\ProfileController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminSettingController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerMailTemplateController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\PlannerAbsenceController;
 use App\Http\Controllers\Planner\PlannerAppointmentCancellationController;
 use App\Http\Controllers\Planner\PlannerAppointmentMailController;
 use App\Http\Controllers\Planner\PlannerBookingController;
@@ -77,11 +79,10 @@ Route::middleware('auth')->group(function (): void {
         return redirect()->route('tech.planning');
     })->name('dashboard');
 
-    Route::view('/profile', 'app.page', [
-        'section' => 'Compte',
-        'title' => 'Mon profil',
-        'description' => 'Page profil en cours de construction.',
-    ])->name('profile');
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+    Route::put('/profile', [ProfileController::class, 'update'])->middleware('throttle:20,1')->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
+    Route::put('/profile/notifications', [ProfileController::class, 'notifications'])->middleware('throttle:20,1')->name('profile.notifications');
     Route::post('/account/first-password', [FirstLoginPasswordController::class, 'update'])
         ->name('account.first-password.update');
 
@@ -163,6 +164,10 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/manager/appointments/coffrac/placed/refresh', [PlannerTrackingController::class, 'refreshPlacedCoffracAppointments'])->name('manager.appointments.coffrac.placed.refresh');
 
     Route::get('/planner/dashboard', PlannerDashboardController::class)->name('planner.dashboard');
+    Route::get('/planner/absences/technicians', [PlannerAbsenceController::class, 'technicians'])
+        ->middleware(EnsureCrmV2Enabled::class)->name('planner.absences.technicians');
+    Route::post('/planner/absences', [PlannerAbsenceController::class, 'store'])
+        ->middleware(EnsureCrmV2Enabled::class)->name('planner.absences.store');
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
     Route::get('/planner/appointments/modify', [PlannerBookingController::class, 'index'])->name('planner.appointments.modify');
     Route::get('/planner/book/crm-appointments', [PlannerBookingController::class, 'crmAppointments'])->name('planner.book.crm-appointments.index');

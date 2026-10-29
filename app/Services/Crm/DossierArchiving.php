@@ -13,6 +13,58 @@ use Illuminate\Validation\ValidationException;
 
 class DossierArchiving
 {
+    public const MAX_BATCH_SIZE = 100;
+
+    /** Only explicitly selected, still-problematic dossiers; never a filter-wide cleanup. */
+    public function batch(User $actor, array $selection, string $action, ?string $reason = null): int
+    {
+        Gate::forUser($actor)->authorize('manageArchiving', Dossier::class);
+        $ids = array_column($selection, 'id');
+        if ($selection === [] || count($selection) > self::MAX_BATCH_SIZE || count(array_unique($ids)) !== count($selection)
+            || ! in_array($action, ['cancel', 'delete'], true)) {
+            throw ValidationException::withMessages(['dossiers' => 'Sélectionne entre 1 et '.self::MAX_BATCH_SIZE.' dossiers distincts et une action valide.']);
+        }
+
+        return DB::transaction(function () use ($actor, $selection, $ids, $action, $reason): int {
+            // Stable lock order prevents two overlapping batches from locking in reverse order.
+            $dossiers = Dossier::query()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            if ($dossiers->count() !== count($selection)) {
+                throw ValidationException::withMessages(['dossiers' => 'Un dossier sélectionné est introuvable ou déjà supprimé. Actualise le tableau.']);
+            }
+            $versions = array_column($selection, 'version', 'id');
+            foreach ($dossiers as $dossier) {
+                Gate::forUser($actor)->authorize('delete', $dossier);
+                $this->assertVersion($dossier, (int) $versions[$dossier->id]);
+                $operations = $dossier->operations()->orderBy('id')->lockForUpdate()->get();
+                $problems = $operations->filter(fn ($operation) => DossierStatusCatalog::describe($operation->legacy_status)['key'] === 'problem');
+                if ($problems->isEmpty()) {
+                    throw ValidationException::withMessages(['dossiers' => 'Le dossier '.$dossier->reference.' n’est plus en problème RDV. Aucun lot partiel : actualise la sélection.']);
+                }
+                if ($action === 'delete') {
+                    if ($operations->contains(fn ($operation) => ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], ['problem', 'cancelled'], true))) {
+                        throw ValidationException::withMessages(['dossiers' => 'Le dossier '.$dossier->reference.' contient des prestations dans d’autres états. Utilise la suppression individuelle explicite après vérification de son historique. Aucun dossier du lot n’a été supprimé.']);
+                    }
+                    $this->delete($actor, $dossier, $dossier->version, $reason);
+
+                    continue;
+                }
+                $this->assertNoPendingDelivery($dossier);
+                $version = $dossier->version;
+                foreach ($problems as $operation) {
+                    app(DossierWorkflow::class)->changeStatus($actor, $dossier, $operation, ['version' => $version++, 'status' => 'cancelled']);
+                }
+                if (filled($reason)) {
+                    $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'dossier_cancelled',
+                        'body' => 'Prestations en problème RDV annulées en sélection groupée. Motif : '.trim($reason),
+                        'changed_fields' => ['action' => 'batch_cancel', 'operation_ids' => $problems->modelKeys(), 'reason' => trim($reason)],
+                        'client_visible' => false, 'delegataire_visible' => false]);
+                }
+            }
+
+            return $dossiers->count();
+        }, 3);
+    }
+
     /** For fresh imports only; preserve the raw source and all existing billing evidence. */
     public function classifyLegacyDeleted(): int
     {
@@ -29,16 +81,12 @@ class DossierArchiving
             $locked = Dossier::withTrashed()->lockForUpdate()->findOrFail($dossier->id);
             $this->assertVersion($locked, $version);
             Gate::forUser($actor)->authorize('delete', $locked);
-            if (CapceeDelivery::whereHas('report.operation', fn ($query) => $query->where('dossier_id', $locked->id))
-                ->whereIn('status', ['queued', 'processing', 'review'])->exists()
-                || DossierSms::where('dossier_id', $locked->id)->whereIn('status', ['queued', 'sending'])->exists()) {
-                throw ValidationException::withMessages(['dossier' => 'Un envoi est en cours ou à vérifier. Traite cet envoi avant de supprimer le dossier.']);
-            }
+            $this->assertNoPendingDelivery($locked);
             $locked->forceFill(['deleted_by' => $actor->id, 'deletion_source' => 'native', 'version' => $locked->version + 1])->save();
             $locked->delete();
             $locked->activities()->create(['author_id' => $actor->id, 'kind' => 'dossier_deleted',
                 'body' => 'Dossier supprimé. Données et facturation conservées.'.(filled($reason) ? ' Motif : '.trim($reason) : ''),
-                'changed_fields' => ['deleted' => true], 'client_visible' => false]);
+                'changed_fields' => ['deleted' => true], 'client_visible' => false, 'delegataire_visible' => false]);
         }, 3);
     }
 
@@ -76,5 +124,14 @@ class DossierArchiving
     private function assertVersion(Dossier $dossier, int $version): void
     {
         abort_if($dossier->version !== $version, 409, 'Ce dossier a changé. Actualise la fiche avant de réessayer.');
+    }
+
+    private function assertNoPendingDelivery(Dossier $dossier): void
+    {
+        if (CapceeDelivery::whereHas('report.operation', fn ($query) => $query->where('dossier_id', $dossier->id))
+            ->whereIn('status', ['queued', 'processing', 'review'])->exists()
+            || DossierSms::where('dossier_id', $dossier->id)->whereIn('status', ['queued', 'sending'])->exists()) {
+            throw ValidationException::withMessages(['dossier' => 'Un envoi est en cours ou à vérifier. Traite cet envoi avant de supprimer ou annuler le dossier.']);
+        }
     }
 }

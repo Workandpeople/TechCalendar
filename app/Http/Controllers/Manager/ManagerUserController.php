@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Rules\AvailableUserEmail;
+use App\Services\Crm\AppointmentDateTime;
 use App\Services\PasswordResetLinkSender;
 use App\Services\UserAccountConflict;
 use App\Services\UserBillingPermission;
@@ -16,6 +17,8 @@ use App\Services\UserNameNormalizer;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
@@ -243,7 +246,7 @@ class ManagerUserController extends Controller
     {
         abort_unless($this->canManageUsers($request), 403);
 
-        $technician = User::query()->internal()
+        User::query()->internal()
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
@@ -255,30 +258,39 @@ class ManagerUserController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $startsAt = Carbon::parse($payload['starts_on'])->startOfDay();
-        $endsAt = Carbon::parse($payload['ends_on'])->endOfDay();
+        $startsAt = Carbon::parse($payload['starts_on'], AppointmentDateTime::TIMEZONE)->setTimezone(AppointmentDateTime::TIMEZONE)->startOfDay();
+        $endsAt = Carbon::parse($payload['ends_on'], AppointmentDateTime::TIMEZONE)->setTimezone(AppointmentDateTime::TIMEZONE)->endOfDay();
 
-        $overlapExists = TechnicianAbsence::query()
-            ->where('technician_id', $technician->id)
-            ->where('starts_at', '<=', $endsAt)
-            ->where('ends_at', '>=', $startsAt)
-            ->exists();
+        return DB::transaction(function () use ($request, $user, $payload, $startsAt, $endsAt): RedirectResponse {
+            // Same technician-row lock as v2 booking and bulk absences, before checking overlaps.
+            $technician = User::query()->internal()->where('role', 2)->where('admin', false)
+                ->orderBy('id')->lockForUpdate()->findOrFail($user);
+            $actor = User::query()->find($request->user()->id);
+            abort_unless($actor, 403);
+            Gate::forUser($actor)->authorize('createForManager', TechnicianAbsence::class);
 
-        if ($overlapExists) {
-            return back()->withErrors([
-                'absence' => 'Une absence existe déjà sur cette période pour ce technicien.',
-            ])->withInput();
-        }
+            $overlapExists = TechnicianAbsence::query()
+                ->where('technician_id', $technician->id)
+                ->where('starts_at', '<=', $endsAt)
+                ->where('ends_at', '>=', $startsAt)
+                ->exists();
 
-        TechnicianAbsence::query()->create([
-            'technician_id' => $technician->id,
-            'created_by' => $request->user()->id,
-            'starts_at' => $startsAt,
-            'ends_at' => $endsAt,
-            'reason' => filled($payload['reason'] ?? null) ? trim((string) $payload['reason']) : null,
-        ]);
+            if ($overlapExists) {
+                return back()->withErrors([
+                    'absence' => 'Une absence existe déjà sur cette période pour ce technicien.',
+                ])->withInput();
+            }
 
-        return redirect()->route('manager.users', $request->query())->with('status', 'Absence ajoutée.');
+            TechnicianAbsence::query()->create([
+                'technician_id' => $technician->id,
+                'created_by' => $actor->id,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                'reason' => filled($payload['reason'] ?? null) ? trim((string) $payload['reason']) : null,
+            ]);
+
+            return redirect()->route('manager.users', $request->query())->with('status', 'Absence ajoutée.');
+        }, 3);
     }
 
     public function destroyAbsence(Request $request, int $user, TechnicianAbsence $absence): RedirectResponse

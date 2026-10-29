@@ -178,7 +178,7 @@ it('replaces a known appointment with missing gps using the dossier address inst
         'starts_at' => now()->addDay(), 'ends_at' => now()->addDay()->addHour(), 'duration_minutes' => 60,
         'latitude' => null, 'longitude' => null, 'status' => Appointment::STATUS_SCHEDULED]);
     $this->app->instance(MapboxAddressGeocoder::class, Mockery::mock(MapboxAddressGeocoder::class, function ($mock) {
-        $mock->shouldReceive('geocode')->once()->with('Rue Test 75001 Paris')->andReturn(['latitude' => 48.85, 'longitude' => 2.35]);
+        $mock->shouldReceive('geocode')->once()->with('Rue Test, 75001 Paris')->andReturn(['latitude' => 48.85, 'longitude' => 2.35]);
     }));
     $this->postJson(route('planner.book.analyze'), ['replace_appointment_id' => $appointment->id])->assertOk()
         ->assertJsonPath('crm_appointment.replace_appointment_id', $appointment->id)

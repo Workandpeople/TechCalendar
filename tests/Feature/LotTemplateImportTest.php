@@ -125,6 +125,8 @@ it('previews and confirms a template with deduplicated inspection geocoding and 
     $path = $file->store('lot-import-previews', 'local');
     Http::fake(['api.mapbox.com/*' => Http::response(['features' => [[
         'id' => 'address.1', 'center' => [2.5, 49.5], 'place_name' => '12 RUE DE LARGILIERE 60110 ESCHES', 'relevance' => 1,
+        'place_type' => ['address'], 'text' => 'RUE DE LARGILIERE', 'address' => '12',
+        'context' => [['id' => 'postcode.1', 'text' => '60110'], ['id' => 'place.1', 'text' => 'Esches']],
     ]]])]);
     $preview = LotImportPreview::create([
         'uuid' => (string) Str::uuid(), 'status' => LotImportPreview::STATUS_PENDING,
@@ -170,7 +172,11 @@ it('keeps all dossiers when Mapbox cannot resolve their address', function () {
 });
 
 it('does not erase invalid template fields warnings when only the address is edited', function () {
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [['center' => [2.5, 49.5]]]])]);
+    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [[
+        'id' => 'address.1', 'center' => [2.5, 49.5], 'relevance' => 1, 'place_type' => ['address'],
+        'text' => 'RUE DE LARGILIERE', 'address' => '12',
+        'context' => [['id' => 'postcode.1', 'text' => '60110'], ['id' => 'place.1', 'text' => 'Esches']],
+    ]]])]);
     $mapped = app(LotTemplateMapper::class)->normalize(app(LotSpreadsheetExtractor::class)->extract(
         LotTemplateFile::upload([LotTemplateFile::row([7 => 'bad-email', 12 => '123'])]),
     ))['appointments'][0];

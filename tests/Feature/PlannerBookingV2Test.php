@@ -10,6 +10,7 @@ use App\Models\ExternalDelegataire;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierBooking;
+use App\Services\Crm\DossierLocation;
 use App\Services\Crm\DossierRegistry;
 use App\Services\MapboxAddressGeocoder;
 use App\Services\SidebarNotifications;
@@ -106,6 +107,7 @@ function nativeBookingFixture(string $status = 'PRISE DE RDV'): array
     $service = Service::create(['type' => 'COFFRAC', 'name' => 'Prestation native', 'average_duration_minutes' => 60]);
     $technician->services()->attach($service);
     $dossier = Dossier::create(['reference' => 'BOOKING-TEST', 'first_name' => 'Camille', 'last_name' => 'TEST', 'phone' => '0600000000', 'address' => '1 rue du Test', 'city' => 'Paris', 'postal_code' => '75001', 'source' => 'coffrac']);
+    $dossier->forceFill(['inspection_geocode' => DossierLocation::metadata($dossier, ['latitude' => 48.85, 'longitude' => 2.35])])->save();
     $operation = $dossier->operations()->create(['service_id' => $service->id]);
     $operation->forceFill(['legacy_status' => $status])->save();
     DB::table('legacy_records')->insert(['source_table' => 'dossiers', 'source_id' => 123, 'dossier_id' => $dossier->id,
@@ -260,6 +262,7 @@ it('uses the same pending dossier count in categories the sidebar and the bookin
 
 it('keeps a pending dossier without coordinates visible and geocodes only the selected dossier', function () {
     extract(nativeBookingFixture());
+    $dossier->forceFill(['inspection_geocode' => null])->save();
     DB::table('legacy_records')->delete();
     $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->once()->with('1 rue du Test, 75001 Paris')->andReturn(['latitude' => 48.85, 'longitude' => 2.35]);
     $this->actingAs($actor)->getJson(route('planner.book.crm-appointments.index'))->assertJsonCount(1, 'appointments')->assertJsonPath('appointments.0.latitude', null);

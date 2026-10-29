@@ -162,6 +162,7 @@
                             </button>
 
                             <div id="header-user-menu-dropdown" role="menu" class="header-user-menu-dropdown absolute right-0 top-full z-20 mt-2 w-40 rounded-xl border border-[color:var(--gc-border)] bg-white p-1 shadow-md">
+                                <a href="{{ route('profile') }}" role="menuitem" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]"><x-nav-icon name="users" /> Mon profil</a>
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
                                     <button type="submit" role="menuitem" class="w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--gc-text)] hover:bg-[color:var(--gc-accent-soft)]">Déconnexion</button>

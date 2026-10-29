@@ -15,6 +15,7 @@ use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
+use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\AppointmentEditor;
 use App\Services\Crm\AppointmentProblemReport;
 use Carbon\Carbon;
@@ -190,8 +191,8 @@ class PlannerTrackingController extends Controller
         $appointmentsQuery = $this->appointmentDetailsQuery()
             ->when(config('crm.v2_enabled'), fn ($query) => $query->onPlanning())
             ->whereIn('technician_id', $technicianIds)
-            ->where('starts_at', '<', Carbon::parse($payload['end']))
-            ->where('ends_at', '>', Carbon::parse($payload['start']))
+            ->where('starts_at', '<', AppointmentDateTime::parse($payload['end'], 'end'))
+            ->where('ends_at', '>', AppointmentDateTime::parse($payload['start'], 'start'))
             ->when(! empty($payload['service_id']), fn ($query) => $query->where('service_id', (int) $payload['service_id']));
 
         match ($payload['appointment_status'] ?? 'all') {
@@ -349,8 +350,8 @@ class PlannerTrackingController extends Controller
             return [
                 'id' => $appointment->id,
                 'title' => sprintf('%s | %s', $technicianName, $appointment->customer_first_name.' '.$appointment->customer_last_name),
-                'start' => $appointment->starts_at?->toIso8601String(),
-                'end' => $appointment->ends_at?->toIso8601String(),
+                'start' => AppointmentDateTime::formatStored($appointment->starts_at),
+                'end' => AppointmentDateTime::formatStored($appointment->ends_at),
                 'extendedProps' => [
                     'technician_id' => $appointment->technician_id,
                     'technician_name' => $technicianName,
@@ -462,8 +463,9 @@ class PlannerTrackingController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
-        $startsAt = Carbon::parse($payload['starts_at']);
+        $startsAt = AppointmentDateTime::parse($payload['starts_at']);
         $endsAt = $startsAt->copy()->addMinutes((int) $payload['duration_minutes']);
+        AppointmentDateTime::assertStorableRange($startsAt, $endsAt);
 
         $hasOverlappingAppointment = Appointment::query()
             ->where('technician_id', $appointment->technician_id)
@@ -511,8 +513,8 @@ class PlannerTrackingController extends Controller
             'message' => 'Rendez-vous mis à jour.',
             'appointment' => [
                 'id' => $appointment->id,
-                'start' => $appointment->starts_at?->toIso8601String(),
-                'end' => $appointment->ends_at?->toIso8601String(),
+                'start' => AppointmentDateTime::formatStored($appointment->starts_at),
+                'end' => AppointmentDateTime::formatStored($appointment->ends_at),
                 'duration_minutes' => $appointment->duration_minutes,
                 'address' => $appointment->address,
                 'latitude' => $appointment->latitude,

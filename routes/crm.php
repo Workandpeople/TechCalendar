@@ -47,6 +47,7 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::post('/dossiers/actions-groupees', [DossierArchivingController::class, 'batch'])->name('dossiers.batch');
         Route::patch('/dossiers/{dossier}/prestations/{operation}/fiche', DossierServiceController::class)->name('dossiers.operations.service');
         Route::patch('/dossiers/{dossier}/capcee/automatique/{submission}', [AutomaticCapceeController::class, 'update'])->name('capcee.automatic.update');
         Route::delete('/dossiers/{dossier}', [DossierArchivingController::class, 'destroy'])->name('dossiers.destroy');

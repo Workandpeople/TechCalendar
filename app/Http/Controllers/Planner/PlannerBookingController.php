@@ -18,10 +18,12 @@ use App\Services\AppointmentMailTemplateData;
 use App\Services\AppointmentTechnicianMailService;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
+use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\AppointmentProblemReport;
 use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
+use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\NativeAppointmentPlacement;
 use App\Services\ExternalAppointmentSourceRegistry;
 use App\Services\GlobalPlus\GlobalPlusApiException;
@@ -157,8 +159,8 @@ class PlannerBookingController extends Controller
             $drivingRoutes
         );
         $technicianIds = $technicians->pluck('id');
-        $calendarStart = now()->startOfWeek();
-        $calendarEnd = now()->copy()->addWeeks(8)->endOfWeek();
+        $calendarStart = now(AppointmentDateTime::TIMEZONE)->startOfWeek();
+        $calendarEnd = now(AppointmentDateTime::TIMEZONE)->addWeeks(8)->endOfWeek();
         $preferredStartsAt = $this->preferredStartsAt($crmAppointment);
 
         if ($preferredStartsAt) {
@@ -412,8 +414,8 @@ class PlannerBookingController extends Controller
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
-        $windowStart = Carbon::parse($payload['start']);
-        $windowEnd = Carbon::parse($payload['end']);
+        $windowStart = AppointmentDateTime::parse($payload['start'], 'start');
+        $windowEnd = AppointmentDateTime::parse($payload['end'], 'end');
         $technicians = isset($payload['technician_ids'])
             ? $this->techniciansByIdsForAppointment($payload['technician_ids'], $crmAppointment, $drivingRoutes)
             : $this->eligibleTechnicians($crmAppointment, $drivingRoutes);
@@ -487,9 +489,10 @@ class PlannerBookingController extends Controller
             ]);
         }
 
-        $startsAt = Carbon::parse($payload['starts_at']);
+        $startsAt = AppointmentDateTime::parse($payload['starts_at']);
         $durationMinutes = (int) $payload['duration_minutes'];
         $endsAt = (clone $startsAt)->addMinutes($durationMinutes);
+        AppointmentDateTime::assertStorableRange($startsAt, $endsAt);
         if (! config('crm.v2_enabled')) {
             $absence = $this->absenceOverlapForTechnician((int) $payload['technician_id'], $startsAt, $endsAt);
 
@@ -673,6 +676,12 @@ class PlannerBookingController extends Controller
         return response()->json([
             'message' => $replacementAppointment ? 'Rendez-vous replacé.' : 'Rendez-vous créé.',
             'appointment_id' => $appointment->id,
+            'appointment' => [
+                'id' => $appointment->id,
+                'start' => AppointmentDateTime::formatStored($appointment->starts_at),
+                'end' => AppointmentDateTime::formatStored($appointment->ends_at),
+                'duration_minutes' => $appointment->duration_minutes,
+            ],
             'forced_placement' => (bool) ($payload['force_placement'] ?? false),
             'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment),
             'global_plus' => $globalPlus,
@@ -827,7 +836,7 @@ class PlannerBookingController extends Controller
      */
     private function eligibleTechnicians(array $crmAppointment, MapboxDrivingRouteService $drivingRoutes): Collection
     {
-        $candidateTechnicians = User::query()
+        $candidateTechnicians = User::query()->internal()
             ->with(['departments:code,name'])
             ->where('role', 2)
             ->where('admin', false)
@@ -837,7 +846,7 @@ class PlannerBookingController extends Controller
             ->when($crmAppointment['service'], function ($query) use ($crmAppointment): void {
                 $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $crmAppointment['service']['id']));
             })
-            ->get();
+            ->get()->filter(fn (User $technician): bool => DossierLocation::point($technician->latitude, $technician->longitude) !== null);
 
         $techniciansByDistance = $candidateTechnicians
             ->map(function (User $technician) use ($crmAppointment): User {
@@ -859,11 +868,8 @@ class PlannerBookingController extends Controller
         $strictTechnicians = $techniciansByDistance
             ->filter(fn (User $technician): bool => (bool) $technician->getAttribute('covers_requested_department'))
             ->values();
-        $routingPool = $strictTechnicians->count() >= 3
-            ? $strictTechnicians
-            : $strictTechnicians->merge(
-                $techniciansByDistance->whereNotIn('id', $strictTechnicians->pluck('id'))->take(3 - $strictTechnicians->count())
-            );
+        // Keep sector coverage, but never hide the nearest qualified technicians behind it.
+        $routingPool = $strictTechnicians->merge($techniciansByDistance->take(3))->unique('id')->values();
 
         return $routingPool
             ->map(function (User $technician) use ($crmAppointment, $drivingRoutes): User {
@@ -1718,11 +1724,10 @@ class PlannerBookingController extends Controller
             $appointment->loadMissing('dossierOperation.dossier');
             if ($dossier = $appointment->dossierOperation?->dossier) {
                 Gate::authorize('update', $dossier);
-                if ($point = DossierLocation::coordinates($dossier)) {
-                    $appointment->address = DossierLocation::address($dossier);
-                    $appointment->latitude = $point['latitude'];
-                    $appointment->longitude = $point['longitude'];
-                }
+                $point = app(DossierMapPreview::class)->coordinates(auth()->user(), $dossier, forPlanning: true)['coordinates'];
+                $appointment->address = DossierLocation::address($dossier);
+                $appointment->latitude = $point['latitude'] ?? null;
+                $appointment->longitude = $point['longitude'] ?? null;
                 if (blank($appointment->address)) {
                     $appointment->address = trim($dossier->address.' '.$dossier->postal_code.' '.$dossier->city);
                 }
@@ -1731,7 +1736,8 @@ class PlannerBookingController extends Controller
         if (blank($appointment->address)) {
             throw ValidationException::withMessages(['replace_appointment_id' => 'Adresse absente du RDV. Complétez les coordonnées du dossier avant de le replacer.']);
         }
-        if ($appointment->latitude === null || $appointment->longitude === null) {
+        if (($appointment->latitude === null || $appointment->longitude === null)
+            && (! config('crm.v2_enabled') || ! $appointment->dossierOperation?->dossier)) {
             $point = app(MapboxAddressGeocoder::class)->geocode($appointment->address);
             $appointment->latitude = $point['latitude'] ?? null;
             $appointment->longitude = $point['longitude'] ?? null;
@@ -2108,8 +2114,8 @@ class PlannerBookingController extends Controller
             return [
                 'id' => $appointment->id,
                 'title' => $appointment->technician?->full_name_with_departments.' | '.$serviceLabel,
-                'start' => $appointment->starts_at?->toIso8601String(),
-                'end' => $appointment->ends_at?->toIso8601String(),
+                'start' => AppointmentDateTime::formatStored($appointment->starts_at),
+                'end' => AppointmentDateTime::formatStored($appointment->ends_at),
                 'backgroundColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#fff7ed' : '#9ccfe3',
                 'borderColor' => $isReplacementTarget ? '#faff00' : ($appointment->status === Appointment::STATUS_PROBLEM ? '#f97316' : '#31424c'),
                 'textColor' => $appointment->status === Appointment::STATUS_PROBLEM ? '#9a3412' : '#31424c',
@@ -2200,9 +2206,9 @@ class PlannerBookingController extends Controller
             );
         }
 
-        $startDate = $windowStart?->copy()->startOfDay() ?? now()->copy()->startOfDay();
+        $startDate = $windowStart?->copy()->startOfDay() ?? now(AppointmentDateTime::TIMEZONE)->startOfDay();
         $endDate = $windowEnd?->copy() ?? $startDate->copy()->addWeeks(2);
-        $today = now()->copy()->startOfDay();
+        $today = now(AppointmentDateTime::TIMEZONE)->startOfDay();
 
         if ($startDate->lt($today)) {
             $startDate = $today;
@@ -2257,7 +2263,7 @@ class PlannerBookingController extends Controller
             return null;
         }
 
-        return Carbon::parse($crmAppointment['preferred_starts_at']);
+        return AppointmentDateTime::parse($crmAppointment['preferred_starts_at']);
     }
 
     /**
@@ -2315,15 +2321,15 @@ class PlannerBookingController extends Controller
         if ($dayAppointments->contains(fn (Appointment $row): bool => $row->latitude === null || $row->longitude === null)) {
             return []; // Cannot promise travel feasibility for an unknown location.
         }
-        $dayStart = Carbon::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
-        $dayEnd = Carbon::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
+        $dayStart = AppointmentDateTime::parse($date->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
+        $dayEnd = AppointmentDateTime::parse($date->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
 
         if ($this->technicianHasLoadedAbsenceOverlap($technician, $dayStart, $dayEnd)) {
             return [];
         }
 
         if ($date->isSameDay(now()) && $dayStart->lt(now())) {
-            $dayStart = now()->copy()->addMinutes(15);
+            $dayStart = now(AppointmentDateTime::TIMEZONE)->addMinutes(15);
         }
 
         if ($dayStart->gte($dayEnd)) {
@@ -2683,8 +2689,8 @@ class PlannerBookingController extends Controller
         if ($dayAppointments->contains(fn (Appointment $row): bool => $row->latitude === null || $row->longitude === null)) {
             return null;
         }
-        $dayStart = Carbon::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
-        $dayEnd = Carbon::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
+        $dayStart = AppointmentDateTime::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_start_time ?: '08:00'));
+        $dayEnd = AppointmentDateTime::parse($preferredStartsAt->format('Y-m-d').' '.($technician->day_end_time ?: '17:00'));
         $startsAt = $this->roundUpToNextHalfHour($preferredStartsAt);
         $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
 
@@ -2840,8 +2846,8 @@ class PlannerBookingController extends Controller
             return true;
         }
 
-        $breakWindowStart = Carbon::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_START);
-        $breakWindowEnd = Carbon::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_END);
+        $breakWindowStart = AppointmentDateTime::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_START);
+        $breakWindowEnd = AppointmentDateTime::parse($dayStart->format('Y-m-d').' '.self::BREAK_WINDOW_END);
 
         if ($breakWindowEnd->lte($dayStart) || $breakWindowStart->gte($dayEnd)) {
             return true;

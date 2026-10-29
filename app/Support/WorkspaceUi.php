@@ -10,6 +10,7 @@ final class WorkspaceUi
     public static function forRoute(?string $route): array
     {
         $area = match (true) {
+            Str::is(['profile', 'profile.*'], $route ?? '') => 'profile',
             Str::is('client.lots*', $route ?? '') => 'client-lots',
             Str::is('client.*', $route ?? '') => 'client-dossiers',
             Str::is('v2.dossiers.*', $route ?? '') => 'dossiers',
@@ -25,6 +26,11 @@ final class WorkspaceUi
         };
 
         [$label, $tone, $icon, $steps] = match ($area) {
+            'profile' => ['Mon profil', 'cyan', 'users', [
+                ['Mes informations', 'Retrouvez votre identité, votre adresse de connexion et votre organisation.'],
+                ['Sécuriser mon compte', 'Modifiez votre mot de passe avec votre mot de passe actuel.'],
+                ['Mes notifications', 'Choisissez les événements pour lesquels recevoir un email, uniquement sur les dossiers auxquels vous avez accès.'],
+            ]],
             'dossiers' => ['Les dossiers', 'blue', 'dossiers', [
                 ['Retrouver', 'Choisissez un état ou recherchez un client, une référence ou une adresse.'],
                 ['Consulter', 'Ouvrez le dossier pour retrouver ses prestations, rendez-vous et documents.'],

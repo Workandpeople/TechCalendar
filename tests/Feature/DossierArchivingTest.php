@@ -42,7 +42,7 @@ it('soft deletes without losing billing documents raw states or history and rest
         'marked_at' => now(), 'marked_by' => $this->actor->id, 'source' => 'native', 'evidence' => []]);
     $document = $this->dossier->documents()->create(['name' => 'Conserver', 'path' => 'retained.pdf', 'mime_type' => 'application/pdf', 'size' => 5, 'client_visible' => true]);
     Storage::disk('local')->put('retained.pdf', '%PDF-');
-    $this->delete(route('v2.dossiers.destroy', $this->dossier), ['version' => 1, 'reason' => 'Doublon signalé'])
+    $this->delete(route('v2.dossiers.destroy', $this->dossier), ['version' => 1, 'confirmed' => true, 'reason' => 'Doublon signalé'])
         ->assertRedirect(route('v2.dossiers.index', ['status' => 'unknown']));
     expect(Dossier::count())->toBe(0)->and(Dossier::withTrashed()->count())->toBe(1)
         ->and($this->dossier->refresh()->trashed())->toBeTrue()->and($this->dossier->version)->toBe(2)
@@ -84,7 +84,7 @@ it('denies delete and restore to planning technicians and external users', funct
 })->with([1, 2, 3]);
 
 it('rejects stale deletion and restoration without duplicate history', function () {
-    $this->deleteJson(route('v2.dossiers.destroy', $this->dossier), ['version' => 99])->assertConflict();
+    $this->deleteJson(route('v2.dossiers.destroy', $this->dossier), ['version' => 99, 'confirmed' => true])->assertConflict();
     expect($this->dossier->activities()->count())->toBe(0);
     app(DossierArchiving::class)->delete($this->actor, $this->dossier, 1, null);
     $this->postJson(route('v2.dossiers.restore', $this->dossier), ['version' => 1])->assertConflict();
