@@ -90,6 +90,8 @@ assert($summary['production_http_tested']===true && $summary['validated_links']=
 assert($summary['connector_enabled']===false && $summary['can_affect_planning']===false && $summary['business_database_writes']===false);
 $report=json_decode(file_get_contents($reports[0].'/observation.json'),true,32,JSON_THROW_ON_ERROR);
 assert(count($report['candidates'])===2 && array_column($report['candidates'],'cofrac_user_id')===[101,102]);
+assert($report['http_requests']===true && $report['source_database_read']===true && isset($report['mapping_revalidated_at_utc']));
+assert(array_unique(array_column($report['candidates'],'mapping_basis'))===['operator_approved_and_freshly_revalidated']);
 $config=json_decode(file_get_contents('/var/lib/cofrac-mymar-gateway/private/config.json'),true,32,JSON_THROW_ON_ERROR);
 foreach(new DirectoryIterator($reports[0]) as $file){
  if($file->isDot())continue;

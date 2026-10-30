@@ -207,7 +207,7 @@ try {
         exit;
     }
     if ($phase === '--observe') {
-        State::freshMap($mapPath, $map, $run);
+        $fresh = State::freshMap($mapPath, $map, $run);
         $now = new DateTimeImmutable;
         $from = $now->setTimezone(new DateTimeZone('Europe/Paris'))->setTime(0, 0);
         $window = new MymarReadWindow($from->format(DATE_ATOM), $from->modify('+7 days')->format(DATE_ATOM), array_column($map['bindings'], 'source_technician_id'));
@@ -255,7 +255,7 @@ try {
         if ($status !== 200) {
             throw new RuntimeException('mymar.private_http_source_failed');
         }
-        $report = (new MymarObservation)->inspect($snapshot, new MymarObservationPolicy, $now,
+        $report = (new MymarObservation)->inspect($snapshot, new MymarObservationPolicy, new DateTimeImmutable,
             array_column($map['bindings'], 'cofrac_user_id', 'source_technician_id'));
         if (! $report['snapshot_complete'] || $report['scope_technician_ids'] !== $window->technicianIds
             || $report['window_start'] !== $window->from->format(DATE_ATOM) || $report['window_end'] !== $window->to->format(DATE_ATOM)
@@ -265,6 +265,13 @@ try {
         State::assertProof($validated['proof']);
         $report['mode'] = 'isolated_apache_fpm_http_observation';
         $report['production_http_tested'] = true;
+        $report['http_requests'] = true;
+        $report['source_database_read'] = true;
+        $report['mapping_revalidated_at_utc'] = $fresh['validated_at_utc'];
+        foreach ($report['candidates'] as &$candidate) {
+            $candidate['mapping_basis'] = 'operator_approved_and_freshly_revalidated';
+        }
+        unset($candidate);
         $report['connector_enabled'] = false;
         $report['can_affect_planning'] = false;
         State::write($run.'/observation.json', $report);
