@@ -1,0 +1,442 @@
+# Preparation de l'integration MYMAR
+
+Etat au 30 octobre 2026 : aucun connecteur actif, aucune ecriture MYMAR,
+aucune reprise du CRM MYMAR dans Cofrac. Le premier audit du 29 octobre a
+identifie les tables utiles et les risques des endpoints existants.
+
+## Deuxieme collecte
+
+Le paquet autonome `tools/deploy/mymar` prepare une collecte statique et SQL
+en lecture seule, a lancer explicitement par l'operateur. Il ne s'installe pas
+dans les applications et ne charge aucun de leurs fichiers PHP.
+
+Les schemas sont fixes : MYMAR et cofrac2production sur le socket MySQL local.
+Le collecteur verifie les declarations de connexion, les caches litteraux
+eventuels, les tables InnoDB, les colonnes attendues et des limites de volume.
+Une configuration sans cache reste une declaration a confirmer, pas une preuve
+de la configuration effective des processus MYMAR.
+
+La collecte contient les references de statuts/roles, des statistiques de RDV
+groupees et une revue des correspondances de techniciens. Les emails ne sortent
+pas de MySQL : seules les concordances sont exportees. Aucun mot de passe,
+contact beneficiaire, adresse ou document n'est collecte. Les requetes et les
+erreurs SQL restent root-privees. Le rapport final reste prive et provisoire.
+
+Les SELECT sont bornes a 1500 ms, chaque session a 20 s, avec transactions
+READ ONLY. Les limites ne rendent pas la lecture gratuite : aucune collecte
+en boucle ni synchronisation recurrente n'est installee. Le compte de maintenance
+est reserve a cet audit ponctuel ; il ne sera pas utilise par le connecteur.
+
+### Resultat du 30 octobre a 09:48 UTC
+
+Rapport local verifie par SHA-256 : collecte statique complete sur les 11
+fichiers cibles, fichiers sources inchanges. La partie SQL n'a pas ete lancee :
+la configuration en cache MYMAR n'est pas decodable par le parseur litteral.
+Ce refus ne demontre ni une panne MYMAR ni une erreur de sa configuration.
+La declaration et le cache de connexion Cofrac sont compatibles avec la cible.
+
+Les routes API en cache confirment le middleware `api` seul pour les anciennes
+routes de planning et les mutateurs ; `/api/user` porte `auth:sanctum`.
+Les vhosts MYMAR collectes ont `Require all granted`. Ce constat statique
+ne prouve pas l'exposition effective ni l'absence de toute autre protection,
+mais interdit de reutiliser ces routes comme interface privee authentifiee.
+Aucune route n'a ete appelee ou testee.
+
+Les appels du code confirment `status_id IN (3)` et `is_old = 0` dans les
+anciennes lectures API ; le role recherche est `2` / `Technicien Terrain`.
+Le cron utilise les statuts `2` et `15`, puis attribue `1`. Les libelles des
+statuts et la couverture des occupations restent a verifier, pas a deviner.
+Les exports planning appellent `addHour()` et dedupliquent par `dossier_id`.
+Le fichier source `config/app.php` contient `timezone => UTC` ; cela ne prouve
+pas encore le fuseau effectif en cache ni celui des dates stockees.
+
+La prochaine collecte `tools/deploy/mymar/cache-diagnostic` ne lit que le cache
+MYMAR comme du texte. Elle exporte taille, ligne et types de tokens du refus,
+jamais ses valeurs ou extraits. Aucun SQL et aucun assouplissement du parseur.
+Elle ne contient aucun correctif/deploiement MYMAR ou Cofrac.
+
+### Diagnostic du cache du 30 octobre a 10:03 UTC
+
+Le cache est un fichier regulier stable de 29 737 octets. Le parseur strict
+refuse la ligne 692 sur une expression `T_NAME_FULLY_QUALIFIED :: T_STRING (`
+suivie d'un tableau. Ce motif est compatible avec un objet exporte ; le nom
+de la classe et de la methode n'ont pas ete collectes, donc ne sont pas deduits
+du diagnostic. Aucun SQL n'a ete execute pendant cette verification.
+
+Le collecteur peut desormais reconnaitre exclusivement la forme
+`\\Classe::__set_state(tableau litteral)` et la remplacer par un marqueur
+opaque interne, sans charger la classe ni appeler sa methode. Les etats de
+ces objets sont jetes, pas deserialises ou exportes. Les fonctions, fabriques
+statiques autres que `__set_state`, constructeurs et arguments non litteraux
+restent refuses. Le decodage des routes reste strictement litteral.
+
+Un objet dans `database` ou dans `app.timezone` interdit toujours le SQL.
+Les objets ailleurs peuvent etre ignores et sont comptes dans le rapport.
+Une compatibilite statique n'est pas une preuve du comportement runtime des
+objets ou de la configuration des processus MYMAR. Le connecteur reste inactif.
+
+### Collecte du 30 octobre a 10:13 UTC
+
+Le cache MYMAR est maintenant lu statiquement : un objet hors configuration
+SQL/fuseau a ete ignore, les declarations de connexion correspondent aux deux
+schemas attendus. Le cache indique UTC pour MYMAR et Europe/Paris pour Cofrac.
+Cette difference ne suffit pas a conclure sur le fuseau des dates stockees.
+
+La collecte retourne `sql_eligible=true`, mais `sql_complete=false` ; le resume
+initial ne distingue pas erreur SQL, validation de metadonnees ou timeout.
+Aucun resultat metier n'a ete publie et les fichiers sources sont inchanges.
+Il serait incorrect d'assouplir un controle ou de relancer la collecte sans
+examiner les diagnostics deja produits.
+
+Le paquet `tools/deploy/mymar/sql-diagnostic` retrouve uniquement ce run termine
+par l'empreinte exacte du rapport source (fournie dans le paquet operateur).
+Il relit ses fichiers prives, sans SQL ni lecture des applications, et publie
+les codes SQL/SQLSTATE, l'etape atteinte et les ecarts de schema. Aucun message
+brut, valeur de configuration ou nom de compte ne sort du diagnostic.
+Les codes de sortie n'etaient pas traces : leur absence n'est pas une reussite.
+
+### Diagnostic SQL du 30 octobre a 10:26 UTC
+
+Le schema et les metadonnees passent. MySQL `8.0.46` interrompt la requete
+techniciens (ligne 14 de l'ancien `data.sql`) avec `3024 / HY000` : limite
+d'execution de 1500 ms atteinte. Les lectures precedentes ont termine, mais
+le resultat partiel n'a pas ete publie comme audit complet.
+
+La requete utilisait `WHERE id IN (SELECT ... UNION ...)` et un `COUNT` correle
+par utilisateur. Le plan local confirme des sous-requetes/UNION dependants.
+Le collecteur calcule maintenant les IDs candidats, doublons historiques et
+cles email dans des ensembles dedupliques, puis fait les jointures. Aucune
+ecriture, aucun index, aucun changement de serveur ni hausse du timeout.
+
+Le collecteur trace desormais les codes de sortie par etape et les codes
+MySQL/SQLSTATE dans `summary.json`, sans message brut ni valeur personnelle.
+Un resultat interrompu n'est jamais promu en audit complet ou en liaison active.
+
+Validation locale sur MySQL 8.0.46, conteneur sans reseau/ports/montages hote :
+256 comptes MYMAR, 293 V2, 5063 dossiers, 8358 RDV synthetiques. Resultats
+identiques a la requete precedente dans les populations dense (255 candidats)
+et clairsemee (21 candidats). Aucun `DEPENDENT` dans le plan optimise, limite
+1500 ms conservee et checksums des tables identiques avant/apres les lectures.
+Le test d'echec 3024 confirme que le resume contient le code et l'etape, sans
+erreur brute et sans publication du resultat partiel. Ces mesures locales
+ne sont pas une garantie de temps d'execution sur le serveur de production.
+
+## Conditions avant implementation
+
+### Audit complet du 30 octobre a 11:07 UTC
+
+Toutes les etapes SQL passent avec la limite de 1500 ms : metadonnees,
+validation, donnees et EXPLAIN. Les quatre empreintes des fichiers du rapport
+ont ete verifiees. Les 11 fichiers sources correspondent aussi a ceux du
+premier audit du 29 octobre ; les conclusions statiques restent applicables.
+Aucun compte, mot de passe, application, configuration ou service modifie.
+
+Le comptage reel donne 12 254 RDV, 287 comptes MYMAR, 293 comptes Cofrac,
+31 statuts et 7 roles. Les anciennes estimations InnoDB (8358 RDV, 256 comptes
+MYMAR) etaient des statistiques de table, pas des comptages exacts.
+
+Le rapport regroupe 68 personnes candidates : 43 profils Technicien Terrain
+(41 actifs MYMAR) et 25 profils Auditeur (24 actifs MYMAR). Ce ne sont donc
+pas 68 techniciens a relier automatiquement. Pour les seuls techniciens terrain,
+10 correspondances satisfont les criteres conservateurs : lien historique
+unique, email exact concordant et unique, meme cible, role technicien interne
+Cofrac, cible active et source active. Cela reste une proposition de lien,
+pas une validation metier ni une modification de compte.
+
+Des comptes terrain MYMAR restent actifs alors que leur cible Cofrac est
+desactivee ; les choix Cofrac sont conserves. Un ID historique est partage
+par deux profils source. Quatre profils ont un email different de celui de
+leur cible historique. Les cas particuliers et noms restent dans la revue
+privee locale, jamais dans le depot ou un paquet de deploiement.
+
+Points de couverture et de temps :
+
+- Le statut `3` est bien RDV ATTENTE VISITE, mais aucun RDV de ce snapshot
+  n'est rattache a un dossier actuellement dans cet etat.
+- Le statut `16` est RDV APT ATTENTE et contient 9 RDV `is_old=0`, dates
+  du 30 octobre au 10 novembre. Le filtre historique `status_id=3` les exclut.
+  Ils ont `mar_type=0` : ne pas confondre cette colonne avec la phase APT.
+- `is_old=1` represente 6489 lignes ; 5765 sont `is_old=0`. Plusieurs lignes
+  non anciennes peuvent appartenir au meme dossier : ne pas dedupliquer par
+  dossier ni assimiler `is_old=0` a un rendez-vous actif a lui seul.
+- Les 12 254 lignes ont une duree strictement positive, minimum 1 et maximum 2.
+  L'unite n'est pas prouvee par ce nombre : ne pas convertir implicitement
+  en minutes/heures ni remplacer toutes les durees par une heure.
+- Les caches indiquent UTC pour MYMAR et Europe/Paris pour Cofrac, MySQL
+  utilise SYSTEM/UTC. Un DATETIME ne contient pas de fuseau. Le code audite
+  assemble aussi directement date/heure recues : le stockage horaire reste
+  a comparer avec un rendez-vous connu avant d'appliquer une conversion.
+- Des groupes de RDV portent encore des dates futures alors que le dossier
+  est en DEPOT FINI. Une date future ou `is_old=0` ne suffit donc pas a prouver
+  une occupation. Les etats bloquants doivent etre explicitement valides.
+- Aucun dossier orphelin detecte dans les groupes ; 4 lignes n'ont pas de
+  technicien de dossier. Ne pas les attribuer a l'auditeur par defaut.
+- Le plan EXPLAIN des occupations parcourt la table RDV ; seul l'index
+  dossier apparait comme candidat. Aucun index n'a ete ajoute. Avant une
+  synchronisation recurrente, revoir le plan de la requete definitive et
+  le cout de la fenetre temporelle choisie.
+
+La prochaine etape est une integration en observation : lectures privees
+authentifiees et simulation du rapprochement/occupations, sans modifier les
+suggestions ni bloquer un placement tant que durees, horaires, etats et liens
+ne sont pas valides. Ne pas ouvrir les anciennes routes API pour cette etape.
+
+- Identifier les etats qui occupent le planning, y compris les visites initiales
+  et apres travaux, les annulations et les remplacements. Ne pas supposer que
+  `is_old=0` ou un statut unique couvre tout le besoin.
+- Confirmer le fuseau des datetime et l'unite de `duree`. Une duree absente ne
+  devient pas automatiquement 60 minutes. La politique metier reste a valider.
+- Revoir le lien `MYMAR.users.cofrac_id` vers l'ancien ID Cofrac puis
+  `coffrac_user_links.user_id`. Un email concordant unique est une preuve
+  complementaire, pas une autorisation de fusionner/creer des comptes.
+- Confirmer le confinement effectif et l'authentification. L'audit statique de
+  routes/vhosts ne prouve pas leur exposition reseau. Aucun mutateur ne sera sonde.
+
+### Calibration ciblee des horaires et durees
+
+La consultation admin en lecture seule a confirme une reference exploitable :
+le dossier MYMAR `91` affichait le 2 novembre 2026 a 09:30 avec le technicien
+source `26`. Ce numero de dossier n'est pas l'identifiant du rendez-vous.
+Le formulaire consulte ne permettait pas de confirmer l'unite de duree ;
+le calendrier presentait aussi une erreur JavaScript. Aucun correctif MYMAR
+n'a ete applique et aucun formulaire n'a ete enregistre.
+
+Le paquet `tools/deploy/mymar/calibration/` prepare la comparaison suivante :
+
+- Lecture statique des controles de duree et des appels temporels du calendrier
+  et de ses dependances locales, limitee a 64 fichiers et 8 Mio. Aucun fichier
+  applicatif ou cache PHP n'est execute et aucun code brut n'est exporte.
+- Verification du schema, des types et des index avant une requete restreinte
+  au dossier `91`, `is_old=0`. Le SELECT est limite a 1500 ms et la session
+  a 20 secondes, dans une transaction READ ONLY. Aucun index n'est ajoute.
+- Publication des seuls IDs techniques, date brute, duree brute et etat.
+  Les noms, coordonnees, documents et secrets ne sont pas selectionnes.
+- Une reference absente, multiple ou changee n'est jamais choisie arbitrairement.
+  Une concordance entre heure stockee et heure affichee ne prouve pas a elle
+  seule le fuseau historique. Aucune conversion de duree/date n'est appliquee.
+- Les empreintes des sources selectionnees sont relues avant publication.
+  Un echec SQL ou une modification concurrente interdit la publication de la
+  reference. Les fichiers SQL et erreurs brutes restent root-prives.
+
+Cette collecte ponctuelle utilise le compte local de maintenance deja present.
+Il ne sera pas reutilise pour le connecteur. Le paquet ne cree aucun compte,
+ne change aucune configuration et ne demarre/recharge aucun service. Les seuls
+fichiers crees sont ses paquets et rapports prives, hors des applications.
+Le resultat conserve toujours `connector_enabled=false` et
+`integration_ready=false` : il doit etre analyse avant toute implementation.
+
+Validation locale : 48 tests unitaires d'audit/calibration (207 assertions),
+plus un test MySQL 8.0.46 avec compte SELECT seul et un test du pipeline shell
+en conteneurs jetables sans reseau. Les fixtures couvrent les anciennes lignes,
+les autres dossiers, l'echec SQL, les sources modifiees et l'absence d'export
+de donnees sensibles. Aucune connexion au serveur reel pendant ces tests.
+
+### Resultat de calibration et hypothese retenue
+
+Rapport du 30 octobre a 15:47 UTC, empreintes verifiees : 28 fichiers sources,
+569 399 octets lus, sources inchangees et trois etapes SQL reussies.
+Le dossier de reference `91` porte un seul RDV non ancien `12317`, statut `16`,
+technicien source `26`, debut brut `2026-11-02 09:30:00`, duree brute `1`.
+L'heure correspond a celle vue dans MYMAR. Cela ne prouve pas a lui seul le
+fuseau de tous les enregistrements historiques. Aucun controle numerique de
+duree n'a ete extrait des formulaires Vue ; leur absence du rapport ne signifie
+pas que l'interface MYMAR n'a pas de champ de duree.
+
+L'operateur retient provisoirement **1 = 1 heure et 2 = 2 heures**, faute de
+reponse metier. La preparation continue avec cette hypothese explicite, sans
+la presenter comme confirmee. Les heures sans fuseau sont interpretees comme
+des heures locales Europe/Paris pour cette observation, egalement a titre
+provisoire, plutot que de leur appliquer silencieusement un decalage UTC.
+
+## Observation hors ligne implementee
+
+`App\Services\Mymar\MymarObservation` interprete le contrat source propose,
+avec une politique explicite `MymarObservationPolicy`. Il n'appelle ni SQL,
+ni HTTP, ni service Laravel, ne cree aucun dossier/RDV/compte et ne change
+aucun planning. Aucun controleur, job, ordonnanceur, migration, variable
+d'environnement ou service de production n'est branche sur cette classe.
+
+- IDs stables par RDV MYMAR, pas par dossier : deux RDV du meme dossier ne
+  sont pas fusionnes. Les IDs RDV dupliques sont refuses.
+- Fenetre exigeant un fuseau, limitee a 31 jours, 200 techniciens et 2000
+  lignes maximum. Les statuts et techniciens hors perimetre sont refuses.
+- Statuts source `3` et `16` prepares respectivement pour les visites initiales
+  et apres travaux. `mar_type` n'est pas utilise pour deviner cette phase.
+  La couverture des autres etats reste a valider avant activation.
+- Durees positives bornees et convertibles en minutes entieres ; aucune duree
+  par defaut pour les valeurs absentes, invalides ou non numeriques.
+- Heures locales invalides, inexistantes ou ambigues au changement d'heure
+  signalees explicitement ; aucune normalisation automatique d'un horaire faux.
+  Les durees s'ajoutent en minutes ecoulees, pas en heures locales variables.
+- Lignes anciennes et intervalles sans intersection avec la fenetre exclus,
+  avec semantique `[debut, fin[`. Aucun contenu personnel libre accepte.
+- Rapprochements techniciens uniquement fournis explicitement par l'operateur,
+  sans recherche de nom/email, fusion, creation ou reactivation de compte.
+  Deux sources vers le meme compte cible sont refusees. La validation runtime
+  de l'activite et du role du compte cible n'est pas encore implementee.
+- Snapshot partiel, perime ou date dans le futur : anomalie visible, jamais
+  interpretee comme un ensemble de creneaux libres. Un technicien absent ou
+  non rapproche laisse une occupation candidate non attribuee et une anomalie.
+- Aucun GPS deduit : precision `unknown`, donc pas de preuve de co-localisation
+  ou de calcul routier fiable a ce stade.
+
+Tous les rapports portent `connector_enabled=false`, `planning_ready=false`
+et `can_affect_planning=false`, meme si les controles structurels passent.
+`quality_checks_passed` n'est jamais une autorisation d'import ou de placement.
+La duree reste `duration_estimated=true` tant que son unite est supposee.
+
+### Relecture locale d'une calibration deja collectee
+
+Le script `tools/deploy/mymar/observation/observe-calibration.php` verifie le
+manifest et les trois empreintes, puis produit un nouveau JSON prive en 0600
+dans un repertoire 0700 hors des applications. Il fonctionne avec `php -n` :
+aucun autoload ni bootstrap Laravel, aucune connexion SQL/HTTP. Il refuse les
+fichiers indirects, les entrees corrompues et l'ecrasement d'une sortie existante.
+Ce script n'est pas une collecte exhaustive de MYMAR ni un endpoint API.
+
+Le test local sur le rapport reel donne une occupation candidate le 2 novembre,
+**09:30-10:30 Europe/Paris**, soit **08:30-09:30 UTC**, duree estimee 60 minutes.
+L'absence de rapprochement approuve pour le technicien source `26` est conservee.
+Le rapport est aussi marque partiel/perime : une calibration d'un seul dossier
+ne prouve jamais qu'une fenetre de planning est completement couverte.
+
+Validation : 34 tests unitaires de normalisation (106 assertions), plus un
+test CLI hors ligne couvrant conversion, permissions privees, corruption,
+symlink de manifest et refus d'ecrasement. Les tests ne contactent aucun serveur.
+
+## Contrat cible a valider
+
+Cette section decrit une **cible non deployee**, pas une API deja disponible.
+Le normaliseur precedent est pret pour des snapshots de cette forme :
+
+```json
+{
+  "format": "cofrac.mymar-occupations-source",
+  "version": 1,
+  "generated_at": "2026-10-30T15:47:52Z",
+  "complete": true,
+  "source_timezone": "Europe/Paris",
+  "duration_unit": "hours",
+  "window_start": "2026-11-01T23:00:00Z",
+  "window_end": "2026-11-08T23:00:00Z",
+  "technician_ids": [26],
+  "status_ids": [3, 16],
+  "appointments": [{
+    "rdv_id": 777,
+    "dossier_id": 91,
+    "technician_id": 26,
+    "status_id": 16,
+    "is_old": 0,
+    "stored_start": "2026-11-02 09:30:00",
+    "raw_duration": 1
+  }]
+}
+```
+
+L'API source devra garantir l'exhaustivite du perimetre declare avant de poser
+`complete=true`. Les dates brutes resteront accompagnees d'une interpretation
+explicite ; la normalisation UTC et la confiance sont produites par l'adaptateur.
+
+Deux lectures privees, versionnees et authentifiees : techniciens de reference
+et occupations pour une fenetre bornee et un ensemble explicite de techniciens.
+Pas de rappel vers l'ancien Cofrac depuis ces endpoints. Pas de route publique
+necessaire : loopback ou socket Unix, avec scope de lecture et controle d'acces.
+
+Chaque occupation fournit un ID RDV MYMAR stable, l'ID technicien source, debut
+et fin ISO 8601 avec fuseau, etat normalise, duree certaine/estimee et niveau de
+confiance de la localisation. Les donnees manquantes restent explicites.
+Le resultat indique sa date de collecte, la fenetre couverte et s'il est complet.
+
+Cofrac conserve une projection d'occupations externes distincte de ses dossiers,
+unique par source/ID RDV. Synchronisation en arriere-plan, pas de requete MYMAR
+par ligne ou par ouverture de calendrier. Une collecte partielle/echouee ne
+supprime jamais les occupations connues et n'est pas interpretee comme du libre.
+
+Les occupations doivent etre utilisees par les deux calendriers, les suggestions,
+les trajets et toutes les validations (placement, replacement, changement de
+technicien, placement force). Elles ne sont pas editables depuis Cofrac.
+Fraicheur insuffisante ou identite ambigue : incertitude explicite et pas de
+validation automatique fondee sur de fausses disponibilites. Le delai de
+fraicheur maximal sera valide avant activation.
+
+Une derniere relecture peut reduire une course entre applications, sans offrir
+une reservation atomique : une garantie stricte demanderait un protocole de
+reservation partage avec MYMAR. Aucun verrou Cofrac seul ne garantit cela.
+
+## Passerelle et client d'observation implementes localement
+
+La passerelle autonome `tools/deploy/mymar/gateway/serve.php` et le client
+`App\Services\Mymar\MymarGatewayClient` implementent maintenant une lecture
+`GET /v1/occupations`. Ils ont ete testes ensemble en HTTP sur loopback avec
+MySQL 8.0.46 et des donnees synthetiques. **Rien n'est installe ou active sur
+le serveur de production.** Le client est desactive par defaut et n'est utilise
+par aucun controleur, job, calendrier ou service de placement.
+
+- Authentification Bearer dediee, comparaison a temps constant, acces depuis
+  loopback seulement, en-tetes de proxy refuses. Aucun secret dans la query.
+- Config JSON privee, non executable, 0600 dans un dossier 0700 hors des
+  racines applicatives. Aucun chargement de .env/autoload/bootstrap de MYMAR.
+- Uniquement SELECT sur les colonnes utiles de `dossiers` et `dossier_rdv`.
+  Le runtime verifie les grants exacts et refuse les roles, droits globaux,
+  ecritures, delegations et SELECT sur des tables entieres. Aucun compte SQL
+  de production n'est cree dans cette etape.
+- Tables InnoDB, transaction READ ONLY, limites MySQL 1500ms/verrous 2s.
+  Requete parametree, statuts fixes par politique et techniciens explicites.
+  Une enveloppe de 24 heures avec offsets de fuseau couvre les RDV debordant
+  sur la fenetre. Les lignes invalides restent signalees, jamais remplacees
+  par une duree par defaut ou silencieusement declarees libres.
+- Plus de 2000 lignes : erreur 503, jamais de resultat tronque marque complet.
+  `complete=true` garantit seulement la couverture de la requete bornee :
+  aucune certification de l'unite, des statuts, du mapping ou de la localisation.
+- Le contrat non publie ajoute `source_timezone` et `duration_unit` explicites.
+  Le client refuse leur divergence avec sa politique, une autre fenetre, un
+  autre ensemble de techniciens, une reponse partielle/perimee/future, les
+  redirects, les contenus compresses ou superieurs a 2 Mio. Pas de retry cache.
+- Seul un rapport `private_gateway_observation` est retourne. Il conserve
+  `planning_ready=false`, `connector_enabled=false` et `can_affect_planning=false`.
+  Aucune projection, liaison de compte ou ecriture des disponibilites.
+
+L'endpoint de references techniciens reste a preparer. Les propositions de
+rapprochement de l'audit ne sont toujours pas des liens approuves. Le perimetre
+par technicien ne couvre pas les lignes sans technicien source : ce diagnostic
+global restera a traiter avant l'activation. Une API exhaustive par perimetre
+ne rend pas fiables des informations source incompletes.
+
+Tests reproductibles :
+
+```sh
+php vendor/bin/pest tests/Unit/MymarGatewayTest.php tests/Unit/MymarObservationTest.php
+MYMAR_GATEWAY_TEST=1 bash tools/deploy/tests/check-mymar-gateway.sh
+```
+
+Le second test cree uniquement des conteneurs jetables sans reseau externe,
+monte le code en lecture seule et ne publie aucun port. Il verifie les vrais
+grants MySQL, les intervalles en chevauchement, les RDV multiples d'un dossier,
+les valeurs invalides, l'authentification HTTP, l'arret logique, le refus des
+reponses tronquees et la derive des privileges. Checksums source compares
+avant/apres les lectures. Sur une fixture de 12 011 RDV, moyenne locale des
+dix lectures d'environ 7 ms, sans nouvel index. Ce chiffre n'est pas une
+mesure du serveur de production ; la limite de 1500 ms reste imposee.
+
+Validation globale apres implementation : 134 tests unitaires MYMAR reussis
+(451 assertions), plus le test d'integration HTTP/MySQL ci-dessus. Suite PHP
+complete : 2656 tests reussis, 20279 assertions, avec une limite memoire de
+512 Mio pour le processus de tests local uniquement. Aucun reglage memoire
+de production n'est modifie.
+
+### Prochaine etape avant installation privee
+
+`prepare-disabled.php --prepare-disabled REVISION` prepare maintenant un depot
+root prive et scelle des seuls huit fichiers necessaires. Il n'est autorise que
+sur ns365601, apres validation/reouverture de la release V2 correspondante. Le
+marqueur `DISABLED.json` indique explicitement l'absence de configuration, compte
+SQL, connexion et changement de services/planning. Il ne copie aucun .env ni
+client Laravel et refuse une preparation existante modifiee. Ce depot de code
+ne cree pas encore de service ou d'ecoute HTTP, meme en loopback.
+
+Preparer le paquet d'installation desactivee de cette passerelle et un compte
+SQL dedie limite aux colonnes necessaires, jamais le compte de maintenance. Valider la
+requete definitive sous la limite d'execution existante avant de planifier
+des lectures recurrentes. Revoir les liens des techniciens des RDV APT non
+rapproches, sans toucher aux droits ou mots de passe. La projection, la
+synchronisation et l'utilisation dans les disponibilites restent a implementer.
