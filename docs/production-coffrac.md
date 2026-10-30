@@ -3009,3 +3009,6 @@ Validation du lot : 2663 tests PHP (20316 assertions), 390 tests JavaScript,
 et repetition Docker complete avec MySQL 8.0.46, Apache/TLS, PHP-FPM, worker,
 Reverb, double domaine, echec intermediaire et reprise. La preparation MYMAR
 est aussi verifiee dans un contexte Linux/root jetable, sans SQL ni reseau.
+La fixture runtime execute ensuite le lanceur epingle lui-meme : remote Git
+local, faux referentiel HTTPS local, refus d'un paquet altere AVANT maintenance,
+mise a jour reelle et preparation MYMAR privee sans changement des comptes.

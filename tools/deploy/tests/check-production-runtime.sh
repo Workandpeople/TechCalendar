@@ -326,3 +326,6 @@ bash "$APP/tools/deploy/tests/check-production-domains.sh"
 if [ -f "$APP/tools/deploy/tests/check-production-calendar.sh" ]; then
     bash "$APP/tools/deploy/tests/check-production-calendar.sh"
 fi
+if [ -f "$APP/tools/deploy/tests/check-correctifs-launcher.sh" ]; then
+    bash "$APP/tools/deploy/tests/check-correctifs-launcher.sh"
+fi

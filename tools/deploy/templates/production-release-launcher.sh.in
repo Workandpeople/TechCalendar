@@ -116,7 +116,7 @@ php8.4 -r '
         exit(1);
     }
 ' "$CHECK/package.json"
-php8.4 -r 'if (PHP_VERSION_ID < 80401 || !class_exists("Dom\\HTMLDocument")) exit(1);' \
+php8.4 -r 'if (PHP_VERSION_ID < 80401 || !class_exists(\Dom\HTMLDocument::class)) exit(1);' \
     || stop 'PHP 8.4.1+ avec le parseur HTML5 DOM requis pour les commentaires.'
 git_app show "$REV:tools/deploy/production-runtime.php" > "$CHECK/runtime-check.php"
 [ "$(sha256sum "$CHECK/runtime-check.php" | cut -d' ' -f1)" = @RUNTIME_CHECK_SHA@ ] || stop 'controle runtime different de la revision approuvee.'
