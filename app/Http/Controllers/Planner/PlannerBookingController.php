@@ -31,6 +31,7 @@ use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotStatusService;
 use App\Services\MapboxDrivingRouteService;
+use App\Services\Mymar\MymarCalendarFeed;
 use App\Services\PlanningAddressGeocoder;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -181,6 +182,8 @@ class PlannerBookingController extends Controller
         $replacementAppointmentId = $this->replacementAppointmentId($crmAppointment);
         $appointmentsForSuggestions = $this->appointmentsWithoutReplacement($appointments, $replacementAppointmentId);
 
+        $mymar = app(MymarCalendarFeed::class)->window($technicianIds->all(), $calendarStart, $calendarEnd);
+
         return response()->json([
             'crm_appointment' => $crmAppointment,
             'filters' => [
@@ -192,7 +195,8 @@ class PlannerBookingController extends Controller
                 'is_lot' => (bool) ($crmAppointment['is_lot'] ?? false),
             ],
             'technicians' => $this->serializeTechnicians($technicians),
-            'events' => $this->calendarEvents($appointments, $replacementAppointmentId),
+            'events' => $this->calendarEvents($appointments, $replacementAppointmentId)->concat($mymar['events'])->values(),
+            'mymar' => array_diff_key($mymar, ['events' => true]),
             'suggestions' => $this->buildSlotSuggestions($technicians, $appointmentsForSuggestions, $crmAppointment, $drivingRoutes),
             'calendar_range' => [
                 'start' => $calendarStart->toDateString(),
@@ -424,10 +428,12 @@ class PlannerBookingController extends Controller
         $appointments = $this->appointmentsForTechnicians($technicians->pluck('id'), $windowStart, $windowEnd);
         $replacementAppointmentId = $this->replacementAppointmentId($crmAppointment);
         $appointmentsForSuggestions = $this->appointmentsWithoutReplacement($appointments, $replacementAppointmentId);
+        $mymar = app(MymarCalendarFeed::class)->window($technicians->pluck('id')->all(), $windowStart, $windowEnd);
 
         return response()->json([
             'technicians' => $this->serializeTechnicians($technicians),
-            'events' => $this->calendarEvents($appointments, $replacementAppointmentId),
+            'events' => $this->calendarEvents($appointments, $replacementAppointmentId)->concat($mymar['events'])->values(),
+            'mymar' => array_diff_key($mymar, ['events' => true]),
             'suggestions' => $this->buildSlotSuggestions(
                 $technicians,
                 $appointmentsForSuggestions,

@@ -613,3 +613,72 @@ Validation locale de ce lot : 214 tests unitaires MYMAR (683 assertions),
 plus les deux scenarios complets Apache/FPM/MySQL ci-dessus. La premiere
 execution systemd sur le serveur reste a confirmer par le rapport operateur ;
 aucun demarrage de production n'a ete effectue depuis le poste de developpement.
+
+## Pilote cache et affichage, sans blocage
+
+Le rapport operateur du transport prive confirme une lecture HTTP authentifiee
+et quatre correspondances. Le lot suivant ajoute une projection locale minimale
+et un affichage distinct dans les calendriers de prise de RDV et de suivi.
+Il ne cree aucun `Appointment` et ne modifie ni la detection de conflit ni les
+suggestions : `blocking_enabled` reste obligatoirement `false`.
+
+`mymar:sync-observation` est execute par un service/timer dedie toutes les
+60 secondes environ, jamais par une requete utilisateur. Il appelle seulement
+l'API loopback existante, avec un jeton separe. Le mot de passe SQL MYMAR et les
+credentials de maintenance ne sont pas transmis au CRM. Le scheduler global,
+les mails, les SMS et CAPCEE ne sont pas executes par ce timer.
+
+Le cache contient uniquement les identifiants de liaison, les horaires, la phase
+de visite et les dates de synchronisation/couverture. Il ne reprend ni beneficiaire,
+adresse, document ou trajet MYMAR. La fenetre est bornee a 7 jours passes et
+21 jours futurs, avec 2000 occupations maximum. Les pages effectuent une lecture
+groupee du cache et une seule requete cible pour les profils/noms Cofrac actifs,
+sans HTTP, jeton ou SQL source. Aucun cache n'est touche lorsque le pilote est
+absent/desactive. Les droits d'acces aux calendriers restent inchanges.
+
+Un verrou de synchronisation de 120 secondes evite les executions concurrentes.
+Seule une reponse complete et valide remplace atomiquement le cache. Une panne
+conserve le dernier instantane valide, au maximum 24 heures, avec un avertissement
+explicite. Une anciennete de cinq minutes, un echec recent, une correspondance
+modifiee, l'absence de cache ou une fenetre partiellement couverte ne sont jamais
+presentes comme des disponibilites MAR fiables. Les doublons d'ecriture MySQL
+sans ligne affectee sont acceptes seulement si la relecture est identique.
+
+La configuration root:cofrac2-app est stockee sous `/etc/cofrac2-mymar`,
+repertoire 0750, fichiers 0640, sans inclusion de secrets dans `.env` ou le
+cache de configuration Laravel. Les quatre profils sources et cibles sont
+revalides lors de l'installation ; les profils cibles actifs sont controles
+ensuite a chaque synchronisation et lecture calendrier. Les hypotheses
+Europe/Paris, durees en heures et statuts 3/16 restent visibles et non confirmees.
+Cette etape est une observation avant validation humaine, pas une autorisation
+de bloquer les creneaux.
+
+Le paquet est construit avec `tools/deploy/prepare-mymar-pilot-delivery.php`
+depuis les fichiers commites. Il reutilise les controles de release avant
+maintenance, sauvegarde V2, assets precompiles et reouverture des deux domaines.
+L'API privee deja installee n'est ni remplacee ni arretee. Le pilote est active
+seulement apres une premiere synchronisation valide, sans nouvelle fermeture
+du site. Un echec du pilote desactive ses propres flags/timer ; il ne ferme
+pas le CRM. `mymar:observation-status` controle uniquement le cache local.
+Le rapport fournit un `stop-pilot.sh` root-prive pour masquer les cartes et
+arreter seulement le nouveau timer/service, sans suppression SQL ni arret API.
+
+Test de chaine complete, uniquement dans les conteneurs jetables :
+
+```bash
+MYMAR_PRIVATE_HTTP_TEST=1 MYMAR_PILOT_CACHE_TEST=1 \
+  bash tools/deploy/tests/check-mymar-private-http.sh
+```
+
+Ce test utilise une vraie API Apache/FPM, MySQL 8.0.46, les migrations Laravel
+et son cache SQL. Il controle un echec de premiere synchronisation apres staging,
+la desactivation de securite, le fonctionnement nominal, puis l'arret volontaire.
+Les checksums des donnees metier sont compares avant/apres. Le cycle systemd
+est simule par un gestionnaire de PIDs restreint et la syntaxe des unites est
+verifiee avec `systemd-analyze` ; son execution reelle reste a confirmer par
+le rapport operateur. Aucun test ne contacte la production.
+
+Validation locale de ce lot : 2761 tests PHP (20595 assertions), 394 tests
+frontend et la chaine complete API/cache/affichage/arret ci-dessus reussis.
+Les cartes en vue mois et les compteurs distinguent aussi les observations
+MYMAR des RDV confirmes Cofrac et des suggestions.

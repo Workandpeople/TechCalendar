@@ -1,0 +1,30 @@
+[Unit]
+Description=Cofrac MYMAR observation cache only
+After=network.target mysql.service cofrac-mymar-http.service
+
+[Service]
+Type=oneshot
+User=cofrac2-app
+Group=cofrac2-app
+WorkingDirectory=/var/www/cofrac2
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/var/lib/cofrac2-app
+ExecStart=/usr/bin/php8.4 /var/www/cofrac2/artisan mymar:sync-observation --no-interaction --no-ansi
+TimeoutStartSec=30
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/cofrac2/storage /var/www/cofrac2/bootstrap/cache
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1/32
+CapabilityBoundingSet=
+CPUQuota=25%
+MemoryMax=256M
+TasksMax=32

@@ -176,3 +176,12 @@ test('calendar actions remain in the toolbar when expanded and receive their own
         assert.equal(calendar.element.children[0], calendar.toolbar);
     }
 });
+
+test('MYMAR observations are never counted as confirmed Cofrac appointments or suggestions', () => {
+    const placed = event('placed', '2026-10-28T09:00', '2026-10-28T10:00');
+    const suggestion = event('suggestion', '2026-10-28T11:00', '2026-10-28T12:00');
+    suggestion.extendedProps.is_suggestion = true;
+    const observation = event('mymar:1', '2026-10-28T13:00', '2026-10-28T14:00');
+    observation.extendedProps.is_mymar = true;
+    assert.deepEqual(NativeCalendar.prototype.eventCounts([placed, suggestion, observation]), { placed: 1, suggestions: 1, observations: 1 });
+});

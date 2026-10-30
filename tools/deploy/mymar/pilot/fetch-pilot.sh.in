@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+BASE=$(cd "$(dirname "$0")" && pwd -P)
+NAME=@PACKAGE_NAME@
+REMOTE="/home/ubuntu/$NAME"
+HOST=ubuntu@46.105.110.76
+cd "$BASE"
+shasum -a 256 -c SHA256SUMS
+ssh "$HOST" "test ! -e '$REMOTE' && test ! -L '$REMOTE' && mkdir -m 0700 '$REMOTE'"
+scp -r "$BASE/." "$HOST:$REMOTE/"
+LOG=$(mktemp "${TMPDIR:-/tmp}/cofrac-mymar-pilot-XXXXXXXX")
+printf 'Mise a jour applicative avec courte maintenance, puis pilote en observation seulement.\n'
+ssh -t "$HOST" "cd '$REMOTE' && sha256sum -c SHA256SUMS && sudo bash ./deploy.sh && sudo bash ./setup-pilot.sh --enable-observation-only" | tee "$LOG"
+REPORT=$(tr -d '\r' < "$LOG" | sed -n 's/^REPORT_DIR=//p' | tail -n 1)
+[[ "$REPORT" =~ ^/home/ubuntu/cofrac2-mymar-cache-pilot-report-[A-Za-z0-9]+$ ]] || { echo "STOP : rapport absent. Journal local : $LOG" >&2; exit 1; }
+DEST=$(mktemp -d "$HOME/Downloads/cofrac2-mymar-cache-pilot-analysis-XXXXXXXX")
+scp "$HOST:$REPORT/summary.json" "$HOST:$REPORT/SHA256SUMS" "$DEST/"
+(cd "$DEST" && shasum -a 256 -c SHA256SUMS)
+printf 'LOCAL_DIR=%s\n' "$DEST"
+printf 'Pilote MYMAR affiche, sans blocage des creneaux. Aucun mail/SMS de test envoye.\n'

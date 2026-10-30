@@ -212,6 +212,12 @@ export class NativeCalendar {
         this.mounted = [];
     }
 
+    eventCounts(events) {
+        return { placed: events.filter(event => !event.extendedProps?.is_mymar && !calendarFields(event).suggestion).length,
+            suggestions: events.filter(event => calendarFields(event).suggestion).length,
+            observations: events.filter(event => event.extendedProps?.is_mymar === true).length };
+    }
+
     draw() {
         if (!this.rendered || this.destroyed) return;
         const scroll = { top: this.viewport.scrollTop, left: this.viewport.scrollLeft };
@@ -219,11 +225,11 @@ export class NativeCalendar {
         this.unmountEvents();
         const range = calendarRange(this.date, this.mode, this.options.hiddenDays || [0]);
         const events = eventsDuring(this.events, range.start, range.end);
-        const placed = events.filter(event => !calendarFields(event).suggestion).length;
+        const { placed, suggestions, observations } = this.eventCounts(events);
         this.heading.textContent = this.mode === 'dayGridMonth' ? dateLabel(this.date, { month: 'long', year: 'numeric' })
             : this.mode === 'timeGridDay' ? dateLabel(this.date, { weekday: 'long', day: 'numeric', month: 'long' })
                 : `${dateLabel(range.days[0], { day: 'numeric' })} – ${dateLabel(range.days.at(-1), { day: 'numeric', month: 'long', year: 'numeric' })}`;
-        this.summary.textContent = `${placed} RDV placé${placed > 1 ? 's' : ''} · ${events.length - placed} proposition${events.length - placed > 1 ? 's' : ''} · ${this.resources(events).length} technicien(s)`;
+        this.summary.textContent = `${placed} RDV placé${placed > 1 ? 's' : ''} · ${suggestions} proposition${suggestions > 1 ? 's' : ''} · ${this.resources(events).length} technicien(s)${observations ? ` · ${observations} MYMAR en observation` : ''}`;
         for (const button of this.views.children) button.setAttribute('aria-pressed', String(button.dataset.view === this.mode));
         this.zoomControls.hidden = this.mode !== 'timeGridDay';
         this.element.dataset.mode = this.mode;
@@ -238,10 +244,11 @@ export class NativeCalendar {
 
     resourceLabel(resource, events) {
         const heading = this.node('div', 'nc-resource');
+        const { placed, observations } = this.eventCounts(events);
         heading.style.setProperty('--nc-tone', tone(resource.id));
         const initials = resource.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('');
         heading.append(this.node('span', 'nc-avatar', initials), this.node('strong', '', resource.name),
-            this.node('small', '', `${events.filter(event => !calendarFields(event).suggestion).length} RDV sur la période`));
+            this.node('small', '', `${placed} RDV sur la période${observations ? ` · ${observations} MYMAR en observation` : ''}`));
         return heading;
     }
 

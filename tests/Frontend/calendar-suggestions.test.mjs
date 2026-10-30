@@ -104,6 +104,7 @@ test('native technician values are plain text and absent names do not add a plac
 
 function fullCalendarFixture() {
     return runInNewContext(`${escape}\n${renderer}\n({ render: bookingCalendarEventContent, colorize: colorizedEvents });`, {
+        window: {},
         calendarTimeLabel: date => date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
         visibleCalendarItems: events => events,
         currentTechnicianColors: { 7: '#1764d9' }, travelBadgesForSuggestion: event => event.extendedProps.booking_travel_badges,
@@ -137,7 +138,7 @@ test('FullCalendar confirmed content and suggestion payloads remain intact for e
     assert.equal(prepared.extendedProps.travel_to_minutes, 30);
     assert.equal(prepared.extendedProps.address, suggestion.extendedProps.address);
     assert.deepEqual(suggestion, original);
-    assert.match(booking, /hideSuggestionTooltip\(\);\s*openBookingAppointmentModal\(info.event\)/);
+    assert.match(booking, /hideSuggestionTooltip\(\);\s*if \([^\n]+isMymar[^\n]+\n\s*openBookingAppointmentModal\(info.event\)/);
 });
 
 test('tracking keeps its existing edit action with an explicit schedule label', () => {

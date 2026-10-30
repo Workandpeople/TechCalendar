@@ -135,6 +135,7 @@
 @endif
 <div id="tracking-calendar-panel" class="relative min-h-[780px]">
 
+                @include('planner.partials.mymar-observation', ['mymarBannerId' => 'tracking-mymar-status'])
                 <div id="tracking-calendar"></div>
                 <div id="tracking-calendar-loading" class="absolute inset-0 z-10 hidden items-start justify-center rounded-xl bg-white/85 px-4 pt-24 backdrop-blur-sm">
                     <div class="w-full max-w-md rounded-2xl border bg-white p-5 shadow-lg" style="border-color:var(--gc-border);">
@@ -2179,7 +2180,7 @@
                 throw new Error(firstError || 'Erreur calendrier.');
             }
 
-            return payload.events || [];
+            return { events: payload.events || [], mymar: payload.mymar };
         };
 
         const loadTrackingEventsInBatches = async (technicianIds, fetchInfo) => {
@@ -2190,21 +2191,24 @@
             trackingEventsAbortController = controller;
             const chunks = chunkArray(technicianIds, trackingEventsBatchSize);
             const events = [];
+            const mymarStatuses = [];
 
             showTrackingCalendarLoader(chunks.length, technicianIds.length);
 
             try {
                 for (const [index, chunk] of chunks.entries()) {
-                    const chunkEvents = await fetchTrackingEventsChunk(chunk, fetchInfo, controller.signal);
+                    const chunkPayload = await fetchTrackingEventsChunk(chunk, fetchInfo, controller.signal);
 
                     if (requestId !== trackingEventsRequestId) {
                         return null;
                     }
 
-                    events.push(...chunkEvents);
+                    events.push(...chunkPayload.events);
+                    mymarStatuses.push(chunkPayload.mymar);
                     updateTrackingCalendarLoader(index + 1, chunks.length, events.length);
                 }
 
+                window.CofracMymarCalendar?.setStatus('tracking-mymar-status', window.CofracMymarCalendar.combineStatuses(mymarStatuses));
                 return events;
             } finally {
                 if (requestId === trackingEventsRequestId) {
@@ -2328,6 +2332,7 @@
         };
 
         const styleTrackingEvent = (event) => {
+            if (window.CofracMymarCalendar?.isMymar(event)) return event;
             if (event.extendedProps?.is_historical) {
                 return {...event, backgroundColor: '#f1f5f9', borderColor: '#64748b', textColor: '#334155', classNames: ['appointment-historical']};
             }
@@ -2351,6 +2356,7 @@
         };
 
         const applyTrackingEventStyle = (event) => {
+            if (window.CofracMymarCalendar?.isMymar(event)) return;
             const isProblem = event.extendedProps?.status === 'problem';
             const themes = trackingTechnicianThemeMap();
             const theme = themes[event.extendedProps?.technician_id] || {
@@ -2471,6 +2477,7 @@
 	                    const technicianIds = selectedTechnicianIds();
 	
 	                    if (technicianIds.length === 0) {
+	                        window.CofracMymarCalendar?.setStatus('tracking-mymar-status', null);
 	                        trackingEventsAbortController?.abort();
 	                        trackingEventsRequestId++;
 	                        hideTrackingCalendarLoader();
@@ -2498,6 +2505,7 @@
 	                    }
 	                },
                 eventContent: (arg) => {
+                    if (window.CofracMymarCalendar?.isMymar(arg.event)) return window.CofracMymarCalendar.content(arg.event);
                     const props = arg.event.extendedProps || {};
                     const time = arg.timeText ? `<span class="font-semibold">${trackingEscapeHtml(arg.timeText)}</span>` : '';
                     const technicianName = props.technician_name || 'Technicien non renseigné';
@@ -2515,6 +2523,7 @@
                     };
                 },
                 eventDidMount: (info) => {
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return window.CofracMymarCalendar.mount(info);
 	                    const props = info.event.extendedProps;
                     if (props.status === 'problem') {
                         info.el.style.borderWidth = '2px';
@@ -2551,6 +2560,7 @@
                     hideTrackingAppointmentTooltip();
                 },
                 eventMouseEnter: (info) => {
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return;
                     const moveHandler = (event) => moveTrackingAppointmentTooltip(event);
 
                     info.el._trackingAppointmentTooltipMoveHandler = moveHandler;
@@ -2570,6 +2580,7 @@
                 eventClick: (info) => {
                     info.jsEvent.preventDefault();
                     hideTrackingAppointmentTooltip();
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return window.CofracMymarCalendar.open(info.event, info.el);
                     openTrackingAppointmentModal(info.event);
                 },
             });

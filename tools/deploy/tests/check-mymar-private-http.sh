@@ -106,6 +106,11 @@ assert(!file_exists('/fixtures/FORBIDDEN_CALL')&&!file_exists('/fixtures/EXECUTE
 echo "Apache/FPM/MySQL : HTTP authentifie, scope borne, deux occupations, aucun secret exporte, aucun effet CRM.\n";
 PHP
 test "$(docker exec "$DB" mysql -NBe "SELECT COUNT(*) FROM mysql.user WHERE User LIKE 'cofrac_mymar_ro_%' AND account_locked='N'")" = 1
+if [ "${MYMAR_PILOT_CACHE_TEST:-}" = 1 ]; then
+    docker exec "$PHP" bash /workspace/tools/deploy/tests/check-mymar-pilot-cache-container.sh
+    echo 'Chaine complete API HTTP privee, Laravel, cache SQL et affichage en observation validee.'
+    exit
+fi
 docker exec -i "$PHP" bash <<'SH'
 set -Eeuo pipefail
 find /home/ubuntu/www/MYMAR /var/www/cofrac2 -type f -exec sha256sum {} + | sort > /fixtures/apps.after

@@ -960,6 +960,7 @@
                         <div id="booking-calendar-loader-bar" class="h-full rounded-full transition-all duration-200" style="width:0%;background:var(--gc-primary);"></div>
                     </div>
                 </div>
+                @include('planner.partials.mymar-observation', ['mymarBannerId' => 'booking-mymar-status'])
                 <div id="booking-calendar"></div>
             </section>
         </section>
@@ -5266,6 +5267,7 @@
             techniciansList.innerHTML = '';
             clearMap();
             bookingCalendar?.removeAllEvents();
+            window.CofracMymarCalendar?.setStatus('booking-mymar-status', null);
         };
 
         const showDetailStatus = (message, type = 'info') => {
@@ -5579,6 +5581,7 @@
         };
 
         const bookingCalendarEventContent = (info) => {
+            if (window.CofracMymarCalendar?.isMymar(info.event)) return window.CofracMymarCalendar.content(info.event);
             const props = info.event.extendedProps || {};
             if (props.is_suggestion) {
                 const hours = info.timeText || [info.event.start, info.event.end].filter(Boolean).map(calendarTimeLabel).join(' – ');
@@ -5618,6 +5621,7 @@
             const visibleSuggestions = visibleCalendarItems(suggestions);
 
             return [...visibleEvents, ...visibleSuggestions].map((event) => {
+                if (window.CofracMymarCalendar?.isMymar(event)) return event;
                 const technicianId = String(event.extendedProps?.technician_id || '');
                 const color = currentTechnicianColors[technicianId] || '#31424c';
                 const isSuggestion = Boolean(event.extendedProps?.is_suggestion);
@@ -5687,6 +5691,7 @@
                 if (requestId !== calendarWindowRequestId) return;
 
                 currentCalendarEvents = payload.events || [];
+                window.CofracMymarCalendar?.setStatus('booking-mymar-status', payload.mymar);
                 currentCalendarSuggestions = payload.suggestions || [];
                 if (Array.isArray(payload.technicians)) {
                     mergeTechnicianUpdates(payload.technicians);
@@ -5760,10 +5765,12 @@
                 },
                 eventClick: (info) => {
                     hideSuggestionTooltip();
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return window.CofracMymarCalendar.open(info.event, info.el);
                     openBookingAppointmentModal(info.event);
                 },
                 eventContent: bookingCalendarEventContent,
                 eventMouseEnter: (info) => {
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return;
                     const tooltip = tooltipForBookingEvent(info.event);
                     const moveHandler = (event) => tooltip.move(event);
                     info.el._bookingSuggestionTooltipMoveHandler = moveHandler;
@@ -5781,6 +5788,7 @@
                     hideSuggestionTooltip();
                 },
                 eventDidMount: (info) => {
+                    if (window.CofracMymarCalendar?.isMymar(info.event)) return window.CofracMymarCalendar.mount(info);
                     info.el.tabIndex = 0;
                     if (info.event.extendedProps?.is_suggestion) {
                         const props = info.event.extendedProps;
@@ -5897,6 +5905,7 @@
                 selectedTechnicianIds = new Set(currentTechnicians.map((technician) => String(technician.id)));
                 currentFilters = data.filters || null;
                 currentCalendarEvents = data.events || [];
+                window.CofracMymarCalendar?.setStatus('booking-mymar-status', data.mymar);
                 currentCalendarSuggestions = suggestions;
                 technicianSearchInput.value = '';
                 clearTechnicianSearch();

@@ -18,6 +18,7 @@ use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\AppointmentEditor;
 use App\Services\Crm\AppointmentProblemReport;
+use App\Services\Mymar\MymarCalendarFeed;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -205,8 +206,12 @@ class PlannerTrackingController extends Controller
             ->orderBy('starts_at')
             ->get();
 
+        $mymar = app(MymarCalendarFeed::class)->window($technicianIds->all(),
+            AppointmentDateTime::parse($payload['start'], 'start'), AppointmentDateTime::parse($payload['end'], 'end'));
+
         return response()->json([
-            'events' => $this->appointmentEvents($appointments, $appointmentMailData),
+            'events' => $this->appointmentEvents($appointments, $appointmentMailData)->concat($mymar['events'])->values(),
+            'mymar' => array_diff_key($mymar, ['events' => true]),
         ]);
     }
 
