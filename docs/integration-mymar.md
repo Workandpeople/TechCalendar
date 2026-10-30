@@ -484,3 +484,34 @@ Le test utilise un compte SELECT seul sur des schemas synthetiques, compare
 les checksums avant/apres et repete la chaine de publication en conteneur
 isole, avec refus d'un SQL interrompu, d'une source modifiee et d'une reponse
 tronquee. Il n'appelle jamais le serveur de production.
+
+## Correspondances humaines confirmees
+
+L'observation reelle du 30 octobre a termine sans ecriture ni erreur SQL :
+41 techniciens Terrain actifs, 10 propositions concordantes et 5 occupations
+apres travaux sur la fenetre. Le plan definitif utilise une selection indexee
+des dossiers puis une jointure indexee sur les RDV. Cela ne mesure pas la
+latence d'une future synchronisation et ne valide pas encore tous les statuts.
+
+Quatre identites presentes dans ces occupations ont ensuite ete confirmees
+par l'operateur. Une lecture ponctuelle des comptes a retrouve quatre profils
+sources actifs Terrain et quatre cibles Cofrac actives internes techniciens,
+sans doublon dans cette selection. Les noms/IDs reels restent dans les donnees
+privees de preparation, pas dans le depot. Les dix propositions concordantes
+restantes ne deviennent pas automatiquement des liens approuves.
+
+`tools/deploy/mymar/mapping` prepare maintenant un fichier de correspondances
+inactif a partir d'une liste explicite d'IDs et identites approuves. Il relit
+les deux cotes dans une meme transaction READ ONLY avant de creer le fichier
+root-prive. Comptes manquants, desactives, externes, non techniciens, identites
+changees, donnees incompletes/perimees et schema non transactionnel sont refuses.
+Le script ne met jamais a jour `MYMAR.users.cofrac_id` ni un compte Cofrac.
+Les empreintes de configuration sont relues avant publication ; la validation
+est liee a la release deja ouverte et a la preparation MYMAR desactivee.
+
+Le fichier porte `requires_runtime_revalidation=true` : son contenu ne dispense
+pas de verifier de nouveau les profils avant une lecture utilisee par le CRM.
+Il conserve `connector_enabled=false` et `can_affect_planning=false`, n'ecrit
+aucun pointeur de configuration active et n'est charge par aucun service.
+Le compte SQL restreint et la passerelle authentifiee restent a installer
+separement ; aucun envoi mail/SMS ou changement des suggestions n'est declenche.
