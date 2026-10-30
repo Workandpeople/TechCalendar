@@ -515,3 +515,52 @@ Il conserve `connector_enabled=false` et `can_affect_planning=false`, n'ecrit
 aucun pointeur de configuration active et n'est charge par aucun service.
 Le compte SQL restreint et la passerelle authentifiee restent a installer
 separement ; aucun envoi mail/SMS ou changement des suggestions n'est declenche.
+
+## Acces SQL dedie, toujours sans activation
+
+Les quatre correspondances approuvees ont ete preparees et confirmees le
+30 octobre. Le paquet autonome `tools/deploy/mymar/sql-gateway` prepare
+l'etape suivante sans deploiement applicatif ni maintenance du site :
+
+- Revalidation fraiche des profils et empreintes avant tout CREATE USER.
+- Nouveau compte SQL local aleatoire, SELECT uniquement sur les huit colonnes
+  necessaires des deux tables d'occupations MYMAR, sans role ni GRANT OPTION.
+- Compte cree verrouille, deverrouille seulement pour ouvrir une connexion,
+  puis reverrouille avant la lecture ponctuelle. Aucun compte existant change.
+- Lecture reelle par ce compte, via le gestionnaire authentifie en processus,
+  sur sept jours et uniquement pour les techniciens explicitement approuves.
+- Mauvais jeton refuse sans lecture ; controle des grants, lecture READ ONLY
+  bornee et verification du verrouillage a la sortie, meme apres un echec.
+
+La creation et les grants modifient les comptes techniques MySQL ; ce n'est
+donc pas une operation entierement sans ecriture SQL. Les bases metier,
+fichiers de configuration des applications et services restent inchanges.
+Le compte de maintenance sert uniquement au controle ponctuel et a cette
+creation ; le test des occupations utilise le compte restreint.
+
+Le mot de passe et le jeton generes restent root-prives sur le serveur.
+La configuration conserve `enabled=false`. Un registre prive interdit la
+recreation aveugle pour la meme empreinte de correspondances. Un echec apres
+CREATE laisse le nouveau compte verrouille et un marqueur a revoir ; aucun
+DROP USER ou nettoyage des donnees originales n'est automatique.
+
+Le rapport distingue `authenticated_handler_tested=true` de
+`production_http_tested=false`. Aucun listener HTTP ou service n'est demarre.
+Cette etape n'integre toujours pas MYMAR au planning : pas de synchronisation,
+projection CRM, ecriture des disponibilites ou changement des suggestions.
+La couverture globale, le fuseau, les durees et les statuts restent a valider.
+
+Test reproductible :
+`MYMAR_SQL_GATEWAY_TEST=1 bash tools/deploy/tests/check-mymar-sql-gateway.sh`.
+Il utilise uniquement des identites synthetiques et MySQL 8.0.46 jetable,
+sans reseau externe. Il exerce la chaine serveur complete, les grants reels,
+le maintien d'une session apres ACCOUNT LOCK, le refus de nouvelles connexions,
+la reexecution, une cible desactivee et un echec de lecture apres CREATE.
+Les checksums des tables metier sont compares avant/apres ; les fichiers
+applicatifs et les appels interdits sont controles, sans bootstrap Laravel.
+
+Validation locale de cette etape : 212 tests unitaires MYMAR reussis
+(657 assertions), plus la chaine serveur integrale sur MySQL 8.0.46.
+Les refus d'empreinte et de code modifie ont aussi ete verifies avant CREATE,
+ainsi que le chemin independant de reverrouillage d'un compte ouvert.
+Il ne s'agit pas encore d'une execution de ce nouveau paquet en production.
