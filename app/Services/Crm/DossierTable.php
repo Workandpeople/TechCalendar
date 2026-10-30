@@ -109,13 +109,11 @@ class DossierTable
         if ($serviceIds !== []) {
             $appointment->whereIn('dossier_operations.service_id', $serviceIds);
         }
-        if (($filters['date_field'] ?? null) === 'appointment') {
-            if (filled($filters['date_from'] ?? null)) {
-                $appointment->where('appointments.starts_at', '>=', $filters['date_from'].' 00:00:00');
-            }
-            if (filled($filters['date_to'] ?? null)) {
-                $appointment->where('appointments.starts_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
-            }
+        if (filled($filters['date_from'] ?? null)) {
+            $appointment->where('appointments.starts_at', '>=', $filters['date_from'].' 00:00:00');
+        }
+        if (filled($filters['date_to'] ?? null)) {
+            $appointment->where('appointments.starts_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
         }
         if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
             $appointment->where(function ($query) use ($filters): void {

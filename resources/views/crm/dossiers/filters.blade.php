@@ -61,8 +61,7 @@
                 <div><label for="section" class="gc-label">Secteur / activité</label><select id="section" name="section" class="gc-input"><option value="">Tous les secteurs</option>@foreach (\App\Services\Crm\DossierSections::LABELS as $key => $label)<option value="{{ $key }}" @selected(($filters['section'] ?? '') === $key)>{{ $label }}</option>@endforeach</select></div>
             </fieldset>
             <fieldset class="gc-dossier-filter-group" data-filter-group="dates">
-                <legend><x-nav-icon name="planning" />Période</legend>
-                <div><label for="date_field" class="gc-label">Date à utiliser</label><select id="date_field" name="date_field" class="gc-input"><option value="created" @selected(($filters['date_field'] ?? 'created') === 'created')>Création du dossier</option><option value="appointment" @selected(($filters['date_field'] ?? '') === 'appointment')>Date du rendez-vous</option></select></div>
+                <legend><x-nav-icon name="planning" />Date du rendez-vous</legend>
                 <div class="gc-dossier-filter-date-range"><div><label for="date_from" class="gc-label">Du</label><input id="date_from" name="date_from" type="date" class="gc-input" value="{{ $filters['date_from'] ?? '' }}"></div><div><label for="date_to" class="gc-label">Au inclus</label><input id="date_to" name="date_to" type="date" class="gc-input" value="{{ $filters['date_to'] ?? '' }}"></div></div>
             </fieldset>
             <fieldset class="gc-dossier-filter-group" data-filter-group="activity">

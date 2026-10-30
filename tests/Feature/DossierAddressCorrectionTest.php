@@ -78,7 +78,7 @@ it('stores the server resolved address and durable point with private audit and 
     $appointmentBefore = $appointment->fresh()->getAttributes();
     $sourceBefore = DB::table('legacy_records')->value('payload');
     Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$this->feature]])]);
-    $this->patch($this->url, [...$this->data, 'latitude' => 0, 'longitude' => 0, 'address' => 'FORGED'])
+    $this->patch($this->url, [...$this->data, 'latitude' => 0, 'longitude' => 0, 'address' => 'FORGED', 'display_address' => 'FORGED DISPLAY'])
         ->assertSessionHasNoErrors()->assertRedirect(route('v2.dossiers.show', $this->dossier).'#synthese');
     $dossier = $this->dossier->fresh();
     expect($dossier->address)->toBe('8 rue Corrigée')->and($dossier->postal_code)->toBe('69001')->and($dossier->city)->toBe('Lyon')

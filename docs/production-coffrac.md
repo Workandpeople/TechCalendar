@@ -2917,3 +2917,22 @@ Mapbox complets avec departement/pays pouvaient ensuite echouer a la validation.
   Les dossiers existants ne changent qu'apres validation explicite de leur adresse.
 
 Reference : [documentation officielle des communes](https://geo.api.gouv.fr/decoupage-administratif/communes).
+
+### Adresse affichee et periode des RDV (30 octobre 2026)
+
+- Selectionner une commune dans la correction d'adresse conserve desormais la
+  voie / le lieu-dit du dossier. Un champ distinct permet de completer cette voie
+  pour l'affichage ; elle n'est pas envoyee au geocodeur en mode commune.
+  Le point approximatif reste le centre officiel de la commune selectionnee.
+- Pour les anciennes corrections ayant remplace la voie par le nom de commune,
+  le formulaire peut pre-remplir l'ancienne voie depuis une chaine d'audit prouvee
+  (25 corrections maximum). Cette proposition ne modifie pas la base sur lecture :
+  l'operateur doit verifier le champ puis Valider. Aucune restauration en masse.
+- Une adresse precise selectionnee reste resolue et verifiee cote serveur ;
+  le champ de voie affichee ne peut pas remplacer le resultat precis de Mapbox.
+- Le filtre de periode concerne uniquement la date du rendez-vous. L'ancien
+  choix creation/RDV est retire. Les anciens parametres `date_field` sont ignores,
+  y compris dans les compteurs, les reponses AJAX et les exports. La colonne de
+  creation du dossier reste disponible, mais ne pilote plus la recherche par date.
+- Aucun import, seeder, nouvelle migration, envoi ou changement de configuration.
+  Les RDV existants, reglages SMTP et modes SMS sont conserves.

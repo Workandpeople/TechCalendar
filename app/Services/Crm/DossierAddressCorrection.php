@@ -15,6 +15,41 @@ final class DossierAddressCorrection
 {
     public function __construct(private readonly MapboxAddressGeocoder $geocoder) {}
 
+    public function retainedAddress(Dossier $dossier): string
+    {
+        $address = trim($dossier->address ?? '');
+        if ($address !== trim($dossier->city ?? '') || ($dossier->inspection_geocode['precision'] ?? null) !== 'city'
+            || ! DossierLocation::coordinates($dossier)) {
+            return $address;
+        }
+
+        // Follow only a contiguous locality-correction audit chain, never an unrelated old address.
+        $state = $dossier->only(['address', 'postal_code', 'city']);
+        foreach ($dossier->activities()->where('kind', 'address_corrected')->latest('id')->limit(25)->get(['changed_fields']) as $activity) {
+            $before = $activity->changed_fields['before'] ?? null;
+            $after = $activity->changed_fields['after'] ?? null;
+            if (! is_array($before) || ! is_array($after) || ($after['inspection_geocode']['precision'] ?? null) !== 'city') {
+                break;
+            }
+            foreach ($state as $key => $value) {
+                if (! array_key_exists($key, $after) || $after[$key] !== $value) {
+                    return $address;
+                }
+            }
+            $street = $before['address'] ?? null;
+            if (is_string($street) && trim($street) !== '' && trim($street) !== trim($before['city'] ?? '')
+                && mb_strlen($street) <= 500 && ! preg_match('/[\x00-\x1F\x7F]/', $street)) {
+                return trim($street);
+            }
+            if (! array_key_exists('address', $before) || ! array_key_exists('postal_code', $before) || ! array_key_exists('city', $before)) {
+                break;
+            }
+            $state = array_intersect_key($before, $state);
+        }
+
+        return $address;
+    }
+
     public function correct(User $actor, Dossier $dossier, array $data): Dossier
     {
         Gate::forUser($actor)->authorize('update', $dossier);
@@ -40,10 +75,16 @@ final class DossierAddressCorrection
             $this->checkVersion($locked, (int) $data['version']);
             $before = $locked->only(['address', 'postal_code', 'city', 'inspection_geocode']);
             $oldKey = 'dossier-map-preview:'.$locked->id.':'.hash('sha256', DossierLocation::address($locked));
-            $locked->fill(['address' => $result['street_address'] ?: $result['city'], 'postal_code' => $result['postal_code'] ?? null, 'city' => $result['city']]);
+            $approximate = ($result['precision'] ?? null) === 'city';
+            $street = $approximate ? (array_key_exists('display_address', $data)
+                ? trim((string) $data['display_address']) : $this->retainedAddress($locked)) : $result['street_address'];
+            if ($approximate && $street === trim($locked->city ?? '')) {
+                $street = '';
+            }
+            $locked->fill(['address' => $street ?: $result['city'], 'postal_code' => $result['postal_code'] ?? null, 'city' => $result['city']]);
             $locked->forceFill(['inspection_geocode' => DossierLocation::metadata($locked, $result), 'version' => $locked->version + 1])->save();
             $locked->activities()->create(['author_id' => $actor->id, 'kind' => 'address_corrected',
-                'body' => (($result['precision'] ?? null) === 'city' ? 'Localisation approximative sur la commune / code postal, adresse exacte à confirmer.' : 'Adresse d’intervention validée et position recalculée avec Mapbox.').' Rendez-vous existants conservés.',
+                'body' => ($approximate ? 'Localisation approximative sur la commune / code postal ; voie conservée pour affichage, non utilisée pour le calcul de position.' : 'Adresse d’intervention validée et position recalculée avec Mapbox.').' Rendez-vous existants conservés.',
                 'changed_fields' => ['before' => $before, 'after' => $locked->only(array_keys($before))],
                 'client_visible' => false, 'delegataire_visible' => false]);
             $newKey = 'dossier-map-preview:'.$locked->id.':'.hash('sha256', DossierLocation::address($locked));

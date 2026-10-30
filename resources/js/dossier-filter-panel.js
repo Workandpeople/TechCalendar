@@ -44,7 +44,7 @@ export function dossierFilterItems(form, statusLabels = {}) {
     if (from || to) {
         const period = from && to ? `du ${dateLabel(from)} au ${dateLabel(to)}`
             : from ? `à partir du ${dateLabel(from)}` : `jusqu’au ${dateLabel(to)}`;
-        add('dates', `${value(form, 'date_field') === 'appointment' ? 'Date RDV' : 'Création'} : ${period}`);
+        add('dates', `Date RDV : ${period}`);
     }
     return items;
 }
@@ -60,7 +60,6 @@ export function clearDossierFilter(form, key, browser) {
     }
     if (key === 'dates') {
         for (const name of ['date_from', 'date_to']) if (field(form, name)) field(form, name).value = '';
-        if (field(form, 'date_field')) field(form, 'date_field').value = 'created';
         return true;
     }
     if (!['q', 'status', 'delegataire_id', ...advancedKeys].includes(key)) return false;

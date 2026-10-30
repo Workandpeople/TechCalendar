@@ -261,6 +261,19 @@ test('canonicalizes implicit defaults and reordered multiselections before decid
     assert.equal(dossierCategoryScope(new URL(`${base}?status=pending&date_field=created`)), dossierCategoryScope(new URL(`${base}?status=pending`)));
 });
 
+test('drops the obsolete date-field choice from filters categories and pagination URLs', () => {
+    const dates = 'date_from=2026-11-01&date_to=2026-11-30';
+    const expected = dossierListUrl(base, new URLSearchParams(dates));
+    for (const dateField of ['created', 'appointment']) {
+        const old = new URL(`${base}?${dates}&date_field=${dateField}`);
+        const current = dossierListUrl(base, old.searchParams, { page: 2 });
+        assert.equal(current.searchParams.has('date_field'), false);
+        assert.equal(current.searchParams.get('date_from'), '2026-11-01');
+        assert.equal(current.searchParams.get('page'), '2');
+        assert.equal(dossierCategoryScope(old), dossierCategoryScope(expected));
+    }
+});
+
 test('requests just one page and permits omitted counters only when explicitly requested', async () => {
     const ui = fixture();
     const url = new URL(`${base}?status=visited&page=3&per_page=10`);

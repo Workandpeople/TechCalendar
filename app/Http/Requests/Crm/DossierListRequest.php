@@ -31,7 +31,6 @@ class DossierListRequest extends FormRequest
                 Rule::exists('users', 'id')->where('role', 0)->whereNull('external_client_id')->whereNull('deleted_at')],
             'department' => ['nullable', 'string', 'exists:departments,code'],
             'section' => ['nullable', Rule::in(['corse', 'domtom', 'sav'])],
-            'date_field' => ['nullable', Rule::in(['created', 'appointment'])],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', Rule::when($this->filled('date_from'), 'after_or_equal:date_from')],
             'per_page' => ['nullable', Rule::in([10, 25, 50, 100])],

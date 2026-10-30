@@ -34,9 +34,10 @@ it('separates primary criteria complementary filters and table preferences witho
     foreach (['q', 'company_ids[]', 'service_ids[]'] as $name) {
         expect($xpath->query($form.'//*[@name="'.$name.'" and not(ancestor::details)]')->length)->toBe(1);
     }
-    foreach (['department', 'section', 'planning', 'billing', 'date_field', 'date_from', 'date_to'] as $name) {
+    foreach (['department', 'section', 'planning', 'billing', 'date_from', 'date_to'] as $name) {
         expect($xpath->query('//details[@data-dossier-advanced]//*[@name="'.$name.'"]')->length)->toBe(1);
     }
+    expect($xpath->query('//*[@name="date_field"]')->length)->toBe(0);
     expect($xpath->query('//input[@name="all_columns" and @form="dossier-filters" and not(ancestor::form)]')->length)->toBe(1)
         ->and($xpath->query('//*[@data-dossier-page-size]')->length)->toBe(1)
         ->and($xpath->query('//nav[contains(@class,"gc-pagination")]//*[@data-dossier-page-size]')->length)->toBe(0)
@@ -62,7 +63,7 @@ it('opens complementary criteria from explicit links and preserves all selected 
         ->and(trim($xpath->query('//*[@data-dossier-advanced-count]')->item(0)->textContent))->toBe('5 actifs')
         ->and($xpath->query('//select[@name="service_ids[]"]/option[@selected]')->length)->toBe(2)
         ->and($xpath->query('//input[@name="all_columns" and @checked]')->length)->toBe(1);
-    foreach (['department' => '75', 'section' => 'sav', 'planning' => 'problem', 'billing' => 'invoiced', 'date_field' => 'appointment'] as $name => $value) {
+    foreach (['department' => '75', 'section' => 'sav', 'planning' => 'problem', 'billing' => 'invoiced'] as $name => $value) {
         expect($xpath->query('//select[@name="'.$name.'"]/option[@selected]')->item(0)->getAttribute('value'))->toBe($value);
     }
     $json = $this->getJson(route('v2.dossiers.index', $filters))->assertOk();

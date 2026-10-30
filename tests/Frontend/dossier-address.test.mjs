@@ -78,12 +78,13 @@ function editorFixture() {
         scrollIntoView() {}
         set innerHTML(_) { assert.fail('Suggestions must use textContent, not HTML.'); }
     }
-    const input = new Node(), identifier = new Node(), list = new Node(), status = new Node(), submit = new Node(), dialog = new Node();
+    const input = new Node(), identifier = new Node(), list = new Node(), status = new Node(), submit = new Node(), dialog = new Node(), street = new Node();
+    const displayAddress = new Node(); displayAddress.value = 'Lieu-dit original à conserver';
     list.id = 'dossier-address-options'; input.value = 'Adresse initiale';
     const form = new Node();
-    form.elements = { address_query: input, mapbox_id: identifier };
+    form.elements = { address_query: input, mapbox_id: identifier, display_address: displayAddress };
     form.dataset = { suggestionsUrl: 'https://example.invalid/v2/dossiers/1/adresse/suggestions' };
-    form.querySelector = selector => selector === '[data-address-status]' ? status : selector === '[role="listbox"]' ? list : submit;
+    form.querySelector = selector => selector === '[data-address-status]' ? status : selector === '[role="listbox"]' ? list : selector === '[data-address-street]' ? street : submit;
     form.closest = () => dialog;
     form.contains = node => [input, identifier, list, status, submit].includes(node);
     const root = { querySelectorAll: () => [form], createElement: () => new Node() };
@@ -93,7 +94,7 @@ function editorFixture() {
         input.handlers.keydown(event);
         return event;
     };
-    return { ...ui, input, identifier, list, status, submit, dialog, form, key };
+    return { ...ui, input, identifier, list, status, submit, dialog, form, key, street, displayAddress };
 }
 
 test('selects Mapbox suggestions with the keyboard, escapes HTML and clears stale place IDs when typing', async () => {
@@ -188,7 +189,24 @@ test('keeps a canonical commune selection valid when the correction form is subm
     ui.list.children[0].handlers.click();
     assert.equal(ui.input.value, '32380 Bivès, Gers, France');
     assert.match(ui.status.textContent, /Commune sélectionnée/);
+    assert.equal(ui.street.hidden, false);
+    assert.equal(ui.displayAddress.value, 'Lieu-dit original à conserver');
     ui.input.handlers.change();
     ui.form.handlers.submit();
     assert.equal(ui.identifier.value, 'commune.32055_32380');
+});
+
+test('keeps the display street separate when switching from a commune to an exact address', async () => {
+    const ui = editorFixture();
+    assert.equal(ui.street.hidden, true);
+    ui.input.value = '01560 Lescheroux'; ui.input.handlers.input(); ui.run(300);
+    assert.equal(ui.street.hidden, false);
+    ui.requests[0].resolve(response([{ id: 'commune.01212_01560', label: '01560 Lescheroux, Ain, France', feature_type: 'place' }]));
+    await settle(); ui.list.children[0].handlers.click();
+    ui.input.value = '8 rue Test'; ui.input.handlers.input(); ui.run(300);
+    ui.requests[1].resolve(response([{ id: 'address.precise', label: '8 rue Test, Paris', feature_type: 'address' }]));
+    await settle(); ui.list.children[0].handlers.click();
+    assert.equal(ui.street.hidden, true);
+    assert.equal(ui.displayAddress.value, 'Lieu-dit original à conserver');
+    assert.equal(ui.identifier.value, 'address.precise');
 });

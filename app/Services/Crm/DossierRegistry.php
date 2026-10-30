@@ -133,26 +133,22 @@ class DossierRegistry
                         $query->where($column, '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
                     }
                 };
-                if (($filters['date_field'] ?? 'created') === 'appointment') {
-                    $query->whereHas('appointments', function ($appointments) use ($range, $filters, $serviceIds): void {
-                        $appointments->withTrashed()->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive')
-                            ->orWhere('appointments.status', Appointment::STATUS_CANCELLED));
-                        $range($appointments, 'appointments.starts_at');
-                        $appointments->whereHas('dossierOperation', function ($operation) use ($filters, $serviceIds): void {
-                            $operation->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
-                            if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
-                                $operation->where(function ($q) use ($filters): void {
-                                    DossierStatusCatalog::filter($q, $filters['status']);
-                                    if ($filters['status'] === 'invoiced') {
-                                        $q->orWhereHas('billing');
-                                    }
-                                });
-                            }
-                        });
+                $query->whereHas('appointments', function ($appointments) use ($range, $filters, $serviceIds): void {
+                    $appointments->withTrashed()->where(fn ($q) => $q->whereNull('appointments.deleted_at')->orWhere('appointments.external_source', 'coffrac_archive')
+                        ->orWhere('appointments.status', Appointment::STATUS_CANCELLED));
+                    $range($appointments, 'appointments.starts_at');
+                    $appointments->whereHas('dossierOperation', function ($operation) use ($filters, $serviceIds): void {
+                        $operation->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
+                        if (filled($filters['status'] ?? null) && $filters['status'] !== 'unknown') {
+                            $operation->where(function ($q) use ($filters): void {
+                                DossierStatusCatalog::filter($q, $filters['status']);
+                                if ($filters['status'] === 'invoiced') {
+                                    $q->orWhereHas('billing');
+                                }
+                            });
+                        }
                     });
-                } else {
-                    $range($query, 'dossiers.created_at');
-                }
+                });
             })
             ->when($filters['billing'] ?? null, function ($query, $billing): void {
                 if ($billing === 'review') {

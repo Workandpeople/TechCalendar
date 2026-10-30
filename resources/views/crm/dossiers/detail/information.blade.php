@@ -25,18 +25,28 @@
     </div>
 </section>
 @can('update', $dossier)
+    @php
+        $retainedAddress = old('display_address', app(\App\Services\Crm\DossierAddressCorrection::class)->retainedAddress($dossier));
+        $approximateLocation = ($dossier->inspection_geocode['precision'] ?? null) === 'city' && \App\Services\Crm\DossierLocation::coordinates($dossier);
+        $locationQuery = $approximateLocation ? trim($dossier->postal_code.' '.$dossier->city) : \App\Services\Crm\DossierLocation::address($dossier);
+    @endphp
     <x-dossier-dialog id="corriger-adresse" title="Modifier l’adresse de l’intervention" class="gc-address-dialog" :reopen="$errors->any() && old('_form') === 'address'">
-        <form method="POST" action="{{ route('v2.dossiers.address.update', $dossier) }}" class="space-y-4" data-dossier-address data-suggestions-url="{{ route('v2.dossiers.address.suggestions', $dossier) }}">
+        <form method="POST" action="{{ route('v2.dossiers.address.update', $dossier) }}" class="space-y-4" data-dossier-address data-location-precision="{{ $approximateLocation ? 'city' : 'address' }}" data-suggestions-url="{{ route('v2.dossiers.address.suggestions', $dossier) }}">
             @csrf @method('PATCH')
             <input type="hidden" name="_form" value="address">
             <input type="hidden" name="version" value="{{ $dossier->version }}">
             <input type="hidden" name="mapbox_id" value="{{ old('mapbox_id') }}">
             <p class="text-sm text-slate-600">Recherchez une adresse ou saisissez le code postal et la commune. Les communes sont vérifiées dans le référentiel public français ; leur centre donne une position approximative, pas l’adresse exacte.</p>
-            <div><label class="gc-label" for="dossier-address-query">Adresse de l’intervention</label>
-                <input id="dossier-address-query" name="address_query" type="text" required minlength="3" maxlength="255" class="gc-input" value="{{ old('address_query', \App\Services\Crm\DossierLocation::address($dossier)) }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dossier-address-options" aria-describedby="dossier-address-status">
+            <div><label class="gc-label" for="dossier-address-query">Localisation pour le planning (adresse ou commune)</label>
+                <input id="dossier-address-query" name="address_query" type="text" required minlength="3" maxlength="255" class="gc-input" value="{{ old('address_query', $locationQuery) }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dossier-address-options" aria-describedby="dossier-address-status">
                 <ul id="dossier-address-options" class="gc-address-suggestions" role="listbox" aria-label="Adresses ou communes proposées" hidden></ul>
             </div>
             <p id="dossier-address-status" data-address-status role="status" aria-live="polite" class="text-xs text-slate-500">Saisissez au moins 3 caractères pour rechercher une adresse.</p>
+            <div data-address-street>
+                <label class="gc-label" for="dossier-display-address">Voie / lieu-dit à conserver sur la fiche</label>
+                <input id="dossier-display-address" name="display_address" type="text" maxlength="500" class="gc-input" value="{{ is_string($retainedAddress) ? $retainedAddress : '' }}" aria-describedby="dossier-display-address-help">
+                <p id="dossier-display-address-help" class="text-xs text-slate-500 mt-1">Avec une commune sélectionnée, cette voie reste affichée sur le dossier mais n’est pas utilisée pour calculer la position. Vous pouvez la compléter sans changer le point de la commune.</p>
+            </div>
             <p class="text-xs text-slate-500">Les rendez-vous déjà planifiés et l’historique sont conservés. Une localisation sur la commune reste approximative jusqu’à confirmation de l’adresse exacte.</p>
             <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-primary">Valider</button></footer>
         </form>

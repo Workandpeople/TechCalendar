@@ -35,6 +35,9 @@ export function initDossierAddress(root = document, browser = window) {
         const status = form.querySelector('[data-address-status]');
         const list = form.querySelector('[role="listbox"]');
         const dialog = form.closest('dialog');
+        const streetSection = form.querySelector('[data-address-street]');
+        const cityQuery = () => /^\s*[0-9]{5}[\s,]+[^0-9]+$/u.test(input.value.trim());
+        if (streetSection) streetSection.hidden = form.dataset.locationPrecision !== 'city' && !cityQuery();
         let suggestions = [], highlighted = -1, composing = false;
         let selectedLabel = input.value;
         const hide = () => {
@@ -56,8 +59,10 @@ export function initDossierAddress(root = document, browser = window) {
             input.value = selectedLabel = item.label;
             identifier.value = item.id;
             hide();
-            status.textContent = ['place', 'postcode', 'locality'].includes(item.feature_type)
-                ? 'Commune sélectionnée : position approximative. Cliquez sur Valider.'
+            const approximate = ['place', 'postcode', 'locality'].includes(item.feature_type);
+            if (streetSection) streetSection.hidden = !approximate;
+            status.textContent = approximate
+                ? 'Commune sélectionnée : position approximative. La voie reste conservée sur la fiche. Cliquez sur Valider.'
                 : 'Adresse sélectionnée. Cliquez sur Valider pour recalculer la position.';
             input.focus({ preventScroll: true });
         };
@@ -85,6 +90,7 @@ export function initDossierAddress(root = document, browser = window) {
             loader.cancel(); hide();
             identifier.value = '';
             selectedLabel = '';
+            if (streetSection && cityQuery()) streetSection.hidden = false;
             const query = input.value.trim();
             if (composing) return;
             if (query.length < 3 || query.length > 255) {

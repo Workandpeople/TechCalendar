@@ -60,10 +60,15 @@ test('handles a single service and open ended dates without timezone conversion'
     const ui = fixture({ date_from: '2026-03-29' });
     ui.fields['service_ids[]'].options[0].selected = true;
     assert.equal(dossierFilterItems(ui.form)[0].label, 'Fiche : Fiche A');
-    assert.equal(dossierFilterItems(ui.form)[1].label, 'Création : à partir du 29/03/2026');
+    assert.equal(dossierFilterItems(ui.form)[1].label, 'Date RDV : à partir du 29/03/2026');
     ui.fields.date_from.value = '';
     ui.fields.date_to.value = '2026-10-25';
-    assert.equal(dossierFilterItems(ui.form)[1].label, 'Création : jusqu’au 25/10/2026');
+    assert.equal(dossierFilterItems(ui.form)[1].label, 'Date RDV : jusqu’au 25/10/2026');
+});
+
+test('always describes appointment dates even when a stale creation selector remains in an old page', () => {
+    const ui = fixture({ date_field: 'created', date_from: '2026-11-02' });
+    assert.equal(dossierFilterItems(ui.form)[0].label, 'Date RDV : à partir du 02/11/2026');
 });
 
 test('clearing one criterion preserves other criteria sorting and display settings', () => {
@@ -131,7 +136,6 @@ test('clearing the period removes both boundaries as a single criterion', () => 
     clearDossierFilter(ui.form, 'dates', ui.browser);
     assert.equal(ui.fields.date_from.value, '');
     assert.equal(ui.fields.date_to.value, '');
-    assert.equal(ui.fields.date_field.value, 'created');
     assert.equal(ui.fields.billing.value, 'invoiced');
 });
 

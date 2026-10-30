@@ -3,7 +3,7 @@ import { initDossierArchiving } from './dossier-archiving.js';
 import { readDossierPreferences, saveDossierPreferences, preferredDossierUrl } from './dossier-preferences.js';
 import { initDossierFilterPanel, syncDossierPlanningFilter } from './dossier-filter-panel.js';
 
-const filterNames = ['q', 'lot', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_field', 'date_from', 'date_to'];
+const filterNames = ['q', 'lot', 'status', 'delegataire_id', 'company_ids[]', 'service_id', 'service_ids[]', 'planning_user_ids[]', 'planning', 'billing', 'per_page', 'sort', 'direction', 'all_columns', 'department', 'section', 'date_from', 'date_to'];
 const arrayFilterName = name => /^(service_ids|planning_user_ids|company_ids)(?:\[\d*\])?$/.exec(name)?.[1];
 const legacyArrayFilters = { service_ids: 'service_id', company_ids: 'delegataire_id' };
 
@@ -33,7 +33,7 @@ export function syncDossierFilters(form, url, browser) {
             input.dispatchEvent(new browser.CustomEvent('techcalendar:selection-sync'));
             continue;
         }
-        const value = url.searchParams.get(name) ?? (name === 'per_page' ? '10' : name === 'date_field' ? 'created' : '');
+        const value = url.searchParams.get(name) ?? (name === 'per_page' ? '10' : '');
         if (input.type === 'checkbox') input.checked = value === '1';
         else if (input.value !== value) input.value = value;
     }
@@ -72,7 +72,6 @@ export function dossierListUrl(base, entries, changes = {}) {
     if (!url.searchParams.has('sort')) url.searchParams.delete('direction');
     else if (!url.searchParams.has('direction')) url.searchParams.set('direction', 'asc');
     if (url.searchParams.get('per_page') === '10') url.searchParams.delete('per_page');
-    if (url.searchParams.get('date_field') === 'created') url.searchParams.delete('date_field');
     if (url.searchParams.get('all_columns') === '0') url.searchParams.delete('all_columns');
     url.searchParams.sort();
     return url;

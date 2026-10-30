@@ -189,6 +189,10 @@ it('replaces a known appointment with missing gps using the dossier address inst
 it('filters departments sectors and date ranges identically in html and ajax listings', function () {
     Department::updateOrCreate(['code' => '2A'], ['name' => 'Corse du Sud']);
     $this->dossier->forceFill(['postal_code' => '20100', 'created_at' => '2026-01-02 23:59:59'])->save();
+    Appointment::forceCreate(['technician_id' => $this->manager->id, 'created_by' => $this->manager->id,
+        'service_id' => $this->service->id, 'dossier_operation_id' => $this->operation->id,
+        'customer_first_name' => 'Test', 'customer_last_name' => 'Client', 'customer_phone' => '', 'address' => 'Corse',
+        'starts_at' => '2026-01-02 23:59:59', 'ends_at' => '2026-01-03 00:59:59', 'duration_minutes' => 60]);
     $filters = ['department' => '2A', 'section' => 'corse', 'date_from' => '2026-01-02', 'date_to' => '2026-01-02'];
     $this->get(route('v2.dossiers.index', $filters))->assertOk()->assertViewHas('dossiers', fn ($rows) => $rows->total() === 1);
     $this->getJson(route('v2.dossiers.index', $filters))->assertOk()->assertJsonPath('total', 1);
