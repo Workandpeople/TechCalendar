@@ -28,6 +28,8 @@ case "$*" in
     'disable --now cofrac2-mymar-observation.timer cofrac2-mymar-observation.service') echo pilot-stopped >> /fixtures/unit-actions ;;
     'show apache2.service mysql.service cofrac2-php-fpm.service cofrac2-queue.service cofrac2-reverb.service cofrac-mymar-fpm.service cofrac-mymar-http.service -p Id -p MainPID -p ExecMainStartTimestampMonotonic -p ActiveState')
         echo 'Existing services and private API unchanged (fixture)' ;;
+    'show apache2.service mysql.service cofrac2-php-fpm.service cofrac2-queue.service cofrac2-reverb.service cofrac-mymar-fpm.service cofrac-mymar-http.service cofrac2-mymar-observation.timer -p Id -p MainPID -p ActiveState -p ExecMainStartTimestampMonotonic')
+        echo 'Existing services, private API and observation timer unchanged (fixture)' ;;
     'show apache2.service mysql.service php7.3-fpm.service php7.4-fpm.service php8.3-fpm.service php8.4-fpm.service cofrac2-php-fpm.service cofrac2-queue.service cofrac2-reverb.service -p Id -p MainPID -p ExecMainStartTimestampMonotonic -p ActiveState -p SubState')
         echo 'Existing services unchanged (fixture)' ;;
     *) printf 'FORBIDDEN systemctl %s\n' "$*" > /fixtures/FORBIDDEN_CALL; exit 99 ;;

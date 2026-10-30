@@ -107,7 +107,7 @@ echo "Apache/FPM/MySQL : HTTP authentifie, scope borne, deux occupations, aucun 
 PHP
 test "$(docker exec "$DB" mysql -NBe "SELECT COUNT(*) FROM mysql.user WHERE User LIKE 'cofrac_mymar_ro_%' AND account_locked='N'")" = 1
 if [ "${MYMAR_PILOT_CACHE_TEST:-}" = 1 ]; then
-    docker exec "$PHP" bash /workspace/tools/deploy/tests/check-mymar-pilot-cache-container.sh
+    docker exec -e MYMAR_CONFLICT_REVIEW_TEST="${MYMAR_CONFLICT_REVIEW_TEST:-0}" "$PHP" bash /workspace/tools/deploy/tests/check-mymar-pilot-cache-container.sh
     echo 'Chaine complete API HTTP privee, Laravel, cache SQL et affichage en observation validee.'
     exit
 fi

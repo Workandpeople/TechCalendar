@@ -81,6 +81,11 @@ if(App\Models\Appointment::count()!==0||App\Models\Dossier::count()!==0)exit(1);
 if(config('mail.delivery_enabled')||config('services.smsfactor.enabled')||config('services.smsfactor.mode')!=='simulate')exit(1);
 echo "API privee -> commande Laravel -> cache SQL persistant -> calendrier : deux occupations readonly, modes mail/SMS preserves.\n";
 PHP
+if [ "${MYMAR_CONFLICT_REVIEW_TEST:-}" = 1 ]; then
+    bash /workspace/tools/deploy/tests/check-mymar-conflict-review-container.sh
+    # The review fixture intentionally adds one native appointment before testing the subsequent pilot stop.
+    snapshot > /fixtures/pilot-business.before
+fi
 RUN=$(php -r '$p=glob("/var/lib/cofrac2-production/mymar-cache-pilot-*/summary.json");echo dirname($p[0]);')
 php -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if(!$r["cache_ready"]||$r["blocking_enabled"]||$r["cached_periods"]!==2)exit(1);' "$RUN/summary.json"
 bash "$RUN/bundle/stop-pilot.sh" > /fixtures/pilot-stop.log 2>&1

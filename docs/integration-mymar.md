@@ -682,3 +682,49 @@ Validation locale de ce lot : 2761 tests PHP (20595 assertions), 394 tests
 frontend et la chaine complete API/cache/affichage/arret ci-dessus reussis.
 Les cartes en vue mois et les compteurs distinguent aussi les observations
 MYMAR des RDV confirmes Cofrac et des suggestions.
+
+## Controle navigateur et previsualisation des conflits
+
+Le retour operateur confirme le pilote de cache en production : quatre
+techniciens approuves, cinq occupations, deux domaines rouverts, mail reel
+conserve et SMS/CAPCEE desactives. La verification navigateur des deux espaces
+a retrouve les cinq dates de debut sans decalage, et un cache qui continue de
+s'actualiser. Les cartes et le detail MYMAR sont bien en lecture seule ; aucune
+modification ou prise de rendez-vous de test n'a ete effectuee. Cela ne vaut pas
+confirmation globale des durees ou de tous les statuts/techniciens de MYMAR.
+
+`MymarOccupancySnapshot` prepare un calcul pur de chevauchements semi-ouverts,
+sans service de placement branche. Un cache absent, perime, futur, invalide,
+une synchronisation en echec ou une plage hors couverture restent des resultats
+inconnus, jamais des disponibilites confirmees. Un technicien hors pilote est
+explicitement distingue. Les instants absolus sont compares, y compris pendant
+les changements d'heure ; aucun rapprochement par adresse n'est suppose.
+
+Le paquet autonome `tools/deploy/mymar/conflicts` compare cet instantane avec
+les seuls RDV Cofrac operationnels du pilote. Il ne deploie pas le site et ne
+necessite pas de maintenance. Il n'amorce pas Laravel ni les providers applicatifs
+(qui peuvent sinon reecrire leur cache de parametres), ne charge pas de jeton
+API et ne contacte pas MYMAR. Il utilise les composants SQL/Eloquent avec les
+events desactives et une transaction MySQL READ ONLY bornee. La lecture brute
+des deux cles de cache evite aussi toute purge des lignes expirees.
+
+Les empreintes des huit contrats de la release runtime, des fichiers de
+configuration et l'etat des services sont controles. Aucune activation ou
+modification des comptes, jobs, rendez-vous, documents, envois ou privileges.
+Le rapport ne contient que des identifiants techniques et horaires, maximum
+30 paires de conflits, plus les compteurs globaux ; aucun contact/beneficiaire.
+Les durees/fuseau/statuts restent indiques comme hypotheses, les trajets ne sont
+pas evalues. Les RDV deja en conflit sont signales sans suppression/deplacement.
+
+Construction depuis le code commite :
+`php tools/deploy/prepare-mymar-conflict-review.php REVISION_RUNTIME`.
+La commande Mac du paquet est `bash ./fetch-conflicts.sh` ; pas de git pull
+serveur. Le pilote reste en observation, `blocking_enabled=false`.
+
+Tests : `tests/Unit/MymarOccupancySnapshotTest.php`, puis
+`MYMAR_PRIVATE_HTTP_TEST=1 MYMAR_PILOT_CACHE_TEST=1 MYMAR_CONFLICT_REVIEW_TEST=1
+bash tools/deploy/tests/check-mymar-private-http.sh` dans les conteneurs jetables.
+Le test reel injecte un conflit synthetique, verifie sa detection sous MySQL
+8.0.46 et compare les checksums des tables natives/source ET du cache avant/apres.
+Un cache expire est refuse sans purge ni fallback HTTP. Aucun test n'appelle
+la production ou ne relance le scheduler global.
