@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+
+# Release-specific launcher: validate the live V2 before requesting maintenance.
+set +x
+set -Eeuo pipefail
+umask 077
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+
+APP=/var/www/cofrac2
+STATE=/var/lib/cofrac2-production
+PACKAGE=@PACKAGE@
+REV=@REVISION@
+
+stop() { printf 'STOP : %s\n' "$1" >&2; exit 1; }
+[ "${EUID:-$(id -u)}" = 0 ] && [ "$(hostname -s)" = ns365601 ] && [ "$#" = 0 ] \
+    || stop 'sudo sur ns365601 uniquement, sans argument.'
+[ -d "$STATE" ] && [ ! -L "$STATE" ] && [ "$(stat -c %u:%a "$STATE")" = 0:700 ] \
+    && [ "$(realpath "$APP")" = "$APP" ] || stop 'chemins V2 inattendus.'
+for command in php8.4 runuser git systemctl curl flock cp find chmod cmp sha256sum; do
+    command -v "$command" >/dev/null || stop "outil manquant : $command"
+done
+
+exec 8>"$STATE/two-lots-release.lock"
+flock -n 8 || stop 'ce deploiement est deja en cours.'
+git_app() {
+    runuser -u cofrac2-deploy -- env HOME=/home/cofrac2-deploy git -C "$APP" "$@"
+}
+[ "$(git_app branch --show-current)" = v2 ] && [ -z "$(git_app status --porcelain)" ] \
+    || stop 'checkout v2 propre requis.'
+BASE=$(php8.4 -r '
+    $r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+    if (!preg_match("/^[a-f0-9]{40}$/D",$r["revision"]??"")) exit(1);
+    echo $r["revision"];
+' "$STATE/RUNTIME-PREPARED.json")
+@BASE_SELECTION@
+[ "$(git_app rev-parse HEAD)" = "$BASE" ] || stop 'revision serveur differente : ne pas utiliser ce paquet.'
+[ -f "$STATE/INTERNAL-SITE-OPEN.json" ] || stop 'ce lancement attend la V2 deja ouverte.'
+for name in php-fpm queue reverb; do
+    systemctl is-active --quiet "cofrac2-$name.service" || stop "service V2 inactif : $name"
+done
+
+CHECK=$(mktemp -d "$STATE/release-preflight-XXXXXXXX")
+phase=preflight
+closed_by_launcher=0
+finish() {
+    result=$?
+    trap - EXIT
+    rm -f -- "$CHECK/mysql.cnf"
+    if [ "$result" != 0 ]; then
+        if [ "$phase" = preflight ]; then
+            printf 'Precontrole interrompu avant maintenance : site non ferme par ce script.\n' >&2
+        elif [ "$phase" = reopened ]; then
+            printf 'Code installe et site rouvert ; verifier le diagnostic de fin de mise a jour.\n' >&2
+        else
+            printf 'Mise a jour interrompue apres demande de maintenance : verifier les journaux, ne pas reinitialiser la base.\n' >&2
+            # Only reopen a fully prepared matching revision. Never force a marker or restore live SQL.
+            if [ "$closed_by_launcher" = 1 ]; then
+                current=$(git_app rev-parse HEAD 2>/dev/null || true)
+                prepared=$(php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);echo $r["revision"]??"";' "$STATE/RUNTIME-PREPARED.json" 2>/dev/null || true)
+                if [ -n "$current" ] && [ "$current" = "$prepared" ]; then
+                    if bash "$APP/tools/deploy/configure-production-runtime.sh" --open --reload-shared-apache > "$CHECK/recovery-open.log" 2>&1; then
+                        printf 'Site reouvert sur sa revision validee ; la mise a jour reste a controler.\n' >&2
+                    else
+                        printf 'Reouverture non validee : consulter recovery-open.log. Aucun controle de securite contourne.\n' >&2
+                    fi
+                fi
+            fi
+        fi
+        printf 'Diagnostic prive : %s\n' "$CHECK" >&2
+    fi
+    exit "$result"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+printf 'Controles avant maintenance ; Cofrac2 reste ouvert. Diagnostic prive : %s\n' "$CHECK"
+[ -d "$SOURCE" ] && [ ! -L "$SOURCE" ] && [ "$(realpath "$SOURCE")" = "$SOURCE" ] \
+    || stop 'paquet transfere absent ou indirect.'
+mkdir -m 0700 "$CHECK/bundle"
+cp -a --no-preserve=ownership "$SOURCE/." "$CHECK/bundle/"
+[ -z "$(find "$CHECK/bundle" ! -type d ! -type f -print -quit)" ] \
+    || stop 'lien ou fichier special dans le paquet.'
+find "$CHECK/bundle" -type d -exec chmod 0700 {} +
+find "$CHECK/bundle" -type f -exec chmod 0600 {} +
+
+git_app fetch origin v2
+git_app merge-base --is-ancestor "$REV" origin/v2 || stop 'revision non presente sur origin/v2.'
+git_app merge-base --is-ancestor "$BASE" "$REV" || stop 'revision non descendante.'
+git_app diff --quiet "$BASE" "$REV" -- composer.json composer.lock \
+    || stop 'dependances PHP modifiees : aucun Composer ne sera lance.'
+git_app diff --name-only "$BASE" "$REV" > "$CHECK/changed-files.txt"
+cp "$EXPECTED" "$CHECK/expected-files.txt"
+[ "$(sha256sum "$CHECK/expected-files.txt" | cut -d' ' -f1)" = "$EXPECTED_SHA" ] || stop 'liste de changements alteree.'
+cmp -s "$CHECK/changed-files.txt" "$CHECK/expected-files.txt" || stop 'difference hors du lot approuve.'
+# Use exactly the future updater's guard while the live V2 remains open.
+git_app show "$REV:tools/deploy/update-production-release.sh" > "$CHECK/future-updater.sh"
+bash -n "$CHECK/future-updater.sh"
+bash "$CHECK/future-updater.sh" --check-scope "$CHECK/changed-files.txt"
+while IFS= read -r file; do
+    case "$file" in
+        app/*.php|routes/*.php|database/migrations/*.php|tools/deploy/*.php)
+            git_app show "$REV:$file" > "$CHECK/syntax.php"
+            php8.4 -l "$CHECK/syntax.php" >> "$CHECK/code-syntax.log"
+            ;;
+    esac
+done < "$CHECK/changed-files.txt"
+php8.4 "$APP/tools/deploy/update-production-release.php" --check \
+    "$CHECK/bundle" "$SHA" "$REV" "$CHECK/mysql.cnf" > "$CHECK/package.json"
+rm -f -- "$CHECK/mysql.cnf"
+php8.4 -r '
+    $p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+    if (($p["pending_migrations"]??null)!==[]) {
+        fwrite(STDERR,"STOP : migrations en attente hors de ce lot sans changement de schema. Aucune maintenance demandee.\n");
+        exit(1);
+    }
+' "$CHECK/package.json"
+php8.4 -r 'if (PHP_VERSION_ID < 80401 || !class_exists("Dom\\HTMLDocument")) exit(1);' \
+    || stop 'PHP 8.4.1+ avec le parseur HTML5 DOM requis pour les commentaires.'
+git_app show "$REV:tools/deploy/production-runtime.php" > "$CHECK/runtime-check.php"
+[ "$(sha256sum "$CHECK/runtime-check.php" | cut -d' ' -f1)" = @RUNTIME_CHECK_SHA@ ] || stop 'controle runtime different de la revision approuvee.'
+php8.4 -l "$CHECK/runtime-check.php" > "$CHECK/runtime-syntax.log"
+runuser -u cofrac2-app -- env -i PATH="$PATH" HOME=/var/lib/cofrac2-app \
+    USER=cofrac2-app LOGNAME=cofrac2-app php8.4 -d memory_limit=768M \
+    -- --check < "$CHECK/runtime-check.php" > "$CHECK/application.json"
+for domain in cofrac.geniuscontrole.com cofrac2.geniuscontrole.com; do
+    for route in /login /up; do
+        code=$(curl --noproxy '*' --fail --silent --show-error --max-time 30 \
+            --resolve "$domain:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$domain$route")
+        [ "$code" = 200 ] || stop 'un des deux domaines ne repond pas deja en HTTPS 200 ; aucune maintenance demandee.'
+    done
+done
+
+# Confirm the new public reference using the runtime account, before closing V2.
+printf 'Verification HTTPS du referentiel des communes (donnees publiques uniquement)...\n'
+runuser -u cofrac2-app -- env -i PATH="$PATH" HOME=/var/lib/cofrac2-app \
+    USER=cofrac2-app LOGNAME=cofrac2-app php8.4 > "$CHECK/communes-check.json" <<'PHP'
+<?php
+try {
+    if (!function_exists('curl_init')) throw new RuntimeException('Extension curl absente.');
+    $checked = [];
+    foreach (['01560' => ['01212', 'Lescheroux'], '32380' => ['32055', "Biv\u{00e8}s"]] as $postal => [$code, $name]) {
+        // Numeric array keys must remain five-character postal codes in the request.
+        $postal = str_pad((string) $postal, 5, '0', STR_PAD_LEFT);
+        $url = 'https://geo.api.gouv.fr/communes?'.http_build_query([
+            'codePostal' => $postal, 'fields' => 'code,nom,codesPostaux,centre,departement', 'format' => 'json',
+        ]);
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 8, CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS]);
+        $body = curl_exec($curl);
+        $http = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        unset($curl);
+        if ($http !== 200 || !is_string($body) || strlen($body) > 2000000) throw new RuntimeException('Reponse HTTP invalide.');
+        $rows = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+        if (!is_array($rows) || !array_is_list($rows) || count($rows) > 500) throw new RuntimeException('Referentiel invalide.');
+        $matches = array_values(array_filter($rows, static fn ($row) => is_array($row)
+            && ($row['code'] ?? null) === $code && ($row['nom'] ?? null) === $name
+            && is_array($row['codesPostaux'] ?? null) && in_array($postal, $row['codesPostaux'], true)));
+        $point = $matches[0]['centre']['coordinates'] ?? null;
+        if (count($matches) !== 1 || ($matches[0]['centre']['type'] ?? null) !== 'Point'
+            || !is_array($point) || !array_is_list($point) || count($point) !== 2
+            || !is_numeric($point[0]) || !is_numeric($point[1])
+            || !is_finite((float) $point[0]) || !is_finite((float) $point[1])
+            || abs((float) $point[0]) > 180 || abs((float) $point[1]) > 90
+            || ((float) $point[0] === 0.0 && (float) $point[1] === 0.0)) throw new RuntimeException('Commune attendue non confirmee.');
+        $checked[] = ['code_postal' => $postal, 'code_insee' => $code, 'commune_confirmee' => true];
+    }
+    echo json_encode(['reference_accessible' => true, 'communes' => $checked], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR).PHP_EOL;
+} catch (Throwable) {
+    fwrite(STDERR, "STOP : referentiel des communes non confirme. Aucune maintenance demandee.\n");
+    exit(1);
+}
+PHP
+
+# Run maintenance with the currently installed templates, before changing code.
+phase=maintenance
+printf 'Controles OK. Courte maintenance V2, sauvegarde et mise a jour.\n'
+bash "$APP/tools/deploy/configure-production-runtime.sh" --maintenance --reload-shared-apache
+closed_by_launcher=1
+git_app merge --ff-only "$REV"
+[ "$(git_app rev-parse HEAD)" = "$REV" ] || stop 'revision apres mise a jour inattendue.'
+bash "$APP/tools/deploy/update-production-release.sh" --apply "$CHECK/bundle" "$SHA"
+bash "$APP/tools/deploy/configure-production-runtime.sh" --open --reload-shared-apache
+phase=reopened
+closed_by_launcher=0
+
+for name in php-fpm queue reverb; do
+    systemctl is-active --quiet "cofrac2-$name.service" || stop "service V2 inactif apres ouverture : $name"
+done
+for domain in cofrac.geniuscontrole.com cofrac2.geniuscontrole.com; do
+    for route in /login /up; do
+        code=$(curl --noproxy '*' --silent --show-error --max-time 30 \
+            --resolve "$domain:443:127.0.0.1" \
+            -o /dev/null -w '%{http_code}' "https://$domain$route")
+        printf '%s%s : HTTPS %s\n' "$domain" "$route" "$code"
+        [ "$code" = 200 ] || stop 'controle HTTPS apres ouverture refuse.'
+    done
+done
+printf 'Correctifs adresses, recherche beneficiaire et commentaires deployes.\n'
+printf 'Identifiants SMTP et modes mail/SMS conserves. Les deux domaines restent ouverts.\n'
+printf 'Aucun ancien RDV ni adresse historique reecrit. Aucun seeder/import, droit ou mot de passe reinitialise.\n'
+printf 'Preparation MYMAR desactivee, sans connexion SQL ni changement de planning...\n'
+php8.4 "$APP/tools/deploy/mymar/gateway/prepare-disabled.php" --prepare-disabled "$REV"
+printf 'Actualiser le navigateur pour charger les nouveaux assets.\n'

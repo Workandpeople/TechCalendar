@@ -12,11 +12,13 @@ database/migrations/2026_10_29_150000_add_portal_notification_preferences_to_use
 config/admin.php
 config/calendar.php
 vite.config.js
+package.json
+package-lock.json
 database/seeders/CoffracServiceAliasSeeder.php
 tools/deploy/update-production-release.sh
 FILES
 bash "$HERE/update-production-release.sh" --check-scope "$WORK/allowed"
-for file in config/database.php database/seeders/UnapprovedSeeder.php database/migrations/2026_10_29_160000_unapproved.php public/unapproved.php .env; do
+for file in config/database.php composer.json composer.lock node_modules/quill/quill.js database/seeders/UnapprovedSeeder.php database/migrations/2026_10_29_160000_unapproved.php public/unapproved.php .env; do
     printf '%s\n' "$file" > "$WORK/refused"
     if bash "$HERE/update-production-release.sh" --check-scope "$WORK/refused" > "$WORK/output" 2>&1; then
         echo 'FAIL : changement hors perimetre accepte.' >&2

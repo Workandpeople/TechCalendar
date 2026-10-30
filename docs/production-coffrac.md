@@ -2936,3 +2936,76 @@ Reference : [documentation officielle des communes](https://geo.api.gouv.fr/deco
   creation du dossier reste disponible, mais ne pilote plus la recherche par date.
 - Aucun import, seeder, nouvelle migration, envoi ou changement de configuration.
   Les RDV existants, reglages SMTP et modes SMS sont conserves.
+
+### Validation des adresses a la creation et reprise GPS (30 octobre 2026)
+
+- Les formulaires internes et clients exigent une adresse d'intervention.
+  En mode precis, une suggestion Mapbox doit etre selectionnee. Le navigateur
+  invalide la selection apres modification ; le serveur confirme aussi son
+  identifiant et ses coordonnees avant toute creation, sans faire confiance
+  aux coordonnees transmises par le navigateur.
+- Le mode "Adresse non trouvee" conserve la voie libre et exige le code postal
+  a 5 chiffres et la ville. Une selection de suggestion n'est pas obligatoire
+  dans ce mode, mais l'association commune/code postal doit etre confirmee
+  par le referentiel officiel avant enregistrement. La voie est conservee.
+- A la selection d'un dossier sans GPS fiable pour le planning, on tente
+  l'adresse precise puis la commune. Les champs code postal/ville du dossier
+  sont prioritaires ; sinon le dernier code postal isole de 5 chiffres et
+  la ville qui le suit sont extraits de l'adresse complete.
+- Un code postal sans nom n'est utilise que s'il correspond a une commune
+  unique. Un nom incoherent, plusieurs communes ou un service indisponible
+  restent un echec explicite : aucun premier resultat choisi au hasard.
+- La reprise est limitee au dossier selectionne et mise en cache 5 minutes,
+  sans mise a jour silencieuse du dossier ni traitement du backlog. La position
+  approximative reste signalee et ne permet jamais l'exception de chevauchement
+  pour des RDV supposes a moins de 1 km. Le departement retrouve est utilise
+  dans l'analyse des techniciens, sans reecrire l'adresse conservee.
+- Aucun import, migration, seeder, modification MYMAR ou changement des envois.
+
+### Recherche par beneficiaire dans les portails (30 octobre 2026)
+
+- Le portail client/delegataire recherche aussi le libelle de beneficiaire
+  importe (`legacy_label`), utilise dans la liste quand les champs natifs sont vides.
+- La recherche commune sait rapprocher un prenom et un nom stockes separement,
+  dans les ordres prenom/nom et nom/prenom. Les espaces multiples ou inseparables
+  et les retours a la ligne d'un texte colle ne bloquent plus cette recherche.
+- Les caracteres SQL `%`, `_` et `!` restent litteraux. Les criteres sont lies
+  a la requete SQL ; aucun filtrage PHP de la seule page de pagination.
+- Les affectations, suppressions et categories autorisees restent appliquees
+  avant la recherche et les compteurs. Aucun acces supplementaire, import,
+  changement de donnees ou nouvelle migration.
+
+### Livraison groupee : adresses, recherche et commentaires
+
+- Le lot inclut la validation d'adresse a la creation interne/externe, le mode
+  voie libre + commune/code postal verifies, la reprise GPS ponctuelle et la
+  recherche par nom de beneficiaire importe ou nom/prenom separes.
+- Les commentaires utilisent une barre compacte de mise en forme, chargee a la
+  demande. Le contenu est nettoye cote navigateur et serveur ; les tooltips et
+  variables textuelles des mails restent sans balises. Droits/portees inchanges.
+  Voir `docs/commentaires-riches.md` pour la liste blanche et l'avis de securite
+  Quill dont les formats concernes ne sont pas inclus dans le build.
+- Le deploiement accepte les changements `package.json`/lock uniquement avec
+  les assets Vite scelles prepares depuis la revision Git. Aucun `npm install`,
+  `npm ci` ou Composer sur le serveur. Les dependances PHP restent interdites.
+- `prepare-correctifs-delivery.php` produit un paquet prive depuis un export
+  Git, sans .env local ni VITE_* herites, pour des revisions de depart explicites.
+  Le lanceur verifie les fichiers, le perimetre du futur updater, PHP/DOM,
+  l'absence de migration en attente et les deux domaines AVANT maintenance.
+- La mise a jour sauvegarde la seule base V2, prepare les caches/assets puis
+  rouvre les deux domaines. Aucun seeder, import, traitement global des adresses,
+  modification des comptes/droits ou changement des reglages mail/SMS.
+- MYMAR est ensuite copie en preparation privee DESACTIVEE dans
+  `/var/lib/cofrac2-production/mymar-gateway-prepared/REVISION`. Aucun secret,
+  compte SQL, service ou vhost n'est cree, et aucune source MYMAR n'est lue.
+  Ce depot de code n'est pas encore une passerelle active et ne change aucun
+  planning. L'installation du service et le rapprochement des techniciens
+  restent des etapes distinctes avant la synchronisation.
+- En cas d'echec, aucune restauration SQL automatique et aucun marqueur force.
+  Une reouverture de secours n'est tentee que si code et preparation runtime
+  correspondent, et passe tous les controles runtime habituels.
+
+Validation du lot : 2663 tests PHP (20316 assertions), 390 tests JavaScript,
+et repetition Docker complete avec MySQL 8.0.46, Apache/TLS, PHP-FPM, worker,
+Reverb, double domaine, echec intermediaire et reprise. La preparation MYMAR
+est aussi verifiee dans un contexte Linux/root jetable, sans SQL ni reseau.

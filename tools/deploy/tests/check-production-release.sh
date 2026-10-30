@@ -21,8 +21,11 @@ printf '\n# Fixture export tooling update.\n' >> "$APP/tools/fixtures/fetch-tech
 printf '\0' >> "$APP/public/favicon.ico"
 printf '\n// Fixture approved naming-only update.\n' >> "$APP/config/admin.php"
 printf '\n// Fixture approved naming-only update.\n' >> "$APP/database/seeders/CoffracServiceAliasSeeder.php"
+php8.4 -r '$p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);$p["description"]="Precompiled frontend fixture";file_put_contents($argv[1],json_encode($p,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");' "$APP/package.json"
+printf '\n' >> "$APP/package-lock.json"
 git_app add resources/views/components/user-email-conflict.blade.php public/favicon.ico \
     config/admin.php database/seeders/CoffracServiceAliasSeeder.php \
+    package.json package-lock.json \
     tools/fixtures/collect-techcalendar-references.php tools/fixtures/prepare-techcalendar-export.php tools/fixtures/fetch-techcalendar-internal-users.sh
 git_app -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-schema-release >/dev/null
 REVISION=$(git_app rev-parse HEAD)

@@ -11,6 +11,7 @@ validate_release_scope() {
     while IFS= read -r file; do
         case "$file" in
             app/*|resources/*|routes/*|tests/*|docs/*|tools/deploy/*|lang/fr/passwords.php) ;;
+            package.json|package-lock.json) ;;
             public/favicon.ico|tools/fixtures/collect-techcalendar-references.php|tools/fixtures/prepare-techcalendar-export.php|tools/fixtures/fetch-techcalendar-internal-users.sh) ;;
             config/admin.php|database/seeders/CoffracServiceAliasSeeder.php) ;;
             config/mail.php|database/migrations/2026_10_25_110000_add_reversible_dossier_deletion.php|database/migrations/2026_10_25_120000_add_automatic_capcee_reports.php|database/migrations/2026_10_26_100000_activate_existing_mail_templates.php|database/migrations/2026_10_26_110000_add_dossier_inspection_geocode.php) ;;
@@ -105,8 +106,9 @@ cmp -s /etc/cofrac2/php-fpm.conf "$WORK/php-fpm.expected.conf" || stop 'configur
 cp -p /etc/cofrac2/php-fpm.conf "$WORK/php-fpm.before.conf"
 php-fpm8.4 --test --fpm-config "$HERE/cofrac2-php-fpm.conf.example" > "$WORK/php-fpm-check.log" 2>&1 \
     || stop 'nouvelle configuration PHP dediee invalide.'
-git_app diff --quiet "$previous" "$REVISION" -- composer.json composer.lock package.json package-lock.json \
-    || stop 'dependances modifiees : ce correctif ne les installe pas.'
+git_app diff --quiet "$previous" "$REVISION" -- composer.json composer.lock \
+    || stop 'dependances PHP modifiees : ce correctif ne les installe pas.'
+# Frontend dependencies are already compiled into the sealed Vite bundle. Never run npm on production.
 git_app diff --name-only "$previous" "$REVISION" > "$WORK/changed-files.txt"
 validate_release_scope "$WORK/changed-files.txt"
 for directory in app config routes resources tools database lang; do
