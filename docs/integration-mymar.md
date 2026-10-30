@@ -440,3 +440,47 @@ requete definitive sous la limite d'execution existante avant de planifier
 des lectures recurrentes. Revoir les liens des techniciens des RDV APT non
 rapproches, sans toucher aux droits ou mots de passe. La projection, la
 synchronisation et l'utilisation dans les disponibilites restent a implementer.
+
+## Observation ponctuelle sur la source reelle
+
+La release `0ea80832` est ouverte sur les deux domaines. La preparation privee
+de la passerelle a ete confirmee, avec `enabled=false` et `configured=false`.
+Cela ne constitue toujours pas un branchement MYMAR au planning.
+
+Le paquet autonome `observation/collect-live.sh` reutilise les controles de
+source et le rapprochement SQL de l'audit deja valide, puis execute une fois
+la requete definitive `MymarReadOnlySource::query` sur sept jours depuis minuit
+Europe/Paris. Un EXPLAIN simple precede la lecture. La limite de 1500 ms,
+les transactions READ ONLY et les bornes de volume restent imposees.
+Le compte de maintenance sert uniquement a cette collecte ponctuelle ; aucun
+compte SQL, index, service ou configuration n'est cree ou change.
+
+Les techniciens Terrain actifs MYMAR sont tous observes, meme si leur cible
+Cofrac est absente ou desactivee. Le rapport propose seulement les liens dont
+les preuves concordent ; aucun n'est approuve, et aucun `cofrac_user_id` n'est
+renseigne dans les occupations. Les rapprochements et les occupations sont
+lus dans des transactions distinctes, ce qui est explicitement indique.
+Les RDV sans technicien sont comptes separement et la couverture globale
+n'est jamais annoncee comme validee. Les hypotheses de duree, fuseau et
+statuts ne sont pas promues en decisions de planning.
+
+Le paquet verifie la release deja ouverte et les empreintes des quatre classes
+de la preparation desactivee avant SQL. Il n'execute aucun code des applications,
+ne lit aucun mot de passe utilisateur et ne publie aucun email, beneficiaire,
+adresse ou document. Les noms et IDs des techniciens restent dans une revue
+privee pour validation humaine. Les requetes/erreurs brutes restent root-privees.
+Une source modifiee, un echec SQL ou un resultat partiel/perime bloque la
+publication. Seuls les quatre rapports valides et leurs empreintes sont
+transferrables a l'operateur, en 0600 dans un dossier 0700.
+
+Le test MySQL confirme que `JSON_OBJECT` ajoute `.000000` a un DATETIME meme
+sans precision fractionnaire. L'enveloppe SQL utilise `CAST(... AS CHAR)` pour
+retrouver le meme texte que PDO, sans modifier l'heure ni tronquer une valeur
+reellement fractionnaire. Les lignes invalides restent des anomalies.
+
+Test reproductible :
+`MYMAR_LIVE_TEST=1 bash tools/deploy/tests/check-mymar-live-observation.sh`.
+Le test utilise un compte SELECT seul sur des schemas synthetiques, compare
+les checksums avant/apres et repete la chaine de publication en conteneur
+isole, avec refus d'un SQL interrompu, d'une source modifiee et d'une reponse
+tronquee. Il n'appelle jamais le serveur de production.
