@@ -9,6 +9,42 @@ PACKAGE=/home/ubuntu/cofrac-correctifs-launcher-fixture
 git_app() { runuser -u cofrac2-deploy -- git -C "$APP" "$@"; }
 sql() { mysql --defaults-file=/etc/mysql/fixture.cnf --batch --skip-column-names -e "$1"; }
 trap 'printf "LAUNCHER_FIXTURE_FAILED_AT_LINE=%s\n" "$LINENO" >&2; tail -35 /tmp/correctifs-launcher-valid.log 2>/dev/null || true; find /var/lib/cofrac2-production -name "*.log" -path "*/release-*/*" | while read -r file; do echo "=== $file ==="; tail -8 "$file"; done >&2' ERR
+# This disposable fixture proves deployment keeps both admins, including their hashes and permissions.
+PRIMARY=$(sql 'SELECT id FROM cofrac2production.users WHERE admin=1 AND deleted_at IS NULL;')
+[[ "$PRIMARY" =~ ^[0-9]+$ ]]
+sql "INSERT INTO cofrac2production.users (id,first_name,last_name,email,password,role,admin,created_at,updated_at)
+ VALUES (77777,'Second','Admin fixture','second-admin@example.invalid','fixture-no-login-hash',0,1,NOW(),NOW());"
+runtime_check() { runuser -u cofrac2-app -- php8.4 "$APP/tools/deploy/production-runtime.php" --check; }
+runtime_check > /tmp/correctifs-two-admins.json
+cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- --check > /tmp/correctifs-two-admins-stdin.json
+cmp /tmp/correctifs-two-admins.json /tmp/correctifs-two-admins-stdin.json
+php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if($r["active_super_admins"]!==2||$r["single_super_admin"]!==false||$r["disabled_super_admins"]!==0)exit(1);' /tmp/correctifs-two-admins.json
+for role in 1 2; do
+    sql "UPDATE cofrac2production.users SET role=$role WHERE id=77777;"
+    runtime_check > /tmp/correctifs-internal-role.json
+    cmp /tmp/correctifs-two-admins.json /tmp/correctifs-internal-role.json
+done
+sql 'UPDATE cofrac2production.users SET role=0 WHERE id=77777;'
+sql 'UPDATE cofrac2production.users SET deleted_at=NOW() WHERE id=77777;'
+runtime_check > /tmp/correctifs-disabled-admin.json
+php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if($r["active_super_admins"]!==1||$r["disabled_super_admins"]!==1||$r["single_super_admin"]!==true)exit(1);' /tmp/correctifs-disabled-admin.json
+sql "UPDATE cofrac2production.users SET admin=0 WHERE id=$PRIMARY;"
+if runtime_check > /tmp/correctifs-no-admin.json 2>/tmp/correctifs-no-admin.err; then exit 1; fi
+grep -q 'Au moins un super-admin interne actif' /tmp/correctifs-no-admin.err
+sql "UPDATE cofrac2production.users SET admin=1 WHERE id=$PRIMARY; UPDATE cofrac2production.users SET deleted_at=NULL,role=3 WHERE id=77777;"
+if runtime_check > /tmp/correctifs-external-admin.json 2>/tmp/correctifs-external-admin.err; then exit 1; fi
+grep -q 'profil externe ou invalide' /tmp/correctifs-external-admin.err
+sql 'UPDATE cofrac2production.users SET role=99 WHERE id=77777;'
+if runtime_check > /tmp/correctifs-invalid-admin.json 2>/tmp/correctifs-invalid-admin.err; then exit 1; fi
+grep -q 'profil externe ou invalide' /tmp/correctifs-invalid-admin.err
+ORGANISATION=$(sql 'SELECT id FROM cofrac2production.external_delegataires ORDER BY id LIMIT 1;')
+[[ "$ORGANISATION" =~ ^[0-9]+$ ]]
+sql "UPDATE cofrac2production.users SET role=0,external_client_id=$ORGANISATION WHERE id=77777;"
+if runtime_check > /tmp/correctifs-linked-admin.json 2>/tmp/correctifs-linked-admin.err; then exit 1; fi
+grep -q 'profil externe ou invalide' /tmp/correctifs-linked-admin.err
+sql 'UPDATE cofrac2production.users SET external_client_id=NULL WHERE id=77777;'
+runtime_check > /tmp/correctifs-two-admins-restored.json
+cmp /tmp/correctifs-two-admins.json /tmp/correctifs-two-admins-restored.json
 BASE=$(git_app rev-parse HEAD)
 ORIGIN=/tmp/correctifs-origin.git
 WRITER=/tmp/correctifs-writer
@@ -87,4 +123,4 @@ for host in cofrac.geniuscontrole.com cofrac2.geniuscontrole.com; do
     done
 done
 sha256sum --status -c /tmp/runtime-original.sha256
-printf 'OK : lanceur epingle de bout en bout, refus avant maintenance, assets frontend, deux domaines et preparation MYMAR desactivee ; comptes/configuration/source preserves.\n'
+printf 'OK : deux super-admins conserves, zero admin actif et admin externe/invalide refuses, lanceur epingle, deux domaines et MYMAR desactive ; comptes/configuration/source preserves.\n'

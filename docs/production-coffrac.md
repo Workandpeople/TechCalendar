@@ -3012,3 +3012,22 @@ est aussi verifiee dans un contexte Linux/root jetable, sans SQL ni reseau.
 La fixture runtime execute ensuite le lanceur epingle lui-meme : remote Git
 local, faux referentiel HTTPS local, refus d'un paquet altere AVANT maintenance,
 mise a jour reelle et preparation MYMAR privee sans changement des comptes.
+
+### Plusieurs super-admins en exploitation
+
+L'unicite du super-admin concernait l'import initial, pas l'exploitation apres
+attribution volontaire de droits dans la gestion des comptes. Le controle de
+deploiement exige maintenant au moins un super-admin interne actif (profil
+interne 0/1/2, sans organisation externe), et accepte plusieurs comptes de ce type.
+Un admin actif avec un profil externe, inconnu ou une organisation rattachee
+reste refuse. Les comptes supprimes logiquement ne comptent pas comme actifs.
+
+Le rapport indique `active_super_admins`, `disabled_super_admins` et la politique
+`at_least_one_active_internal`. `single_super_admin` reste disponible mais vaut
+false avec deux comptes actifs : il ne constitue plus un echec de controle.
+L'import conserve son controle initial strict d'un unique super-admin seede.
+Aucun compte, role, mot de passe ou droit n'est reecrit pour passer ces controles.
+
+La repetition de deploiement conserve deux super-admins et leurs hashes, et
+verifie aussi les refus avec zero admin actif, un admin externe et un admin
+rattache a une organisation. Les controles fichier/stdin donnent le meme resultat.

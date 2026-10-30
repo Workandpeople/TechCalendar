@@ -232,8 +232,18 @@ try {
             throw new RuntimeException('Donnees natives absentes : '.$table);
         }
     }
-    if (DB::table('users')->where('admin', true)->count() !== 1) {
-        throw new RuntimeException('Un seul super-admin est attendu pour la recette interne.');
+    // Import creates one seeded admin; normal operation may have several explicitly granted internal admins.
+    $administrators = DB::table('users')->where('admin', true)->selectRaw(
+        'COALESCE(SUM(CASE WHEN deleted_at IS NULL AND external_client_id IS NULL AND role IN (0,1,2) THEN 1 ELSE 0 END),0) AS active_internal, '
+        .'COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END),0) AS disabled, '
+        .'COALESCE(SUM(CASE WHEN deleted_at IS NULL AND (external_client_id IS NOT NULL OR role IS NULL OR role NOT IN (0,1,2)) THEN 1 ELSE 0 END),0) AS invalid_active'
+    )->first();
+    $activeAdministrators = (int) $administrators->active_internal;
+    if ((int) $administrators->invalid_active !== 0) {
+        throw new RuntimeException('Super-admin actif rattache a un profil externe ou invalide. Aucun droit modifie.');
+    }
+    if ($activeAdministrators < 1) {
+        throw new RuntimeException('Au moins un super-admin interne actif est requis. Aucun droit modifie.');
     }
     $portalAccounts = 0;
     $clientAccess = app(ClientAccess::class);
@@ -283,7 +293,9 @@ try {
         $count++;
     }
     echo json_encode(['database' => 'cofrac2production', 'document_files_readable' => $count,
-        'single_super_admin' => true, 'code_read_only' => true, 'outbound_delivery_enabled' => $mailDeliveryEnabled,
+        'single_super_admin' => $activeAdministrators === 1, 'active_super_admins' => $activeAdministrators,
+        'disabled_super_admins' => (int) $administrators->disabled, 'super_admin_policy' => 'at_least_one_active_internal',
+        'code_read_only' => true, 'outbound_delivery_enabled' => $mailDeliveryEnabled,
         'mail_delivery_enabled' => $mailDeliveryEnabled, 'sms_delivery_enabled' => false, 'capcee_delivery_enabled' => false,
         'external_portals_enabled' => $portalAccounts > 0, 'enabled_external_accounts' => $portalAccounts,
         'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
