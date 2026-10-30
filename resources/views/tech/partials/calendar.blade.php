@@ -618,7 +618,10 @@
             }
 
             if (props.comment) {
-                document.getElementById('tech-sheet-comment').textContent = props.comment;
+                const commentBody = document.getElementById('tech-sheet-comment');
+                commentBody.classList.add('gc-comment-body');
+                if (window.TechCalendarComments) commentBody.innerHTML = window.TechCalendarComments.html(props.comment);
+                else commentBody.textContent = props.comment;
                 commentWrap.classList.remove('hidden');
             } else {
                 commentWrap.classList.add('hidden');

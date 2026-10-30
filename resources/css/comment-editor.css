@@ -1,0 +1,23 @@
+@layer components {
+    .gc-comment-editor { min-width: 0; border: 1px solid var(--gc-border); border-radius: .65rem; background: white; overflow: hidden; }
+    .gc-comment-editor:focus-within { border-color: #2057e8; box-shadow: 0 0 0 2px #2057e820; }
+    .gc-comment-editor .gc-comment-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: .4rem; border-bottom: 1px solid var(--gc-border); background: #f6f9fc; }
+    .gc-comment-editor [hidden] { display: none !important; }
+    .gc-comment-editor .gc-comment-tools { display: inline-flex; gap: .15rem; padding-inline: .25rem; border-inline-start: 1px solid #d8e2ec; }
+    .gc-comment-editor .gc-comment-toolbar button { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; min-height: 2rem; padding: .2rem; margin: 0; border: 1px solid transparent; border-radius: .3rem; color: #31424c; background: transparent; box-shadow: none; font-size: .85rem; line-height: 1; cursor: pointer; }
+    .gc-comment-editor .gc-comment-toolbar button:hover, .gc-comment-editor .gc-comment-toolbar .ql-active { background: #dfeaff; border-color: #b6cfff; color: #1647c5; }
+    .gc-comment-editor .gc-comment-toolbar select { width: auto; max-width: 10rem; min-height: 2rem; border: 1px solid #d8e2ec; border-radius: .3rem; padding: .2rem 1.5rem .2rem .4rem; background-color: white; color: #31424c; font-size: .75rem; }
+    .gc-comment-editor .gc-comment-toolbar :is(button, select):focus-visible { outline: 2px solid #2057e8; outline-offset: 1px; }
+    .gc-comment-editor > textarea.gc-input { border: 0; border-radius: 0; box-shadow: none; min-height: 7rem; }
+    .gc-comment-editor .ql-container { font: inherit; border: 0; }
+    .gc-comment-editor .ql-editor { min-height: 8rem; max-height: 22rem; padding: .7rem .8rem; font-size: .875rem; line-height: 1.55; color: var(--gc-text); overflow-wrap: anywhere; }
+    .gc-comment-editor .ql-editor.ql-blank::before { left: .8rem; right: .8rem; color: var(--gc-text-soft); font-style: normal; }
+    .gc-comment-editor .ql-font-serif { font-family: Georgia, serif; }
+    .gc-comment-editor .ql-font-monospace { font-family: monospace; }
+    .gc-comment-editor .gc-comment-editor-error { margin: 0; padding: .35rem .8rem; color: #b91c1c; font-size: .75rem; }
+    @media (max-width: 640px) {
+        .gc-comment-editor .gc-comment-toolbar button { min-width: 2.35rem; min-height: 2.35rem; }
+        .gc-comment-editor .gc-comment-toolbar select { min-height: 2.35rem; max-width: 9rem; }
+        .gc-comment-editor .ql-editor { min-height: 9rem; }
+    }
+}

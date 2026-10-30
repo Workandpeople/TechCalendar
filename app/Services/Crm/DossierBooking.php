@@ -7,6 +7,7 @@ use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
 use App\Services\MapboxAddressGeocoder;
+use App\Support\CommentContent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -52,6 +53,12 @@ class DossierBooking
             $result['longitude'] = $point['longitude'] ?? null;
             $result['location_precision'] = $location['precision'] ?? 'address';
             $result['location_warning'] = ($location['precision'] ?? null) === 'city' ? $location['message'] : null;
+            $result['external_payload'] = [...($result['external_payload'] ?? []), 'location_precision' => $result['location_precision']];
+            if ($point && DossierLocation::departmentCode($location['postal_code'] ?? null) !== '') {
+                $result['postal_code'] = $location['postal_code'];
+                $result['city'] = $location['city'] ?? $result['city'];
+                $result['department_code'] = DossierLocation::departmentCode($location['postal_code']);
+            }
         }
 
         return $result;
@@ -89,7 +96,7 @@ class DossierBooking
                 $dossier->forceFill(['inspection_geocode' => DossierLocation::metadata($dossier, $geocoded)])->save();
             }
             if (filled($data['comment'] ?? null)) {
-                $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => trim($data['comment'])]);
+                $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => CommentContent::forStorage($data['comment'], 'comment')]);
             }
             $dossier->increment('version');
 
@@ -141,7 +148,7 @@ class DossierBooking
             'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id,
                 'previous_status' => $previousStatus, 'status' => $operation->legacy_status]]);
         if (filled($appointment->comment)) {
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => $appointment->comment]);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment', 'body' => CommentContent::forStorage($appointment->comment, 'comment')]);
         }
         $dossier->increment('version');
     }
@@ -214,9 +221,7 @@ class DossierBooking
             && ((float) $legacy['latitude'] !== 0.0 || (float) $legacy['longitude'] !== 0.0)) {
             $point = ['latitude' => (float) $legacy['latitude'], 'longitude' => (float) $legacy['longitude']];
         }
-        $postalCode = (string) $dossier->postal_code;
-        $department = str_starts_with($postalCode, '20') ? ((int) $postalCode < 20200 ? '2A' : '2B')
-            : substr($postalCode, 0, preg_match('/^9[78]/', $postalCode) ? 3 : 2);
+        $department = DossierLocation::departmentCode($dossier->postal_code);
         $service = $operation->service?->only(['id', 'name', 'type', 'average_duration_minutes']);
         $existingAppointment = $operation->appointments->first();
         $companies = app(DossierTable::class)->companies($dossier);

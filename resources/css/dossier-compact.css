@@ -21,7 +21,7 @@
     .gc-comment-excerpt { min-width: 0; font-size: .78rem; }
     .gc-comment-excerpt > .gc-comment-body { min-width: 0; line-height: 1.55; overflow-wrap: anywhere; }
     .gc-comment-excerpt .gc-comment-body :is(p, div, blockquote, pre, ul, ol) { margin-block: 0; }
-    .gc-comment-excerpt[data-excerpt-ready='true'][data-excerpt-expanded='false'] > .gc-comment-body { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-height: 3.1em; overflow: hidden; }
+    .gc-comment-excerpt[data-excerpt-ready='true'][data-excerpt-expanded='false'] > .gc-comment-body { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     .gc-workspace .gc-comment-excerpt-toggle { display: inline-flex; min-height: 0; padding: .12rem 0; margin-top: .15rem; border: 0; background: transparent; color: #2057e8; font-size: .7rem; font-weight: 650; text-decoration: underline; cursor: pointer; }
     .gc-workspace .gc-comment-excerpt-toggle[hidden] { display: none; }
     .gc-document-more { font-size: .68rem; color: #526679; margin-top: .2rem; }

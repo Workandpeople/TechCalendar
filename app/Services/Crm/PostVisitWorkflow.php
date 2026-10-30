@@ -12,6 +12,7 @@ use App\Models\LotAppointment;
 use App\Models\User;
 use App\Services\Capcee\AutomaticCapceeReports;
 use App\Services\LotStatusService;
+use App\Support\CommentContent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -167,7 +168,7 @@ class PostVisitWorkflow
                     ? $actor->externalClient?->kind === 'delegataire'
                     : (bool) ($data['delegataire_visible'] ?? false),
                 'body' => $transition['label'].' · Fiche #'.$operation->id
-                    .($data['action'] !== 'client_response' && $operation->control_outcome ? ' · '.self::OUTCOMES[$operation->control_outcome] : '')."\n".trim($data['comment']),
+                    .($data['action'] !== 'client_response' && $operation->control_outcome ? ' · '.self::OUTCOMES[$operation->control_outcome] : '')."\n".CommentContent::forStorage($data['comment'], 'comment'),
                 'changed_fields' => ['operation_id' => $operation->id, 'action' => $data['action'], 'before' => $previous,
                     'after' => $operation->only(array_keys($previous)), 'physical_satisfaction' => $satisfaction,
                     'lot_ids' => $lots->modelKeys(), 'visit_document_id' => $data['visit_document_id'] ?? null],

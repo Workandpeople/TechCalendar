@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
 use App\Services\Crm\DossierRegistry;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -22,6 +23,7 @@ beforeEach(function () {
     Http::preventStrayRequests();
     Mail::fake();
     Queue::fake();
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 45.76, 'longitude' => 4.83, 'mapbox_id' => 'address.fixture']);
     $this->organisation = ExternalDelegataire::create([
         'source' => 'native', 'external_id' => 'CLIENT-PORTAL', 'kind' => 'client',
         'name' => 'Client portail', 'email' => 'organisation@example.test', 'is_active' => true,
@@ -35,7 +37,7 @@ beforeEach(function () {
         'submission_id' => (string) Str::uuid(), 'company_name' => 'Bénéficiaire de la visite',
         'last_name' => 'Dupont', 'first_name' => 'Marie', 'email' => 'beneficiaire@example.test',
         'phone' => '0600000000', 'address' => '10 rue de la Visite', 'postal_code' => '69001',
-        'city' => 'Lyon', 'service_ids' => [$this->service->id],
+        'city' => 'Lyon', 'service_ids' => [$this->service->id], 'mapbox_id' => 'address.fixture',
     ];
 });
 

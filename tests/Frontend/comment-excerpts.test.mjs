@@ -42,6 +42,13 @@ test('leaves one and two lines visible without a toggle, including rounding tole
     }
 });
 
+test('measures actual clamped height when formatted text uses a larger font', () => {
+    const ui = fixture([64, 96]);
+    ui.entries.forEach(({ body }) => { body.clientHeight = 64; });
+    initCommentExcerpts(ui.root, ui.browser);
+    assert.deepEqual(ui.entries.map(({ button }) => button.hidden), [true, false]);
+});
+
 test('expands and reduces the same content without modifying or duplicating the comment', () => {
     const ui = fixture([100]);
     initCommentExcerpts(ui.root, ui.browser);

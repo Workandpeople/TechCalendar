@@ -1,10 +1,33 @@
-const formattingTags = new Set(['p', 'div', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code']);
+import formats from '../comment-formats.json' with { type: 'json' };
+
+const formattingTags = new Set(['p', 'div', 'br', 'span', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code']);
 const discardedTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'applet', 'svg', 'math', 'template', 'head', 'title', 'noscript']);
 const blockTags = new Set(['p', 'div', 'li', 'ul', 'ol', 'blockquote', 'pre']);
 const rendered = new WeakSet();
 
+export function commentStyles(style = '', classes = '') {
+    const result = {};
+    for (const name of classes.split(/\s+/)) {
+        if (name.startsWith('ql-font-') && Object.hasOwn(formats.fonts, name.slice(8))) result['font-family'] = formats.fonts[name.slice(8)];
+    }
+    for (const rule of style.split(';')) {
+        const colon = rule.indexOf(':');
+        if (colon < 0) continue;
+        const property = rule.slice(0, colon).trim().toLowerCase();
+        let value = rule.slice(colon + 1).trim();
+        if (property === 'color') {
+            value = value.toLowerCase();
+            const rgb = value.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/);
+            if (rgb && rgb.slice(1).every(part => Number(part) <= 255)) value = `#${rgb.slice(1).map(part => Number(part).toString(16).padStart(2, '0')).join('')}`;
+        }
+        const allowed = property === 'color' ? formats.colors : property === 'font-size' ? formats.sizes : property === 'font-family' ? Object.values(formats.fonts) : [];
+        if (allowed.includes(value)) result[property] = value;
+    }
+    return Object.entries(result).map(([key, value]) => `${key}: ${value}`).join('; ');
+}
+
 export function commentFragment(value, root = document, maxLength = null) {
-    // Template contents stay inert. Rebuild only formatting elements, never attributes or URLs.
+    // Inert parsing, then reconstruction from a formatting/style allowlist. No URLs or arbitrary CSS.
     const template = root.createElement('template');
     template.innerHTML = String(value ?? '');
     const fragment = root.createDocumentFragment();
@@ -29,6 +52,10 @@ export function commentFragment(value, root = document, maxLength = null) {
         const tag = node.localName.toLowerCase();
         if (discardedTags.has(tag)) return;
         const element = formattingTags.has(tag) ? root.createElement(tag) : null;
+        if (element) {
+            const style = commentStyles(node.getAttribute?.('style') || '', node.getAttribute?.('class') || '');
+            if (style) element.setAttribute('style', style);
+        }
         if (element) destination.append(element);
         for (const child of node.childNodes) copy(child, element || destination, depth + 1);
     }
@@ -56,7 +83,7 @@ export function commentText(value, root = document) {
 export function initCommentMarkup(scope = document) {
     const root = scope.ownerDocument || scope;
     scope.querySelectorAll('[data-comment-body]').forEach((element) => {
-        if (rendered.has(element)) return;
+        if (rendered.has(element) || element.dataset.commentRendered === 'true') return;
         const limit = Number(element.dataset.commentLimit) || null;
         element.replaceChildren(commentFragment(element.textContent, root, limit));
         rendered.add(element);

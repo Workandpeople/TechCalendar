@@ -1930,7 +1930,7 @@
                 ['Téléphone', appointment.customer_phone],
                 ['Adresse', fullAddress(appointment)],
                 ['Prestation', appointment.service_label],
-                ['Commentaire', appointment.comment],
+                ['Commentaire', window.TechCalendarComments?.text(appointment.comment) ?? appointment.comment],
             ]);
             renderLotDocumentsList(appointment, lotDocumentsCardList, lotDocumentsCardDocCount);
         }
@@ -2754,7 +2754,10 @@
                 ['Adresse', fullAddress(appointment)],
                 ['Référence', appointment.external_reference],
             ]);
-            contactComment.textContent = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
+            contactComment.classList.add('gc-comment-body');
+            const comment = appointment.contact_comment || appointment.comment || 'Aucun commentaire renseigné.';
+            if (window.TechCalendarComments) contactComment.innerHTML = window.TechCalendarComments.html(comment);
+            else contactComment.textContent = comment;
             stageDocumentFiles(contactDocumentsUploadContext, []);
             renderLotDocumentsList(appointment, contactDocumentsList, contactDocumentsCount);
             clearDocumentUploadStatus(contactDocumentsUploadStatus);

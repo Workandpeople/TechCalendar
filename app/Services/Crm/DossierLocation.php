@@ -24,6 +24,17 @@ final class DossierLocation
         return ['latitude' => (float) $latitude, 'longitude' => (float) $longitude];
     }
 
+    public static function departmentCode(?string $postalCode): string
+    {
+        $postalCode = trim($postalCode ?? '');
+        if (! preg_match('/^[0-9]{5}$/D', $postalCode)) {
+            return '';
+        }
+
+        return str_starts_with($postalCode, '20') ? ((int) $postalCode < 20200 ? '2A' : '2B')
+            : substr($postalCode, 0, preg_match('/^9[78]/', $postalCode) ? 3 : 2);
+    }
+
     public static function coordinates(Dossier $dossier): ?array
     {
         $stored = $dossier->inspection_geocode;

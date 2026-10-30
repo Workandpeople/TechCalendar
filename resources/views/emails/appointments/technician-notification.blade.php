@@ -21,7 +21,8 @@ Bonjour {{ $recipient->full_name }},
 **Adresse :** {{ $appointment->address ?: 'Non renseignée' }}
 
 @if ($appointment->comment)
-**Commentaire :** {{ $appointment->comment }}
+**Commentaire :**
+<div style="white-space:pre-line">{!! \App\Support\CommentContent::html($appointment->comment) !!}</div>
 @endif
 </x-mail::panel>
 

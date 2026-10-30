@@ -10,6 +10,7 @@ use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
 use App\Models\Service;
 use App\Models\User;
+use App\Support\CommentContent;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -217,7 +218,7 @@ class DossierRegistry
         }
         $data = DossierContacts::fillMissingSnapshots($data);
         $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
-        $geocode = app(DossierAddressInput::class)->resolve($data);
+        $geocode = app(DossierAddressInput::class)->resolve($data, requireSelection: true);
         $data['address'] = $data['address'] ?? $data['city'];
 
         try {
@@ -283,6 +284,7 @@ class DossierRegistry
     public function addComment(User $actor, Dossier $dossier, string $body, bool $clientVisible = false, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('comment', $dossier);
+        $body = CommentContent::forStorage($body);
         DB::transaction(function () use ($actor, $dossier, $body, $clientVisible, $delegataireVisible): void {
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossier->id);
             Gate::forUser($actor)->authorize('comment', $dossier);

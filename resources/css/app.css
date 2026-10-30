@@ -9,6 +9,7 @@
 @import './technician.css';
 @import './admin-settings.css';
 @import './beta-feedback.css';
+@import './comment-editor.css';
 
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
@@ -55,6 +56,7 @@ html.sidebar-hidden .app-sidebar {
 
 @layer components {
     .gc-comment-body { white-space: pre-line; overflow-wrap: anywhere; }
+    .gc-comment-body span { line-height: 1.55; }
     .gc-comment-body :is(p, div, blockquote, pre, ul, ol) + :is(p, div, blockquote, pre, ul, ol) { margin-top: .4rem; }
     .gc-comment-body :is(b, strong) { font-weight: 700; }
     .gc-comment-body :is(i, em) { font-style: italic; }

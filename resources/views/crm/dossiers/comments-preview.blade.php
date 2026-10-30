@@ -7,7 +7,7 @@
                 <time>{{ $comment->created_at?->format('d/m/Y H:i') }}</time>
                 @if ($comment->changed_fields['is_private'] ?? false)<span>Privé</span>@endif
             </p>
-            <x-comment-body :body="$comment->body" :limit="240" class="gc-dossier-comment-body" />
+            <x-comment-body :body="$comment->body" :limit="240" :plain="true" class="gc-dossier-comment-body" />
         </div>
     @empty
         <p class="gc-dossier-comment-empty">Aucun commentaire pour ce dossier.</p>

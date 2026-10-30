@@ -126,7 +126,7 @@ it('filters imported files by the separate override and retains original metadat
     $this->patch(route('v2.dossiers.collected-documents.sharing', [$this->dossier, 300]), ['audience' => 'client'])->assertSessionHasNoErrors();
     $this->actingAs($this->clientUser)->get(route('client.dossiers.show', $this->dossier))->assertSee('CLIENT-ARCHIVE');
     $this->actingAs($this->delegataireUser)->get(route('client.dossiers.show', $this->dossier))->assertDontSee('CLIENT-ARCHIVE');
-    $this->actingAs($this->staff)->get(route('v2.dossiers.show', $this->dossier))->assertSee('R-300')->assertSee('&lt;b&gt;Description&lt;/b&gt;', false);
+    $this->actingAs($this->staff)->get(route('v2.dossiers.show', $this->dossier))->assertSee('R-300')->assertSee('<b>Description</b>', false);
     $this->delete(route('v2.dossiers.collected-documents.destroy', [$this->dossier, 300]))->assertRedirect();
     $this->actingAs($this->clientUser)->get(route('client.dossiers.show', $this->dossier))->assertDontSee('CLIENT-ARCHIVE');
     expect(DB::table('legacy_records')->value('hidden_at'))->not->toBeNull();

@@ -103,7 +103,7 @@ it('preloads only three latest comments per dossier without history events and e
     $this->actingAs($this->manager)->get(route('v2.dossiers.index'))
         ->assertOk()->assertDontSee('FIRST comment 1')->assertDontSee('SECOND comment 1')
         ->assertSee('FIRST comment 4')->assertSee('SECOND comment 2')->assertSee('Privé')
-        ->assertSee('&amp;lt;img src=x onerror=alert(1)&amp;gt;', false)->assertDontSee('<img src=x onerror=alert(1)>', false)
+        ->assertSee('&lt;img src=x onerror=alert(1)&gt;', false)->assertDontSee('<img src=x onerror=alert(1)>', false)
         ->assertViewHas('dossiers', function ($rows) use ($first, $second) {
             $items = $rows->keyBy('id');
 

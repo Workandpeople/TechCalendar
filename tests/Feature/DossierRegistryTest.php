@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierRegistry;
 use App\Services\DocumentUpload;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -20,15 +21,15 @@ use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
 
-it('delivers imported rich comments as escaped text for the shared safe renderer without rewriting them', function () {
+it('renders imported rich comments safely on the server without rewriting their archive', function () {
     $dossier = app(DossierRegistry::class)->create($this->manager, $this->data);
     $body = '<p onclick="alert(1)">Note <b>importée</b></p><script>alert(2)</script>';
     $activity = $dossier->activities()->create(['kind' => 'legacy_comment', 'body' => $body]);
 
     $this->actingAs($this->manager)->get(route('v2.dossiers.show', $dossier))
         ->assertOk()->assertSee('data-comment-body', false)
-        ->assertSee('&lt;b&gt;importée&lt;/b&gt;', false)
-        ->assertSee('&lt;script&gt;alert(2)&lt;/script&gt;', false)
+        ->assertSee('<b>importée</b>', false)
+        ->assertDontSee('alert(2)', false)
         ->assertDontSee('<script>alert(2)</script>', false);
 
     expect($activity->fresh()->body)->toBe($body);
@@ -39,6 +40,7 @@ beforeEach(function () {
     Http::preventStrayRequests();
     Mail::fake();
     Queue::fake();
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 45.76, 'longitude' => 4.83, 'mapbox_id' => 'address.fixture']);
     $this->manager = User::factory()->create(['role' => 0]);
     $this->service = Service::create(['name' => 'BAR EN 101', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     $this->data = [
@@ -48,7 +50,7 @@ beforeEach(function () {
         'city' => 'Lyon', 'beneficiary_address' => '2 rue du Siège',
         'beneficiary_postal_code' => '75001', 'beneficiary_city' => 'Paris',
         'installer_name' => 'Installateur exemple', 'installer_siren' => '123456789',
-        'service_ids' => [$this->service->id],
+        'service_ids' => [$this->service->id], 'mapbox_id' => 'address.fixture',
     ];
 });
 
@@ -189,7 +191,7 @@ it('searches literal references and filters by an operation without duplicate re
 
 it('updates the dossier atomically and rejects a stale form without losing data', function () {
     $dossier = app(DossierRegistry::class)->create($this->manager, $this->data);
-    $update = collect($this->data)->except('service_ids')->all();
+    $update = collect($this->data)->except(['service_ids', 'mapbox_id'])->all();
     $this->actingAs($this->manager)->get(route('v2.dossiers.edit', $dossier))->assertOk();
     $this->put(route('v2.dossiers.update', $dossier), [...$update, 'version' => 1, 'city' => 'Villeurbanne'])->assertRedirect();
     expect($dossier->fresh()->city)->toBe('Villeurbanne')->and($dossier->fresh()->version)->toBe(2);
@@ -211,7 +213,7 @@ it('retains an existing inactive delegataire without allowing another inactive c
 it('escapes comments and document names and forbids anonymous file access', function () {
     Storage::fake('local');
     $dossier = app(DossierRegistry::class)->create($this->manager, $this->data);
-    $this->actingAs($this->manager)->post(route('v2.dossiers.comments.store', $dossier), ['body' => '<script>alert(1)</script>'])->assertRedirect();
+    $this->actingAs($this->manager)->post(route('v2.dossiers.comments.store', $dossier), ['body' => '<script>alert(1)</script>'])->assertSessionHasErrors('body');
     $this->post(route('v2.dossiers.documents.store', $dossier), [
         'name' => '<b>Photo site</b>', 'document' => UploadedFile::fake()->image('photo.png'),
     ])->assertRedirect();
@@ -219,7 +221,7 @@ it('escapes comments and document names and forbids anonymous file access', func
     Storage::disk('local')->assertExists($document->path);
     expect($document->path)->toStartWith('crm/dossiers/'.$dossier->id.'/');
     $this->get(route('v2.dossiers.show', $dossier))->assertOk()
-        ->assertSee('&lt;script&gt;', false)->assertDontSee('<script>alert(1)</script>', false)
+        ->assertDontSee('<script>alert(1)</script>', false)
         ->assertSee('&lt;b&gt;Photo site&lt;/b&gt;', false);
     $this->get(route('v2.documents.download', $document))->assertOk()->assertDownload()
         ->assertHeader('X-Content-Type-Options', 'nosniff');

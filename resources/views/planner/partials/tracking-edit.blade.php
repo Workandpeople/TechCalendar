@@ -34,7 +34,7 @@
                         <p class="mt-1 text-xs text-slate-500">Sélectionne une suggestion Mapbox pour actualiser les coordonnées.</p>
                     </div>
                 </div>
-                <div><label class="gc-label" for="tracking_edit_comment">Commentaire</label><textarea id="tracking_edit_comment" class="gc-input" rows="4" maxlength="5000"></textarea></div>
+                <div><label class="gc-label" for="tracking_edit_comment">Commentaire</label><x-comment-editor id="tracking_edit_comment" rows="4" maxlength="5000" name="comment" /></div>
                 <p id="tracking_details_status" role="status" class="hidden text-sm"></p>
             </div>
             <div class="gc-modal-actions">

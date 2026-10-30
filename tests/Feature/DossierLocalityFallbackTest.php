@@ -61,11 +61,12 @@ it('creates a dossier at an explicitly approximate locality without losing the o
     Http::assertSent(fn ($request) => $request['codePostal'] === '01560' && ! isset($request['access_token']));
 })->with([false, true]);
 
-it('allows an absent street only when the postal code and city are explicitly supplied', function () {
-    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
-    $this->actingAs($this->client)->post(route('client.dossiers.store'), [...$this->payload, 'address' => ''])->assertSessionHasNoErrors();
-    expect(Dossier::sole()->address)->toBe('Lescheroux')->and(DossierLocation::address(Dossier::sole()))->toBe('01560 Lescheroux');
-});
+it('requires the display street even when the postal code and city are explicitly supplied', function (bool $external) {
+    $this->actingAs($external ? $this->client : $this->staff)->postJson(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'), [...$this->payload, 'address' => ''])
+        ->assertUnprocessable()->assertJsonValidationErrors('address');
+    expect(Dossier::count())->toBe(0);
+    Http::assertNothingSent();
+})->with([false, true]);
 
 it('rejects mismatched postal codes communes unsafe coordinates and unavailable commune service', function (string $failure) {
     $feature = match ($failure) {

@@ -135,8 +135,13 @@ export function initCreationAddress(root = document, browser = window) {
         const locality = section.querySelector('[data-address-locality]');
         const warning = section.querySelector('[data-address-approximate]');
         const status = section.querySelector('[data-creation-address-status]');
+        const error = section.querySelector('[data-creation-address-error]');
         const addressList = section.querySelector('#creation-address-options'), cityList = section.querySelector('#creation-city-options');
         let cityMode = precision.value === 'city', suggestions = [], activeInput = address, activeList = addressList, index = -1;
+        const values = () => [address.value, postal.value, city.value].map(value => value.trim()).join('\n');
+        const originalValues = values();
+        let selectedValues = identifier.value ? originalValues : null;
+        const clearError = () => { address.setCustomValidity(''); address.removeAttribute('aria-invalid'); if (error) error.textContent = ''; };
         const hide = () => {
             addressList.hidden = cityList.hidden = true;
             [address, city].forEach(input => { input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); });
@@ -144,10 +149,13 @@ export function initCreationAddress(root = document, browser = window) {
         const syncMode = () => {
             precision.value = cityMode ? 'city' : 'address';
             warning.hidden = !cityMode;
-            locality.hidden = !cityMode && !city.value;
-            city.disabled = postal.disabled = locality.hidden;
+            locality.hidden = !cityMode;
+            city.disabled = postal.disabled = false;
+            city.required = cityMode;
             postal.required = cityMode;
-            address.required = !cityMode;
+            if (cityMode) postal.setAttribute('pattern', '[0-9]{5}');
+            else postal.removeAttribute('pattern');
+            address.required = true;
             fallback.setAttribute('aria-expanded', String(cityMode));
             fallback.textContent = cityMode ? 'Rechercher une adresse précise' : 'Adresse non trouvée';
         };
@@ -160,7 +168,8 @@ export function initCreationAddress(root = document, browser = window) {
             city.value = item.city || '';
             postal.value = item.postal_code || '';
             identifier.value = item.id;
-            address.setCustomValidity(''); city.setCustomValidity('');
+            selectedValues = values();
+            clearError(); city.setCustomValidity('');
             syncMode();
             status.textContent = cityMode ? 'Commune sélectionnée. Position approximative, adresse exacte à confirmer.' : 'Adresse sélectionnée avec Mapbox.';
         };
@@ -191,12 +200,13 @@ export function initCreationAddress(root = document, browser = window) {
             url.searchParams.set('q', query); url.searchParams.set('mode', mode);
             loader.search(url);
         };
-        address.addEventListener('input', () => { address.setCustomValidity(''); search('address'); });
+        address.addEventListener('input', () => { clearError(); if (!cityMode) search('address'); });
         city.addEventListener('input', () => { city.setCustomValidity(''); search('city'); });
         postal.addEventListener('input', () => search('city'));
         fallback.addEventListener('click', () => {
             loader.cancel(); hide(); identifier.value = ''; cityMode = !cityMode; syncMode();
-            address.setCustomValidity(''); city.setCustomValidity('');
+            selectedValues = null;
+            clearError(); city.setCustomValidity('');
             status.textContent = cityMode ? 'Renseignez le code postal et la ville pour localiser la commune.' : 'Recherchez une adresse précise avec Mapbox.';
             (cityMode ? postal : address).focus();
         });
@@ -213,8 +223,15 @@ export function initCreationAddress(root = document, browser = window) {
             });
         }));
         form.addEventListener('submit', event => {
-            if (!cityMode && city.disabled) {
-                event.preventDefault(); address.setCustomValidity('Sélectionnez une adresse ou utilisez « Adresse non trouvée ».'); address.reportValidity();
+            const unchangedExisting = section.dataset.existingAddress === 'true' && values() === originalValues && !identifier.value;
+            if (!cityMode && !unchangedExisting && (!/^address\.[a-zA-Z0-9_-]+$/.test(identifier.value) || values() !== selectedValues)) {
+                const message = 'Choisissez une adresse dans les suggestions ou cliquez sur « Adresse non trouvée ».';
+                event.preventDefault();
+                identifier.value = '';
+                address.setCustomValidity(message);
+                address.setAttribute('aria-invalid', 'true');
+                if (error) error.textContent = message;
+                address.reportValidity();
             }
             loader.cancel(); hide();
         });

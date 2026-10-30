@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\AppointmentDocumentSerializer;
 use App\Services\CoffracAppointmentService;
 use App\Services\Crm\AppointmentComments;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -23,6 +24,7 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     config(['crm.v2_enabled' => true, 'services.coffrac.api_url' => 'https://coffrac.test/api', 'services.coffrac.api_token' => 'unused']);
     Http::preventStrayRequests();
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 48.85, 'longitude' => 2.35]);
     Mail::fake();
     Queue::fake();
     $this->actor = User::factory()->create(['role' => 1, 'admin' => false]);

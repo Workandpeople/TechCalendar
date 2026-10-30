@@ -37,7 +37,7 @@
             @csrf
             <input type="hidden" name="_form" value="comment">
             <label for="comment_body" class="gc-label">Ajouter un commentaire (client uniquement par défaut)</label>
-            <textarea id="comment_body" name="body" rows="3" maxlength="10000" class="gc-input" required>{{ old('body') }}</textarea>
+            <x-comment-editor id="comment_body" name="body" :rows="3" :value="old('body')" required />
             <x-content-audience :value="old('body') ? old('audience', 'client') : 'client'" />
             <p class="text-xs text-slate-500">Visible uniquement si son compte autorise la lecture des commentaires. Les délégataires n’ont pas ce droit par défaut.</p>
             <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-primary"><x-nav-icon name="comment" />Ajouter le commentaire</button></footer>

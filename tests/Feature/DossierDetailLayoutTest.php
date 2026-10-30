@@ -56,7 +56,7 @@ it('keeps dense comments and documents accessible with protected sharing and del
     $document = $this->dossier->documents()->create(['name' => 'COMPACT-FILE', 'description' => 'FULL-DESCRIPTION',
         'path' => 'test.pdf', 'mime_type' => 'application/pdf', 'size' => 2048]);
     $response = $this->actingAs($this->manager)->get(route('v2.dossiers.show', $this->dossier))->assertOk()
-        ->assertSee('FULL-COMMENT')->assertSee('FULL-DESCRIPTION')->assertDontSee('<p>FULL-COMMENT</p>', false);
+        ->assertSee('FULL-COMMENT')->assertSee('FULL-DESCRIPTION')->assertSee('<p>FULL-COMMENT</p>', false);
     $dom = new DOMDocument;
     @$dom->loadHTML($response->getContent(), LIBXML_NONET);
     $xpath = new DOMXPath($dom);

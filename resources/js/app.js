@@ -20,6 +20,7 @@ import { initMultiSelects } from './multi-select';
 import { initDocumentUploadLimits } from './document-upload-limit';
 import { initBookingDossierSummary } from './booking-dossier-summary';
 import { initCommentExcerpts } from './comment-excerpts';
+import { initCommentEditors } from './comment-editor';
 import { createBookingTravelTooltip } from './booking-travel-tooltip';
 import { initAdminSettings } from './admin-settings';
 import { confirmForcedPlacement } from './booking-force-placement';
@@ -38,6 +39,7 @@ window.TechCalendarDateTime = appointmentDateTime;
 initAppointmentAssignments();
 initCommentMarkup();
 initCommentExcerpts();
+initCommentEditors();
 
 initSidebar();
 initSidebarSections();

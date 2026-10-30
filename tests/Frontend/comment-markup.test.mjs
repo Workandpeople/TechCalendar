@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commentFragment, commentHtml, commentText, initCommentMarkup } from '../../resources/js/comment-markup.js';
+import { commentFragment, commentHtml, commentText, commentStyles, initCommentMarkup } from '../../resources/js/comment-markup.js';
 
 const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
@@ -13,10 +13,12 @@ class Node {
         this.attributes = {};
     }
     append(node) { this.childNodes.push(...(node.nodeType === 11 ? node.childNodes : [node])); }
+    getAttribute(name) { return this.attributes[name] ?? null; }
+    setAttribute(name, value) { this.attributes[name] = value; }
     get textContent() { return this.nodeType === 3 ? this.value : this.childNodes.map(child => child.textContent).join(''); }
     get innerHTML() {
         return this.childNodes.map(child => child.nodeType === 3 ? escape(child.value)
-            : `<${child.localName}>${child.localName === 'br' ? '' : `${child.innerHTML}</${child.localName}>`}`).join('');
+            : `<${child.localName}${Object.entries(child.attributes).map(([key, value]) => ` ${key}="${value}"`).join('')}>${child.localName === 'br' ? '' : `${child.innerHTML}</${child.localName}>`}`).join('');
     }
 }
 
@@ -84,4 +86,23 @@ test('hydrates each escaped comment once without reinterpreting already-rendered
     initCommentMarkup(scope);
     initCommentMarkup(scope);
     assert.equal(calls, 1);
+});
+
+test('retains only palette colors, bounded font sizes and local approved fonts', () => {
+    assert.equal(commentStyles('color:rgb(185, 28, 28);font-size:18px;position:fixed; background:url(https://bad.test)', 'ql-font-serif attacker'),
+        'font-family: Georgia, serif; color: #b91c1c; font-size: 18px');
+    assert.equal(commentStyles('color:expression(attack());font-size:1000px;font-family:url(https://bad.test)'), '');
+    assert.equal(commentStyles('color:#ffffff;font-size:18px !important'), '');
+    assert.equal(commentStyles('color:rgb(999, 1, 1)'), '');
+});
+
+test('retains allowed attributes directly on bold text rather than losing combined formatting', () => {
+    const bold = element('strong', 'Important');
+    bold.attributes = { class: 'ql-font-serif', style: 'color:rgb(185,28,28);font-size:18px;position:fixed', onclick: 'attack()' };
+    assert.equal(commentHtml('source', documentFor(bold)), '<strong style="font-family: Georgia, serif; color: #b91c1c; font-size: 18px">Important</strong>');
+});
+
+test('does not reinterpret comments already rendered safely by the server', () => {
+    const scope = { querySelectorAll: () => [{ dataset: { commentRendered: 'true' }, replaceChildren() { throw new Error('Unsafe second interpretation'); } }] };
+    assert.doesNotThrow(() => initCommentMarkup(scope));
 });

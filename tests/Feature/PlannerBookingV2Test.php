@@ -235,11 +235,12 @@ it('lists each pending operation once with only its latest live scheduled appoin
 
 it('uses the same pending dossier count in categories the sidebar and the booking queue', function () {
     extract(nativeBookingFixture());
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 48.85, 'longitude' => 2.35, 'mapbox_id' => 'address.fixture']);
     $this->actingAs($actor);
     foreach (range(1, 7) as $index) {
         $created = app(DossierRegistry::class)->create($actor, [
             'reference' => 'COUNT-'.$index, 'company_name' => 'Client '.$index,
-            'address' => 'Rue Test', 'city' => 'Paris', 'service_ids' => [$service->id],
+            'address' => 'Rue Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id],
         ]);
         if ($index <= 2) {
             $created->operations()->first()->appointments()->create([
@@ -272,9 +273,10 @@ it('keeps a pending dossier without coordinates visible and geocodes only the se
 
 it('puts newly created native dossiers in the pending booking list', function () {
     extract(nativeBookingFixture());
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->once()->andReturn(['latitude' => 48.85, 'longitude' => 2.35, 'mapbox_id' => 'address.fixture']);
     $this->actingAs($actor);
     $created = app(DossierRegistry::class)->create($actor, [
-        'reference' => 'NEW-NATIVE', 'company_name' => 'Bénéficiaire natif', 'address' => '2 rue du Test', 'city' => 'Paris', 'service_ids' => [$service->id],
+        'reference' => 'NEW-NATIVE', 'company_name' => 'Bénéficiaire natif', 'address' => '2 rue du Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id],
     ]);
     expect($created->operations()->sole()->legacy_status)->toBe('PRISE DE RDV');
     $this->getJson(route('planner.book.crm-appointments.index'))->assertOk()->assertJsonCount(2, 'appointments')

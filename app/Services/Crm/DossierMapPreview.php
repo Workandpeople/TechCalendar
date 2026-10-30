@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Models\Dossier;
 use App\Models\User;
 use App\Services\MapboxAddressGeocoder;
+use App\Services\PlanningAddressGeocoder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -30,7 +31,7 @@ class DossierMapPreview
 
         if ($forPlanning) {
             // Imported GPS points are not proof of an address match. Check only the selected dossier.
-            return $this->geocodedCoordinates($address, 'planning-location-v2:'.$dossier->id.':'.hash('sha256', $address));
+            return $this->geocodedCoordinates($address, 'planning-location-v3:'.$dossier->id.':'.hash('sha256', $address), $dossier);
         }
 
         $appointment = $dossier->appointments()->withTrashed()->whereNotNull('latitude')->whereNotNull('longitude')
@@ -58,14 +59,19 @@ class DossierMapPreview
         return $this->geocodedCoordinates($address, $key);
     }
 
-    private function geocodedCoordinates(string $address, string $key): array
+    private function geocodedCoordinates(string $address, string $key, ?Dossier $planningDossier = null): array
     {
-        return Cache::remember($key, now()->addMinutes(5), function () use ($address): array {
-            $result = $this->geocoder->geocode($address);
+        return Cache::remember($key, now()->addMinutes(5), function () use ($address, $planningDossier): array {
+            $result = $planningDossier
+                ? app(PlanningAddressGeocoder::class)->geocode($address, $planningDossier->postal_code, $planningDossier->city)
+                : $this->geocoder->geocode($address);
             $point = $this->point($result['latitude'] ?? null, $result['longitude'] ?? null);
+            $approximate = ($result['precision'] ?? null) === 'city';
 
-            return ['coordinates' => $point, 'message' => $point
-                ? 'Position estimée par Mapbox : '.($result['formatted_address'] ?? $address)
+            return ['coordinates' => $point, 'postal_code' => $result['postal_code'] ?? null, 'city' => $result['city'] ?? null,
+                'precision' => $approximate ? 'city' : 'address', 'message' => $point
+                ? ($approximate ? 'Position approximative : commune / code postal. Adresse exacte à confirmer avant la visite.'
+                    : 'Position estimée par Mapbox : '.($result['formatted_address'] ?? $address))
                 : 'Adresse non localisée. Ouvrir le dossier pour vérifier l’adresse.'];
         });
     }

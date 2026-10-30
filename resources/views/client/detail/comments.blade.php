@@ -22,7 +22,7 @@
                 @csrf
                 <input type="hidden" name="_form" value="client-comment">
                 <p class="gc-portal-form-intro">Votre message sera partagé avec notre équipe et les comptes autorisés de votre organisation. Il ne déclenche pas de demande de recontrôle.</p>
-                <div><label for="body" class="gc-label">Votre commentaire</label><textarea id="body" name="body" rows="6" maxlength="10000" class="gc-input" required placeholder="Précisez votre question ou les corrections apportées…">{{ old('_form') === 'client-comment' ? old('body') : '' }}</textarea></div>
+                <div><label for="body" class="gc-label">Votre commentaire</label><x-comment-editor id="body" name="body" :rows="6" :value="old('_form') === 'client-comment' ? old('body') : ''" required placeholder="Précisez votre question ou les corrections apportées…" /></div>
                 <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button class="gc-btn-primary" type="submit"><x-nav-icon name="comment" />Envoyer le commentaire</button></footer>
             </form>
         </x-dossier-dialog>

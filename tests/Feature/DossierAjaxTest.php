@@ -30,7 +30,7 @@ it('returns only escaped listing fragments with the same filters sorting counts 
 
     expect($response->headers->get('Cache-Control'))->toContain('private', 'no-store');
     expect($response->json('results'))
-        ->toContain('MATCH-25', 'page=1', 'q=MATCH-', 'status=pending', 'direction=asc', '&amp;lt;script&amp;gt;')
+        ->toContain('MATCH-25', 'page=1', 'q=MATCH-', 'status=pending', 'direction=asc', '&lt;script&gt;')
         ->not->toContain('MATCH-24', 'EXCLUDED', '<script>', '<html', 'not-in-json', 'mapbox-gl.js', 'data-dossier-map-config');
     expect($response->json('categories'))->toContain('26', 'data-category="pending"', 'aria-current="page"');
 });

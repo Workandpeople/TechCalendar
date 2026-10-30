@@ -403,7 +403,7 @@
                         <form id="tracking-comment-form" class="gc-appointment-action-details-body">
                             <input id="tracking_detail_appointment_id" type="hidden" />
                             <label class="gc-label" for="tracking_detail_comment">Commentaire</label>
-                            <textarea id="tracking_detail_comment" rows="5" class="gc-input" style="min-height:130px;" placeholder="Ajouter ou modifier le commentaire du RDV"></textarea>
+                            <x-comment-editor id="tracking_detail_comment" rows="5" placeholder="Ajouter ou modifier le commentaire du RDV" name="comment" />
                             <div id="tracking_comment_status" class="mt-2 hidden text-sm"></div>
                             <div class="mt-3 flex flex-wrap justify-end gap-2">
                                 <button id="tracking-save-comment-btn" type="submit" class="gc-btn-primary hidden">Enregistrer mon commentaire</button>
@@ -413,7 +413,7 @@
                                 <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="tracking_problem_comment">Commentaire du problème</label>
-                                    <textarea id="tracking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré et la suite à donner"></textarea>
+                                    <x-comment-editor id="tracking_problem_comment" placeholder="Explique le problème rencontré et la suite à donner" name="comment" />
                                 </div>
                                 <div>
                                     <label class="gc-label" for="tracking_problem_type">Type de problème</label>

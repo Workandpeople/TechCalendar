@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Appointment;
+use App\Support\CommentContent;
 
 class AppointmentMailTemplateData
 {
@@ -43,7 +44,7 @@ class AppointmentMailTemplateData
             'appointment_end_time' => $appointment->ends_at?->format('H:i') ?? '',
             'appointment_duration' => $appointment->duration_minutes ? $appointment->duration_minutes.' min' : '',
             'address' => (string) $appointment->address,
-            'comment' => (string) ($appointment->comment ?? ''),
+            'comment' => CommentContent::text($appointment->comment),
             'manager_name' => (string) ($appointment->creator?->full_name ?? ''),
         ];
     }

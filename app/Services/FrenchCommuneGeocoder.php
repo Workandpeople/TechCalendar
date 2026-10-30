@@ -34,7 +34,7 @@ final class FrenchCommuneGeocoder
         return array_slice($matches, 0, 8);
     }
 
-    public function geocode(string $query, ?string $identifier = null): array
+    public function geocode(string $query, ?string $identifier = null, bool $allowPostalOnly = false): array
     {
         [$postal, $name] = $this->queryParts($query);
         $insee = null;
@@ -45,7 +45,7 @@ final class FrenchCommuneGeocoder
             }
             [, $insee, $postal] = $parts;
         }
-        if ($name === '' && $insee === null) {
+        if ($name === '' && $insee === null && (! $allowPostalOnly || $postal === null)) {
             throw $this->invalidSelection();
         }
         $matches = array_values(array_filter($this->communes($postal, $name), fn ($row) => ($insee === null || $row['code'] === $insee) && ($postal === null || in_array($postal, $row['codesPostaux'], true))

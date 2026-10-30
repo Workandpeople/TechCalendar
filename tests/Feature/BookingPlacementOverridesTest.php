@@ -7,6 +7,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\Crm\AppointmentSlotAvailability;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -18,6 +19,7 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     config(['crm.v2_enabled' => true, 'mail.delivery_enabled' => false]);
     Http::preventStrayRequests();
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 48.8566, 'longitude' => 2.3522]);
     Mail::fake();
     Queue::fake();
     $this->actor = User::factory()->create(['role' => 1, 'admin' => false]);

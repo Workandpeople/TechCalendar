@@ -27,7 +27,10 @@ export function initCommentExcerpts(root = document, browser = window) {
             if (entry.body.clientWidth === 0) continue;
             const lineHeight = Number.parseFloat(browser.getComputedStyle(entry.body).lineHeight);
             if (!Number.isFinite(lineHeight) || lineHeight <= 0) continue;
-            const overflows = entry.body.scrollHeight > lineHeight * 2 + 1;
+            entry.excerpt.dataset.excerptReady = 'true';
+            entry.excerpt.dataset.excerptExpanded = 'false';
+            const visibleHeight = entry.body.clientHeight || lineHeight * 2;
+            const overflows = entry.body.scrollHeight > visibleHeight + 1;
             entry.button.hidden = !overflows;
             if (!overflows) entry.expanded = false;
             entry.excerpt.dataset.excerptReady = 'true';

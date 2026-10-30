@@ -23,7 +23,7 @@ class ClientPortal
             DossierLotReference::filter($query, $filters['lot']);
         }
         if (filled($filters['q'] ?? null)) {
-            DossierSearch::apply($query, $filters['q'], ['reference', 'company_name', 'last_name', 'first_name', 'legacy_lot_name', 'address', 'postal_code', 'city']);
+            DossierSearch::apply($query, $filters['q'], DossierSearch::EXTERNAL_FIELDS);
         }
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
         $counts = DB::query()->fromSub((clone $query)->select('dossiers.id'), 'visible_dossiers')

@@ -91,7 +91,7 @@ it('hides internal comments and exposes only shared or legacy public client comm
     $shared = $this->dossier->activities()->create(['kind' => 'comment', 'body' => '<b>SHARED-COMMENT</b>', 'client_visible' => true]);
     $this->actingAs($this->external)->get(route('client.dossiers.show', $this->dossier))->assertOk()
         ->assertSee('SHARED-COMMENT')->assertSee('LEGACY-PUBLIC')->assertDontSee('LEGACY-PRIVATE')
-        ->assertDontSee('INTERNAL-SECRET')->assertDontSee('HISTORY-SECRET')->assertDontSee('<b>SHARED-COMMENT</b>', false);
+        ->assertDontSee('INTERNAL-SECRET')->assertDontSee('HISTORY-SECRET')->assertSee('<b>SHARED-COMMENT</b>', false);
     $this->post(route('client.dossiers.comments', $this->dossier), ['body' => 'Client reply', 'client_visible' => false])->assertRedirect();
     expect($this->dossier->comments()->where('body', 'Client reply')->first()->client_visible)->toBeTrue();
     $this->post(route('client.dossiers.comments', $this->privateDossier), ['body' => 'NOT ALLOWED'])->assertForbidden();

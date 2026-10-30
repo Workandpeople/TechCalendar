@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Models\User;
+use App\Support\CommentContent;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -97,7 +98,7 @@ class DossierWorkflow
             }
             $previousStatus = $operation->legacy_status;
             $operation->forceFill(['legacy_status' => 'PROBLÈME RENDEZ-VOUS'])->save();
-            $comment = trim($data['comment']);
+            $comment = CommentContent::forStorage($data['comment'], 'comment');
             if (filled($data['recall_date'] ?? null)) {
                 $comment .= "\nRappel prévu le ".CarbonImmutable::parse($data['recall_date'])->format('d/m/Y');
                 if (filled($data['recall_time'] ?? null)) {

@@ -30,8 +30,8 @@ use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotStatusService;
-use App\Services\MapboxAddressGeocoder;
 use App\Services\MapboxDrivingRouteService;
+use App\Services\PlanningAddressGeocoder;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -1740,9 +1740,10 @@ class PlannerBookingController extends Controller
         }
         if (($appointment->latitude === null || $appointment->longitude === null)
             && (! config('crm.v2_enabled') || ! $appointment->dossierOperation?->dossier)) {
-            $point = app(MapboxAddressGeocoder::class)->geocode($appointment->address);
+            $point = app(PlanningAddressGeocoder::class)->geocode($appointment->address);
             $appointment->latitude = $point['latitude'] ?? null;
             $appointment->longitude = $point['longitude'] ?? null;
+            $appointment->external_payload = [...($appointment->external_payload ?? []), 'location_precision' => $point['precision'] ?? 'address'];
         }
 
         $externalPayload = is_array($appointment->external_payload) ? $appointment->external_payload : [];
@@ -1776,6 +1777,9 @@ class PlannerBookingController extends Controller
             'external_source' => $appointment->external_source,
             'external_reference' => $appointment->external_reference,
             'external_payload' => $externalPayload,
+            'location_precision' => $externalPayload['location_precision'] ?? 'address',
+            'location_warning' => ($externalPayload['location_precision'] ?? null) === 'city'
+                ? 'Position approximative : commune / code postal. Adresse exacte à confirmer avant la visite.' : null,
             'documents' => app(AppointmentDocumentSerializer::class)->forAppointment($appointment),
             'comments' => $this->externalComments($appointment),
             'service' => $appointment->service ? [

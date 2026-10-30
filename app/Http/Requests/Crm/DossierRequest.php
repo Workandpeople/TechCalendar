@@ -33,11 +33,11 @@ class DossierRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:500'],
             'site_name' => ['nullable', 'string', 'max:190'],
             'legacy_lot_name' => ['sometimes', 'nullable', 'string', 'max:256', 'not_regex:/[\x00-\x1F\x7F]/'],
-            'address' => ['required_unless:address_precision,city', 'nullable', 'string', 'max:500', 'not_regex:/[;\x00-\x1F\x7F]/'],
+            'address' => [$dossier ? 'required_unless:address_precision,city' : 'required', 'nullable', 'string', 'max:500', 'not_regex:/[;\x00-\x1F\x7F]/'],
             'postal_code' => ['required_if:address_precision,city', 'nullable', 'string', 'max:10'],
             'city' => ['required', 'string', 'max:190', 'not_regex:/[;\x00-\x1F\x7F]/'],
             'address_precision' => ['sometimes', Rule::in(['address', 'city'])],
-            'mapbox_id' => ['nullable', 'string', 'max:200', 'regex:'.MapboxAddressGeocoder::IDENTIFIER_PATTERN],
+            'mapbox_id' => [Rule::requiredIf(! $dossier && $this->input('address_precision') !== 'city'), 'nullable', 'string', 'max:200', 'regex:'.MapboxAddressGeocoder::IDENTIFIER_PATTERN],
             'beneficiary_address' => ['nullable', 'string', 'max:500'],
             'beneficiary_postal_code' => ['nullable', 'string', 'max:10'],
             'beneficiary_city' => ['nullable', 'string', 'max:190'],
@@ -68,13 +68,17 @@ class DossierRequest extends FormRequest
         return [
             'reference' => 'référence', 'company_name' => 'raison sociale',
             'last_name' => 'nom du bénéficiaire', 'address' => 'adresse du lieu d’inspection',
-            'city' => 'ville', 'installer_siren' => 'SIREN', 'service_ids' => 'fiche technique', 'service_ids.*' => 'fiche technique',
+            'city' => 'ville', 'postal_code' => 'code postal', 'mapbox_id' => 'adresse sélectionnée', 'installer_siren' => 'SIREN', 'service_ids' => 'fiche technique', 'service_ids.*' => 'fiche technique',
             'version' => 'version du dossier',
         ];
     }
 
     public function messages(): array
     {
-        return ['service_ids.size' => 'Sélectionnez une seule fiche technique par dossier.'];
+        return [
+            'service_ids.size' => 'Sélectionnez une seule fiche technique par dossier.',
+            'mapbox_id.required' => 'Choisissez une adresse dans les suggestions ou cliquez sur « Adresse non trouvée » et renseignez le code postal et la ville.',
+            'postal_code.regex' => 'Le code postal doit contenir exactement 5 chiffres.',
+        ];
     }
 }

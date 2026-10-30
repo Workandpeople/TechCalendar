@@ -18,7 +18,7 @@
             <label class="gc-label">Heure de rappel<input class="gc-input" type="time" name="recall_time" value="{{ $failedProblem ? old('recall_time') : '' }}"></label>
         </div>
         <p class="text-xs text-slate-500">Rappel facultatif, sauf pour le motif « Demande de rappel » qui exige une date et une heure. Il est visible avec le commentaire selon la portée choisie.</p>
-        <label class="gc-label">Commentaire<textarea class="gc-input" name="comment" rows="4" minlength="3" maxlength="5000" required>{{ $failedProblem ? old('comment') : '' }}</textarea></label>
+        <div><label class="gc-label" for="dossier-problem-comment">Commentaire</label><x-comment-editor id="dossier-problem-comment" name="comment" :rows="4" minlength="3" :maxlength="5000" required :value="$failedProblem ? old('comment') : ''" /></div>
         <x-content-audience :value="$failedProblem ? old('audience', 'client') : 'client'" />
         <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-danger">Enregistrer le problème</button></footer>
     </form>

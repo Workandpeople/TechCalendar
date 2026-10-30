@@ -138,7 +138,7 @@ test('submit validates manually edited text rather than a previously selected pl
     assert.match(ui.status.textContent, /recalcul/);
 });
 
-test('creation fallback reveals postcode and city and selects an explicitly approximate location safely', async () => {
+async function creationFixture({ existing = false, postalCode = '' } = {}) {
     const { initCreationAddress } = await import('../../resources/js/dossier-address.js');
     const ui = browserFixture();
     class Node {
@@ -147,22 +147,31 @@ test('creation fallback reveals postcode and city and selects an explicitly appr
         setAttribute(key, value) { this.attrs.set(key, String(value)); }
         removeAttribute(key) { this.attrs.delete(key); }
         replaceChildren(...children) { this.children = children; }
-        focus() {} scrollIntoView() {} setCustomValidity(value) { this.validity = value; } reportValidity() {}
+        focus() {} scrollIntoView() {} setCustomValidity(value) { this.validity = value; } reportValidity() { this.reported = true; }
         set innerHTML(value) { assert.fail('Unsafe HTML rendering'); }
     }
     const fields = Object.fromEntries(['address', 'postal_code', 'city', 'mapbox_id', 'address_precision'].map(key => [key, new Node()]));
     fields.address.value = 'Lieu-dit introuvable'; fields.address_precision.value = 'address';
+    fields.postal_code.value = postalCode;
+    fields.postal_code.setAttribute('pattern', '[0-9]{5}');
     const form = new Node(); form.elements = fields;
-    const elements = Object.fromEntries(['[data-address-fallback]', '[data-address-locality]', '[data-address-approximate]', '[data-creation-address-status]', '#creation-address-options', '#creation-city-options'].map(selector => [selector, new Node()]));
+    const elements = Object.fromEntries(['[data-address-fallback]', '[data-address-locality]', '[data-address-approximate]', '[data-creation-address-status]', '[data-creation-address-error]', '#creation-address-options', '#creation-city-options'].map(selector => [selector, new Node()]));
     elements['#creation-address-options'].id = 'address-options'; elements['#creation-city-options'].id = 'city-options';
-    const section = new Node(); section.dataset = { suggestionsUrl: '/espace-client/dossiers/adresse/suggestions' };
+    const section = new Node(); section.dataset = { suggestionsUrl: '/espace-client/dossiers/adresse/suggestions', existingAddress: String(existing) };
     section.closest = () => form; section.contains = () => true; section.querySelector = selector => elements[selector];
     initCreationAddress({ querySelectorAll: () => [section], createElement: () => new Node() }, ui.browser);
+    const submit = () => { const event = { preventDefault() { this.prevented = true; } }; form.handlers.submit(event); return event; };
+    return { ...ui, fields, elements, form, submit };
+}
+
+test('creation fallback reveals postcode and city and selects an explicitly approximate location safely', async () => {
+    const ui = await creationFixture();
+    const { fields, elements } = ui;
     assert.equal(elements['[data-address-locality]'].hidden, true);
-    assert.equal(fields.city.disabled, true);
+    assert.equal(fields.city.required, false);
     elements['[data-address-fallback]'].handlers.click();
     assert.equal(elements['[data-address-locality]'].hidden, false);
-    assert.equal(fields.address.required, false);
+    assert.equal(fields.address.required, true);
     assert.equal(fields.postal_code.required, true);
     fields.postal_code.value = '01560'; fields.city.value = 'Lescheroux';
     fields.city.handlers.input(); ui.run(300);
@@ -179,6 +188,51 @@ test('creation fallback reveals postcode and city and selects an explicitly appr
     assert.equal(elements['[data-address-approximate]'].hidden, false);
     fields.city.handlers.input();
     assert.equal(fields.mapbox_id.value, '');
+});
+
+test('blocks free typing in precise mode even when city and postcode have values', async () => {
+    const ui = await creationFixture();
+    ui.fields.city.value = 'Paris'; ui.fields.postal_code.value = '75001';
+    assert.equal(ui.submit().prevented, true);
+    assert.match(ui.fields.address.validity, /suggestions/);
+    assert.match(ui.elements['[data-creation-address-error]'].textContent, /Adresse non trouvée/);
+    assert.equal(ui.fields.address.reported, true);
+});
+
+test('only accepts an unchanged precise selection and detects programmatic edits on submit', async () => {
+    const ui = await creationFixture();
+    ui.fields.address.value = '8 rue'; ui.fields.address.handlers.input(); ui.run(300);
+    ui.requests[0].resolve(response([{ id: 'address.precise', feature_type: 'address', label: '8 rue Test, 75001 Paris',
+        street_address: '8 rue Test', postal_code: '75001', city: 'Paris' }]));
+    await settle(); ui.elements['#creation-address-options'].children[0].handlers.click();
+    assert.equal(ui.submit().prevented, undefined);
+    assert.equal(ui.fields.city.disabled, false);
+    ui.fields.address.value = '9 rue Test';
+    assert.equal(ui.submit().prevented, true);
+    assert.equal(ui.fields.mapbox_id.value, '');
+    ui.fields.address.handlers.input();
+    assert.equal(ui.fields.address.validity, '');
+});
+
+test('fallback street stays free without triggering address searches or invalidating the selected commune', async () => {
+    const ui = await creationFixture();
+    ui.elements['[data-address-fallback]'].handlers.click();
+    ui.fields.postal_code.value = '01560'; ui.fields.city.value = 'Lescheroux';
+    ui.fields.city.handlers.input(); ui.run(300);
+    ui.requests[0].resolve(response([{ id: 'commune.01212_01560', label: '01560 Lescheroux', feature_type: 'place', postal_code: '01560', city: 'Lescheroux' }]));
+    await settle(); ui.elements['#creation-city-options'].children[0].handlers.click();
+    ui.fields.address.value = 'Lieu-dit libre, bâtiment A'; ui.fields.address.handlers.input(); ui.run(300);
+    assert.equal(ui.requests.length, 1);
+    assert.equal(ui.fields.mapbox_id.value, 'commune.01212_01560');
+    assert.equal(ui.submit().prevented, undefined);
+});
+
+test('does not force a new suggestion when editing unrelated fields of an existing dossier', async () => {
+    const ui = await creationFixture({ existing: true, postalCode: 'Ancien CP' });
+    assert.equal(ui.submit().prevented, undefined);
+    assert.equal(ui.fields.postal_code.attrs.has('pattern'), false);
+    ui.fields.address.value = 'Une autre voie';
+    assert.equal(ui.submit().prevented, true);
 });
 
 test('keeps a canonical commune selection valid when the correction form is submitted', async () => {

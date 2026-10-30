@@ -68,7 +68,8 @@ it('checks the selected imported dossier rather than trusting historical GPS and
     DB::table('legacy_records')->insert(['source_table' => 'dossiers', 'source_id' => 1, 'dossier_id' => $dossier->id,
         'payload' => json_encode(['adress' => 'Les Rivieres', 'zip' => '41110', 'ville' => 'Testville', 'latitude' => 43, 'longitude' => 2])]);
     $before = $dossier->fresh()->getAttributes();
-    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$matches ? planningAddressFeature() : planningAddressFeature(['place_type' => ['place']])]])]);
+    Http::fake(['api.mapbox.com/*' => Http::response(['features' => [$matches ? planningAddressFeature() : planningAddressFeature(['place_type' => ['place']])]]),
+        'geo.api.gouv.fr/communes*' => Http::response([])]);
     $booking = app(DossierBooking::class);
     expect($booking->pending($actor))->toHaveCount(1);
     Http::assertNothingSent();
@@ -77,7 +78,7 @@ it('checks the selected imported dossier rather than trusting historical GPS and
         expect($selected['latitude'])->toBe($matches ? 47.3 : null)
             ->and($selected['longitude'])->toBe($matches ? 1.3 : null);
     }
-    Http::assertSentCount(1);
+    Http::assertSentCount($matches ? 1 : 2);
     expect($dossier->fresh()->getAttributes())->toBe($before);
 })->with([true, false]);
 

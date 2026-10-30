@@ -1,0 +1,5 @@
+{
+    "colors": ["#1e293b", "#b91c1c", "#c2410c", "#a16207", "#15803d", "#0369a1", "#1d4ed8", "#7e22ce"],
+    "fonts": {"serif": "Georgia, serif", "monospace": "monospace"},
+    "sizes": ["12px", "14px", "18px", "22px"]
+}

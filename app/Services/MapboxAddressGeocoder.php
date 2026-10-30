@@ -11,7 +11,7 @@ class MapboxAddressGeocoder
 
     private const COUNTRIES = 'fr,gp,mq,gf,re,yt,pm,bl,mf,pf,nc,wf';
 
-    public function geocode(?string $address): array
+    public function geocode(?string $address, ?string $identifier = null): array
     {
         if (blank($address)) {
             return $this->emptyResult('Adresse absente.');
@@ -42,6 +42,7 @@ class MapboxAddressGeocoder
             $features = $response->json('features');
             $feature = collect(is_array($features) ? $features : [])
                 ->filter(fn ($candidate) => is_array($candidate)
+                    && ($identifier === null || ($candidate['id'] ?? null) === $identifier)
                     && app(MapboxGeocodingMatch::class)->accepts((string) $address, $candidate, $this->addressParts($candidate)))
                 ->first();
 

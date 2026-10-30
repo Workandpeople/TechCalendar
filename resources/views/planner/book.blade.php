@@ -1012,7 +1012,7 @@
                             </div>
                             <div>
                                 <label class="gc-label" for="booking_crm_detail_comment">Commentaires</label>
-                                <textarea id="booking_crm_detail_comment" class="gc-input min-h-[110px]" placeholder="Commentaires du dossier ou notes internes"></textarea>
+                                <x-comment-editor id="booking_crm_detail_comment" placeholder="Commentaires du dossier ou notes internes" name="comment" />
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
                                     <button id="booking-crm-detail-save-comment" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                                 </div>
@@ -1022,7 +1022,7 @@
                                 <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                     <div>
                                         <label class="gc-label" for="booking_crm_problem_comment">Commentaire du problème</label>
-                                        <textarea id="booking_crm_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré"></textarea>
+                                        <x-comment-editor id="booking_crm_problem_comment" placeholder="Explique le problème rencontré" name="comment" />
                                     </div>
                                     <div>
                                         <label class="gc-label" for="booking_crm_problem_type">Type de problème</label>
@@ -1222,7 +1222,7 @@
 
                         <div class="mt-4">
                             <label class="gc-label" for="booking_detail_comment">Commentaire</label>
-                            <textarea id="booking_detail_comment" rows="5" class="gc-input" style="min-height:120px;"></textarea>
+                            <x-comment-editor id="booking_detail_comment" rows="5" name="comment" />
                             <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
                                 <button id="booking-save-comment-btn" type="button" class="gc-btn-soft hidden">Enregistrer mon commentaire</button>
                             </div>
@@ -1233,7 +1233,7 @@
                             <div class="gc-appointment-action-details-body grid grid-cols-1 gap-3">
                                 <div>
                                     <label class="gc-label" for="booking_problem_comment">Commentaire du problème</label>
-                                    <textarea id="booking_problem_comment" class="gc-input min-h-[95px]" placeholder="Explique le problème rencontré"></textarea>
+                                    <x-comment-editor id="booking_problem_comment" placeholder="Explique le problème rencontré" name="comment" />
                                 </div>
                                 <div>
                                     <label class="gc-label" for="booking_problem_type">Type de problème</label>
@@ -1346,7 +1346,7 @@
 
                         <div>
                             <label class="gc-label" for="booking_lot_contact_comment">Commentaire</label>
-                            <textarea id="booking_lot_contact_comment" class="gc-input min-h-[170px]" maxlength="2000" required placeholder="Résumé de l’appel, éléments constatés, suite à donner..."></textarea>
+                            <x-comment-editor id="booking_lot_contact_comment" maxlength="2000" required placeholder="Résumé de l’appel, éléments constatés, suite à donner..." name="comment" />
                         </div>
 
                         <p id="booking_lot_contact_status" class="hidden text-sm"></p>

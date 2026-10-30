@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierPlanning;
 use App\Services\Crm\DossierRegistry;
+use App\Services\MapboxAddressGeocoder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -24,12 +25,13 @@ beforeEach(function () {
     Http::preventStrayRequests();
     Mail::fake();
     Queue::fake();
+    $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 45.76, 'longitude' => 4.83, 'mapbox_id' => 'address.fixture']);
     $this->manager = User::factory()->create(['role' => 0]);
     $this->technician = User::factory()->create(['role' => 2, 'admin' => false]);
     $this->service = Service::create(['name' => 'BAR EN 101', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     $this->dossierData = [
         'reference' => 'DOS-V2-TEST', 'company_name' => 'Client dossier',
-        'address' => '10 rue de Lyon', 'city' => 'Lyon', 'service_ids' => [$this->service->id],
+        'address' => '10 rue de Lyon', 'city' => 'Lyon', 'service_ids' => [$this->service->id], 'mapbox_id' => 'address.fixture',
     ];
     $this->dossier = app(DossierRegistry::class)->create($this->manager, $this->dossierData);
     $this->operation = $this->dossier->operations()->firstOrFail();
