@@ -564,3 +564,52 @@ Validation locale de cette etape : 212 tests unitaires MYMAR reussis
 Les refus d'empreinte et de code modifie ont aussi ete verifies avant CREATE,
 ainsi que le chemin independant de reverrouillage d'un compte ouvert.
 Il ne s'agit pas encore d'une execution de ce nouveau paquet en production.
+
+## Transport HTTP prive, sans appel par le planning
+
+L'operateur a ensuite confirme la preparation SQL reelle : quatre occupations
+lues avec le nouveau compte SELECT par colonnes, quatre liens revalides,
+compte reverrouille et fichiers/services inchanges. Les trois anomalies
+globales restent les hypotheses de duree/fuseau/statuts, pas des erreurs SQL.
+
+Le lot autonome `tools/deploy/mymar/runtime` regroupe l'installation isolee
+et le controle du vrai transport HTTP. Il prepare un Apache autonome sur
+127.0.0.1:19846 et un master PHP-FPM dedie, sans include, modification ou reload
+de l'Apache public ni de ses vhosts. Deux nouvelles unites et un utilisateur
+Linux sans shell sont crees ; le compte SQL dedie existant est deverrouille
+pour ce service, sans changer ses droits. Aucun paquet n'est installe.
+
+Les credentials restent separes de Cofrac dans un repertoire prive 0700,
+le code est root/lecture seule et les processus ont des limites de ressources.
+L'API refuse les techniciens hors de la liste humainement approuvee en plus
+du jeton obligatoire, du loopback et des gardes de perimetre existantes.
+Elle ne passe jamais par les anciens endpoints MYMAR non proteges.
+
+Le script compare les fichiers des applications et l'etat des services
+existants avant/apres. Il n'execute pas Laravel, ne fait aucun git pull,
+migration, import, envoi, synchronisation ou appel par une page du CRM.
+Le marqueur du transport HTTP est distinct de toute activation du connecteur.
+Les suggestions et les disponibilites restent donc exactement inchangees.
+
+L'installation publie seulement un rapport apres un vrai GET authentifie
+et six refus HTTP attendus. Un echec arrete les nouvelles unites uniquement
+et reverrouille le compte SQL par un chemin independant des approbations.
+Le script d'arret est fourni dans le diagnostic root-prive et le rapport.
+Il ne supprime aucune donnee et ne restaure pas un ancien CRM.
+
+Tests reproductibles : `MYMAR_PRIVATE_HTTP_TEST=1 bash
+tools/deploy/tests/check-mymar-private-http.sh`, puis la meme commande avec
+`MYMAR_PRIVATE_HTTP_FAILSTART=1`. Apache/FPM/MySQL/HTTP sont reels dans les
+conteneurs jetables, sans reseau externe ; la gestion des PIDs remplace
+systemd, tandis que systemd-analyze verifie les unites. Le refus de relance,
+le nettoyage apres echec et l'arret apres derive du fichier d'approbation
+sont controles avec les checksums des donnees metier et des applications.
+
+La projection/cache CRM et la prise en compte des occupations dans les
+disponibilites restent a implementer dans le lot suivant. Aucune lecture
+MYMAR n'est prevue directement pendant le rendu des pages du planning.
+
+Validation locale de ce lot : 214 tests unitaires MYMAR (683 assertions),
+plus les deux scenarios complets Apache/FPM/MySQL ci-dessus. La premiere
+execution systemd sur le serveur reste a confirmer par le rapport operateur ;
+aucun demarrage de production n'a ete effectue depuis le poste de developpement.
