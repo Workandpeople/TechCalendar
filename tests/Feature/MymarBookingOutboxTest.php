@@ -9,11 +9,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    // Kept outside automatic production migrations until placements are explicitly enabled.
+    if (! Schema::hasTable('mymar_booking_requests')) {
+        (require base_path('tools/deploy/mymar/booking/inactive-migrations/2026_10_31_110000_create_mymar_booking_requests_table.php'))->up();
+    }
     Http::preventStrayRequests();
     $this->actor = User::factory()->create(['role' => 1, 'admin' => false]);
     $this->command = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,

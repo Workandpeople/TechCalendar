@@ -59,7 +59,7 @@ useradd -M ubuntu
 test -e /usr/bin/php8.4 || ln -s /usr/bin/php /usr/bin/php8.4
 mkdir -m 700 /backend-package
 mkdir -p /etc/mysql
-cp /workspace/tools/deploy/mymar/booking/* /backend-package/
+find /workspace/tools/deploy/mymar/booking -maxdepth 1 -type f -exec cp {} /backend-package/ \;
 cp /workspace/tools/deploy/mymar/MymarReadOnlyAudit.php /backend-package/
 cp /workspace/tools/deploy/mymar/workflow/MymarWorkflowAudit.php /backend-package/
 cp /workspace/tools/deploy/mymar/mapping/MymarApprovedTechnicianMap.php /backend-package/

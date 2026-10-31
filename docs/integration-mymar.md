@@ -932,3 +932,38 @@ Le test reel injecte un conflit synthetique, verifie sa detection sous MySQL
 8.0.46 et compare les checksums des tables natives/source ET du cache avant/apres.
 Un cache expire est refuse sans purge ni fallback HTTP. Aucun test n'appelle
 la production ou ne relance le scheduler global.
+
+## Liste des demandes MAR en lecture seule
+
+La passerelle des demandes est independante de celle des occupations :
+127.0.0.1:19847, SELECT seulement, POST refuse. Le compte SQL d'ecriture reste
+verrouille. L'onglet RDV MAR charge une projection paginee (25 lignes, curseur
+d'identifiant) uniquement a son ouverture. Le rendu initial des pages Cofrac
+n'appelle pas MYMAR. Les noms/adresses sont affiches en texte, jamais en HTML.
+
+La route interne est reservee aux comptes actifs gerant/planning/super-admin,
+avec limitation de debit et reponses privees sans cache navigateur. La projection
+serveur est chiffree, conservee 30 secondes, avec verrou court non bloquant et
+actualisation manuelle bornee. Une panne, une reponse invalide ou un timeout ne
+sont jamais presentes comme une liste vide valide. Le changement d'onglet annule
+la requete et les anciennes reponses ne remplacent pas la page courante.
+
+Le paquet se construit depuis HEAD commite :
+`php tools/deploy/prepare-mymar-booking-ui.php REVISION_RUNTIME RAPPORT_LECTEUR`.
+Il precontrole le lecteur et le verrouillage SQL, deploie le lot applicatif
+sans nouvelle migration avec une courte maintenance, rouvre les deux domaines,
+puis autorise la lecture via `/etc/cofrac2-mymar-booking/reader.json` et un jeton
+separe root:cofrac2-app 0640. Le runtime ne recoit aucun identifiant SQL MYMAR.
+Un echec de validation desactive cette seule liste sans fermer Cofrac ni arreter
+les passerelles. Le rapport prive fournit un `disable.sh` independant des anciens
+contrats de deploiement. Aucun placement, signalement de probleme, message de test
+ou modification des donnees MYMAR n'est active dans ce lot.
+
+La migration du futur journal `mymar_booking_requests` reste volontairement dans
+`tools/deploy/mymar/booking/inactive-migrations`, hors migrations automatiques.
+Elle devra etre reintroduite et autorisee dans un lot d'activation des placements
+distinct, apres integration aux controles de disponibilite/reservation Cofrac.
+
+Tests : `MymarPendingBookingsTest`, `MymarBookingOutboxTest`, tests frontend
+`mymar-pending`/`booking-source-tabs`, et chaine conteneur jetable
+`MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 bash tools/deploy/tests/check-mymar-booking.sh`.

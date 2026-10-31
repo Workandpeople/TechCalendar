@@ -15,6 +15,7 @@ use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerMailTemplateController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\MymarPendingBookingController;
 use App\Http\Controllers\Planner\PlannerAbsenceController;
 use App\Http\Controllers\Planner\PlannerAppointmentCancellationController;
 use App\Http\Controllers\Planner\PlannerAppointmentMailController;
@@ -169,6 +170,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/absences', [PlannerAbsenceController::class, 'store'])
         ->middleware(EnsureCrmV2Enabled::class)->name('planner.absences.store');
     Route::get('/planner/book', [PlannerBookingController::class, 'index'])->name('planner.book');
+    Route::get('/planner/book/mar', MymarPendingBookingController::class)->middleware('throttle:60,1')->name('planner.book.mar.index');
     Route::get('/planner/appointments/modify', [PlannerBookingController::class, 'index'])->name('planner.appointments.modify');
     Route::get('/planner/book/crm-appointments', [PlannerBookingController::class, 'crmAppointments'])->name('planner.book.crm-appointments.index');
     Route::post('/planner/book/crm-appointments/refresh', [PlannerBookingController::class, 'refreshCrmAppointments'])->name('planner.book.crm-appointments.refresh');

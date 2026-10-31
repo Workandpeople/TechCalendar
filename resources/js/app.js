@@ -29,6 +29,7 @@ import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentA
 import { createAppointmentTooltip } from './appointment-tooltip';
 import * as appointmentDateTime from './appointment-date-time';
 import { initDatePickers } from './date-picker';
+import { initMymarPending } from './mymar-pending';
 
 window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
@@ -65,6 +66,7 @@ initCreationAddress();
 initAdminSettings();
 initBetaFeedback();
 initDatePickers();
+initMymarPending();
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,

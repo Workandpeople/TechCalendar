@@ -844,10 +844,13 @@
                 @endforelse
             </div>
             @if (config('crm.v2_enabled'))
-                <div id="booking-mymar-source" class="hidden rounded-xl border border-dashed p-5" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" hidden>
-                    <h3 class="font-semibold" style="color:var(--gc-text);">Prise de RDV MAR en préparation</h3>
+                <div id="booking-mymar-source" class="hidden rounded-xl border p-4 space-y-3" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}" hidden>
+                    <header class="flex items-center justify-between gap-3"><h3 class="font-semibold" style="color:var(--gc-text);">Demandes MAR à placer</h3><button class="gc-btn-secondary" type="button" data-mymar-refresh>Actualiser</button></header>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Les rendez-vous MAR déjà placés restent affichés dans le calendrier pour les techniciens du pilote. Aucun dossier MAR n'est copié dans Cofrac.</p>
+                    <p class="text-sm" role="status" aria-live="polite" data-mymar-status>La liste se charge à l’ouverture de cet onglet.</p>
+                    <div class="space-y-2" role="list" data-mymar-list></div>
+                    <footer data-mymar-pagination hidden><div class="flex items-center justify-between gap-3"><button type="button" class="gc-btn-secondary" data-mymar-previous>Précédent</button><span class="text-sm" data-mymar-page>Page 1</span><button type="button" class="gc-btn-secondary" data-mymar-next>Suivant</button></div></footer>
                 </div>
             @endif
         </section>
@@ -2473,6 +2476,9 @@
                 if (!panel) continue;
                 panel.hidden = bookingSourceMode !== source;
                 panel.classList.toggle('hidden', panel.hidden);
+            }
+            if (bookingMymarSource?.dispatchEvent) {
+                bookingMymarSource.dispatchEvent(new Event(bookingSourceMode === 'mymar' ? 'cofrac:mymar:activate' : 'cofrac:mymar:deactivate'));
             }
             bookingCrmSearchWrap?.classList.toggle('hidden', !isCrmMode);
             bookingPendingSummary?.classList.toggle('hidden', !isCrmMode);

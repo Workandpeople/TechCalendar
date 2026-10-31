@@ -81,6 +81,7 @@ $config['writes_enabled']=false;file_put_contents($path,json_encode($config,JSON
 assert(!file_exists('/fixtures/FORBIDDEN_CALL')&&!file_exists('/fixtures/APPLICATION_EXECUTED'));
 echo "Reader HTTP: real Apache/FPM/MySQL, SELECT-only permissions, POST refused, secrets private, old application untouched.\n";
 PHP
+    bash /workspace/tools/deploy/tests/check-mymar-booking-ui-container.sh
     if (cd /reader-package && bash install.sh --install-reader-only > /fixtures/reader-repeat.log 2>&1); then exit 1; fi
     RUN=$(php -r '$r=json_decode(file_get_contents("/var/lib/cofrac2-production/MYMAR-BOOKING-HTTP.json"),true);echo $r["run_directory"];')
     # Cleanup cannot depend on the continuing validity of the original request or mapping.
