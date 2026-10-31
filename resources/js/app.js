@@ -28,6 +28,7 @@ import { initBetaFeedback } from './beta-feedback';
 import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentAssignments } from './appointment-placement';
 import { createAppointmentTooltip } from './appointment-tooltip';
 import * as appointmentDateTime from './appointment-date-time';
+import { initDatePickers } from './date-picker';
 
 window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
@@ -63,6 +64,7 @@ initDossierAddress();
 initCreationAddress();
 initAdminSettings();
 initBetaFeedback();
+initDatePickers();
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,
