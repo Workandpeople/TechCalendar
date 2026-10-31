@@ -398,14 +398,15 @@
                 <div>
                     <div class="flex flex-wrap items-center gap-3">
                         <h2 class="text-lg font-semibold" style="color:var(--gc-text);">{{ $bookingConnectorsEnabled ? 'RDV externes à placer' : 'RDV à placer' }}</h2>
-                        <label class="inline-flex cursor-pointer items-center gap-3">
-                            <button id="booking-source-switch" type="button" class="relative h-4 w-8 rounded-full transition" style="background:var(--gc-primary);" role="switch" aria-checked="false" aria-label="Basculer vers les lots">
-                                <span id="booking-source-switch-knob" class="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition"></span>
-                            </button>
-                            <span class="text-lg font-semibold" style="color:var(--gc-text);">depuis des lots</span>
-                        </label>
+                        <div id="booking-source-tabs" class="inline-flex flex-wrap gap-1 rounded-xl border p-1" style="border-color:var(--gc-border);" role="tablist" aria-label="Origine des rendez-vous">
+                            @foreach (['crm' => 'RDV Cofrac', 'lot' => 'RDV lots', ... (config('crm.v2_enabled') ? ['mymar' => 'RDV MAR'] : [])] as $sourceMode => $sourceLabel)
+                                <button id="booking-source-tab-{{ $sourceMode }}" type="button" role="tab" data-booking-source="{{ $sourceMode }}" aria-selected="{{ $sourceMode === 'crm' ? 'true' : 'false' }}" aria-controls="booking-{{ $sourceMode }}-source" tabindex="{{ $sourceMode === 'crm' ? '0' : '-1' }}" class="rounded-lg px-3 py-2 text-sm font-semibold transition" style="background:{{ $sourceMode === 'crm' ? 'var(--gc-primary)' : 'transparent' }};color:{{ $sourceMode === 'crm' ? '#fff' : 'var(--gc-text)' }};">
+                                    {{ $sourceLabel }}
+                                </button>
+                            @endforeach
+                        </div>
                     </div>
-                    <p class="text-sm" style="color:var(--gc-text-soft);">{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Dossiers en « Prise de RDV » : une ligne par prestation, à placer ou à replacer.' }}</p>
+                    <p id="booking-source-description" class="text-sm" style="color:var(--gc-text-soft);" data-crm-description="{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Dossiers en « Prise de RDV » : une ligne par prestation, à placer ou à replacer.' }}">{{ $bookingConnectorsEnabled ? "Le service est optionnel: s'il est absent, seuls les départements couverts filtrent les techniciens." : 'Dossiers en « Prise de RDV » : une ligne par prestation, à placer ou à replacer.' }}</p>
                     @if (! $bookingConnectorsEnabled)
                         <p id="booking-pending-summary" class="mt-1 text-sm font-semibold" role="status">{{ $crmAppointments->pluck('dossier_id')->unique()->count() }} dossier(s) · {{ $crmAppointments->count() }} prestation(s)</p>
                     @endif
@@ -421,7 +422,7 @@
                 Aucun RDV ne correspond à cette recherche.
             </div>
 
-            <div id="booking-crm-source">
+            <div id="booking-crm-source" role="tabpanel" aria-labelledby="booking-source-tab-crm">
                 <div id="booking-crm-grid" class="gc-booking-request-list space-y-2">
                     @foreach ($crmAppointments as $appointment)
                         @php
@@ -500,7 +501,7 @@
                 <nav id="booking-crm-pagination" class="gc-pagination mt-4 hidden" aria-label="{{ __('pagination.navigation') }}"></nav>
             </div>
 
-            <div id="booking-lot-source" class="hidden space-y-3">
+            <div id="booking-lot-source" class="hidden space-y-3" role="tabpanel" aria-labelledby="booking-source-tab-lot" hidden>
                 @forelse ($lotRequests as $lot)
                     @php
                         $lotAutoCompletion = $lot['auto_completion'] ?? [];
@@ -842,6 +843,13 @@
                     </div>
                 @endforelse
             </div>
+            @if (config('crm.v2_enabled'))
+                <div id="booking-mymar-source" class="hidden rounded-xl border border-dashed p-5" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" hidden>
+                    <h3 class="font-semibold" style="color:var(--gc-text);">Prise de RDV MAR en préparation</h3>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Les rendez-vous MAR déjà placés restent affichés dans le calendrier pour les techniciens du pilote. Aucun dossier MAR n'est copié dans Cofrac.</p>
+                </div>
+            @endif
         </section>
 
         <section id="manual-booking-section" class="gc-card hidden p-5">
@@ -1645,13 +1653,15 @@
         const bookingCrmEmpty = document.getElementById('booking-crm-empty');
         const bookingCrmSource = document.getElementById('booking-crm-source');
         const bookingLotSource = document.getElementById('booking-lot-source');
+        const bookingMymarSource = document.getElementById('booking-mymar-source');
+        const bookingSourceTabs = Array.from(document.querySelectorAll('[data-booking-source]'));
+        const bookingSourceDescription = document.getElementById('booking-source-description');
+        const bookingPendingSummary = document.getElementById('booking-pending-summary');
         const bookingCrmSearchWrap = document.getElementById('booking-crm-search-wrap');
         const bookingCrmPagination = document.getElementById('booking-crm-pagination');
         const bookingCrmRefreshButton = document.getElementById('booking-crm-refresh');
         const bookingExternalRefreshButtons = Array.from(document.querySelectorAll('[data-external-refresh-source]'));
         const bookingCrmRefreshStatus = document.getElementById('booking-crm-refresh-status');
-        const bookingSourceSwitch = document.getElementById('booking-source-switch');
-        const bookingSourceSwitchKnob = document.getElementById('booking-source-switch-knob');
         const techniciansList = document.getElementById('eligible-technicians-list');
         const technicianSearchInput = document.getElementById('eligible-technician-search');
         const technicianSearchResults = document.getElementById('eligible-technician-search-results');
@@ -2437,7 +2447,7 @@
             try {
                 const mode = window.localStorage?.getItem(bookingSourceModeStorageKey);
 
-                return ['crm', 'lot'].includes(mode) ? mode : 'crm';
+                return bookingSourceTabs.some((tab) => tab.dataset.bookingSource === mode) ? mode : 'crm';
             } catch (error) {
                 return 'crm';
             }
@@ -2452,24 +2462,36 @@
         };
 
         const setBookingSourceMode = (mode, { persist = true } = {}) => {
-            bookingSourceMode = mode === 'lot' ? 'lot' : 'crm';
-            const isLotMode = bookingSourceMode === 'lot';
+            bookingSourceMode = bookingSourceTabs.some((tab) => tab.dataset.bookingSource === mode) ? mode : 'crm';
+            const isCrmMode = bookingSourceMode === 'crm';
 
             if (persist) {
                 persistBookingSourceMode(bookingSourceMode);
             }
 
-            bookingCrmSource?.classList.toggle('hidden', isLotMode);
-            bookingLotSource?.classList.toggle('hidden', !isLotMode);
-            bookingCrmSearchWrap?.classList.toggle('hidden', isLotMode);
-            bookingExternalRefreshButtons.forEach((button) => button.classList.toggle('hidden', isLotMode));
-            bookingCrmRefreshStatus?.classList.toggle('hidden', isLotMode || bookingCrmRefreshStatus.textContent === '');
+            for (const [source, panel] of [['crm', bookingCrmSource], ['lot', bookingLotSource], ['mymar', bookingMymarSource]]) {
+                if (!panel) continue;
+                panel.hidden = bookingSourceMode !== source;
+                panel.classList.toggle('hidden', panel.hidden);
+            }
+            bookingCrmSearchWrap?.classList.toggle('hidden', !isCrmMode);
+            bookingPendingSummary?.classList.toggle('hidden', !isCrmMode);
+            bookingExternalRefreshButtons.forEach((button) => button.classList.toggle('hidden', !isCrmMode));
+            bookingCrmRefreshStatus?.classList.toggle('hidden', !isCrmMode || bookingCrmRefreshStatus.textContent === '');
             bookingCrmEmpty?.classList.add('hidden');
-            bookingSourceSwitch?.setAttribute('aria-checked', String(isLotMode));
-            bookingSourceSwitch?.style.setProperty('background', isLotMode ? '#d8c27a' : 'var(--gc-primary)');
-            bookingSourceSwitchKnob?.style.setProperty('transform', isLotMode ? 'translateX(1rem)' : 'translateX(0)');
+            bookingSourceTabs.forEach((tab) => {
+                const selected = tab.dataset.bookingSource === bookingSourceMode;
+                tab.setAttribute('aria-selected', String(selected));
+                tab.tabIndex = selected ? 0 : -1;
+                tab.style.setProperty('background', selected ? 'var(--gc-primary)' : 'transparent');
+                tab.style.setProperty('color', selected ? '#fff' : 'var(--gc-text)');
+            });
+            if (bookingSourceDescription) {
+                bookingSourceDescription.textContent = isCrmMode ? bookingSourceDescription.dataset.crmDescription
+                    : bookingSourceMode === 'lot' ? 'Dossiers à planifier depuis les lots.' : 'Rendez-vous gérés dans MYMAR, sans reprise du CRM.';
+            }
 
-            if (isLotMode) {
+            if (!isCrmMode) {
                 bookingCrmPagination?.classList.add('hidden');
                 bookingCrmCards.forEach((card) => card.classList.add('hidden'));
                 return;
@@ -6489,8 +6511,17 @@
             filterBookingCrmCards();
         });
 
-        bookingSourceSwitch?.addEventListener('click', () => {
-            setBookingSourceMode(bookingSourceMode === 'crm' ? 'lot' : 'crm');
+        bookingSourceTabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => setBookingSourceMode(tab.dataset.bookingSource));
+            tab.addEventListener('keydown', (event) => {
+                const target = event.key === 'Home' ? 0 : event.key === 'End' ? bookingSourceTabs.length - 1
+                    : event.key === 'ArrowRight' ? (index + 1) % bookingSourceTabs.length
+                    : event.key === 'ArrowLeft' ? (index + bookingSourceTabs.length - 1) % bookingSourceTabs.length : null;
+                if (target === null) return;
+                event.preventDefault();
+                bookingSourceTabs[target].focus();
+                setBookingSourceMode(bookingSourceTabs[target].dataset.bookingSource);
+            });
         });
 
         bookingCrmRefreshButton?.addEventListener('click', refreshBookingCrmAppointments);

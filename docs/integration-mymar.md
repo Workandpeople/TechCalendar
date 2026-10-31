@@ -1,8 +1,67 @@
 # Preparation de l'integration MYMAR
 
-Etat au 30 octobre 2026 : aucun connecteur actif, aucune ecriture MYMAR,
-aucune reprise du CRM MYMAR dans Cofrac. Le premier audit du 29 octobre a
+Etat au 31 octobre 2026 : passerelle privee et affichage pilote actifs en
+lecture seule, aucune ecriture MYMAR et aucun blocage des disponibilites MAR.
+Aucune reprise du CRM MYMAR dans Cofrac. Le premier audit du 29 octobre a
 identifie les tables utiles et les risques des endpoints existants.
+
+## Extension demandee : prise de RDV MAR depuis Cofrac
+
+Le besoin valide le 31 octobre depasse l'observation des occupations :
+
+- Afficher les RDV MAR existants dans les plannings Cofrac (pilote deja visible).
+- Trois onglets de source : RDV Cofrac, RDV lots, RDV MAR.
+- Lire les demandes a placer dans MYMAR, sans les transformer en dossiers Cofrac.
+- Choisir un technicien lie, une date et une heure avec les controles habituels.
+- Apres confirmation MYMAR, afficher le placement et son statut attente visite.
+- Declarer un probleme RDV dans MYMAR depuis le meme parcours de prise de RDV.
+
+Les trois onglets sont prepares dans le code. Pour l'instant l'onglet MAR
+explique explicitement que le placement n'est pas active ; il ne montre pas
+une fausse liste vide et ne fait aucun appel reseau. La source selectionnee
+reste memorisee et les parcours Cofrac/lots ne changent pas. Ce code n'a pas
+encore ete deploye. Il n'existe pas encore de mutateur prive actif.
+
+### Contrat d'ecriture a verifier avant activation
+
+MYMAR reste l'unique autorite pour ses dossiers et rendez-vous. Une visite
+initiale et une visite apres travaux ne doivent pas etre confondues : les
+categories observees sont respectivement 1/2/3 et 14/15/16 (prise/probleme/
+attente visite). Le releve statique du 30 octobre confirme que l'ancien
+`ApiController::ajouterRDV` impose **3**, sans distinction de phase. Il archive
+les anciens RDV avec `is_old=1`. L'utiliser tel quel pour l'apres-travaux
+enverrait les dossiers dans la mauvaise categorie. Aucune ancienne route
+API d'ecriture ne sera appelee par le nouveau parcours.
+
+Le prochain paquet `tools/deploy/mymar/workflow` relit seulement les methodes
+de mutation, les modeles/hooks et les metadonnees de contraintes/triggers.
+Il n'inclut/evalue jamais MYMAR, ne lit ni configuration ni lignes metier,
+ne change ni le compte SQL SELECT ni la passerelle existante. Les constantes
+metier sont extraites separement des extraits masques : leurs nombres `0`
+ne doivent pas etre interpretes comme les valeurs d'origine.
+
+Conditions du futur mutateur, non satisfaites par la seule observation :
+
+- Interface loopback authentifiee avec droits d'ecriture separes de la lecture.
+- Permissions internes planning/gerant, liaison technicien valide et active.
+- Revision source attendue, verrouillage du dossier et des RDV courants.
+- Cle d'idempotence avec refus de reutilisation pour un autre contenu ; en cas
+  de timeout, relire le resultat de cette cle, ne pas creer un second RDV.
+- Transaction MYMAR pour RDV, statut, archivage et historique. Les regles
+  d'archivage entre visite initiale et apres travaux doivent etre confirmees.
+- Auteur d'integration explicite et acteur Cofrac tracable ; ne jamais faire
+  passer un ID utilisateur Cofrac pour un ID utilisateur MYMAR.
+- Dates Europe/Paris avec decalage explicite, duree normalisee et conversion
+  vers le format MYMAR, sans reutiliser les exports qui font `addHour()`.
+- Pas de succes affiche avant confirmation ; erreurs/concurrence explicites.
+- Les RDV MAR occupent les disponibilites ; une position absente/interpretee
+  ne doit jamais autoriser le rapprochement <1 km ou un trajet invente.
+- Cache invalide apres ecriture confirmee, mais aucun appel distant pendant
+  le rendu habituel des pages. Notifications et effets secondaires verifies.
+
+La couverture actuelle reste celle des quatre techniciens lies du pilote,
+pas l'ensemble des techniciens MYMAR. L'absence de chevauchement observee
+sur les 96 RDV Cofrac controles n'autorise pas a elargir cette couverture.
 
 ## Deuxieme collecte
 
