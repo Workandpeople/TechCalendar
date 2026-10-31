@@ -80,6 +80,12 @@ dans l'historique et dans le journal technique prive.
 
 ### Noyau de commande et preparation fermee
 
+La preparation fermee a ete executee avec succes le 31 octobre a 09:55 UTC :
+compte technique cree/desactive sans role, nouveau compte SQL verrouille,
+journal vide et quatre liens reverifies. Aucun dossier, RDV, ancien compte,
+historique ni service modifie. Une seule demande a ete sondee en READ ONLY,
+sans exporter ses donnees. Ce succes n'active pas les actions de placement.
+
 Le code `tools/deploy/mymar/booking` est un backend autonome, non installe.
 Il n'est pas ajoute au point d'entree d'occupation existant et aucune route
 Laravel ou tache ne l'appelle. Le DTO `MymarBookingCommand` valide des entrees
@@ -104,7 +110,39 @@ Le moteur implemente :
   partages sur les profils et beneficiaires, exclusifs sur le dossier et RDV.
   Aucun UPDATE sur users/clients et aucun droit TRIGGER pour obtenir un verrou.
 
-Le journal vit dans un NOUVEAU schema `cofrac_mymar_integration`, sur la meme
+### Suivi durable cote Cofrac, prepare mais non branche
+
+`MymarBookingClient` utilise un endpoint loopback distinct (port reserve 19847,
+pas la passerelle d'occupations 19846), un autre jeton, des delais courts,
+sans proxy/redirection/cookies ni nouvelle tentative automatique de POST.
+Lecture des demandes par pages de 1 a 100 avec curseur monotone, contrats/types
+stricts et limite de reponse. Une erreur n'est pas presentee comme une liste
+vide. Les beneficiaires/adresses restent du texte a echapper au rendu.
+
+`MymarBookingOutbox` conserve dans la base Cofrac une commande chiffree et
+son empreinte, auteur authentifie et identifiant source. Le meme UUID ne peut
+pas designer un autre contenu/auteur ; une seule action non resolue par dossier.
+Le bail de traitement est court et les retours d'un ancien worker ne peuvent
+pas ecraser un resultat plus recent. La transaction locale est fermee avant HTTP.
+
+Un resultat confirme exige une reponse source apres COMMIT, meme UUID/dossier/
+action et memes heure/duree. Apres timeout, reponse invalide, 5xx ou abandon
+d'un worker, la demande reste incertaine et verrouille ce dossier. La reprise
+fait uniquement GET du recu avec le meme UUID : ni nouveau POST ni nouvel UUID.
+Un recu absent ne prouve pas l'echec. Les droits de l'auteur sont reverifies
+avant le premier POST, sans empecher la reconciliation d'une action deja partie.
+
+Ces services sont DESACTIVES par defaut, sans route, job, scheduler ni binding
+de production. La nouvelle migration du journal natif est reservee au futur
+lot de branchement ; elle n'est pas dans le paquet du correctif de dates.
+Elle n'est volontairement pas ajoutee aux migrations autorisees du deploiement
+actuel. Les controles de creneaux/absences/trajets et la reservation Cofrac
+restent a brancher avant toute activation des ecritures. Aucun blocage MAR
+supplementaire ni changement d'occupation n'est revendique par ce lot.
+
+### Preparation source et limites d'activation
+
+Le journal source vit dans un NOUVEAU schema `cofrac_mymar_integration`, sur la meme
 instance MySQL pour rester dans la meme transaction. La nouvelle connexion
 utilise des privileges par colonnes verifies exactement. Pas de DELETE, DDL,
 mot de passe, role modifie ou GRANT OPTION pour le compte runtime. L'absence
@@ -127,8 +165,8 @@ d'une commande concurrente et rollback complet quand l'historique echoue.
 Le preparateur est aussi execute de bout en bout, puis relance refusee sans
 ressource double. Sources, visites/dossiers et comptes existants inchanges.
 
-Restent avant activation : installation HTTP privee d'ecriture et client,
-reservations/outbox Cofrac avec gestion du resultat incertain, disponibilites
+Restent avant activation : installation HTTP privee d'ecriture et branchement
+du client/outbox prepares, reservations Cofrac, disponibilites
 natives/absences/trajets, branchement des onglets et droits planning/gerant,
 reconciliation du cache et validation finale du parcours. Le moteur source
 seul n'autorise PAS un creneau Cofrac et n'evalue PAS les trajets. Ses verrous
