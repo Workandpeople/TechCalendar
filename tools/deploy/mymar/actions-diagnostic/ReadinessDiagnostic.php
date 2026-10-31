@@ -39,7 +39,7 @@ final class ReadinessDiagnostic
                 $reason = $error->getMessage();
                 $checks[$name] = ['ok' => false, 'exception_class' => $error::class, 'reason' => in_array($reason,
                     ['mymar.booking_reader_busy', 'mymar.booking_reader_disabled', 'mymar.booking_pending_unavailable',
-                        'mymar.unsafe_actions_settings', 'mymar.invalid_actions_token', 'mymar.unsafe_reader_settings',
+                        'mymar.unsafe_actions_settings', 'mymar.invalid_actions_settings', 'mymar.invalid_actions_mapping', 'mymar.invalid_actions_token', 'mymar.unsafe_reader_settings',
                         'mymar.unsafe_pilot_file', 'mymar.invalid_pilot_token'], true) ? $reason : 'redacted'];
             }
         };

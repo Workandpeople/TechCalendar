@@ -51,7 +51,7 @@ try {
         'actions/MymarReadOnlyAudit.php' => 'tools/deploy/mymar/MymarReadOnlyAudit.php',
         'actions/MymarWorkflowAudit.php' => 'tools/deploy/mymar/workflow/MymarWorkflowAudit.php',
         'actions/MymarApprovedTechnicianMap.php' => 'tools/deploy/mymar/mapping/MymarApprovedTechnicianMap.php'];
-    foreach (['MymarActionsHttpPlan.php', 'entry.php', 'control.php'] as $file) {
+    foreach (['MymarActionsHttpPlan.php', 'MymarActionsConfiguration.php', 'entry.php', 'control.php'] as $file) {
         $files['actions/'.$file] = 'tools/deploy/mymar/actions/'.$file;
     }
     foreach (['MymarBookingFailure', 'MymarBookingSqlAccess', 'MymarBookingSource', 'MymarBookingGateway'] as $class) {

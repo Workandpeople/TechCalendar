@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cofrac2\Deploy\Mymar\MymarActionsConfiguration as Configuration;
 use Cofrac2\Deploy\Mymar\MymarActionsHttpPlan as Plan;
 use Cofrac2\Deploy\Mymar\MymarBookingSqlAccess as Sql;
 use Cofrac2\Deploy\Mymar\MymarRuntimeState as State;
@@ -10,7 +11,7 @@ use Cofrac2\Deploy\MymarWorkflowAudit;
 umask(0077);
 ini_set('display_errors', '0');
 ini_set('zend.exception_ignore_args', '1');
-foreach (['MymarRuntimeState', 'MymarRuntimePlan', 'MymarActionsHttpPlan', 'MymarBookingSqlAccess'] as $class) {
+foreach (['MymarRuntimeState', 'MymarRuntimePlan', 'MymarActionsHttpPlan', 'MymarActionsConfiguration', 'MymarBookingSqlAccess'] as $class) {
     require __DIR__.'/'.$class.'.php';
 }
 
@@ -198,7 +199,7 @@ try {
         chgrp($appConfig, $group['gid']);
         chmod($appConfig, 0750);
         actionsGroupWrite($appConfig.'/actions.json', ['format' => 'cofrac.mymar-actions-client', 'version' => 1,
-            'guard_enabled' => true, 'writes_enabled' => false, 'port' => 19848, 'generation' => $owned['generation'], 'bindings' => $prepared['bindings']], $group['gid']);
+            'guard_enabled' => true, 'writes_enabled' => false, 'port' => 19848, 'generation' => $owned['generation'], 'bindings' => Configuration::bindings($prepared['bindings'])], $group['gid']);
         if (file_put_contents($appConfig.'/api-token', $source['token']."\n") !== 65 || ! chgrp($appConfig.'/api-token', $group['gid']) || ! chmod($appConfig.'/api-token', 0640)) {
             throw new RuntimeException('mymar.actions_token_failed');
         }
@@ -206,7 +207,8 @@ try {
     }
     if ($phase === '--unlock') {
         $app = actionsPrivate($appConfig.'/actions.json', 0640);
-        if ($app['guard_enabled'] !== true || $app['writes_enabled'] !== false || $source['writes_enabled'] !== false) {
+        if ($app['guard_enabled'] !== true || $app['writes_enabled'] !== false || $source['writes_enabled'] !== false
+            || $app['bindings'] !== Configuration::bindings($prepared['bindings'])) {
             throw new RuntimeException('mymar.actions_unlock_order_refused');
         }
         State::admin("ALTER USER '$user'@'localhost' ACCOUNT UNLOCK;", $run);
@@ -234,7 +236,8 @@ try {
         throw new RuntimeException('mymar.actions_probe_refused');
     }
     $app = actionsPrivate($appConfig.'/actions.json', 0640);
-    if ($app['generation'] !== $owned['generation'] || $app['guard_enabled'] !== true || $app['writes_enabled'] !== false || $source['writes_enabled'] !== false) {
+    if ($app['generation'] !== $owned['generation'] || $app['guard_enabled'] !== true || $app['writes_enabled'] !== false || $source['writes_enabled'] !== false
+        || $app['bindings'] !== Configuration::bindings($prepared['bindings'])) {
         throw new RuntimeException('mymar.actions_enable_order_refused');
     }
     $source['writes_enabled'] = true;

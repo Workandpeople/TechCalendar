@@ -1058,3 +1058,39 @@ droits/format des fichiers, correspondances, occupation HTTP et qualite des
 donnees. Le rapport est masque ; seules des references techniques bornees peuvent
 etre exportees. Les caches Laravel peuvent etre touches par le bootstrap et les
 projections ; aucune donnee metier ni aucun service n'est modifie.
+
+### Reprise du format de configuration des actions (31 octobre 2026)
+
+Le premier installateur copiait dans `actions.json` les lignes d'identite
+completes du rapprochement approuve (identifiants et deux empreintes). Le
+validateur applicatif attend deliberement les deux seuls identifiants numeriques
+et rejetait ces lignes. Le journal avait bien ete cree, mais les actions restaient
+fermees ; `occupation_configuration:false` etait ensuite une consequence de cette
+configuration absente, pas la preuve d'un mauvais rapprochement.
+
+`MymarActionsConfiguration` valide les preuves privees puis projette uniquement
+les paires numeriques vers le runtime. Le validateur strict n'est pas assoupli.
+Les empreintes et les comptes techniques restent conserves dans l'etat prive.
+
+Le paquet `actions-recovery` cible un premier essai incomplet, avec journal vide,
+compte SQL verrouille et sources/identites revalidees. Il verifie les empreintes
+du paquet initial et du code de passerelle installe, sauvegarde la configuration
+privee, puis corrige atomiquement son format sans changement du code applicatif.
+La verification de disponibilite et `mymar:actions-check` precedent toute ouverture.
+Les anciennes preuves HTTP sont conservees avant de repasser les GET 403/404.
+L'ouverture du pilote et son arret ne concernent que les deux services d'actions.
+
+Aucun pull, migration, maintenance, rechargement Apache partage ou redemarrage
+Cofrac. Aucun placement, probleme RDV, mail ou SMS de test en production. En cas
+de refus, la reprise conserve le format corrige et ferme les ecritures, sans
+restaurer la base. Le rapport ne publie ni secrets ni empreintes d'identite.
+
+La repetition Docker lit desormais le vrai fichier installe avec le compte
+`cofrac2-app`, reproduit son rejet avec les quatre champs historiques, refuse un
+paquet initial altere, et execute le vrai reparateur avant les tests HTTP de
+placement/probleme, rejeu et arret. Elle verifie que les journaux restent vides
+et le compte SQL verrouille pendant la reparation.
+
+Validation de cette reprise : 2963 tests PHP (21312 assertions), 416 tests
+frontend et chaine Docker Apache/FPM/MySQL 8.0.46 reussis. Le PHP local est 8.5 ;
+le paquet verifiera aussi les lectures avec le runtime reel 8.4.27 du serveur.

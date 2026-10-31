@@ -26,6 +26,16 @@ php-fpm8.4 --test --fpm-config /etc/cofrac-mymar-actions-gateway/php-fpm.conf > 
 apache2 -t -f /etc/cofrac-mymar-actions-gateway/apache.conf > /fixtures/actions-apache-test.log 2>&1
 systemd-analyze verify "$RUN/cofrac-mymar-actions-fpm.service" "$RUN/cofrac-mymar-actions-http.service" > /fixtures/actions-unit-test.log 2>&1
 php8.4 /actions-package/control.php --app "$RUN"
+# Exercise the installed client parser, not just a hand-written ready=true proof.
+runuser -u cofrac2-app -- php -d zend.assertions=1 -d assert.exception=1 <<'PHP'
+<?php
+require '/workspace/vendor/autoload.php';
+$config=(new App\Services\Mymar\MymarActionSettings)->load();
+assert(count($config['bindings'])===2 && $config['writes_enabled']===false && $config['guard_enabled']===true);
+foreach($config['bindings']as$binding){assert(array_keys($binding)===['source_technician_id','cofrac_user_id']);}
+assert(!str_contains(json_encode($config,JSON_THROW_ON_ERROR),'identity_sha256'));
+PHP
+bash /workspace/tools/deploy/tests/check-mymar-actions-recovery-container.sh "$RUN"
 php8.4 /actions-package/control.php --unlock "$RUN"
 mkdir -p /run/cofrac-mymar-actions-fpm /run/cofrac-mymar-actions-http
 php-fpm8.4 --nodaemonize --fpm-config /etc/cofrac-mymar-actions-gateway/php-fpm.conf > /fixtures/actions-fpm.log 2>&1 &

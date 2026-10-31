@@ -121,3 +121,15 @@ it('distinguishes a busy native projection from a successful source reader', fun
     expect($report['readiness_passed'])->toBeFalse()->and($report['checks']['pending_reader']['ok'])->toBeTrue()
         ->and($report['checks']['pending_projection']['reason'])->toBe('mymar.booking_reader_busy');
 });
+
+it('identifies rejected configuration formats without exposing the private identity proofs', function (string $reason) {
+    $actions = Mockery::mock(MymarActionSettings::class);
+    $actions->shouldReceive('load')->once()->andThrow(new RuntimeException($reason));
+    $reader = app(MymarBookingReaderSettings::class);
+    $guard = Mockery::mock(MymarSlotGuard::class);
+    $diagnostic = new ReadinessDiagnostic($actions, $reader, $this->pilot, $guard, Http::getFacadeRoot(), $this->pending);
+    $report = $diagnostic->inspect();
+    expect($report['readiness_passed'])->toBeFalse()
+        ->and($report['checks']['actions_configuration'])->toBe(['ok' => false, 'exception_class' => RuntimeException::class, 'reason' => $reason]);
+    Http::assertNotSent(fn ($request) => $request->method() !== 'GET');
+})->with(['mymar.invalid_actions_settings', 'mymar.invalid_actions_mapping']);
