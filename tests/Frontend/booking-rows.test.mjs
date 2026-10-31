@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { cofracLabel } from '../../resources/js/cofrac-label.js';
 
 const source = readFileSync(new URL('../../resources/views/planner/book.blade.php', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../../resources/css/app.css', import.meta.url), 'utf8');
 const renderer = source.slice(source.indexOf('const renderBookingCrmCard ='), source.indexOf('const setBookingExternalSourceStatus ='));
 const escapeStart = source.indexOf('const escapeHtml =');
 const escape = source.slice(escapeStart, source.indexOf('const formatShortDate =', escapeStart));
@@ -23,14 +24,17 @@ test('initial and refreshed booking rows share the same responsive layout', () =
     const initial = source.slice(source.indexOf('@foreach ($crmAppointments'), source.indexOf('id="booking-crm-pagination"'));
     for (const markup of [initial, render({ id: 'dossier-1' })]) {
         assert.match(markup, /crm-appointment-card gc-booking-request-row/);
-        assert.match(markup, /gc-booking-request-actions flex min-w-0 flex-nowrap/);
-        assert.match(markup, /gc-booking-request-service min-w-0 rounded-lg/);
+        for (const section of ['client', 'phone', 'location', 'service', 'actions']) {
+            assert.match(markup, new RegExp(`class="gc-booking-request-${section}[" ]`));
+        }
         assert.doesNotMatch(markup, /gc-booking-request-service[^"\n]*\btruncate\b/);
-        assert.match(markup, /crm-appointment-detail-button inline-flex h-8 w-8 shrink-0/);
+        assert.match(markup, /crm-appointment-detail-button gc-booking-request-action gc-booking-request-action-icon/);
         assert.doesNotMatch(markup, /flex-wrap\b|md:grid-cols-/);
         assert.equal((markup.match(/data-crm-comments-trigger/g) || []).length, 1);
         assert.match(markup, /gc-booking-request-phone text-sm font-bold tabular-nums/);
-        assert.match(markup, /gc-booking-request-postal shrink-0 whitespace-nowrap/);
+        assert.match(markup, /gc-booking-request-postal/);
+        assert.match(markup, /gc-booking-request-created/);
+        assert.match(markup, /gc-booking-request-action-primary/);
     }
 });
 
@@ -57,11 +61,28 @@ test('type and long fiche names stay visible on separate wrapping lines and rema
     assert.match(html, /title="COFRAC - BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
     assert.match(html, /gc-booking-request-service-type">COFRAC<\/span>/);
     assert.match(html, /gc-booking-request-service-name">BAT EN 101 Isolation en rampant de toiture &quot;test&quot; &lt;img/);
-    assert.match(source, /\.gc-booking-request-service \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/);
-    assert.match(source, /\.gc-booking-request-service-type \{[^}]*display: block;/);
-    assert.match(source, /\.gc-booking-request-service-name \{[^}]*display: block;/);
-    assert.match(source, /minmax\(17rem, 1\.5fr\)/);
+    assert.match(styles, /\.gc-booking-request-service \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/);
+    assert.match(styles, /\.gc-booking-request-service-type \{[^}]*display: block;/);
+    assert.match(styles, /\.gc-booking-request-service-name \{[^}]*display: block;/);
+    assert.match(styles, /grid-template-areas: 'client location phone service actions'/);
+    assert.doesNotMatch(source, /#booking-crm-grid \.gc-booking-request-row \{/);
     assert.doesNotMatch(html, /<img/);
+});
+
+test('lot rows retain their workflow while using the shared row and action layout', () => {
+    const lots = source.slice(source.indexOf('class="booking-lot-appointments-grid'), source.indexOf('class="booking-lot-filter-empty'));
+    assert.match(lots, /booking-lot-appointments-grid gc-booking-request-list/);
+    assert.match(lots, /lot-appointment-row gc-booking-request-row/);
+    for (const section of ['client', 'phone', 'location', 'service', 'actions']) {
+        assert.match(lots, new RegExp(`class="gc-booking-request-${section}[" ]`));
+    }
+    assert.match(lots, /lot-appointment-book-button gc-booking-request-action gc-booking-request-action-primary/);
+    assert.match(lots, /lot-processing-mode-select/);
+    assert.match(lots, /data-can-search=/);
+    assert.match(lots, /data-can-contact=/);
+    assert.match(lots, /data-contact-url=/);
+    assert.match(lots, /\$appointment\['contact_comment'\]/);
+    assert.match(lots, /\$appointment\['tracking_url'\]/);
 });
 
 test('missing services and legacy GPS warnings keep compact accessible labels', () => {

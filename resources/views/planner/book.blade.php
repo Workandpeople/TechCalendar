@@ -423,7 +423,7 @@
             </div>
 
             <div id="booking-crm-source" role="tabpanel" aria-labelledby="booking-source-tab-crm">
-                <div id="booking-crm-grid" class="gc-booking-request-list space-y-2">
+                <div id="booking-crm-grid" class="gc-booking-request-list">
                     @foreach ($crmAppointments as $appointment)
                         @php
                             $companyName = trim((string) ($appointment['company_name'] ?? ''));
@@ -450,44 +450,49 @@
                         <div
                             role="button"
                             tabindex="0"
-                            class="crm-appointment-card gc-booking-request-row grid w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm"
-                            style="border-color:var(--gc-border);background:#ffffff;"
+                            class="crm-appointment-card gc-booking-request-row"
                             data-crm-id="{{ $appointment['id'] }}"
                             data-client="{{ str($searchHaystack)->lower() }}"
                             data-has-coordinates="{{ is_numeric($appointment['latitude'] ?? null) && is_numeric($appointment['longitude'] ?? null) ? '1' : '0' }}"
                         >
-                            <div class="gc-booking-request-client min-w-0">
-                                <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
-                                <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="{{ $companyName !== '' ? $companyName : $appointment['source'] }}">{{ $companyName !== '' ? $companyName : $appointment['source'] }}</p>
+                            <div class="gc-booking-request-client">
+                                <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-name" title="{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}">{{ $appointment['last_name'] }} {{ $appointment['first_name'] }}</p>
+                                <p class="gc-booking-request-meta">{{ $companyName !== '' ? $companyName : \App\Support\CofracText::normalize($appointment['source']) }}</p>
+                                <p class="gc-booking-request-created">Créé le {{ $createdAtLabel }}</p>
                             </div>
-                            <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] }}</p>
-                            <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le {{ $createdAtLabel }}">Créé le {{ $createdAtLabel }}</p>
-                            <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="{{ $appointment['address'] }}">{{ $appointment['address'] }}</p>
-                            <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
-                                <span class="gc-booking-request-postal shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">{{ $locationBadgeLabel }}</span>
+                            <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="{{ $appointment['phone'] }}">{{ $appointment['phone'] ?: 'Téléphone non renseigné' }}</p>
+                            <div class="gc-booking-request-location">
+                                <p class="gc-booking-request-address">{{ $appointment['address'] }}</p>
+                                <span class="gc-booking-request-postal">{{ $locationBadgeLabel }}</span>
+                            </div>
+                            <div class="gc-booking-request-service">
                                 @if ($serviceBadgeLabel !== '')
-                                    <span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="{{ $serviceBadgeLabel }}">
+                                    <span title="{{ $serviceBadgeLabel }}">
                                         @if ($serviceDisplayType !== '')<span class="gc-booking-request-service-type">{{ $serviceDisplayType }}</span>@endif
                                         @if ($serviceDisplayName !== '')<span class="gc-booking-request-service-name">{{ $serviceDisplayName }}</span>@endif
                                     </span>
                                 @else
-                                    <span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>
+                                    <span class="gc-booking-request-service-name text-rose-700" title="Service non renseigné">Service non renseigné</span>
                                 @endif
                                 @if ($bookingConnectorsEnabled && (! is_numeric($appointment['latitude'] ?? null) || ! is_numeric($appointment['longitude'] ?? null)))
-                                    <span class="gc-booking-request-gps min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>
+                                    <span class="gc-booking-request-gps" title="GPS à recalculer">GPS à recalculer</span>
                                 @endif
+                            </div>
+                            <div class="gc-booking-request-actions">
                                 @if ($appointment['replace_appointment_id'] ?? null)
-                                    <a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer / horaire</a>
+                                    <a class="crm-appointment-replace-link gc-booking-request-action gc-booking-request-action-warning" href="{{ route(request()->routeIs('manager.*') ? 'manager.appointments.modify' : 'planner.appointments.modify', ['replace_appointment_id' => $appointment['replace_appointment_id']]) }}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : {{ \Illuminate\Support\Carbon::parse($appointment['existing_appointment_at'])->format('d/m/Y H:i') }}">Replacer / horaire</a>
+                                @else
+                                    <span class="gc-booking-request-action gc-booking-request-action-primary" aria-hidden="true">Placer le RDV</span>
                                 @endif
                                 @if ($appointment['dossier_summary']['dossier_url'] ?? null)
-                                    <a class="crm-appointment-dossier-link inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" href="{{ $appointment['dossier_summary']['dossier_url'] }}" title="Voir le dossier" aria-label="Voir le dossier">
+                                    <a class="crm-appointment-dossier-link gc-booking-request-action gc-booking-request-action-icon" href="{{ $appointment['dossier_summary']['dossier_url'] }}" title="Voir le dossier" aria-label="Voir le dossier">
                                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                             <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                             <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
                                     </a>
                                 @else
-                                    <button type="button" class="crm-appointment-detail-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
+                                    <button type="button" class="crm-appointment-detail-button gc-booking-request-action gc-booking-request-action-icon" data-crm-detail-id="{{ $appointment['id'] }}" title="Voir le détail du RDV" aria-label="Voir le détail du RDV">
                                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                             <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                             <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -661,7 +666,7 @@
                                 <p class="booking-lot-filter-summary mt-3 text-xs" style="color:var(--gc-text-soft);"></p>
                             </div>
 
-                            <div class="booking-lot-appointments-grid grid grid-cols-1">
+                            <div class="booking-lot-appointments-grid gc-booking-request-list p-3">
                             @foreach ($lot['appointments'] as $appointment)
                                 @php
                                     $isPlaced = (bool) $appointment['is_placed'];
@@ -704,7 +709,7 @@
                                     ])));
                                 @endphp
                                 <article
-                                    class="lot-appointment-row grid grid-cols-1 gap-4 border-b p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(320px,auto)] xl:items-center"
+                                    class="lot-appointment-row gc-booking-request-row"
                                     style="border-color:{{ $isPlaced ? '#bbf7d0' : ($isContactProcessed ? '#bae6fd' : 'var(--gc-border)') }};background:{{ $isPlaced ? '#f0fdf4' : ($isContactProcessed ? '#f0f9ff' : '#ffffff') }};"
                                     data-lot-appointment-row="{{ $appointment['id'] }}"
                                     data-lot-filter-search="{{ str($lotAppointmentSearchText)->lower() }}"
@@ -713,33 +718,19 @@
                                     data-lot-filter-processing="{{ $lotAppointmentFilterProcessing }}"
                                     data-default-processing-mode="{{ $lot['supports_physical'] ? 'physical' : 'contact' }}"
                                 >
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:var(--gc-accent-soft);color:var(--gc-text);">Dept. {{ $appointment['department_code'] ?: '--' }}</span>
-                                            @if ($isPlaced)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#dcfce7;color:#15803d;">RDV placé</span>
-                                            @endif
-                                            @if ($isContactProcessed)
-                                                <span class="rounded-full px-2 py-1 text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;">Contact traité</span>
-                                            @endif
-                                        </div>
+                                    <div class="gc-booking-request-client">
                                         @php
                                             $lotAppointmentBusiness = trim(implode(' · ', array_filter([
-                                                ! empty($appointment['company_name']) ? 'Raison sociale : '.$appointment['company_name'] : null,
+                                                ! empty($appointment['company_name']) && $appointment['customer_name'] !== $appointment['company_name'] ? $appointment['customer_name'] : null,
                                                 ! empty($appointment['site_name']) ? 'Site : '.$appointment['site_name'] : null,
                                                 ! empty($appointment['installer_name']) ? 'Installateur : '.$appointment['installer_name'] : null,
                                             ])));
                                         @endphp
-                                        <h4 class="mt-2 font-semibold" style="color:var(--gc-text);">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h4>
+                                        <h4 class="gc-booking-request-name">{{ $appointment['company_name'] ?: $appointment['customer_name'] }}</h4>
                                         @if ($lotAppointmentBusiness !== '')
-                                            <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">{{ $lotAppointmentBusiness }}</p>
+                                            <p class="gc-booking-request-meta">{{ $lotAppointmentBusiness }}</p>
                                         @endif
-                                        <p class="mt-1 text-sm" style="color:var(--gc-text-soft);">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
-                                    </div>
-
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-medium" style="color:var(--gc-text);">{{ $appointmentFullAddress }}</p>
-                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">
+                                        <p class="gc-booking-request-created">
                                             @if ($appointment['external_reference'])
                                                 Réf. {{ $appointment['external_reference'] }}
                                             @elseif ($appointment['row_number'])
@@ -748,6 +739,15 @@
                                                 RDV lot #{{ $appointment['id'] }}
                                             @endif
                                         </p>
+                                        @if ($isPlaced || $isContactProcessed)
+                                            <span class="gc-booking-request-postal">{{ $isPlaced ? 'RDV placé' : 'Contact traité' }}</span>
+                                        @endif
+                                    </div>
+                                    <p class="gc-booking-request-phone">{{ $appointment['customer_phone'] ?: 'Téléphone non renseigné' }}</p>
+
+                                    <div class="gc-booking-request-location">
+                                        <p class="gc-booking-request-address">{{ $appointmentFullAddress }}</p>
+                                        <span class="gc-booking-request-postal">{{ filled($appointment['postal_code']) ? 'CP '.$appointment['postal_code'] : 'Dép. '.($appointment['department_code'] ?: '--') }}</span>
                                         @if ($isPlaced)
                                             <p class="mt-2 text-xs" style="color:#15803d;">
                                                 {{ $appointment['placed_at']?->format('d/m/Y H:i') ?? 'Date non renseignée' }}
@@ -761,10 +761,41 @@
                                         @endif
                                     </div>
 
+                                    <div class="gc-booking-request-service">
+                                        <span class="gc-booking-request-service-type">LOT</span>
+                                        <span class="gc-booking-request-service-name">{{ $appointment['service_label'] ?: 'Prestation non renseignée' }}</span>
+                                        @unless ($isPlaced || $isContactProcessed)
+                                            @php
+                                                $defaultProcessingMode = $canSearch ? 'physical' : ($canContact ? 'contact' : 'physical');
+                                            @endphp
+                                            <label class="sr-only" for="lot_appointment_processing_{{ $appointment['id'] }}">Mode de traitement</label>
+                                            <select
+                                                id="lot_appointment_processing_{{ $appointment['id'] }}"
+                                                class="gc-input lot-processing-mode-select"
+                                                data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                data-can-search="{{ $canSearch ? '1' : '0' }}"
+                                                data-can-contact="{{ $canContact ? '1' : '0' }}"
+                                            >
+                                                @if ($lot['supports_physical'])
+                                                    <option value="physical" @selected($defaultProcessingMode === 'physical') @disabled(! $canSearch)>RDV sur place</option>
+                                                @endif
+                                                @if ($lot['supports_contact'])
+                                                    <option value="contact" @selected($defaultProcessingMode === 'contact') @disabled(! $canContact)>RDV téléphonique</option>
+                                                @endif
+                                            </select>
+                                            @unless ($canSearch)
+                                                <p class="lot-processing-help lot-processing-physical-help {{ $defaultProcessingMode === 'physical' ? '' : 'hidden' }} mt-1 text-rose-700" data-lot-appointment-id="{{ $appointment['id'] }}">Adresse/GPS ou prestation incomplet: corrige le dossier avant placement sur place.</p>
+                                            @endunless
+                                            @if ($canContact)
+                                                <p class="lot-processing-help lot-processing-contact-help {{ $defaultProcessingMode === 'contact' ? '' : 'hidden' }} mt-1" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:var(--gc-text-soft);">Téléphonique : commentaire et résultat uniquement, sans création Cofrac.</p>
+                                            @endif
+                                        @endunless
+                                    </div>
+
                                     @if ($isPlaced)
-                                        <div class="flex justify-start xl:justify-end">
+                                        <div class="gc-booking-request-actions">
                                             @if ($appointment['tracking_url'])
-                                                <a href="{{ $appointment['tracking_url'] }}" class="gc-btn-soft whitespace-nowrap">
+                                                <a href="{{ $appointment['tracking_url'] }}" class="gc-booking-request-action">
                                                     Voir le RDV
                                                 </a>
                                             @else
@@ -774,7 +805,7 @@
                                             @endif
                                         </div>
                                     @elseif ($isContactProcessed)
-                                        <div class="rounded-xl border p-3 text-sm" style="border-color:#bae6fd;background:#ffffff;color:var(--gc-text);">
+                                        <div class="gc-booking-request-actions text-sm">
                                             <p class="font-semibold">
                                                 {{ $appointment['contact_satisfaction'] ? 'Satisfaisant' : 'Non satisfaisant' }}
                                             </p>
@@ -783,50 +814,18 @@
                                             @endif
                                         </div>
                                     @else
-                                        <div class="space-y-3">
-                                            @php
-                                                $defaultProcessingMode = $canSearch ? 'physical' : ($canContact ? 'contact' : 'physical');
-                                            @endphp
-                                            <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                                <div>
-                                                    <label class="gc-label" for="lot_appointment_processing_{{ $appointment['id'] }}">Mode de traitement</label>
-                                                    <select
-                                                        id="lot_appointment_processing_{{ $appointment['id'] }}"
-                                                        class="gc-input lot-processing-mode-select"
-                                                        data-lot-appointment-id="{{ $appointment['id'] }}"
-                                                        data-can-search="{{ $canSearch ? '1' : '0' }}"
-                                                        data-can-contact="{{ $canContact ? '1' : '0' }}"
-                                                    >
-                                                        @if ($lot['supports_physical'])
-                                                            <option value="physical" @selected($defaultProcessingMode === 'physical') @disabled(! $canSearch)>RDV sur place</option>
-                                                        @endif
-                                                        @if ($lot['supports_contact'])
-                                                            <option value="contact" @selected($defaultProcessingMode === 'contact') @disabled(! $canContact)>RDV téléphonique</option>
-                                                        @endif
-                                                    </select>
-                                                    @if ($appointment['service_label'])
-                                                        <p class="mt-1 text-xs" style="color:var(--gc-text-soft);">Prestation du lot : {{ $appointment['service_label'] }}</p>
-                                                    @endif
-                                                    @unless ($canSearch)
-                                                        <p class="lot-processing-help lot-processing-physical-help {{ $defaultProcessingMode === 'physical' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:#be123c;">Adresse/GPS ou prestation incomplet: corrige le dossier avant placement sur place.</p>
-                                                    @endunless
-                                                    @if ($canContact)
-                                                        <p class="lot-processing-help lot-processing-contact-help {{ $defaultProcessingMode === 'contact' ? '' : 'hidden' }} mt-1 text-xs" data-lot-appointment-id="{{ $appointment['id'] }}" style="color:var(--gc-text-soft);">Téléphonique : commentaire et résultat uniquement, sans création Cofrac.</p>
-                                                    @endif
-                                                </div>
-
-                                                <button
-                                                    type="button"
-                                                    class="lot-appointment-book-button gc-btn-primary justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
-                                                    data-lot-appointment-id="{{ $appointment['id'] }}"
-                                                    data-can-search="{{ $canSearch ? '1' : '0' }}"
-                                                    data-can-contact="{{ $canContact ? '1' : '0' }}"
-                                                    data-contact-url="{{ $appointment['contact_url'] }}"
-                                                    data-customer-name="{{ $appointment['company_name'] ?: $appointment['customer_name'] }}"
-                                                >
-                                                    Placer le RDV
-                                                </button>
-                                            </div>
+                                        <div class="gc-booking-request-actions">
+                                            <button
+                                                type="button"
+                                                class="lot-appointment-book-button gc-booking-request-action gc-booking-request-action-primary"
+                                                data-lot-appointment-id="{{ $appointment['id'] }}"
+                                                data-can-search="{{ $canSearch ? '1' : '0' }}"
+                                                data-can-contact="{{ $canContact ? '1' : '0' }}"
+                                                data-contact-url="{{ $appointment['contact_url'] }}"
+                                                data-customer-name="{{ $appointment['company_name'] ?: $appointment['customer_name'] }}"
+                                            >
+                                                Placer le RDV
+                                            </button>
                                         </div>
                                     @endif
                                 </article>
@@ -844,15 +843,15 @@
                 @endforelse
             </div>
             @if (config('crm.v2_enabled'))
-                <div id="booking-mymar-source" class="hidden rounded-xl border p-4 space-y-3" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}"
+                <div id="booking-mymar-source" class="hidden space-y-3" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}"
                     data-place-url="{{ route('planner.book.mar.place', [], false) }}" data-problem-url="{{ route('planner.book.mar.problem', [], false) }}"
                     data-status-url="{{ route('planner.book.mar.status', ['id' => '__REQUEST__'], false) }}" data-user-id="{{ auth()->id() }}" data-csrf="{{ csrf_token() }}" hidden>
-                    <header class="flex items-center justify-between gap-3"><h3 class="font-semibold" style="color:var(--gc-text);">Demandes MAR à placer</h3><button class="gc-btn-secondary" type="button" data-mymar-refresh>Actualiser</button></header>
+                    <header class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold" style="color:var(--gc-text);">Demandes MAR à placer</h3><button class="gc-booking-request-action" type="button" data-mymar-refresh>Actualiser</button></header>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);" data-mymar-readonly-note hidden>Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
                     <button type="button" class="gc-btn-secondary" data-mymar-resume style="display:none">Confirmation MAR à vérifier</button>
-                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Les rendez-vous MAR déjà placés restent affichés dans le calendrier pour les techniciens du pilote. Aucun dossier MAR n'est copié dans Cofrac.</p>
+                    <p class="text-xs" style="color:var(--gc-text-soft);">Les RDV MAR sont gérés dans MYMAR et affichés au planning pour les techniciens du pilote, sans copie du dossier.</p>
                     <p class="text-sm" role="status" aria-live="polite" data-mymar-status>La liste se charge à l’ouverture de cet onglet.</p>
-                    <div class="space-y-2" role="list" data-mymar-list></div>
+                    <div class="gc-booking-request-list" role="list" data-mymar-list></div>
                     <footer data-mymar-pagination hidden><div class="flex items-center justify-between gap-3"><button type="button" class="gc-btn-secondary" data-mymar-previous>Précédent</button><span class="text-sm" data-mymar-page>Page 1</span><button type="button" class="gc-btn-secondary" data-mymar-next>Suivant</button></div></footer>
                 </div>
             @endif
@@ -1383,19 +1382,6 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 
     <style>
-        #booking-crm-grid .gc-booking-request-actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: .4rem .5rem; }
-        #booking-crm-grid .gc-booking-request-service { grid-column: 1 / 3; grid-row: 1; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
-        #booking-crm-grid .gc-booking-request-service-type { display: block; font-weight: 700; }
-        #booking-crm-grid .gc-booking-request-service-name { display: block; }
-        #booking-crm-grid .gc-booking-request-postal { grid-column: 1; grid-row: 2; }
-        #booking-crm-grid .crm-appointment-replace-link { grid-column: 2; grid-row: 2; justify-self: start; white-space: normal; }
-        #booking-crm-grid .gc-booking-request-gps { grid-column: 1 / 3; }
-        #booking-crm-grid :is(.crm-appointment-dossier-link, .crm-appointment-detail-button) { grid-column: 3; grid-row: 1 / 3; }
-        #booking-crm-grid :is(.crm-appointment-replace-link, .crm-appointment-dossier-link, .crm-appointment-detail-button):focus-visible { outline: 2px solid var(--gc-accent); outline-offset: 2px; }
-        @container (min-width: 56rem) {
-            #booking-crm-grid .gc-booking-request-row { grid-template-columns: minmax(9rem, 1.05fr) minmax(7.5rem, .7fr) minmax(8.5rem, .85fr) minmax(10rem, 1.2fr) minmax(17rem, 1.5fr); }
-        }
-
         .gc-booking-force-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
         .gc-booking-force-dialog::backdrop { background: #0f172a99; }
         .gc-mymar-action-dialog { margin: auto; width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--gc-border); background: var(--gc-surface, white); color: var(--gc-text); }
@@ -2055,14 +2041,14 @@
             const hasCoordinates = appointment.latitude != null && appointment.longitude != null
                 && Number.isFinite(Number(appointment.latitude)) && Number.isFinite(Number(appointment.longitude));
             const serviceBadge = serviceLabel
-                ? `<span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;" title="${escapeHtml(serviceLabel)}">${serviceDisplayType ? `<span class="gc-booking-request-service-type">${escapeHtml(serviceDisplayType)}</span>` : ''}${serviceDisplayName ? `<span class="gc-booking-request-service-name">${escapeHtml(serviceDisplayName)}</span>` : ''}</span>`
-                : '<span class="gc-booking-request-service min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;" title="Service non renseigné">Service non renseigné</span>';
+                ? `<span title="${escapeHtml(serviceLabel)}">${serviceDisplayType ? `<span class="gc-booking-request-service-type">${escapeHtml(serviceDisplayType)}</span>` : ''}${serviceDisplayName ? `<span class="gc-booking-request-service-name">${escapeHtml(serviceDisplayName)}</span>` : ''}</span>`
+                : '<span class="gc-booking-request-service-name text-rose-700" title="Service non renseigné">Service non renseigné</span>';
             const gpsBadge = hasCoordinates || !bookingConnectorsEnabled
                 ? ''
-                : '<span class="gc-booking-request-gps min-w-0 rounded-lg px-2 py-1 text-xs" style="background:#fff7ed;color:#c2410c;" title="GPS à recalculer">GPS à recalculer</span>';
+                : '<span class="gc-booking-request-gps" title="GPS à recalculer">GPS à recalculer</span>';
             const replacementLink = appointment.replace_appointment_id
-                ? `<a class="crm-appointment-replace-link shrink-0 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer / horaire</a>`
-                : '';
+                ? `<a class="crm-appointment-replace-link gc-booking-request-action gc-booking-request-action-warning" href="${escapeHtml(bookingReplacementPageUrl)}?replace_appointment_id=${encodeURIComponent(appointment.replace_appointment_id)}" aria-label="Replacer le RDV ou modifier l’horaire" title="Replacer le RDV ou modifier l’horaire · RDV actuel : ${escapeHtml(formatShortDateTime(appointment.existing_appointment_at))}">Replacer / horaire</a>`
+                : '<span class="gc-booking-request-action gc-booking-request-action-primary" aria-hidden="true">Placer le RDV</span>';
             const dossierUrl = appointment.dossier_summary?.dossier_url;
             const detailLabel = dossierUrl ? 'Voir le dossier' : 'Voir le détail du RDV';
             const detailTag = dossierUrl ? 'a' : 'button';
@@ -2075,25 +2061,28 @@
                 <div
                     role="button"
                     tabindex="0"
-                    class="crm-appointment-card gc-booking-request-row grid w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm"
-                    style="border-color:var(--gc-border);background:#ffffff;"
+                    class="crm-appointment-card gc-booking-request-row"
                     data-crm-id="${escapeHtml(appointment.id)}"
                     data-client="${escapeHtml(searchHaystack)}"
                     data-has-coordinates="${hasCoordinates ? '1' : '0'}"
                 >
-                    <div class="gc-booking-request-client min-w-0">
-                        <p data-crm-comments-trigger tabindex="0" class="truncate text-sm font-semibold" style="color:var(--gc-text);" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
-                        <p class="truncate text-xs" style="color:var(--gc-text-soft);" title="${escapeHtml(companyName || appointment.source || '')}">${escapeHtml(companyName || appointment.source || '')}</p>
+                    <div class="gc-booking-request-client">
+                        <p data-crm-comments-trigger tabindex="0" class="gc-booking-request-name" title="${escapeHtml(customerName)}">${escapeHtml(customerName)}</p>
+                        <p class="gc-booking-request-meta">${escapeHtml(companyName || window.TechCalendarLabels.cofrac(appointment.source || ''))}</p>
+                        <p class="gc-booking-request-created">Créé le ${escapeHtml(createdAtLabel)}</p>
                     </div>
-                    <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone)}</p>
-                    <p class="truncate text-sm" style="color:var(--gc-text-soft);" title="Créé le ${escapeHtml(createdAtLabel)}">Créé le ${escapeHtml(createdAtLabel)}</p>
-                    <p class="gc-booking-request-address truncate text-sm" style="color:var(--gc-text);" title="${escapeHtml(appointment.address)}">${escapeHtml(appointment.address)}</p>
-                    <div class="gc-booking-request-actions flex min-w-0 flex-nowrap items-center gap-2">
-                        <span class="gc-booking-request-postal shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs" style="background:var(--gc-accent-soft);color:var(--gc-text);">${escapeHtml(locationBadgeLabel)}</span>
+                    <p class="gc-booking-request-phone text-sm font-bold tabular-nums" style="color:var(--gc-text);" title="${escapeHtml(appointment.phone)}">${escapeHtml(appointment.phone || 'Téléphone non renseigné')}</p>
+                    <div class="gc-booking-request-location">
+                        <p class="gc-booking-request-address">${escapeHtml(appointment.address)}</p>
+                        <span class="gc-booking-request-postal">${escapeHtml(locationBadgeLabel)}</span>
+                    </div>
+                    <div class="gc-booking-request-service">
                         ${serviceBadge}
                         ${gpsBadge}
+                    </div>
+                    <div class="gc-booking-request-actions">
                         ${replacementLink}
-                        <${detailTag} ${detailAttributes} class="${detailClass} inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:shadow-sm" style="border-color:var(--gc-border);background:#ffffff;color:var(--gc-text);" title="${detailLabel}" aria-label="${detailLabel}">
+                        <${detailTag} ${detailAttributes} class="${detailClass} gc-booking-request-action gc-booking-request-action-icon" title="${detailLabel}" aria-label="${detailLabel}">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M12 14.75A2.75 2.75 0 1 0 12 9.25a2.75 2.75 0 0 0 0 5.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>

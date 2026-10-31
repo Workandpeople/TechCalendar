@@ -71,10 +71,41 @@ test('renders external text safely and includes town without native booking acti
     renderPendingRows(ui.children.list, page(0, 1).items);
     const row = ui.children.list.children[0];
     assert.equal(row.attrs.role, 'listitem');
-    assert.equal(row.children[0].textContent, '<img src=x onerror=alert(1)> Test');
-    assert.equal(row.children[2].textContent, 'Lieu-dit, 01560 Lescheroux');
+    assert.equal(row.className, 'gc-booking-request-row');
+    assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-name').textContent, '<img src=x onerror=alert(1)> Test');
+    assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-address').textContent, 'Lieu-dit, 01560 Lescheroux');
+    assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-postal').textContent, 'CP 01560');
     assert.equal(row.tag, 'article');
     assert.equal(row.children.some(node => ['button', 'a', 'form'].includes(node.tag)), false);
+});
+
+test('MAR actions use the common compact controls without changing their target or sending on render', () => {
+    const ui = fixture(), calls = [], item = page(0, 1).items[0];
+    renderPendingRows(ui.children.list, [item], { choose: value => calls.push(['choose', value]), problem: value => calls.push(['problem', value]) });
+    assert.equal(calls.length, 0);
+    const buttons = ui.nodes.filter(node => node.tag === 'button');
+    assert.equal(buttons.length, 2);
+    assert.equal(buttons[0].className, 'gc-booking-request-action gc-booking-request-action-primary');
+    assert.equal(buttons[1].className, 'gc-booking-request-action gc-booking-request-action-warning');
+    assert.match(buttons[0].attrs['aria-label'], /Placer le RDV :/);
+    buttons[0].dispatch('click'); buttons[1].dispatch('click');
+    assert.deepEqual(calls, [['choose', item], ['problem', item]]);
+    assert.equal(ui.calls.length, 0);
+});
+
+test('MAR phases and missing data remain explicit without duplicating a locality already in the address', () => {
+    for (const status_id of [1, 14]) {
+        const ui = fixture();
+        const item = { ...page(0, 1).items[0], status_id, phase: status_id === 1 ? 'initial' : 'after_works', address: '1 rue du Test, 01560 LESCHEROUX' };
+        renderPendingRows(ui.children.list, [item]);
+        assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-service-name').textContent, status_id === 1 ? 'Visite initiale' : 'Visite après travaux');
+        assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-address').textContent, item.address);
+    }
+    const ui = fixture();
+    renderPendingRows(ui.children.list, [{ ...page(0, 1).items[0], first_name: '', last_name: '', address: '', city: '', postal_code: '', phone: '' }]);
+    for (const text of ['Bénéficiaire non renseigné', 'Adresse non renseignée', 'CP non renseigné', 'Téléphone non renseigné']) {
+        assert.ok(ui.nodes.some(node => node.textContent === text));
+    }
 });
 
 test('uses keyset pagination with previous navigation and refresh preserving rows', async () => {

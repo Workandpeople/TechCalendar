@@ -69,12 +69,43 @@ html.sidebar-hidden .app-sidebar {
     .gc-comment-body blockquote { border-left: 2px solid var(--gc-border); padding-left: .65rem; }
     .gc-comment-body pre { white-space: pre-wrap; }
 
-    .gc-booking-request-list { container-type: inline-size; }
-    .gc-booking-request-row { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 3.375rem; }
+    .gc-booking-request-list { container-type: inline-size; display: grid; gap: .5rem; }
+    .gc-booking-request-row { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'client' 'location' 'phone' 'service' 'actions'; align-items: center; gap: .65rem 1rem; padding: .8rem 1rem; border: 1px solid var(--gc-border); border-radius: .75rem; background: white; color: var(--gc-text); text-align: left; }
     .gc-booking-request-row > * { min-width: 0; }
-    .gc-booking-request-phone { overflow-wrap: anywhere; white-space: normal; }
-    .gc-booking-request-row [data-crm-comments-trigger]:focus-visible { outline: 2px solid var(--gc-accent); outline-offset: 2px; border-radius: .25rem; }
-    .gc-booking-request-client, .gc-booking-request-address, .gc-booking-request-actions { grid-column: 1 / -1; }
+    .gc-booking-request-row[role='button'] { cursor: pointer; transition: border-color .15s, background-color .15s; }
+    .gc-booking-request-row[role='button']:hover { border-color: var(--gc-accent); background: #f5fbfa; }
+    .gc-booking-request-client { grid-area: client; }
+    .gc-booking-request-name { display: block; font-size: .875rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+    .gc-booking-request-meta { margin-top: .2rem; font-size: .75rem; line-height: 1.4; color: var(--gc-text-soft); overflow-wrap: anywhere; }
+    .gc-booking-request-created { display: block; margin-top: .2rem; font-size: .6875rem; color: var(--gc-text-soft); }
+    .gc-booking-request-location { grid-area: location; }
+    .gc-booking-request-address { font-size: .8125rem; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+    .gc-booking-request-postal { display: inline-block; margin-top: .3rem; border-radius: .3rem; padding: .1rem .4rem; background: var(--gc-accent-soft); font-size: .6875rem; font-weight: 600; white-space: nowrap; }
+    .gc-booking-request-phone { grid-area: phone; font-size: .8125rem; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .gc-booking-request-service { grid-area: service; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+    .gc-booking-request-service-type { display: block; width: fit-content; margin-bottom: .2rem; border-radius: .3rem; padding: .1rem .4rem; background: #edf4ff; color: #2459a8; font-size: .625rem; font-weight: 700; letter-spacing: .04em; }
+    .gc-booking-request-service-name { display: block; font-size: .75rem; font-weight: 600; }
+    .gc-booking-request-gps { display: block; margin-top: .25rem; font-size: .6875rem; color: #b45309; }
+    .gc-booking-request-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; justify-self: end; flex-wrap: wrap; gap: .4rem; width: 100%; max-width: 18rem; overflow-wrap: anywhere; }
+    .gc-booking-request-action { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; min-height: 34px; padding: .4rem .65rem; border: 1px solid #d5e1ed; border-radius: .5rem; background: white; color: #36536c; font-size: .75rem; font-weight: 600; line-height: 1.2; text-decoration: none; white-space: nowrap; }
+    .gc-booking-request-action-primary { border-color: #b4ded8; background: #e7f6f3; color: #086c62; }
+    .gc-booking-request-action-warning { border-color: #f1d7a4; background: #fff8e9; color: #8a570d; }
+    .gc-booking-request-action-icon { width: 34px; padding: .4rem; }
+    :is(a, button).gc-booking-request-action:hover { filter: brightness(.96); }
+    .gc-booking-request-action:disabled { cursor: not-allowed; opacity: .5; }
+    .gc-booking-request-row :is(a, button, select, [tabindex]):focus-visible, .gc-booking-request-row:focus-visible { outline: 2px solid var(--gc-accent); outline-offset: 3px; }
+    .gc-booking-request-row .lot-processing-mode-select { margin-top: .3rem; min-height: 34px; padding: .35rem 1.8rem .35rem .5rem; font-size: .75rem; }
+    .gc-booking-request-row .lot-processing-help { font-size: .6875rem; }
+    @media (pointer: coarse) { .gc-booking-request-action { min-height: 44px; } .gc-booking-request-action-icon { width: 44px; } }
+    @container (min-width: 30rem) {
+        .gc-booking-request-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'client phone' 'location location' 'service actions'; }
+    }
+    @container (min-width: 48rem) {
+        .gc-booking-request-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) auto; grid-template-areas: 'client location phone' 'service service actions'; }
+    }
+    @container (min-width: 56rem) {
+        .gc-booking-request-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(7rem, .8fr) minmax(0, 1.1fr) auto; grid-template-areas: 'client location phone service actions'; }
+    }
     .gc-booking-summary { padding: 0; overflow: hidden; border-top: 3px solid #2459a8; }
     .gc-booking-summary[hidden] { display: none; }
     .gc-booking-summary [hidden] { display: none; }
@@ -97,11 +128,6 @@ html.sidebar-hidden .app-sidebar {
         .gc-booking-summary-address { grid-column: 1 / -1; }
     }
     @media (max-width: 430px) { .gc-booking-summary-grid { grid-template-columns: minmax(0, 1fr); } }
-
-    @container (min-width: 56rem) {
-        .gc-booking-request-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, .95fr) minmax(0, 1.45fr) minmax(0, 1.6fr); }
-        .gc-booking-request-client, .gc-booking-request-address, .gc-booking-request-actions { grid-column: auto; }
-    }
 
     .gc-dossier-table-scroll { position: relative; overflow-x: auto; }
     .gc-dossier-table { --gc-dossier-action-width: 44px; width: 100%; min-width: 1280px; table-layout: fixed; text-align: left; font-size: .875rem; line-height: 1.5; }

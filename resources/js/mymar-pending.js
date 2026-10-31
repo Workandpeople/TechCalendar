@@ -15,29 +15,33 @@ export function pendingPage(value, after) {
 
 export function renderPendingRows(list, items, actions = null) {
     list.replaceChildren();
+    const element = (tag, className, text) => {
+        const node = list.ownerDocument.createElement(tag);
+        node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
     for (const item of items) {
-        const row = list.ownerDocument.createElement('article');
-        row.className = 'rounded-xl border p-3 grid gap-2 sm:grid-cols-2';
+        const row = element('article', 'gc-booking-request-row');
         row.setAttribute('role', 'listitem');
-        const name = list.ownerDocument.createElement('strong');
-        name.textContent = `${item.last_name} ${item.first_name}`.trim() || 'Bénéficiaire non renseigné';
-        const phase = list.ownerDocument.createElement('span');
-        phase.className = 'text-sm font-semibold sm:text-right';
-        phase.textContent = item.phase === 'after_works' ? 'MAR · Visite après travaux' : 'MAR · Visite initiale';
-        const address = list.ownerDocument.createElement('span');
-        address.className = 'text-sm';
+        const client = element('div', 'gc-booking-request-client');
+        client.append(element('strong', 'gc-booking-request-name', `${item.last_name} ${item.first_name}`.trim() || 'Bénéficiaire non renseigné'));
+        const service = element('div', 'gc-booking-request-service');
+        service.append(element('span', 'gc-booking-request-service-type', 'MAR'),
+            element('span', 'gc-booking-request-service-name', item.phase === 'after_works' ? 'Visite après travaux' : 'Visite initiale'));
+        const location = element('div', 'gc-booking-request-location');
         const locality = [item.postal_code, item.city].filter(Boolean).join(' ');
-        address.textContent = [item.address, locality && !item.address.includes(locality) ? locality : ''].filter(Boolean).join(', ') || 'Adresse non renseignée';
-        const phone = list.ownerDocument.createElement('strong');
-        phone.className = 'text-sm sm:text-right';
-        phone.textContent = item.phone || 'Téléphone non renseigné';
-        row.append(name, phase, address, phone);
+        const address = [item.address, locality && !item.address.toLocaleLowerCase('fr').includes(locality.toLocaleLowerCase('fr')) ? locality : ''].filter(Boolean).join(', ');
+        location.append(element('p', 'gc-booking-request-address', address || 'Adresse non renseignée'),
+            element('span', 'gc-booking-request-postal', item.postal_code ? `CP ${item.postal_code}` : 'CP non renseigné'));
+        const phone = element('strong', 'gc-booking-request-phone', item.phone || 'Téléphone non renseigné');
+        row.append(client, phone, location, service);
         if (actions) {
-            const controls = list.ownerDocument.createElement('div');
-            controls.className = 'flex flex-wrap gap-2 sm:col-span-2';
-            for (const [title, method] of [['Placer le RDV', 'choose'], ['Problème RDV', 'problem']]) {
-                const button = list.ownerDocument.createElement('button');
-                button.type = 'button'; button.className = 'gc-btn-secondary'; button.textContent = title;
+            const controls = element('div', 'gc-booking-request-actions');
+            for (const [title, method, style] of [['Placer le RDV', 'choose', 'primary'], ['Problème RDV', 'problem', 'warning']]) {
+                const button = element('button', `gc-booking-request-action gc-booking-request-action-${style}`, title);
+                button.type = 'button';
+                button.setAttribute('aria-label', `${title} : ${item.last_name} ${item.first_name}`.trim());
                 button.addEventListener('click', () => actions[method](item)); controls.append(button);
             }
             row.append(controls);
