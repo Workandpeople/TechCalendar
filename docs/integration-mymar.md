@@ -1043,3 +1043,18 @@ MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 MYMAR_ACTIONS_TEST=1 \
 Validation locale du lot : 2943 tests PHP, 416 tests frontend et chaine Docker
 ci-dessus reussis. PHP local 8.5 ; MySQL de repetition 8.0.46. Le runtime reel
 PHP 8.4.27 et le cycle systemd seront controles par le paquet sur le serveur.
+
+### Diagnostic d'un refus du controle final
+
+Si le journal est cree mais `application-probe.json` vaut `ready:false`, les
+ecritures restent fermees et les nouveaux services sont arretes. Ne pas rejouer
+le paquet initial : sa precondition de journal absent n'est plus satisfaite.
+Le site deja rouvert et les lecteurs existants ne doivent pas etre arretes.
+
+`tools/deploy/mymar/actions-diagnostic` isole les prerequis par etape, depuis un
+paquet hors application epingle a la revision runtime. Il ne fait aucun pull,
+migration, activation ou POST. Il distingue lecteur HTTP et projection en cache,
+droits/format des fichiers, correspondances, occupation HTTP et qualite des
+donnees. Le rapport est masque ; seules des references techniques bornees peuvent
+etre exportees. Les caches Laravel peuvent etre touches par le bootstrap et les
+projections ; aucune donnee metier ni aucun service n'est modifie.
