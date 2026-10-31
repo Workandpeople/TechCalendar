@@ -1,7 +1,7 @@
 # Preparation de l'integration MYMAR
 
 Etat au 31 octobre 2026 : passerelle privee et affichage pilote actifs en
-lecture seule, aucune ecriture MYMAR et aucun blocage des disponibilites MAR.
+lecture seule, aucune ecriture de RDV MYMAR et aucun blocage des disponibilites MAR.
 Aucune reprise du CRM MYMAR dans Cofrac. Le premier audit du 29 octobre a
 identifie les tables utiles et les risques des endpoints existants.
 
@@ -33,7 +33,7 @@ les anciens RDV avec `is_old=1`. L'utiliser tel quel pour l'apres-travaux
 enverrait les dossiers dans la mauvaise categorie. Aucune ancienne route
 API d'ecriture ne sera appelee par le nouveau parcours.
 
-Le prochain paquet `tools/deploy/mymar/workflow` relit seulement les methodes
+Le paquet d'audit `tools/deploy/mymar/workflow` relit seulement les methodes
 de mutation, les modeles/hooks et les metadonnees de contraintes/triggers.
 Il n'inclut/evalue jamais MYMAR, ne lit ni configuration ni lignes metier,
 ne change ni le compte SQL SELECT ni la passerelle existante. Les constantes
@@ -62,6 +62,78 @@ Conditions du futur mutateur, non satisfaites par la seule observation :
 La couverture actuelle reste celle des quatre techniciens lies du pilote,
 pas l'ensemble des techniciens MYMAR. L'absence de chevauchement observee
 sur les 96 RDV Cofrac controles n'autorise pas a elargir cette couverture.
+
+### Audit de workflows termine le 31 octobre a 08:48 UTC
+
+Les trois empreintes du rapport sont verifiees : 15 fichiers sources stables,
+metadonnees completes et aucune ecriture/route appelee. Les transitions de
+probleme concernent bien 2 et 15. Les modeles de dossier, RDV et historique
+collectes ne declarent pas de hooks de mutation ; les notifications partenaires
+et mandataires sont appelees explicitement par `changeStatusPost`. Il ne faut
+donc pas appeler ce controleur pour une integration sans envoi implicite.
+
+Les trois tables a modifier sont InnoDB. Le RDV exige un `author_id` MYMAR
+existant (cle etrangere vers users) ; le compte Cofrac ne peut pas servir
+directement d'auteur. Le choix confirme est un compte technique MYMAR dedie,
+desactive et sans role. L'acteur Cofrac et l'UUID de commande restent traces
+dans l'historique et dans le journal technique prive.
+
+### Noyau de commande et preparation fermee
+
+Le code `tools/deploy/mymar/booking` est un backend autonome, non installe.
+Il n'est pas ajoute au point d'entree d'occupation existant et aucune route
+Laravel ou tache ne l'appelle. Le DTO `MymarBookingCommand` valide des entrees
+scalaires strictes ; pas d'auteur MYMAR, statut cible, SQL ou forcement arbitraire.
+Les ecritures sont desactivees independamment de la lecture, y compris pour
+les tests de preparation. Durees entieres en heures : un choix de 45/90 minutes
+est refuse, pas arrondi. Les dates sont explicites UTC ou Europe/Paris ; un
+mauvais decalage saisonnier ou une heure locale ambigue/non stockable est refuse.
+
+Le moteur implemente :
+
+- Demandes paginees par ID, deux requetes de donnees par page, pas de N+1.
+- Revision incluant dossier, beneficiaire et tous les RDV courants : une
+  modification intervenue depuis la selection provoque un conflit.
+- Transaction unique pour journal, archivage, nouveau RDV, statut et historique.
+- Rejeu d'un UUID confirme donnant le meme resultat, sans nouvelle ecriture ;
+  contenu ou acteur different pour cet UUID refuse. Lookup du resultat apres
+  timeout. Une reponse incertaine ne pretend jamais que l'action a echoue.
+- Sous-statut, commentaire texte et rappel pour probleme, sans detruire les RDV.
+- Controle des vrais chevauchements MYMAR, dates/durees inconnues bloquantes.
+- Verrou nomme par technicien pour serialiser les commandes du pont, verrous
+  partages sur les profils et beneficiaires, exclusifs sur le dossier et RDV.
+  Aucun UPDATE sur users/clients et aucun droit TRIGGER pour obtenir un verrou.
+
+Le journal vit dans un NOUVEAU schema `cofrac_mymar_integration`, sur la meme
+instance MySQL pour rester dans la meme transaction. La nouvelle connexion
+utilise des privileges par colonnes verifies exactement. Pas de DELETE, DDL,
+mot de passe, role modifie ou GRANT OPTION pour le compte runtime. L'absence
+de triggers est verifiee par le preparateur privilegie, pas par une lecture
+incomplete de information_schema avec le compte runtime restreint.
+
+Le paquet operateur `prepare-mymar-booking-backend.php` ne deploie pas Cofrac :
+il cree seulement le journal neuf, un compte SQL ferme et le compte technique
+explicitement approuve (adresse reservee .invalid, secret aleatoire inconnu,
+enabled=0, aucun role). Il ouvre une seule connexion pour lire au plus un
+dossier, reverrouille les nouveaux logins avant cette lecture et verifie que
+la porte d'ecriture refuse toute action. Le journal doit rester vide. Aucun
+beneficiaire, email, token ou mot de passe ne sort dans le rapport de preparation.
+Configuration root-privee avec `read_enabled=false` ET `writes_enabled=false`.
+
+Tests locaux sur MySQL 8.0.46, conteneurs sans reseau ni montage hote writable :
+les deux phases, heures Paris, droits minimaux reels, source modifiee, refus
+de technicien inactif/hors scope, chevauchements, rappel, idempotence, rejet
+d'une commande concurrente et rollback complet quand l'historique echoue.
+Le preparateur est aussi execute de bout en bout, puis relance refusee sans
+ressource double. Sources, visites/dossiers et comptes existants inchanges.
+
+Restent avant activation : installation HTTP privee d'ecriture et client,
+reservations/outbox Cofrac avec gestion du resultat incertain, disponibilites
+natives/absences/trajets, branchement des onglets et droits planning/gerant,
+reconciliation du cache et validation finale du parcours. Le moteur source
+seul n'autorise PAS un creneau Cofrac et n'evalue PAS les trajets. Ses verrous
+ne rendent pas transactionnelles les anciennes actions MYMAR qui n'utilisent
+pas ce protocole ; aucun ancien controleur n'a ete modifie.
 
 ## Deuxieme collecte
 
