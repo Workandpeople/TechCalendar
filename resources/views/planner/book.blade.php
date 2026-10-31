@@ -848,7 +848,7 @@
                     data-place-url="{{ route('planner.book.mar.place', [], false) }}" data-problem-url="{{ route('planner.book.mar.problem', [], false) }}"
                     data-status-url="{{ route('planner.book.mar.status', ['id' => '__REQUEST__'], false) }}" data-user-id="{{ auth()->id() }}" data-csrf="{{ csrf_token() }}" hidden>
                     <header class="flex items-center justify-between gap-3"><h3 class="font-semibold" style="color:var(--gc-text);">Demandes MAR à placer</h3><button class="gc-btn-secondary" type="button" data-mymar-refresh>Actualiser</button></header>
-                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);" data-mymar-readonly-note>Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);" data-mymar-readonly-note hidden>Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
                     <button type="button" class="gc-btn-secondary" data-mymar-resume style="display:none">Confirmation MAR à vérifier</button>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Les rendez-vous MAR déjà placés restent affichés dans le calendrier pour les techniciens du pilote. Aucun dossier MAR n'est copié dans Cofrac.</p>
                     <p class="text-sm" role="status" aria-live="polite" data-mymar-status>La liste se charge à l’ouverture de cet onglet.</p>

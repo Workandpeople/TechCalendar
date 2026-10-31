@@ -67,8 +67,8 @@ initCreationAddress();
 initAdminSettings();
 initBetaFeedback();
 initDatePickers();
-window.CofracMymarActions = initMymarActions();
 initMymarPending();
+window.CofracMymarActions = initMymarActions(document, window);
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,

@@ -1094,3 +1094,21 @@ et le compte SQL verrouille pendant la reparation.
 Validation de cette reprise : 2963 tests PHP (21312 assertions), 416 tests
 frontend et chaine Docker Apache/FPM/MySQL 8.0.46 reussis. Le PHP local est 8.5 ;
 le paquet verifiera aussi les lectures avec le runtime reel 8.4.27 du serveur.
+
+### Initialisation de l'onglet MAR dans le build de production
+
+La lecture HTTP a ete controlee dans la session admin : huit demandes sont
+retournees (cinq initiales et trois apres travaux), avec `actions_enabled:true`.
+Le navigateur s'arretait avant d'initialiser la liste : le code minifie reutilisait
+un mauvais symbole pour le parametre `document` des actions, masque par une
+variable locale portant le meme nom.
+
+Le document proprietaire est maintenant nomme explicitement `ownerDocument`,
+le point d'entree passe `document` et `window` explicitement, et la lecture
+de la liste est initialisee avant les actions. La mention d'actions desactivees
+reste masquee jusqu'a la reponse du serveur. Aucun changement des autorisations,
+passerelles, correspondances, donnees source ou modes mail/SMS.
+
+Un test compile et minifie le vrai module avec Vite puis execute ses parametres
+par defaut, avec et sans panneau MAR. Les tests de pagination, lecture seule,
+absence de POST initial et reprises sans doublon restent appliques.

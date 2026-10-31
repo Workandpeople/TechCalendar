@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { build } from 'vite';
+import { runInNewContext } from 'node:vm';
 import { initMymarActions, validateActionResult } from '../../resources/js/mymar-actions.js';
 
 function fixture({ fetch, storage = new Map(), override = {} } = {}) {
@@ -94,4 +96,20 @@ test('does not initialize action endpoints pointing to a different origin', () =
     const ui = fixture(); ui.panel.dataset.placeUrl = 'https://evil.test/place';
     assert.equal(initMymarActions(ui.root, ui.browser), null);
     assert.equal(ui.calls.length, 0);
+});
+
+test('production-minified actions initialize with the browser defaults, including on unrelated pages', async () => {
+    const output = await build({ configFile: false, logLevel: 'silent', build: {
+        write: false, minify: true, lib: { entry: new URL('../../resources/js/mymar-actions.js', import.meta.url).pathname,
+            name: 'MymarActions', formats: ['iife'] },
+    } });
+    const code = (Array.isArray(output) ? output[0] : output).output.find(chunk => chunk.type === 'chunk').code;
+    const ui = fixture();
+    const context = { document: ui.root, window: ui.browser, URL };
+    runInNewContext(`${code}\nglobalThis.result = MymarActions.initMymarActions();`, context);
+    assert.equal(typeof context.result.choose, 'function');
+    assert.equal(ui.calls.length, 0);
+    const unrelated = { document: { querySelector: () => null }, window: ui.browser, URL };
+    runInNewContext(`${code}\nglobalThis.result = MymarActions.initMymarActions();`, unrelated);
+    assert.equal(unrelated.result, null);
 });

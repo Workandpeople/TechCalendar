@@ -18,7 +18,7 @@ export function initMymarActions(root = document, browser = window) {
             urls[key] = url.href;
         }
     } catch { return null; }
-    const document = panel.ownerDocument;
+    const ownerDocument = panel.ownerDocument;
     const storageKey = `cofrac.mar.confirmations.${panel.dataset.userId}`;
     let records = {};
     try {
@@ -32,7 +32,7 @@ export function initMymarActions(root = document, browser = window) {
         try { browser.sessionStorage.setItem(storageKey, JSON.stringify(records)); } catch {}
         if (resumeButton) resumeButton.style.display = Object.keys(records).length ? '' : 'none';
     };
-    const node = (tag, text = '', className = '') => { const element = document.createElement(tag); element.textContent = text; element.className = className; return element; };
+    const node = (tag, text = '', className = '') => { const element = ownerDocument.createElement(tag); element.textContent = text; element.className = className; return element; };
     const button = text => { const value = node('button', text, 'gc-btn-secondary'); value.type = 'button'; return value; };
     let dialog = null;
     const open = title => {
@@ -41,7 +41,7 @@ export function initMymarActions(root = document, browser = window) {
         const header = node('header', '', 'flex items-center justify-between gap-3');
         header.append(node('h2', title, 'font-semibold text-lg'));
         const close = button('Fermer'); close.addEventListener('click', () => dialog.close()); header.append(close);
-        dialog.append(header); document.body.append(dialog); dialog.showModal();
+        dialog.append(header); ownerDocument.body.append(dialog); dialog.showModal();
         return dialog;
     };
     const changed = () => panel.dispatchEvent(new browser.Event('cofrac:mymar:changed'));
