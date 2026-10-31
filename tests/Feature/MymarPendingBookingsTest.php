@@ -4,6 +4,7 @@ use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\User;
 use App\Services\Mymar\MymarBookingReaderSettings;
+use App\Services\Mymar\MymarPendingBookings;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -115,7 +116,7 @@ it('authorizes managers/planners and internal admins but rejects external, techn
     }
 })->with(['manager', 'admin', 'external', 'tech', 'deleted', 'v1']);
 
-it('does not register any placement route and never waits on an occupied cache lock', function () {
+it('keeps the pending endpoint read only and never waits on an occupied cache lock', function () {
     $this->actingAs($this->actor)->postJson(route('planner.book.mar.index'))->assertStatus(405);
     $key = 'mymar:pending:v1:'.hash('sha256', $this->configuration['generation']).':0:25';
     $lock = Cache::lock($key.':lock', 8);
@@ -126,4 +127,13 @@ it('does not register any placement route and never waits on an occupied cache l
         $lock->release();
     }
     Http::assertNothingSent();
+});
+
+it('invalidates all pending pages immediately after a confirmed action', function () {
+    Http::fakeSequence()->push(($this->sourcePage)())->push(($this->sourcePage)(0, 0));
+    $pending = app(MymarPendingBookings::class);
+    expect($pending->page()['items'])->toHaveCount(25);
+    $pending->invalidate();
+    expect($pending->page(0, 25, true)['items'])->toBe([]);
+    Http::assertSentCount(2);
 });

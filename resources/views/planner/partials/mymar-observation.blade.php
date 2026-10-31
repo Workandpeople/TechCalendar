@@ -31,13 +31,13 @@
         const props = event.extendedProps || {};
         return [props.service_label || 'Rendez-vous MAR', props.technician_name || 'Technicien',
             date(event.start, { dateStyle: 'short', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' }),
-            'Observation en lecture seule. Ne bloque pas les créneaux.',
+            props.availability_guard_enabled ? 'Lecture seule. Disponibilité MAR contrôlée au placement.' : 'Observation en lecture seule. Ne bloque pas les créneaux.',
             props.cache_state === 'stale' || props.cache_state === 'degraded' ? 'Données à actualiser.' : 'Horaires à confirmer.'].join(' · ');
     };
     const content = event => {
         const props = event.extendedProps || {};
         const box = node('span', '', 'mymar-event-content');
-        box.append(node('small', 'MYMAR · Observation · Lecture seule'), node('strong', props.service_label || 'Rendez-vous MAR'),
+        box.append(node('small', props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'), node('strong', props.service_label || 'Rendez-vous MAR'),
             node('span', date(event.start, { timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
             node('span', props.technician_name || 'Technicien'));
         if (['stale', 'degraded'].includes(props.cache_state)) box.append(node('small', 'Données à actualiser'));
@@ -50,7 +50,7 @@
         info.el.tabIndex = 0;
         if (info.el.classList.contains('nc-event')) info.el.replaceChildren(...content(info.event).domNodes);
         if (info.el.classList.contains('nc-month-event')) info.el.replaceChildren(node('span',
-            date(info.event.start, { timeStyle: 'short' }) + ' · MYMAR · Observation'));
+            date(info.event.start, { timeStyle: 'short' }) + (info.event.extendedProps?.availability_guard_enabled ? ' · MYMAR' : ' · MYMAR · Observation')));
         if (info.el.tagName !== 'BUTTON' && !info.el.dataset.mymarKeyboard) {
             info.el.dataset.mymarKeyboard = '1';
             info.el.addEventListener('keydown', event => {
@@ -71,8 +71,8 @@
         close.addEventListener('click', () => dialog.close());
         dialog.append(title, node('p', props.technician_name || 'Technicien'),
             node('p', date(event.start, { dateStyle: 'full', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
-            node('p', 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
-            node('p', 'Les durées et horaires restent à confirmer. Le bénéficiaire, les documents et les trajets MYMAR ne sont pas repris.'),
+            node('p', props.availability_guard_enabled ? 'Ce rendez-vous est pris en compte dans les disponibilités. Il reste en lecture seule et se modifie dans MYMAR.' : 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
+            node('p', props.availability_guard_enabled ? 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.' : 'Les durées et horaires restent à confirmer. Le bénéficiaire, les documents et les trajets MYMAR ne sont pas repris.'),
             node('p', 'Dernière synchronisation : ' + date(props.synced_at, { dateStyle: 'short', timeStyle: 'short' })), close);
         dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus({ preventScroll: true }); }, { once: true });
         document.body.append(dialog);
@@ -87,11 +87,11 @@
             stale: 'Cache périmé : les derniers horaires connus sont affichés.', degraded: 'La dernière actualisation a échoué : données précédentes conservées.',
             mapping_changed: 'Correspondance de technicien à revalider.', unavailable: 'Cache indisponible : aucune conclusion sur les disponibilités MAR.',
             invalid: 'Cache non exploitable : aucune conclusion sur les disponibilités MAR.' };
-        element.textContent = ['MYMAR · Pilote en observation, sans blocage des créneaux.', states[meta.state] || states.unavailable,
+        element.textContent = [meta.blocking_enabled ? 'MYMAR · Disponibilités contrôlées au placement pour les techniciens du pilote.' : 'MYMAR · Pilote en observation, sans blocage des créneaux.', states[meta.state] || states.unavailable,
             meta.pilot_technicians ? `${meta.covered_technicians || 0}/${meta.pilot_technicians} technicien(s) du pilote sélectionné(s).` : '',
             meta.generated_at ? 'Synchronisé le ' + date(meta.generated_at, { dateStyle: 'short', timeStyle: 'short' }) + '.' : '',
             meta.window_start && meta.window_end ? 'Couverture du ' + date(meta.window_start, { dateStyle: 'short' }) + ' au ' + date(meta.window_end, { dateStyle: 'short' }) + '.' : '',
-            'Horaires et durées à confirmer.'].filter(Boolean).join(' ');
+            meta.blocking_enabled ? 'Une disponibilité inconnue ne permet pas de placer un rendez-vous.' : 'Horaires et durées à confirmer.'].filter(Boolean).join(' ');
     };
     const combineStatuses = values => {
         const metas = values.filter(Boolean);

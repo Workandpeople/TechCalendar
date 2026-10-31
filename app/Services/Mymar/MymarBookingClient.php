@@ -8,7 +8,7 @@ use Illuminate\Http\Client\Factory;
 use RuntimeException;
 use Throwable;
 
-/** Explicit internal client, deliberately not bound to routes or production settings yet. */
+/** Loopback client. Readers never gain write permission through this shared contract. */
 final readonly class MymarBookingClient
 {
     public function __construct(

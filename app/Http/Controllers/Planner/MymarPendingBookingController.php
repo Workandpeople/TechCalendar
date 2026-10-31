@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Planner;
 
 use App\Http\Controllers\Controller;
+use App\Services\Mymar\MymarActionSettings;
 use App\Services\Mymar\MymarPendingBookings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,14 @@ final class MymarPendingBookingController extends Controller
         try {
             $page = $pending->page((int) ($data['after'] ?? 0), 25, ($data['refresh'] ?? '0') === '1');
 
-            return response()->json($page + ['read_only' => true])->header('Cache-Control', 'private, no-store');
+            try {
+                $actions = app(MymarActionSettings::class)->load();
+            } catch (Throwable) {
+                $actions = null;
+            }
+
+            return response()->json($page + ['read_only' => true, 'actions_enabled' => (bool) ($actions['writes_enabled'] ?? false)])
+                ->header('Cache-Control', 'private, no-store');
         } catch (Throwable) {
             return response()->json(['error' => 'mymar_pending_unavailable', 'message' => 'La lecture des demandes MAR est momentanement indisponible. Reessayez dans quelques instants.'], 503)
                 ->header('Cache-Control', 'private, no-store')->header('Retry-After', '5');

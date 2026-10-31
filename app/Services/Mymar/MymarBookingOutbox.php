@@ -6,6 +6,7 @@ namespace App\Services\Mymar;
 
 use App\Models\MymarBookingRequest;
 use App\Models\User;
+use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,7 +17,7 @@ final readonly class MymarBookingOutbox
 {
     public function __construct(private MymarBookingClient $client, private bool $enabled = false) {}
 
-    public function enqueue(MymarBookingCommand $command, User $actor): MymarBookingRequest
+    public function enqueue(MymarBookingCommand $command, User $actor, ?array $reservation = null): MymarBookingRequest
     {
         $this->assertEnabled();
         $this->client->assertEnabled(write: true);
@@ -24,7 +25,7 @@ final readonly class MymarBookingOutbox
             throw new RuntimeException('mymar.booking_actor_mismatch');
         }
         try {
-            return DB::transaction(function () use ($command): MymarBookingRequest {
+            return DB::transaction(function () use ($command, $reservation): MymarBookingRequest {
                 $data = $command->payload;
                 $author = User::query()->find($data['cofrac_actor_id']);
                 if (! $author || $author->isExternal() || (! $author->admin && ! in_array($author->role, [0, 1], true))) {
@@ -36,6 +37,9 @@ final readonly class MymarBookingOutbox
                 $record = new MymarBookingRequest;
                 $record->forceFill(['id' => $data['request_id'], 'author_id' => $author->id, 'source_dossier_id' => $data['dossier_id'],
                     'active_dossier_id' => $data['dossier_id'], 'fingerprint' => $command->fingerprint(), 'command' => $data, 'status' => 'queued'])->save();
+                if ($reservation !== null) {
+                    $record->forceFill(array_intersect_key($reservation, array_flip(['cofrac_technician_id', 'reserved_starts_at', 'reserved_ends_at'])))->save();
+                }
 
                 return $record;
             });
@@ -51,14 +55,14 @@ final readonly class MymarBookingOutbox
         }
     }
 
-    public function process(string $requestId): MymarBookingRequest
+    public function process(string $requestId, ?Closure $dispatch = null): MymarBookingRequest
     {
         $this->assertEnabled();
         $this->client->assertEnabled();
         if (! MymarBookingCommand::isRequestId($requestId)) {
             throw new RuntimeException('mymar.invalid_booking_request_id');
         }
-        $claim = DB::transaction(function () use ($requestId): ?array {
+        $claim = DB::transaction(function () use ($requestId, $dispatch): ?array {
             $record = MymarBookingRequest::query()->lockForUpdate()->find($requestId);
             if (! $record) {
                 throw new RuntimeException('mymar.booking_local_request_missing');
@@ -70,6 +74,9 @@ final readonly class MymarBookingOutbox
             $this->sameCommand($record, $command);
             $submit = $record->status === 'queued';
             if ($submit) {
+                if ($dispatch === null) {
+                    throw new RuntimeException('mymar.booking_dispatch_guard_required');
+                }
                 $this->client->assertEnabled(write: true);
                 $author = User::query()->find($record->author_id);
                 if (! $author || $author->isExternal() || (! $author->admin && ! in_array($author->role, [0, 1], true))) {
@@ -86,7 +93,7 @@ final readonly class MymarBookingOutbox
         });
         if ($claim !== null) {
             [$command, $submit, $claimId] = $claim;
-            $attempt = $submit ? $this->client->submit($command) : $this->client->result($command);
+            $attempt = $submit ? $dispatch($command, fn () => $this->client->submit($command)) : $this->client->result($command);
             $terminal = in_array($attempt->state, ['confirmed', 'rejected'], true);
             MymarBookingRequest::query()->whereKey($requestId)->where('claim_id', $claimId)->where('status', 'dispatching')
                 ->update(['status' => $attempt->state, 'reason' => $attempt->reason,

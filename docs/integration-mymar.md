@@ -967,3 +967,79 @@ distinct, apres integration aux controles de disponibilite/reservation Cofrac.
 Tests : `MymarPendingBookingsTest`, `MymarBookingOutboxTest`, tests frontend
 `mymar-pending`/`booking-source-tabs`, et chaine conteneur jetable
 `MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 bash tools/deploy/tests/check-mymar-booking.sh`.
+
+## Activation explicite des placements et problemes MAR (pilote)
+
+Le lot suivant ajoute les boutons Placer / Probleme RDV dans l'onglet MAR,
+uniquement apres activation root. Les demandes restent lues depuis MYMAR ;
+aucun dossier ni rendez-vous MAR natif n'est duplique dans Cofrac. Le calendrier
+existant est reutilise. L'operateur choisit explicitement une duree de 1 a 8 h,
+et seuls les techniciens actifs avec correspondance validee sont proposes.
+Les unites de duree et le fuseau restent ceux retenus pendant la calibration.
+
+Les actions sont reservees aux gerants, planning et administrateurs internes.
+L'auteur Cofrac est determine par la session serveur, jamais par le formulaire.
+MYMAR utilise son compte technique dedie, desactive, sans role de connexion.
+Les transitions restent propres a MYMAR : placement 1 -> 3 ou 14 -> 16,
+probleme RDV 1 -> 2 ou 14 -> 15. Commentaire, motif facultatif et date de rappel
+sont transmis uniquement pour le probleme. Les controles et l'historique source
+sont ecrits par le backend transactionnel, sans bootstrap Laravel MYMAR,
+notifications, mail ou SMS automatiques. La modification des RDV MAR deja
+places reste dans MYMAR dans ce premier pilote.
+
+Le journal technique `mymar_booking_requests` est cree explicitement par ce
+seul paquet apres sauvegarde V2. Sa migration reste hors migrations automatiques.
+Les commandes sont chiffrees. Avant envoi, une reservation technique durable
+est enregistree ; le technicien Cofrac est verrouille pendant les controles
+natifs et l'appel source borne. Les absences, autres RDV et occupations MAR
+sont controles. Le controle MAR en direct ne s'effectue qu'au placement ou a la
+modification d'un creneau ; les pages et suggestions utilisent le cache existant.
+Une disponibilite inconnue/perimee n'est jamais consideree comme libre. Une
+reservation en attente ne peut pas etre forcee. Les placements MAR ne proposent
+pas de forcer les conflits. Les actions directes dans l'interface MYMAR ne
+participent pas au verrou natif Cofrac ; elles restent une limite de concurrence
+entre applications et doivent etre evitees simultanement sur un meme technicien.
+Les trajets autour des occupations MAR ne sont pas encore calcules.
+
+Chaque demande conserve son UUID jusqu'au resultat. Un timeout peut suivre un
+COMMIT source : le message indique alors Confirmation en attente, la reservation
+reste bloquante, et Verifier la confirmation effectue seulement un GET du recu.
+Aucun POST n'est automatiquement rejoue, meme apres rechargement de la page.
+Les cles uniques source/locales et la revision du dossier evitent les doublons.
+Une demande refusee est distinguee d'une confirmation reussie. Les pages de
+demandes en cache sont invalidees apres confirmation.
+
+Le lecteur SELECT-only 19847 et l'occupation 19846 restent inchanges. Un service
+d'ecriture separe ecoute exclusivement 127.0.0.1:19848, avec ses propres Apache,
+PHP-FPM, utilisateur systeme et jeton. Le compte SQL prepare est deverrouille
+seulement apres installation du garde natif, ecriture toujours desactivee.
+Le runtime Cofrac ne recoit aucun identifiant SQL MYMAR.
+
+Construction depuis les fichiers commites :
+
+```bash
+php tools/deploy/prepare-mymar-actions.php REVISION_RUNTIME RAPPORT_UI
+```
+
+Le paquet verifie les empreintes source, mapping, lecteur, auteur et privileges
+avant maintenance. Il deploie l'application avec sauvegarde/reouverture des deux
+domaines, cree le journal technique, teste uniquement les GET, puis active les
+actions en dernier. Aucun placement/probleme/message de test sur la production.
+Mail reel et SMS en simulation sont conserves. Le `stop.sh` root-prive indique
+a la fin ferme seulement les actions et verrouille leur compte SQL. Il conserve
+les reservations incertaines et les controles de disponibilite ; les lecteurs,
+le CRM et les rendez-vous existants ne sont ni supprimes ni arretes.
+
+Les tests PHP/frontend couvrent l'autorisation, les correspondances, les
+chevauchements/absences, la reprise GET seule et le parcours calendrier. La
+chaine suivante execute de vrais placements/problemes/rejeux et arrets avec
+Apache/FPM et MySQL 8.0.46 uniquement dans un environnement Docker jetable :
+
+```bash
+MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 MYMAR_ACTIONS_TEST=1 \
+  bash tools/deploy/tests/check-mymar-booking.sh
+```
+
+Validation locale du lot : 2943 tests PHP, 416 tests frontend et chaine Docker
+ci-dessus reussis. PHP local 8.5 ; MySQL de repetition 8.0.46. Le runtime reel
+PHP 8.4.27 et le cycle systemd seront controles par le paquet sur le serveur.

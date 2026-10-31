@@ -27,6 +27,7 @@ beforeEach(function () {
         'technician_id' => 5, 'starts_at' => '2026-11-05T10:30:00+01:00', 'duration_minutes' => 60]);
     $this->client = new MymarBookingClient(Http::getFacadeRoot(), enabled: true, writesEnabled: true, token: str_repeat('0123456789abcdef', 4));
     $this->outbox = new MymarBookingOutbox($this->client, enabled: true);
+    $this->guardedProcess = fn ($id) => $this->outbox->process($id, fn ($command, $send) => $send());
     $this->receipt = fn (array $overrides = []) => array_replace(['format' => 'cofrac.mymar-booking-result', 'version' => 1,
         'request_id' => $this->command->payload['request_id'], 'action' => 'place', 'dossier_id' => 123, 'status_id' => 3,
         'rdv_id' => 456, 'starts_at' => '2026-11-05T10:30:00+01:00', 'duration_minutes' => 60, 'source_committed' => true], $overrides);
@@ -79,7 +80,7 @@ it('ignores a stale worker response once its claim has been superseded', functio
 
         return Http::response(($this->receipt)());
     });
-    expect($this->outbox->process($record->id)->status)->toBe('dispatching')->and($record->fresh()->result)->toBeNull()
+    expect(($this->guardedProcess)($record->id)->status)->toBe('dispatching')->and($record->fresh()->result)->toBeNull()
         ->and($record->fresh()->active_dossier_id)->toBe(123);
     Http::assertSentCount(1);
 });
@@ -93,6 +94,13 @@ it('encrypts command contents, enqueues idempotently and never sends from enqueu
     expect($first->id)->toBe($second->id)->and(MymarBookingRequest::count())->toBe(1)
         ->and($first->command)->toBe($command->payload)->and($first->toArray())->not->toHaveKeys(['command', 'claim_id', 'fingerprint']);
     expect(DB::table('mymar_booking_requests')->value('command'))->not->toContain('PRIVATE_REASON_CANARY');
+    Http::assertNothingSent();
+});
+
+it('requires an availability dispatch guard before initiating any queued POST', function () {
+    $record = $this->outbox->enqueue($this->command, $this->actor);
+    expect(fn () => $this->outbox->process($record->id))->toThrow(RuntimeException::class, 'mymar.booking_dispatch_guard_required');
+    expect($record->fresh()->status)->toBe('queued')->and($record->fresh()->attempts)->toBe(0);
     Http::assertNothingSent();
 });
 
@@ -111,10 +119,10 @@ it('rejects reuse with different content and competing active requests for the s
 it('confirms only a validated committed source receipt and never sends twice', function () {
     Http::fake(fn () => Http::response(($this->receipt)()));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    $processed = $this->outbox->process($record->id);
+    $processed = ($this->guardedProcess)($record->id);
     expect($processed->status)->toBe('confirmed')->and($processed->result)->toBe(($this->receipt)())
         ->and($processed->active_dossier_id)->toBeNull()->and($processed->finished_at)->not->toBeNull();
-    expect($this->outbox->process($record->id)->status)->toBe('confirmed');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('confirmed');
     Http::assertSentCount(1);
     Http::assertSent(fn ($request) => $request->method() === 'POST' && $request->url() === 'http://127.0.0.1:19847/v1/booking-commands'
         && $request->data() === $this->command->payload && $request->hasHeader('Authorization', 'Bearer '.str_repeat('0123456789abcdef', 4)));
@@ -124,10 +132,10 @@ it('keeps timeouts uncertain and reconciles by GET with the original UUID only',
     Http::fake(fn ($request) => $request->method() === 'POST'
         ? throw new ConnectionException('TOKEN_AND_PRIVATE_BODY_CANARY') : Http::response(($this->receipt)()));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    expect($this->outbox->process($record->id)->status)->toBe('uncertain');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('uncertain');
     expect($record->fresh()->reason)->toBe('booking_gateway_unavailable')->and($record->fresh()->active_dossier_id)->toBe(123);
     $record->forceFill(['lease_until' => 0])->save();
-    expect($this->outbox->process($record->id)->status)->toBe('confirmed');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('confirmed');
     Http::assertSentCount(1);
     Http::assertSent(fn ($request) => $request->method() === 'GET' && str_ends_with($request->url(), '/'.$record->id));
 });
@@ -135,7 +143,7 @@ it('keeps timeouts uncertain and reconciles by GET with the original UUID only',
 it('does not assume failure or release a dossier on absent or invalid receipts', function (int $status, array $reply) {
     Http::fake(fn () => Http::response($reply, $status));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    expect($this->outbox->process($record->id)->status)->toBe('uncertain')
+    expect(($this->guardedProcess)($record->id)->status)->toBe('uncertain')
         ->and($record->fresh()->active_dossier_id)->toBe(123)->and($record->fresh()->finished_at)->toBeNull();
 })->with([
     'receipt not present' => [404, ['error' => 'booking_receipt_not_found', 'source_committed' => null, 'outcome' => 'unknown']],
@@ -147,7 +155,7 @@ it('does not assume failure or release a dossier on absent or invalid receipts',
 it('rejects mismatched receipts even when the gateway answers 200', function (array $change) {
     Http::fake(fn () => Http::response(($this->receipt)($change)));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    expect($this->outbox->process($record->id)->status)->toBe('uncertain');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('uncertain');
 })->with([
     'different request' => [['request_id' => '11111111-1111-4111-8111-111111111111']],
     'different dossier' => [['dossier_id' => 124]], 'different action' => [['action' => 'problem']],
@@ -159,19 +167,19 @@ it('rejects mismatched receipts even when the gateway answers 200', function (ar
 it('records explicit noncommitted rejection without replaying a POST', function () {
     Http::fake(fn () => Http::response(['error' => 'booking_source_changed', 'outcome' => 'rejected', 'source_committed' => false], 409));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    expect($this->outbox->process($record->id)->status)->toBe('rejected')->and($record->fresh()->active_dossier_id)->toBeNull();
-    $this->outbox->process($record->id);
+    expect(($this->guardedProcess)($record->id)->status)->toBe('rejected')->and($record->fresh()->active_dossier_id)->toBeNull();
+    ($this->guardedProcess)($record->id);
     Http::assertSentCount(1);
 });
 
 it('does not dispatch twice while a worker owns the lease', function () {
     $record = $this->outbox->enqueue($this->command, $this->actor);
     Http::fake(function () use ($record) {
-        expect($this->outbox->process($record->id)->status)->toBe('dispatching');
+        expect(($this->guardedProcess)($record->id)->status)->toBe('dispatching');
 
         return Http::response(($this->receipt)());
     });
-    expect($this->outbox->process($record->id)->status)->toBe('confirmed');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('confirmed');
     Http::assertSentCount(1);
 });
 
@@ -180,7 +188,7 @@ it('reconciles an abandoned dispatch without submitting it again, even after aut
     $record->forceFill(['status' => 'dispatching', 'claim_id' => (string) Str::uuid(), 'lease_until' => 0])->save();
     $this->actor->delete();
     Http::fake(fn () => Http::response(($this->receipt)()));
-    expect($this->outbox->process($record->id)->status)->toBe('confirmed');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('confirmed');
     Http::assertSent(fn ($request) => $request->method() === 'GET');
     Http::assertSentCount(1);
 });
@@ -198,7 +206,7 @@ it('refuses external, technician and deleted actors without sending', function (
 it('checks author rights again before first dispatch', function () {
     $record = $this->outbox->enqueue($this->command, $this->actor);
     $this->actor->delete();
-    expect($this->outbox->process($record->id)->status)->toBe('rejected')->and($record->fresh()->reason)->toBe('booking_author_not_allowed');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('rejected')->and($record->fresh()->reason)->toBe('booking_author_not_allowed');
     Http::assertNothingSent();
 });
 
@@ -212,7 +220,7 @@ it('never accepts a client-supplied actor ID in place of the authenticated actor
 it('keeps uncertain state on redirects, HTML, oversized or compressed responses', function (string $body, array $headers) {
     Http::fake(fn () => Http::response($body, 200, $headers));
     $record = $this->outbox->enqueue($this->command, $this->actor);
-    expect($this->outbox->process($record->id)->status)->toBe('uncertain');
+    expect(($this->guardedProcess)($record->id)->status)->toBe('uncertain');
 })->with([
     'HTML login' => ['<html>login</html>', ['Content-Type' => 'text/html']],
     'oversized' => [str_repeat('a', 8193), ['Content-Type' => 'application/json']],

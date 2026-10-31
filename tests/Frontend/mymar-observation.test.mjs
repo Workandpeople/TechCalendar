@@ -77,3 +77,18 @@ test('all failure states remain explicit and an outside-pilot batch cannot erase
     assert.equal(banner.hidden, true);
     assert.equal(banner.textContent, '');
 });
+
+test('the active guard is described accurately without enabling calendar editing', () => {
+    const { ui, banner, body } = harness();
+    const appointment = event();
+    appointment.extendedProps.availability_guard_enabled = true;
+    const card = element('button');
+    ui.mount({ el: card, event: appointment });
+    assert.match(card.title, /Disponibilité MAR contrôlée/);
+    assert.doesNotMatch(card.title, /Ne bloque pas/);
+    ui.open(appointment, card);
+    assert.match(text(body.children[0]), /se modifie dans MYMAR/);
+    ui.setStatus('banner', { state: 'observing', blocking_enabled: true });
+    assert.match(banner.textContent, /Disponibilités contrôlées au placement/);
+    assert.doesNotMatch(banner.textContent, /sans blocage/);
+});

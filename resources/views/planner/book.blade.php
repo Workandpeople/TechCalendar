@@ -844,9 +844,12 @@
                 @endforelse
             </div>
             @if (config('crm.v2_enabled'))
-                <div id="booking-mymar-source" class="hidden rounded-xl border p-4 space-y-3" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}" hidden>
+                <div id="booking-mymar-source" class="hidden rounded-xl border p-4 space-y-3" style="border-color:var(--gc-border);" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}"
+                    data-place-url="{{ route('planner.book.mar.place', [], false) }}" data-problem-url="{{ route('planner.book.mar.problem', [], false) }}"
+                    data-status-url="{{ route('planner.book.mar.status', ['id' => '__REQUEST__'], false) }}" data-user-id="{{ auth()->id() }}" data-csrf="{{ csrf_token() }}" hidden>
                     <header class="flex items-center justify-between gap-3"><h3 class="font-semibold" style="color:var(--gc-text);">Demandes MAR à placer</h3><button class="gc-btn-secondary" type="button" data-mymar-refresh>Actualiser</button></header>
-                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
+                    <p class="mt-2 text-sm" style="color:var(--gc-text-soft);" data-mymar-readonly-note>Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
+                    <button type="button" class="gc-btn-secondary" data-mymar-resume style="display:none">Confirmation MAR à vérifier</button>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);">Les rendez-vous MAR déjà placés restent affichés dans le calendrier pour les techniciens du pilote. Aucun dossier MAR n'est copié dans Cofrac.</p>
                     <p class="text-sm" role="status" aria-live="polite" data-mymar-status>La liste se charge à l’ouverture de cet onglet.</p>
                     <div class="space-y-2" role="list" data-mymar-list></div>
@@ -1395,6 +1398,8 @@
 
         .gc-booking-force-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
         .gc-booking-force-dialog::backdrop { background: #0f172a99; }
+        .gc-mymar-action-dialog { margin: auto; width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--gc-border); background: var(--gc-surface, white); color: var(--gc-text); }
+        .gc-mymar-action-dialog::backdrop { background: #0f172a99; }
         .booking-lot-details > summary::-webkit-details-marker {
             display: none;
         }
@@ -5442,8 +5447,11 @@
             document.getElementById('booking-confirm-suggestion-btn').textContent = bookingConfirmSuggestionLabel();
             document.getElementById('booking-confirm-suggestion-btn').classList.toggle('hidden', !isSuggestion);
             document.getElementById('booking-confirm-suggestion-btn').disabled = isSuggestion && !props.can_validate;
-            document.getElementById('booking-force-placement-btn')?.classList.toggle('hidden', !isSuggestion);
-            document.getElementById('booking-place-alongside-btn')?.classList.toggle('hidden', isSuggestion || !currentAppointmentRequest);
+            document.getElementById('booking-force-placement-btn')?.classList.toggle('hidden', !isSuggestion || Boolean(currentAppointmentRequest?.is_mymar));
+            document.getElementById('booking-place-alongside-btn')?.classList.toggle('hidden', isSuggestion || !currentAppointmentRequest || Boolean(currentAppointmentRequest?.is_mymar));
+            document.getElementById('booking_detail_comment').disabled = Boolean(currentAppointmentRequest?.is_mymar && isSuggestion);
+            document.getElementById('booking_detail_duration').min = currentAppointmentRequest?.is_mymar ? '60' : '30';
+            document.getElementById('booking_detail_duration').step = currentAppointmentRequest?.is_mymar ? '60' : '5';
 
             if (shouldSelectCrmService) {
                 syncCrmServiceSelection();
@@ -5978,9 +5986,18 @@
 
             return analyzeAppointment({ crm_appointment_id: crmId }, bookingConnectorsEnabled ? 'RDV Cofrac' : 'Dossier à placer');
         };
+
         const lotProcessingSelectFor = (lotAppointmentId) => document.querySelector(`.lot-processing-mode-select[data-lot-appointment-id="${lotAppointmentId}"]`);
         const lotBookButtonFor = (lotAppointmentId) => document.querySelector(`.lot-appointment-book-button[data-lot-appointment-id="${lotAppointmentId}"]`);
 
+        @if (config('crm.v2_enabled'))
+        window.addEventListener('cofrac:mymar:select', (event) => {
+            const detail = event.detail;
+            if (!Number.isSafeInteger(detail?.dossier_id) || !Number.isInteger(detail?.duration_minutes)
+                || detail.duration_minutes < 60 || detail.duration_minutes > 480 || detail.duration_minutes % 60 !== 0) return;
+            void analyzeAppointment({ mymar_dossier_id: detail.dossier_id, mymar_duration_minutes: detail.duration_minutes }, 'RDV MAR');
+        });
+        @endif
         const updateLotBookButtonState = (lotAppointmentId) => {
             const select = lotProcessingSelectFor(lotAppointmentId);
             const button = lotBookButtonFor(lotAppointmentId);
@@ -7101,6 +7118,22 @@
             if (forceButton) forceButton.disabled = true;
 
             try {
+                if (payload.mymar_dossier_id) {
+                    if (forced || !window.CofracMymarActions) return;
+                    button.textContent = 'Confirmation MYMAR…';
+                    const result = await window.CofracMymarActions.place({ dossier_id: Number(payload.mymar_dossier_id),
+                        expected_revision: currentAppointmentRequest.expected_revision, technician_id: Number(payload.technician_id),
+                        starts_at: payload.starts_at, duration_minutes: Number(payload.duration_minutes) });
+                    closeBookingAppointmentModal();
+                    if (result?.confirmed) {
+                        bookingCalendar?.addEvent({ id: `mymar:${result.source_result.rdv_id}`, title: confirmedEvent.title,
+                            start: result.source_result.starts_at, end: addMinutes(new Date(result.source_result.starts_at), result.source_result.duration_minutes),
+                            editable: false, extendedProps: { ...confirmedEvent.extendedProps, is_suggestion: false, is_mymar: true,
+                                observation_only: true, read_only: true, availability_guard_enabled: true, duration_minutes: result.source_result.duration_minutes } });
+                        showFeedback(result.message);
+                    }
+                    return;
+                }
                 if (forced) {
                     if (!bookingForcePlacementEnabled) return;
                     const accepted = await window.TechCalendarBookingForce?.confirm({

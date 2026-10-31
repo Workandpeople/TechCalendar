@@ -13,6 +13,9 @@ return new class extends Migration
             $table->foreignId('author_id')->constrained('users')->restrictOnDelete();
             $table->unsignedBigInteger('source_dossier_id')->index();
             $table->unsignedBigInteger('active_dossier_id')->nullable()->unique();
+            $table->foreignId('cofrac_technician_id')->nullable()->constrained('users')->restrictOnDelete();
+            $table->dateTime('reserved_starts_at')->nullable();
+            $table->dateTime('reserved_ends_at')->nullable();
             $table->char('fingerprint', 64);
             $table->text('command');
             $table->string('status', 20);
@@ -24,6 +27,7 @@ return new class extends Migration
             $table->timestamp('finished_at')->nullable();
             $table->timestamps();
             $table->index(['status', 'lease_until']);
+            $table->index(['cofrac_technician_id', 'status', 'reserved_starts_at'], 'mymar_booking_reservation_index');
         });
     }
 

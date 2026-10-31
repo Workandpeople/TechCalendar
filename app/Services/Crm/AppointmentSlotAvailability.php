@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Exceptions\AppointmentPlacementConflict;
 use App\Models\Appointment;
 use App\Models\User;
+use App\Services\Mymar\MymarSlotGuard;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -50,6 +51,11 @@ class AppointmentSlotAvailability
     public function assertAvailable(User $technician, CarbonInterface $start, CarbonInterface $end, array $location, ?int $ignoreId = null, bool $forced = false): array
     {
         $checks = $this->inspect($technician, $start, $end, $location, $ignoreId);
+        $checks['conflicts'] = [...$checks['conflicts'], ...app(MymarSlotGuard::class)->liveConflicts($technician->id, $start, $end)];
+        // An uncertain external COMMIT cannot safely be overridden, even by force.
+        if (collect($checks['conflicts'])->contains(fn ($conflict) => in_array($conflict['type'], ['mymar_pending', 'mymar_unknown'], true))) {
+            throw AppointmentPlacementConflict::fromConflicts($checks['conflicts'], false);
+        }
         if (! $forced && $checks['conflicts'] !== []) {
             throw AppointmentPlacementConflict::fromConflicts($checks['conflicts']);
         }
@@ -61,7 +67,7 @@ class AppointmentSlotAvailability
     {
         $overlaps = $this->overlaps($technician->id, $start, $end, $ignoreId);
         $absences = $technician->absences()->where('starts_at', '<', $end)->where('ends_at', '>', $start)->get(['id']);
-        $conflicts = [];
+        $conflicts = app(MymarSlotGuard::class)->pendingConflicts($technician->id, $start, $end, $location['mymar_request_id'] ?? null);
         if ($absences->isNotEmpty()) {
             $conflicts[] = ['field' => 'starts_at', 'type' => 'absence', 'message' => 'Le technicien est absent sur ce créneau.'];
         }

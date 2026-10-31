@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Crm\DossierLocation;
+use App\Services\Mymar\MymarActionSettings;
 use App\Services\Mymar\MymarCachedObservation;
 use App\Services\Mymar\MymarCalendarFeed;
 use App\Services\Mymar\MymarObservation;
@@ -49,6 +50,19 @@ it('syncs through HTTP into local cache without creating appointments or exposin
     $feed = app(MymarCalendarFeed::class)->window([$this->technician->id], now()->startOfDay(), now()->addDays(7));
     expect($feed['state'])->toBe('observing')->and($feed['blocking_enabled'])->toBeFalse()
         ->and($feed['events'][0]['editable'])->toBeFalse()->and($feed['events'][0]['id'])->toBe('mymar:555');
+    Http::assertNothingSent();
+});
+
+it('publishes guard metadata from local configuration without remote reads or editable MAR events', function () {
+    $now = new DateTimeImmutable;
+    $report = (new MymarObservation)->inspect(MymarPilotFixture::source($this->pilot, $now), new MymarObservationPolicy, $now, $this->pilot->technicianMap);
+    Cache::put($this->pilot->cacheKey(), MymarCachedObservation::project($report, $this->pilot, $now), 86400);
+    $actions = Mockery::mock(MymarActionSettings::class);
+    $actions->shouldReceive('load')->once()->andReturn(['guard_enabled' => true]);
+    app()->instance(MymarActionSettings::class, $actions);
+    $feed = app(MymarCalendarFeed::class)->window([$this->technician->id], now()->startOfDay(), now()->addDays(7));
+    expect($feed['blocking_enabled'])->toBeTrue()->and($feed['events'][0]['editable'])->toBeFalse()
+        ->and($feed['events'][0]['extendedProps']['availability_guard_enabled'])->toBeTrue();
     Http::assertNothingSent();
 });
 

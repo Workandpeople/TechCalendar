@@ -92,11 +92,13 @@ test('supports arrows, Home and End without hijacking unrelated keys', () => {
     assert.equal(ui.bookingSourceMode, 'lot');
 });
 
-test('MAR tab exposes only a deferred read list, not a placement or problem action', () => {
+test('MAR tab defers its list and keeps actions behind the server capability', () => {
     const panel = source.slice(source.indexOf('<div id="booking-mymar-source"'), source.indexOf('</section>', source.indexOf('<div id="booking-mymar-source"')));
     assert.match(panel, /ne sont pas encore activés/);
     assert.match(panel, /data-mymar-pending/);
     assert.match(panel, /data-mymar-refresh/);
-    assert.doesNotMatch(panel, /<form|data-crm-id|data-place|fetch\(/);
+    assert.match(panel, /data-place-url/);
+    assert.match(panel, /data-problem-url/);
+    assert.doesNotMatch(panel, /<form|data-crm-id|fetch\(/);
     assert.doesNotMatch(implementation + listeners, /fetch\(|XMLHttpRequest|location\.(?:reload|href)/);
 });

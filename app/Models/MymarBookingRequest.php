@@ -26,6 +26,7 @@ class MymarBookingRequest extends Model
     {
         return ['command' => 'encrypted:array', 'result' => 'array', 'author_id' => 'integer',
             'source_dossier_id' => 'integer', 'active_dossier_id' => 'integer', 'lease_until' => 'integer',
-            'attempts' => 'integer', 'finished_at' => 'datetime'];
+            'attempts' => 'integer', 'finished_at' => 'datetime', 'cofrac_technician_id' => 'integer',
+            'reserved_starts_at' => 'datetime', 'reserved_ends_at' => 'datetime'];
     }
 }

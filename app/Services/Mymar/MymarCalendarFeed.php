@@ -14,7 +14,7 @@ use Throwable;
 /** Calendar reads use only the local cache. No token loading, HTTP, source SQL, queue dispatch or placement logic. */
 class MymarCalendarFeed
 {
-    public function __construct(private readonly MymarPilotSettings $settings) {}
+    public function __construct(private readonly MymarPilotSettings $settings, private readonly MymarActionSettings $actions) {}
 
     public function window(array $technicianIds, DateTimeInterface $from, DateTimeInterface $to): array
     {
@@ -28,7 +28,8 @@ class MymarCalendarFeed
                 return $empty;
             }
             $selected = array_values(array_intersect(array_values($pilot->technicianMap), array_map('intval', $technicianIds)));
-            $meta = ['events' => [], 'state' => 'unavailable', 'blocking_enabled' => false, 'pilot_technicians' => count($pilot->technicianMap),
+            $blocking = (bool) ($this->actions->load()['guard_enabled'] ?? false);
+            $meta = ['events' => [], 'state' => 'unavailable', 'blocking_enabled' => $blocking, 'pilot_technicians' => count($pilot->technicianMap),
                 'covered_technicians' => count($selected), 'selected_technicians' => count(array_unique($technicianIds))];
             if ($selected === []) {
                 return array_replace($meta, ['state' => 'outside_pilot']);
@@ -63,12 +64,12 @@ class MymarCalendarFeed
                     continue;
                 }
                 $label = $period['visit_phase'] === 'after_works' ? 'MAR après travaux' : 'MAR visite initiale';
-                $events[] = ['id' => 'mymar:'.$period['source_rdv_id'], 'title' => $label.' · Observation',
+                $events[] = ['id' => 'mymar:'.$period['source_rdv_id'], 'title' => $label.($blocking ? ' · Lecture seule' : ' · Observation'),
                     'start' => $start->setTimezone(new DateTimeZone('Europe/Paris'))->format(DATE_ATOM),
                     'end' => $end->setTimezone(new DateTimeZone('Europe/Paris'))->format(DATE_ATOM),
                     'editable' => false, 'startEditable' => false, 'durationEditable' => false, 'overlap' => true,
                     'backgroundColor' => '#fff7db', 'borderColor' => '#c58615', 'textColor' => '#71450a', 'classNames' => ['mymar-observation-event'],
-                    'extendedProps' => ['is_mymar' => true, 'observation_only' => true, 'read_only' => true,
+                    'extendedProps' => ['is_mymar' => true, 'observation_only' => true, 'read_only' => true, 'availability_guard_enabled' => $blocking,
                         'technician_id' => $period['cofrac_user_id'], 'technician_name' => $names[$period['cofrac_user_id']],
                         'technician_full_name' => $names[$period['cofrac_user_id']], 'service_label' => $label, 'service_name' => $label,
                         'customer_name' => $label, 'duration_minutes' => $period['duration_minutes'], 'location_precision' => 'unknown',

@@ -108,3 +108,6 @@ $q=$db->prepare('SELECT account_locked FROM mysql.user WHERE User=?');$q->execut
 assert(!file_exists('/fixtures/FORBIDDEN_CALL')&&!file_exists('/fixtures/APPLICATION_EXECUTED'));
 PHP
 echo 'Wrong release refused before resource creation; reader installation/stop checked; writer and business/source/occupation API unchanged.'
+if [ "${MYMAR_ACTIONS_TEST:-}" = 1 ] && [ "${MYMAR_BOOKING_READER_FAILSTART:-0}" = 0 ]; then
+    bash /workspace/tools/deploy/tests/check-mymar-actions-container.sh
+fi

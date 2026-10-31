@@ -13,7 +13,7 @@ export function pendingPage(value, after) {
     return value;
 }
 
-export function renderPendingRows(list, items) {
+export function renderPendingRows(list, items, actions = null) {
     list.replaceChildren();
     for (const item of items) {
         const row = list.ownerDocument.createElement('article');
@@ -32,6 +32,16 @@ export function renderPendingRows(list, items) {
         phone.className = 'text-sm sm:text-right';
         phone.textContent = item.phone || 'Téléphone non renseigné';
         row.append(name, phase, address, phone);
+        if (actions) {
+            const controls = list.ownerDocument.createElement('div');
+            controls.className = 'flex flex-wrap gap-2 sm:col-span-2';
+            for (const [title, method] of [['Placer le RDV', 'choose'], ['Problème RDV', 'problem']]) {
+                const button = list.ownerDocument.createElement('button');
+                button.type = 'button'; button.className = 'gc-btn-secondary'; button.textContent = title;
+                button.addEventListener('click', () => actions[method](item)); controls.append(button);
+            }
+            row.append(controls);
+        }
         list.append(row);
     }
 }
@@ -90,8 +100,11 @@ export function initMymarPending(root = document, browser = window) {
             nextAfter = value.next_after;
             loaded = true;
             lastLoaded = Date.now();
-            renderPendingRows(list, value.items);
-            status.textContent = value.items.length ? `${value.items.length} demande(s) sur cette page · lecture seule` : 'Aucune demande MAR à placer sur cette page.';
+            const actions = value.actions_enabled === true ? browser.CofracMymarActions : null;
+            renderPendingRows(list, value.items, actions);
+            const note = panel.querySelector('[data-mymar-readonly-note]');
+            if (note) note.hidden = Boolean(actions);
+            status.textContent = value.items.length ? `${value.items.length} demande(s) sur cette page${actions ? '' : ' · lecture seule'}` : 'Aucune demande MAR à placer sur cette page.';
             panel.querySelector('[data-mymar-page]').textContent = `Page ${history.length + 1}`;
             pager.hidden = history.length === 0 && nextAfter === null;
         } catch {
@@ -107,6 +120,7 @@ export function initMymarPending(root = document, browser = window) {
     panel.addEventListener('cofrac:mymar:activate', activate);
     const deactivate = () => { ++version; request?.abort(); request = null; controls(false); };
     panel.addEventListener('cofrac:mymar:deactivate', deactivate);
+    panel.addEventListener('cofrac:mymar:changed', () => { loaded = false; if (!panel.hidden) void load(after, { fresh: true }); });
     browser.addEventListener('pagehide', deactivate);
     refresh.addEventListener('click', () => { if (!panel.hidden) void load(after, { fresh: true }); });
     previous.addEventListener('click', () => { if (!panel.hidden && !request && history.length) void load(history.at(-1), { back: true }); });

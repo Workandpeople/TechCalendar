@@ -30,6 +30,7 @@ import { createAppointmentTooltip } from './appointment-tooltip';
 import * as appointmentDateTime from './appointment-date-time';
 import { initDatePickers } from './date-picker';
 import { initMymarPending } from './mymar-pending';
+import { initMymarActions } from './mymar-actions';
 
 window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
@@ -66,6 +67,7 @@ initCreationAddress();
 initAdminSettings();
 initBetaFeedback();
 initDatePickers();
+window.CofracMymarActions = initMymarActions();
 initMymarPending();
 
 const reverbConfig = {
