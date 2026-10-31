@@ -140,7 +140,42 @@ actuel. Les controles de creneaux/absences/trajets et la reservation Cofrac
 restent a brancher avant toute activation des ecritures. Aucun blocage MAR
 supplementaire ni changement d'occupation n'est revendique par ce lot.
 
-### Preparation source et limites d'activation
+### Lecteur HTTP des demandes, lot serveur separe
+
+`tools/deploy/mymar/booking-http` installe un lecteur sur 127.0.0.1:19847,
+avec deux NOUVEAUX services, un compte Linux sans shell et un NOUVEAU compte
+SQL `cofrac_mymar_br_*` limite strictement a SELECT par colonnes. Le compte
+de placement prepare `cofrac_mymar_rw_*` reste verrouille ; le compte SQL
+et les services d'occupations 19846 ne changent pas. Aucun deploiement,
+maintenance, migration ou rechargement des applications/Apache public.
+
+La lecture des demandes et des recus est authentifiee. Les POST sont refuses
+avant ouverture de connexion SQL ; meme une configuration writes_enabled=true
+rend le lecteur indisponible au lieu de l'activer. Un profil SQL trop large est
+refuse. L'installation fait des controles HTTP et valide une page d'au plus
+une demande sans exporter ses donnees. Le rapport ne contient que des compteurs
+et indicateurs. Aucun jeton/secret n'est encore donne au runtime Cofrac.
+
+Une mauvaise release est refusee avant creation du compte SQL/systeme. En cas
+d'echec de demarrage, seuls les nouveaux services sont arretes, le lecteur SQL
+est verrouille et sa configuration desactivee. L'arret fonctionne independamment
+de la validite des anciennes demandes d'installation. Aucun DROP automatique.
+
+Tests locaux : Apache/FPM/MySQL reels dans des conteneurs sans reseau externe,
+permissions SELECT, refus des ecritures/passwords, commandes HTTP malformees,
+secret non exporte, configuration forcee en ecriture refusee, reexecution refusee,
+arret et echec de demarrage. Checksums des tables metier et fichiers applicatifs
+inchanges ; ancienne API d'occupations toujours accessible.
+
+```sh
+MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 bash tools/deploy/tests/check-mymar-booking.sh
+MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 MYMAR_BOOKING_READER_FAILSTART=1 bash tools/deploy/tests/check-mymar-booking.sh
+```
+
+Ce lot ne branche pas encore les onglets, le cache des demandes ou l'outbox.
+Il ne modifie ni disponibilites ni reservations et ne permet aucun placement.
+
+### Journal source et activation future
 
 Le journal source vit dans un NOUVEAU schema `cofrac_mymar_integration`, sur la meme
 instance MySQL pour rester dans la meme transaction. La nouvelle connexion

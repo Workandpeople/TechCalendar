@@ -84,3 +84,7 @@ docker exec "$PHP" bash -c 'cd /backend-package; if bash collect-backend.sh --pr
 test "$(docker exec "$DB" mysql -NBe "SELECT COUNT(*) FROM MYMAR.users WHERE email='cofrac-planning@integration.invalid' AND enabled=0")" = 1
 test "$(docker exec "$DB" mysql -NBe "SELECT COUNT(*) FROM mysql.user WHERE User LIKE 'cofrac_mymar_rw_%' AND User<>'cofrac_mymar_rw_abcdef01' AND account_locked='Y'")" = 1
 echo 'Preparation operateur et reexecution refusee : aucune modification des visites, dossiers, comptes existants, sources ou services.'
+if [ "${MYMAR_BOOKING_HTTP_TEST:-}" = 1 ]; then
+    docker exec -e MYMAR_BOOKING_READER_FAILSTART="${MYMAR_BOOKING_READER_FAILSTART:-0}" "$PHP" \
+        bash /workspace/tools/deploy/tests/check-mymar-booking-reader-container.sh
+fi

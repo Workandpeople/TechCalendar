@@ -30,8 +30,9 @@ final class MymarBookingSource
         private array $technicianIds,
         private bool $enabled = false,
         private bool $writesEnabled = false,
+        private bool $readOnlyCredentials = false,
     ) {
-        if ($technicalAuthorId < 1 || ! array_is_list($technicianIds) || $technicianIds === [] || count($technicianIds) > 200
+        if (($readOnlyCredentials && $writesEnabled) || $technicalAuthorId < 1 || ! array_is_list($technicianIds) || $technicianIds === [] || count($technicianIds) > 200
             || count(array_unique($technicianIds, SORT_REGULAR)) !== count($technicianIds) || in_array($technicalAuthorId, $technicianIds, true)) {
             throw new InvalidArgumentException('mymar.invalid_booking_scope');
         }
@@ -259,7 +260,7 @@ final class MymarBookingSource
             if ($this->database->query('SELECT CURRENT_ROLE()')->fetchColumn() !== 'NONE') {
                 throw new MymarBookingFailure('booking_connection_refused', 503);
             }
-            MymarBookingSqlAccess::validateGrants($this->database->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN));
+            MymarBookingSqlAccess::validateGrants($this->database->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), $this->readOnlyCredentials);
             $this->assertSchema();
             $this->database->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
             $this->database->exec($readOnly ? 'START TRANSACTION READ ONLY' : 'START TRANSACTION READ WRITE');
@@ -270,10 +271,11 @@ final class MymarBookingSource
 
     private function assertSchema(): void
     {
+        $history = $this->readOnlyCredentials ? '' : ",'dossier_historiques'";
         $tables = $this->database->query('SELECT TABLE_SCHEMA,TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE'
-            ." (TABLE_SCHEMA='MYMAR' AND TABLE_NAME IN ('dossiers','clients','dossier_rdv','dossier_historiques','users','roles','model_has_roles','status'))"
+            ." (TABLE_SCHEMA='MYMAR' AND TABLE_NAME IN ('dossiers','clients','dossier_rdv','users','roles','model_has_roles','status'$history))"
             ." OR (TABLE_SCHEMA='cofrac_mymar_integration' AND TABLE_NAME='booking_commands')")->fetchAll(PDO::FETCH_ASSOC);
-        if (count($tables) !== 9 || array_filter($tables, static fn ($row) => $row['ENGINE'] !== 'InnoDB')) {
+        if (count($tables) !== ($this->readOnlyCredentials ? 8 : 9) || array_filter($tables, static fn ($row) => $row['ENGINE'] !== 'InnoDB')) {
             throw new MymarBookingFailure('booking_schema_refused', 503);
         }
         // Trigger absence must be checked by the privileged preparation audit. The runtime
@@ -281,6 +283,9 @@ final class MymarBookingSource
         $lengths = $this->database->query("SELECT TABLE_NAME,COLUMN_NAME,CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='MYMAR'"
             ." AND ((TABLE_NAME='dossiers' AND COLUMN_NAME IN ('sub_statut','commentaire_status')) OR (TABLE_NAME='dossier_historiques' AND COLUMN_NAME='text'))")->fetchAll(PDO::FETCH_ASSOC);
         $expected = ['dossiers.sub_statut' => 100, 'dossiers.commentaire_status' => 255, 'dossier_historiques.text' => 255];
+        if ($this->readOnlyCredentials) {
+            unset($expected['dossier_historiques.text']);
+        }
         foreach ($lengths as $row) {
             $key = $row['TABLE_NAME'].'.'.$row['COLUMN_NAME'];
             if (($row['CHARACTER_MAXIMUM_LENGTH'] ?? 0) < $expected[$key]) {

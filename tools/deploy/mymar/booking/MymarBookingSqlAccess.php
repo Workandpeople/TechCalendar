@@ -6,18 +6,18 @@ namespace Cofrac2\Deploy\Mymar;
 
 use RuntimeException;
 
-/** Separate account from the live observation gateway. No installer calls this yet. */
+/** Separate accounts from the live observation gateway; never broaden its permissions. */
 final class MymarBookingSqlAccess
 {
-    public static function credentials(): array
+    public static function credentials(bool $readOnly = false): array
     {
-        return ['database_user' => 'cofrac_mymar_rw_'.bin2hex(random_bytes(4)),
+        return ['database_user' => 'cofrac_mymar_'.($readOnly ? 'br_' : 'rw_').bin2hex(random_bytes(4)),
             'database_password' => 'Mb3!'.bin2hex(random_bytes(32)), 'token' => bin2hex(random_bytes(32))];
     }
 
-    public static function privileges(): array
+    public static function privileges(bool $readOnly = false): array
     {
-        return [
+        $privileges = [
             'MYMAR.dossiers' => [
                 'SELECT' => ['id', 'client_id', 'status_id', 'technicien_id', 'updated_at', 'created_at', 'mar_type', 'sub_statut', 'commentaire_status', 'date_rappel'],
                 'UPDATE' => ['status_id', 'technicien_id', 'sub_statut', 'commentaire_status', 'date_rappel', 'updated_at'],
@@ -39,15 +39,20 @@ final class MymarBookingSqlAccess
                 'UPDATE' => ['result', 'completed_at'],
             ],
         ];
+        if ($readOnly) {
+            $privileges = array_filter(array_map(static fn ($operations) => array_intersect_key($operations, ['SELECT' => true]), $privileges));
+        }
+
+        return $privileges;
     }
 
-    public static function createSql(string $username, #[\SensitiveParameter] string $password): string
+    public static function createSql(string $username, #[\SensitiveParameter] string $password, bool $readOnly = false): string
     {
-        if (! preg_match('/^cofrac_mymar_rw_[a-f0-9]{8}$/D', $username) || ! preg_match('/^Mb3![a-f0-9]{64}$/D', $password)) {
+        if (! preg_match('/^cofrac_mymar_'.($readOnly ? 'br' : 'rw').'_[a-f0-9]{8}$/D', $username) || ! preg_match('/^Mb3![a-f0-9]{64}$/D', $password)) {
             throw new RuntimeException('mymar.invalid_generated_booking_account');
         }
         $sql = "CREATE USER '$username'@'localhost' IDENTIFIED BY '$password' ACCOUNT LOCK;\n";
-        foreach (self::privileges() as $table => $operations) {
+        foreach (self::privileges($readOnly) as $table => $operations) {
             foreach ($operations as $verb => $columns) {
                 $sql .= 'GRANT '.$verb.' (`'.implode('`,`', $columns).'`) ON '.str_replace('.', '`.`', '`'.$table.'`')
                     ." TO '$username'@'localhost';\n";
@@ -57,17 +62,18 @@ final class MymarBookingSqlAccess
         return $sql;
     }
 
-    public static function validateGrants(array $grants): void
+    public static function validateGrants(array $grants, bool $readOnly = false): void
     {
         $seen = [];
+        $account = '`cofrac_mymar_'.($readOnly ? 'br' : 'rw').'_[a-f0-9]{8}`@`localhost`';
         foreach ($grants as $grant) {
             if (! is_string($grant)) {
                 throw new RuntimeException('mymar.unsafe_booking_grants');
             }
-            if (preg_match('/^GRANT USAGE ON \*\.\* TO `cofrac_mymar_rw_[a-f0-9]{8}`@`localhost`$/D', $grant)) {
+            if (preg_match('/^GRANT USAGE ON \*\.\* TO '.$account.'$/D', $grant)) {
                 continue;
             }
-            if (! preg_match('/^GRANT (.+) ON `([a-zA-Z0-9_]+)`\.`([a-zA-Z0-9_]+)` TO `cofrac_mymar_rw_[a-f0-9]{8}`@`localhost`$/D', $grant, $match)) {
+            if (! preg_match('/^GRANT (.+) ON `([a-zA-Z0-9_]+)`\.`([a-zA-Z0-9_]+)` TO '.$account.'$/D', $grant, $match)) {
                 throw new RuntimeException('mymar.unsafe_booking_grants');
             }
             $table = $match[2].'.'.$match[3];
@@ -85,7 +91,7 @@ final class MymarBookingSqlAccess
                 $seen[$table][$verb] = $columns;
             }
         }
-        $expected = self::privileges();
+        $expected = self::privileges($readOnly);
         foreach ($expected as &$operations) {
             foreach ($operations as &$columns) {
                 sort($columns);
