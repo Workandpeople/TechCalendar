@@ -88,6 +88,7 @@ esac
 CASE;
     $template = file_get_contents($source.'/tools/deploy/templates/production-release-launcher.sh.in');
     $launcher = strtr($template, ['@PACKAGE@' => '/home/ubuntu/'.basename($out), '@REVISION@' => $revision, '@BASE_SELECTION@' => $cases,
+        '@PACKAGE_CHECK_SHA@' => hash_file('sha256', $source.'/tools/deploy/update-production-release.php'),
         '@RUNTIME_CHECK_SHA@' => hash_file('sha256', $source.'/tools/deploy/production-runtime.php')]);
     if (preg_match('/@[A-Z_]+@/', $launcher)) {
         throw new RuntimeException('Substitution du lanceur incomplete.');

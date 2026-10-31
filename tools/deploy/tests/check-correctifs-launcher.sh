@@ -45,7 +45,19 @@ grep -q 'profil externe ou invalide' /tmp/correctifs-linked-admin.err
 sql 'UPDATE cofrac2production.users SET external_client_id=NULL WHERE id=77777;'
 runtime_check > /tmp/correctifs-two-admins-restored.json
 cmp /tmp/correctifs-two-admins.json /tmp/correctifs-two-admins-restored.json
+# An explicitly installed MAR journal must survive an ordinary release, including its pending reservations.
+runuser -u cofrac2-app -- php8.4 "$APP/artisan" migrate --path=tools/deploy/mymar/booking/inactive-migrations/2026_10_31_110000_create_mymar_booking_requests_table.php --force --no-interaction > /tmp/correctifs-mar-journal.log 2>&1
+sql "INSERT INTO cofrac2production.mymar_booking_requests (id,author_id,source_dossier_id,active_dossier_id,fingerprint,command,status,created_at,updated_at)
+ VALUES ('11111111-1111-4111-8111-111111111111',$PRIMARY,123,123,REPEAT('a',64),'fixture-retained-command','uncertain',NOW(),NOW());"
+sql 'CHECKSUM TABLE cofrac2production.mymar_booking_requests;' > /tmp/correctifs-mar-journal.before
+# Reproduce an old deployed checker which cannot yet understand the optional journal.
+cp "$APP/tools/deploy/update-production-release.php" /tmp/correctifs-future-checker.php
+printf '<?php throw new RuntimeException("Legacy checker must not run");\n' > "$APP/tools/deploy/update-production-release.php"
+git_app add tools/deploy/update-production-release.php
+git_app -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-obsolete-installed-checker >/dev/null
 BASE=$(git_app rev-parse HEAD)
+# This is the simulated already-deployed old release, not a production repair shortcut.
+php8.4 -r '$p=$argv[1];$r=json_decode(file_get_contents($p),true,32,JSON_THROW_ON_ERROR);$r["revision"]=$argv[2];file_put_contents($p,json_encode($r,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");' "$STATE/RUNTIME-PREPARED.json" "$BASE"
 ORIGIN=/tmp/correctifs-origin.git
 WRITER=/tmp/correctifs-writer
 runuser -u cofrac2-deploy -- git clone --bare "$APP" "$ORIGIN" >/dev/null 2>&1
@@ -53,7 +65,8 @@ runuser -u cofrac2-deploy -- git clone "$ORIGIN" "$WRITER" >/dev/null 2>&1
 printf '\n/* Compiled frontend fixture. */\n' >> "$WRITER/resources/css/app.css"
 php8.4 -r '$p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);$p["description"]="Pinned launcher fixture";file_put_contents($argv[1],json_encode($p,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n");' "$WRITER/package.json"
 printf '\n' >> "$WRITER/package-lock.json"
-runuser -u cofrac2-deploy -- git -C "$WRITER" add resources/css/app.css package.json package-lock.json
+cp /tmp/correctifs-future-checker.php "$WRITER/tools/deploy/update-production-release.php"
+runuser -u cofrac2-deploy -- git -C "$WRITER" add resources/css/app.css package.json package-lock.json tools/deploy/update-production-release.php
 runuser -u cofrac2-deploy -- git -C "$WRITER" -c user.name=Fixture -c user.email=fixture@example.invalid commit -m fixture-launcher >/dev/null
 REV=$(runuser -u cofrac2-deploy -- git -C "$WRITER" rev-parse HEAD)
 runuser -u cofrac2-deploy -- git -C "$WRITER" push origin v2 >/dev/null 2>&1
@@ -97,7 +110,8 @@ git_app diff --name-only "$BASE" "$REV" > "$PACKAGE/changes.txt"
 php8.4 -r '
     $source=file_get_contents($argv[1]."/tools/deploy/templates/production-release-launcher.sh.in");
     $cases="case \"\$BASE\" in\n  ".$argv[4].")\n SOURCE=\"\$PACKAGE/from-fixture\"\n SHA=".$argv[5]."\n EXPECTED=\"\$PACKAGE/changes.txt\"\n EXPECTED_SHA=".hash_file("sha256",$argv[2]."/changes.txt")."\n ;;\n *) stop \"fixture revision mismatch\" ;;\nesac";
-    $script=strtr($source,["@PACKAGE@"=>$argv[2],"@REVISION@"=>$argv[3],"@BASE_SELECTION@"=>$cases,"@RUNTIME_CHECK_SHA@"=>hash_file("sha256",$argv[1]."/tools/deploy/production-runtime.php")]);
+    $script=strtr($source,["@PACKAGE@"=>$argv[2],"@REVISION@"=>$argv[3],"@BASE_SELECTION@"=>$cases,
+     "@PACKAGE_CHECK_SHA@"=>hash_file("sha256","/tmp/correctifs-future-checker.php"),"@RUNTIME_CHECK_SHA@"=>hash_file("sha256",$argv[1]."/tools/deploy/production-runtime.php")]);
     file_put_contents($argv[2]."/deploy.sh",$script);
 ' "$APP" "$PACKAGE" "$REV" "$BASE" "$SHA"
 bash -n "$PACKAGE/deploy.sh"
@@ -109,6 +123,18 @@ if bash "$PACKAGE/deploy.sh" > /tmp/correctifs-launcher-refused.log 2>&1; then e
 test -f "$STATE/INTERNAL-SITE-OPEN.json"
 test "$(git_app rev-parse HEAD)" = "$BASE"
 cp /tmp/correctifs-changes.before "$PACKAGE/changes.txt"
+sql "INSERT INTO cofrac2production.migrations (migration,batch) VALUES ('2099_01_01_000000_unapproved_integration',999);"
+if bash "$PACKAGE/deploy.sh" > /tmp/correctifs-unknown-migration.log 2>&1; then exit 1; fi
+grep -q 'Migrations appliquees ou en attente non reconnues' /tmp/correctifs-unknown-migration.log
+test -f "$STATE/INTERNAL-SITE-OPEN.json"
+test "$(git_app rev-parse HEAD)" = "$BASE"
+sql "DELETE FROM cofrac2production.migrations WHERE migration='2099_01_01_000000_unapproved_integration';"
+sql 'ALTER TABLE cofrac2production.mymar_booking_requests DROP INDEX mymar_booking_requests_active_dossier_id_unique;'
+if bash "$PACKAGE/deploy.sh" > /tmp/correctifs-missing-mar-index.log 2>&1; then exit 1; fi
+grep -q 'Index de protection du journal MAR' /tmp/correctifs-missing-mar-index.log
+test -f "$STATE/INTERNAL-SITE-OPEN.json"
+test "$(git_app rev-parse HEAD)" = "$BASE"
+sql 'ALTER TABLE cofrac2production.mymar_booking_requests ADD UNIQUE INDEX mymar_booking_requests_active_dossier_id_unique (active_dossier_id);'
 bash "$PACKAGE/deploy.sh" > /tmp/correctifs-launcher-valid.log 2>&1
 test "$(git_app rev-parse HEAD)" = "$REV"
 test -f "$STATE/INTERNAL-SITE-OPEN.json"
@@ -116,6 +142,8 @@ test -f "$STATE/mymar-gateway-prepared/$REV/DISABLED.json"
 php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if($r["enabled"]||$r["configured"]||$r["services_changed"]||$r["source_database_read"]||$r["planning_changed"])exit(1);' "$STATE/mymar-gateway-prepared/$REV/DISABLED.json"
 sql 'SELECT id,email,password,role,admin,deleted_at,portal_enabled FROM cofrac2production.users ORDER BY id' > /tmp/correctifs-users.after
 cmp /tmp/correctifs-users.before /tmp/correctifs-users.after
+sql 'CHECKSUM TABLE cofrac2production.mymar_booking_requests;' > /tmp/correctifs-mar-journal.after
+cmp /tmp/correctifs-mar-journal.before /tmp/correctifs-mar-journal.after
 sha256sum -c /tmp/correctifs-config.before
 for host in cofrac.geniuscontrole.com cofrac2.geniuscontrole.com; do
     for route in /login /up; do

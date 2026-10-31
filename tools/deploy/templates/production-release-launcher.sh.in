@@ -106,8 +106,11 @@ while IFS= read -r file; do
             ;;
     esac
 done < "$CHECK/changed-files.txt"
-php8.4 "$APP/tools/deploy/update-production-release.php" --check \
-    "$CHECK/bundle" "$SHA" "$REV" "$CHECK/mysql.cnf" > "$CHECK/package.json"
+git_app show "$REV:tools/deploy/update-production-release.php" > "$CHECK/package-check.php"
+[ "$(sha256sum "$CHECK/package-check.php" | cut -d' ' -f1)" = @PACKAGE_CHECK_SHA@ ] || stop 'controle du paquet different de la revision approuvee.'
+php8.4 -l "$CHECK/package-check.php" > "$CHECK/package-syntax.log"
+php8.4 -- --check "$CHECK/bundle" "$SHA" "$REV" "$CHECK/mysql.cnf" \
+    < "$CHECK/package-check.php" > "$CHECK/package.json"
 rm -f -- "$CHECK/mysql.cnf"
 php8.4 -r '
     $p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);

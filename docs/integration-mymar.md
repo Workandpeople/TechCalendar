@@ -1112,3 +1112,28 @@ passerelles, correspondances, donnees source ou modes mail/SMS.
 Un test compile et minifie le vrai module avec Vite puis execute ses parametres
 par defaut, avec et sans panneau MAR. Les tests de pagination, lecture seule,
 absence de POST initial et reprises sans doublon restent appliques.
+
+### Mises a jour applicatives apres installation du journal MAR
+
+La migration `2026_10_31_110000_create_mymar_booking_requests_table` reste hors du
+repertoire des migrations automatiques. Une mise a jour ordinaire reconnait son
+installation explicite deja effectuee, apres verification des colonnes et des
+index primaire, d'unicite du dossier actif et de reservation par technicien.
+Elle ne cree pas ce journal, ne le supprime pas et ne le marque pas artificiellement
+comme execute. Les demandes et reservations existantes sont conservees.
+
+Avant maintenance, le lanceur charge depuis la revision Git cible son controle
+de paquet, verifie son empreinte epinglee, puis l'execute via stdin avec le seul
+compte SQL limite de la V2. Le code actuellement servi n'est pas encore remplace.
+Cela permet de mettre a jour une ancienne version du controle sans modifier
+manuellement le checkout ou contourner les verifications de schema.
+
+Une migration inconnue reste refusee. Un journal incomplet ou prive de son index
+anti-doublon reste refuse avant fermeture du site. Les erreurs de migration,
+base vide et reserve disque insuffisante sont desormais distinguees. La reserve
+de 5 Gio, les controles des privileges SQL et le refus des automatismes SQL
+restent inchanges.
+
+La repetition Docker couvre le lancement depuis un ancien controle incompatible,
+les refus avant maintenance, puis la reouverture HTTPS des deux domaines en
+conservant une reservation MAR incertaine et les comptes/mots de passe.

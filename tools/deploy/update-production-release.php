@@ -8,13 +8,14 @@ umask(0077);
 ini_set('display_errors', '0');
 try {
     $app = '/var/www/cofrac2';
+    $pinnedStdin = __FILE__ === 'Standard input code';
     if (PHP_SAPI !== 'cli' || ! function_exists('posix_geteuid') || posix_geteuid() !== 0
         || explode('.', gethostname())[0] !== 'ns365601' || $argc !== 6 || $argv[1] !== '--check'
-        || realpath(__FILE__) !== $app.'/tools/deploy/update-production-release.php') {
+        || (! $pinnedStdin && realpath(__FILE__) !== $app.'/tools/deploy/update-production-release.php')) {
         throw new RuntimeException('Controle reserve au serveur de production V2.');
     }
     require $app.'/vendor/autoload.php';
-    require __DIR__.'/lib/ProductionAssetUpdate.php';
+    require $app.'/tools/deploy/lib/ProductionAssetUpdate.php';
     $bundle = new ProductionAssetUpdate($argv[2], $argv[3]);
     $prepared = json_decode(file_get_contents('/var/lib/cofrac2-production/RUNTIME-PREPARED.json'), true, 32, JSON_THROW_ON_ERROR);
     if ($bundle->manifest['revision'] !== $argv[4] || $bundle->manifest['from_revision'] !== ($prepared['revision'] ?? null)
@@ -51,13 +52,45 @@ try {
     $applied = $db->query('SELECT migration FROM migrations')->fetchAll(PDO::FETCH_COLUMN);
     $expected = array_map(fn ($file) => basename($file, '.php'), glob($app.'/database/migrations/*.php'));
     $pending = array_values(array_diff($expected, $applied));
+    // Explicitly installed integration journals are known, but must never become automatic migrations.
+    $optional = [];
+    $journalMigration = '2026_10_31_110000_create_mymar_booking_requests_table';
+    $journalPath = $app.'/tools/deploy/mymar/booking/inactive-migrations/'.$journalMigration.'.php';
+    $journalApplied = in_array($journalMigration, $applied, true);
+    $journalColumns = $db->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='mymar_booking_requests'")->fetchAll(PDO::FETCH_COLUMN);
+    if ($journalApplied || $journalColumns !== []) {
+        $columns = ['id', 'author_id', 'source_dossier_id', 'active_dossier_id', 'cofrac_technician_id', 'reserved_starts_at', 'reserved_ends_at',
+            'fingerprint', 'command', 'status', 'reason', 'result', 'claim_id', 'lease_until', 'attempts', 'finished_at', 'created_at', 'updated_at'];
+        if (! $journalApplied || realpath($journalPath) !== $journalPath || ! is_file($journalPath)
+            || array_diff($columns, $journalColumns) !== [] || array_diff($journalColumns, $columns) !== []) {
+            throw new RuntimeException('Journal MAR incoherent avec sa migration explicite. Aucun schema modifie.');
+        }
+        $indexes = [];
+        foreach ($db->query("SELECT INDEX_NAME,NON_UNIQUE,COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='mymar_booking_requests' ORDER BY INDEX_NAME,SEQ_IN_INDEX") as $index) {
+            $indexes[$index['INDEX_NAME']]['columns'][] = $index['COLUMN_NAME'];
+            $indexes[$index['INDEX_NAME']]['non_unique'] = (int) $index['NON_UNIQUE'];
+        }
+        foreach (['PRIMARY' => [['id'], 0], 'mymar_booking_requests_active_dossier_id_unique' => [['active_dossier_id'], 0],
+            'mymar_booking_reservation_index' => [['cofrac_technician_id', 'status', 'reserved_starts_at'], 1]] as $name => [$keys, $nonUnique]) {
+            if (($indexes[$name]['columns'] ?? null) !== $keys || ($indexes[$name]['non_unique'] ?? null) !== $nonUnique) {
+                throw new RuntimeException('Index de protection du journal MAR absent ou incompatible.');
+            }
+        }
+        $optional[] = $journalMigration;
+    }
     $allowed = ['2026_10_25_110000_add_reversible_dossier_deletion', '2026_10_25_120000_add_automatic_capcee_reports',
         '2026_10_26_100000_activate_existing_mail_templates', '2026_10_26_110000_add_dossier_inspection_geocode',
         '2026_10_28_140000_add_appointment_planning_window_index', '2026_10_28_200000_create_appointment_mail_deliveries_table',
         '2026_10_29_150000_add_portal_notification_preferences_to_users'];
-    if (array_diff($pending, $allowed) !== [] || array_diff($applied, $expected) !== [] || $db->query('SELECT COUNT(*) FROM dossiers')->fetchColumn() < 1
-        || disk_free_space('/var/lib/cofrac2-production') < 5 * 1024 ** 3) {
-        throw new RuntimeException('Migrations inattendues, base vide ou marge disque insuffisante.');
+    if (array_diff($pending, $allowed) !== [] || array_diff($applied, [...$expected, ...$optional]) !== []) {
+        throw new RuntimeException('Migrations appliquees ou en attente non reconnues. Aucun schema modifie.');
+    }
+    if ($db->query('SELECT COUNT(*) FROM dossiers')->fetchColumn() < 1) {
+        throw new RuntimeException('Base V2 vide : mise a jour refusee.');
+    }
+    $freeBytes = disk_free_space('/var/lib/cofrac2-production');
+    if ($freeBytes === false || $freeBytes < 5 * 1024 ** 3) {
+        throw new RuntimeException('Espace disque libre inferieur a la reserve de 5 Gio.');
     }
     foreach (['TRIGGERS' => 'TRIGGER_SCHEMA', 'EVENTS' => 'EVENT_SCHEMA', 'ROUTINES' => 'ROUTINE_SCHEMA'] as $table => $column) {
         if ((int) $db->query("SELECT COUNT(*) FROM information_schema.$table WHERE $column=DATABASE()")->fetchColumn() !== 0) {
@@ -73,6 +106,7 @@ try {
     fwrite($handle, "[client]\nhost=127.0.0.1\nport=3306\nprotocol=tcp\nuser=cofrac2_app\npassword=\"".$escape($env['DB_PASSWORD'])."\"\n");
     fclose($handle);
     echo json_encode(['from_revision' => $prepared['revision'], 'revision' => $argv[4], 'pending_migrations' => $pending,
+        'recognized_optional_migrations' => $optional, 'free_disk_bytes' => $freeBytes,
         'asset_probe' => $bundle->assetProbe, 'source_database_read' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {
     $detail = $exception::class === RuntimeException::class ? ' '.$exception->getMessage() : '';
