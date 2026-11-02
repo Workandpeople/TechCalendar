@@ -4,8 +4,9 @@ Lancer apply-roster.sh sur le Mac. Le paquet transfere les outils puis demande
 sudo sur ns365601. Il ne fait aucun git pull ni deploiement de l'application.
 
 Lecture ACTUALISEE des deux bases, READ ONLY, requetes bornees. Conservation de
-tous les liens existants valides. Ajout de Bertrand (29 -> 34) confirme par
-l'operateur, puis correspondances certaines par email unique des deux cotes
+tous les liens existants valides. Identites confirmees par l'operateur :
+Bertrand (29 -> 34), Yach DAOUD (27 -> 40), Jebarri RAMZY (35 -> 57) et
+Hachemi SAID (275 -> 92), puis correspondances certaines par email unique des deux cotes
 ou nom complet unique sans contradiction. Un email partage meme par un compte
 inactif reste bloque. Aucun rapprochement approximatif par simple prenom.
 

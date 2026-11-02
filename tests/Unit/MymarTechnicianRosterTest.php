@@ -83,6 +83,31 @@ it('normalizes department suffixes but never guesses a partial identity without 
         ->and(array_column($result['review'], 'source_technician_id'))->toBe([2]);
 });
 
+it('adds the three confirmed aliases while preserving the already linked technicians', function () {
+    $sources = [mymarRosterSource(1, 'Existing Tech'), mymarRosterSource(27, 'daoud yachouroutua'),
+        mymarRosterSource(35, 'jebari ramzy'), mymarRosterSource(275, 'SAID (84,13,30,26,07,04,83)')];
+    $targets = [mymarRosterTarget(101, 'Existing Tech'), mymarRosterTarget(40, 'Yach DAOUD'),
+        mymarRosterTarget(57, 'Jebarri RAMZY (69,38,42,01,71)'), mymarRosterTarget(92, 'Hachemi SAID (84,13,30,26,07,04,83)')];
+    $existing = [['source_technician_id' => 1, 'cofrac_user_id' => 101]];
+    $approved = [
+        ['source_technician_id' => 27, 'source_name' => 'daoud yachouroutua', 'cofrac_user_id' => 40, 'cofrac_name' => 'Yach DAOUD'],
+        ['source_technician_id' => 35, 'source_name' => 'jebari ramzy', 'cofrac_user_id' => 57, 'cofrac_name' => 'Jebarri RAMZY'],
+        ['source_technician_id' => 275, 'source_name' => 'SAID (84,13,30,26,07,04,83)', 'cofrac_user_id' => 92, 'cofrac_name' => 'Hachemi SAID'],
+    ];
+    expect(mymarRosterPlan($sources, $targets, $existing)['summary']['proposed_links'])->toBe(1);
+    $result = mymarRosterPlan($sources, $targets, $existing, $approved);
+    expect(array_column($result['links'], 'cofrac_user_id'))->toBe([101, 40, 57, 92])
+        ->and(array_column($result['links'], 'basis'))->toBe(['existing_validated_mapping',
+            'operator_confirmed_identity', 'operator_confirmed_identity', 'operator_confirmed_identity'])
+        ->and($result['review'])->toBe([])
+        ->and($result['configuration_writes'])->toBeFalse();
+    $targets[2]['active'] = 0;
+    expect(fn () => mymarRosterPlan($sources, $targets, $existing, $approved))->toThrow(RuntimeException::class);
+    $targets[2]['active'] = 1;
+    $sources[2]['active'] = 0;
+    expect(fn () => mymarRosterPlan($sources, $targets, $existing, $approved))->toThrow(RuntimeException::class);
+});
+
 it('can distinguish homonyms only when both emails are unique and the full identity matches', function () {
     $result = mymarRosterPlan([mymarRosterSource(1, 'Alex Martin', 'one'), mymarRosterSource(2, 'Martin Alex', 'two')],
         [mymarRosterTarget(101, 'Alex Martin', 'one'), mymarRosterTarget(102, 'Alex Martin', 'two')]);

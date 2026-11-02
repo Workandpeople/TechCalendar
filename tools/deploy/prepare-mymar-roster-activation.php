@@ -44,7 +44,10 @@ try {
     file_put_contents($out.'/REQUEST.json', json_encode(['format' => 'cofrac.mymar-roster-activation', 'version' => 1,
         'revision' => $revision, 'runtime_contract' => $contract], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
     file_put_contents($out.'/confirmed-identities.json', json_encode(['bindings' => [
+        ['source_technician_id' => 27, 'source_name' => 'daoud yachouroutua', 'cofrac_user_id' => 40, 'cofrac_name' => 'Yach DAOUD'],
         ['source_technician_id' => 29, 'source_name' => 'ballekens bertrand', 'cofrac_user_id' => 34, 'cofrac_name' => 'Bertrand BALLEKENS'],
+        ['source_technician_id' => 35, 'source_name' => 'jebari ramzy', 'cofrac_user_id' => 57, 'cofrac_name' => 'Jebarri RAMZY'],
+        ['source_technician_id' => 275, 'source_name' => 'SAID (84,13,30,26,07,04,83)', 'cofrac_user_id' => 92, 'cofrac_name' => 'Hachemi SAID'],
     ]], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
     $names = [...array_keys($files), 'REQUEST.json', 'confirmed-identities.json'];
     sort($names);
