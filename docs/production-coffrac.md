@@ -3143,3 +3143,25 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
   cree ; l'ancien n'est pas restaure. Les prestations engagees dans un controle
   restent protegees. Version, affectation et disponibilites sont revalidees sous
   verrou avant ecriture. Aucun traitement global ni envoi de test requis.
+
+### Raccordement global des techniciens MYMAR
+
+- `php tools/deploy/prepare-mymar-roster-activation.php` exporte le paquet depuis
+  HEAD commite. Lancer son `apply-roster.sh` sur le Mac : aucun deploiement du
+  site, maintenance ou redemarrage. Les contrats runtime doivent correspondre
+  au code deja deploye ; aucun `git pull` n'est execute par ce paquet.
+- Une lecture SQL bornee READ ONLY des comptes actuels conserve les liens
+  existants et ajoute les identites confirmees, emails uniques ou noms complets
+  uniques sans contradiction. Les cas ambigus et comptes sans homologue restent
+  dans le rapport. Aucun compte, mot de passe, secteur ou habilitation modifie.
+- Les cinq scopes prives sont elargis par ajouts seulement : occupations,
+  lecteur, actions, cache/affichage et client de placement. Le cache complet et
+  les identites sont verifies avant publication atomique du dernier fichier.
+  Les secrets, generations et portes d'activation sont conserves.
+- Les petits fichiers sont sauvegardes root-prives, sans dump documentaire.
+  Un echec avant publication restaure l'etat precedent. La restauration refuse
+  une reduction apres publication, car des placements reels peuvent exister.
+  Les anciens installateurs du pilote ne doivent pas etre rejoues.
+- Validation : `MYMAR_ROSTER_ACTIVATION_TEST=1 bash tools/deploy/tests/check-mymar-roster-activation.sh`.
+  Fixture MySQL jetable, GET prives et cache Laravel ; controles d'idempotence,
+  restauration, permissions et empreintes SQL/code avant/apres, sans POST.

@@ -12,9 +12,9 @@ transformes en techniciens. Aucun compte n'est cree, fusionne ou reactive.
 
 Le plan conserve les correspondances existantes dont les profils sont actifs,
 inclut les identites confirmees par l'operateur et propose les noms complets
-uniques ou les emails uniques coherents avec le nom complet. L'ordre nom/prenom,
-la casse, les accents et les departements entre parentheses sont normalises.
-Un email partage, une contradiction, un nom incomplet ou un homonyme sans email
+uniques ou les emails uniques des deux cotes sans identite contradictoire.
+L'ordre nom/prenom, la casse, les accents et les departements sont normalises.
+Un email partage, une contradiction, un nom incomplet sans email unique ou un homonyme sans email
 distinct verifie reste en revue : aucune recherche approximative ni premier
 resultat choisi. Une correspondance existante n'est pas remplacee silencieusement.
 

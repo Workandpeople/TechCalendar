@@ -40,7 +40,7 @@ it('plans unique full names regardless of order accents and department suffixes 
     $result = mymarRosterPlan([mymarRosterSource(1, 'MARTIN Élodie', 'one'), mymarRosterSource(2, 'Camille Petit', 'two')],
         [mymarRosterTarget(101, 'Élodie MARTIN (59,62)', 'one'), mymarRosterTarget(102, 'Petit CAMILLE', 'new-two')]);
     expect(array_column($result['links'], 'cofrac_user_id'))->toBe([101, 102])
-        ->and(array_column($result['links'], 'basis'))->toBe(['unique_email_and_full_name', 'unique_full_name'])
+        ->and(array_column($result['links'], 'basis'))->toBe(['unique_email', 'unique_full_name'])
         ->and($result['links'][0])->toMatchArray(['mar_qualified' => true, 'departments' => ['59'], 'gps_present' => true])
         ->and($result['summary']['mapped_but_not_mar_qualified'])->toBe(1)
         ->and($result)->toMatchArray(['configuration_writes' => false, 'account_writes' => false, 'services_changed' => false, 'can_affect_planning' => false])
@@ -65,9 +65,23 @@ it('does not guess on shared emails conflicting emails partial names or homonyms
     [[mymarRosterSource(1, 'Alex Martin')], [mymarRosterTarget(101, 'Alex Martin'), mymarRosterTarget(102, 'Martin Alex')]],
     [[mymarRosterSource(1, 'Alex Martin', 'shared')], [mymarRosterTarget(101, 'Alex Martin', 'shared'), mymarRosterTarget(102, 'Different Person', 'shared')]],
     [[mymarRosterSource(1, 'Alex Martin', 'wrong')], [mymarRosterTarget(101, 'Alex Martin', 'correct'), mymarRosterTarget(102, 'Different Person', 'wrong')]],
-    [[mymarRosterSource(1, 'Alex', 'one')], [mymarRosterTarget(101, 'Alex Martin', 'one')]],
+    [[mymarRosterSource(1, 'Alex')], [mymarRosterTarget(101, 'Alex Martin')]],
     [[mymarRosterSource(1, 'Alex Martin', 'shared'), mymarRosterSource(2, 'Other Person', 'shared')], [mymarRosterTarget(101, 'Alex Martin', 'shared')]],
 ]);
+
+it('links unique emails even when MYMAR only stores a first name or surname', function () {
+    $result = mymarRosterPlan([mymarRosterSource(1, 'Serigne (59)', 'one'), mymarRosterSource(2, 'DHERY', 'two')],
+        [mymarRosterTarget(101, 'Serigne MBOW', 'one'), mymarRosterTarget(102, 'David DHERY', 'two')]);
+    expect(array_column($result['links'], 'cofrac_user_id'))->toBe([101, 102])
+        ->and(array_column($result['links'], 'basis'))->toBe(['unique_email', 'unique_email']);
+});
+
+it('normalizes department suffixes but never guesses a partial identity without a unique email', function () {
+    $result = mymarRosterPlan([mymarRosterSource(1, 'JULIEN CULIÉ 81'), mymarRosterSource(2, 'Said 59')],
+        [mymarRosterTarget(101, 'Julien CULIÉ'), mymarRosterTarget(102, 'Hachemi SAID')]);
+    expect(array_column($result['links'], 'cofrac_user_id'))->toBe([101])
+        ->and(array_column($result['review'], 'source_technician_id'))->toBe([2]);
+});
 
 it('can distinguish homonyms only when both emails are unique and the full identity matches', function () {
     $result = mymarRosterPlan([mymarRosterSource(1, 'Alex Martin', 'one'), mymarRosterSource(2, 'Martin Alex', 'two')],

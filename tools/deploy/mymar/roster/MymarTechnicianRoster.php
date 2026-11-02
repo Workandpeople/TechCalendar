@@ -183,12 +183,13 @@ SQL
             $fullIdentity = substr_count($key, ' ') >= 1 && count(array_unique(explode(' ', $key))) >= 2;
             $uniqueName = $fullIdentity && count($sourceNames[$key] ?? []) === 1 && count($names) === 1;
             $emailCandidate = $email !== '' && count($sourceEmails[$email] ?? []) === 1 && count($emails) === 1
-                && isset($targets[$emails[0]]) && $fullIdentity && self::name($targets[$emails[0]]['name']) === $key ? $emails[0] : null;
+                && isset($targets[$emails[0]]) ? $emails[0] : null;
             $emailConflict = $email !== '' && (count($sourceEmails[$email] ?? []) !== 1 || count($emails) > 1
-                || (count($emails) === 1 && $emailCandidate === null));
+                || (count($emails) === 1 && $emailCandidate === null)
+                || ($emailCandidate !== null && $uniqueName && $names[0] !== $emailCandidate));
             $candidate = $emailCandidate ?? ($uniqueName ? $names[0] : null);
             if ($candidate !== null && ! $emailConflict && ! isset($usedTargets[$candidate])) {
-                $add($sourceId, $candidate, count($emails) === 1 ? 'unique_email_and_full_name' : 'unique_full_name');
+                $add($sourceId, $candidate, $emailCandidate !== null ? 'unique_email' : 'unique_full_name');
 
                 continue;
             }
@@ -216,7 +217,7 @@ SQL
                 'mapped_but_not_mar_qualified' => count(array_filter($links, fn ($l) => ! $l['mar_qualified'])),
                 'mar_service_candidates' => count($marServices), 'mar_duration_minutes' => $marServices[0]['duration'] ?? null],
             'links' => array_values($links), 'review' => $reviews, 'unlinked_cofrac' => $unlinkedTargets, 'existing_mapping_issues' => $currentIssues,
-            'policy' => 'preserve_existing_plus_operator_confirmed_and_unique_full_identity_without_conflicting_email',
+            'policy' => 'preserve_existing_plus_operator_confirmed_unique_email_or_full_identity_without_conflict',
             'configuration_writes' => false, 'account_writes' => false, 'services_changed' => false, 'can_affect_planning' => false];
     }
 
@@ -226,7 +227,8 @@ SQL
             throw new RuntimeException('mymar.intl_required');
         }
         $value = transliterator_transliterate('Any-Latin; Latin-ASCII; Lower()', preg_replace('/\([^)]*\)/u', ' ', $name) ?? '');
-        $words = preg_split('/[^a-z0-9]+/', $value, -1, PREG_SPLIT_NO_EMPTY);
+        // Department annotations are not identity tokens, including suffixes outside parentheses.
+        $words = preg_split('/[^a-z]+/', $value, -1, PREG_SPLIT_NO_EMPTY);
         sort($words, SORT_STRING);
 
         return implode(' ', $words);

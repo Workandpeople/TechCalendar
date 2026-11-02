@@ -1,0 +1,42 @@
+RACCORDEMENT GLOBAL DES TECHNICIENS COFRAC / MYMAR
+
+Lancer apply-roster.sh sur le Mac. Le paquet transfere les outils puis demande
+sudo sur ns365601. Il ne fait aucun git pull ni deploiement de l'application.
+
+Lecture ACTUALISEE des deux bases, READ ONLY, requetes bornees. Conservation de
+tous les liens existants valides. Ajout de Bertrand (29 -> 34) confirme par
+l'operateur, puis correspondances certaines par email unique des deux cotes
+ou nom complet unique sans contradiction. Un email partage meme par un compte
+inactif reste bloque. Aucun rapprochement approximatif par simple prenom.
+
+Seuls les techniciens actifs des deux applications sont raccordes. Les comptes
+internes non techniciens, super-admins, externes et comptes desactives sont exclus.
+Aucun compte cree/reactive, mot de passe change, secteur ou habilitation ajoute.
+Les techniciens sans compte homologue certain restent dans plan.json ; une
+identite raccordee n'est proposee que si ses habilitations Cofrac le permettent.
+
+Les cinq perimetres sont elargis ensemble : occupations, lecture des details,
+actions, affichage/cache, liste des techniciens autorises pour les placements.
+Les passerelles lisent leurs fichiers a chaque requete : aucun redemarrage.
+Les perimetres source sont elargis d'abord, le cache complet est controle, les
+identites sont relues, puis la liste applicative est publiee atomiquement.
+Les anciens techniciens restent utilisables pendant l'operation. Aucun appel
+POST, placement, mail ou SMS de test. Aucune modification de MYMAR ni SQL metier.
+Seuls les cinq fichiers prives de l'integration et les caches Cofrac changent.
+Les secrets, generations, comptes SQL, permissions et interrupteurs sont gardes.
+
+Les sauvegardes des petits fichiers de configuration restent root-privees sous
+/var/lib/cofrac2-production/mymar-roster-activation-*/. Ne pas diffuser ce dossier.
+Seuls le plan sans emails/mots de passe et les resumes sont telecharges sur le Mac.
+
+En cas d'echec avant publication, restauration automatique des petits fichiers.
+Si une execution est interrompue, recover-preparation.sh dans sa preparation
+root-privee peut restaurer l'ancien perimetre, uniquement avant publication.
+APRES publication, il refuse de reduire les liens : des actions reelles peuvent
+deja exister pour les nouveaux techniciens. Ne pas relancer les anciens scripts
+d'installation du pilote ni remplacer les configurations par une ancienne copie.
+Le coupe-circuit existant des actions MAR conserve la meme generation et reste
+disponible si l'operateur souhaite suspendre les placements MAR.
+
+Le site ne passe jamais en maintenance. Aucun service n'est arrete/recharge.
+64 Mio libres suffisent ; aucune duplication de documents ou dump volumineux.
