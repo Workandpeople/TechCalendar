@@ -332,11 +332,8 @@ class DossierRegistry
         abort_if($actor->isExternal() && (! $document->{app(ClientAccess::class)->audienceColumn($actor)}
             || ! app(ClientAccess::class)->allows($actor, 'documents')), 404);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
-        $name = preg_replace('/[^\pL\pN ._-]/u', '_', $document->name) ?: 'Document';
         $extension = pathinfo($document->path, PATHINFO_EXTENSION);
-        if ($extension !== '' && ! str_ends_with(strtolower($name), '.'.strtolower($extension))) {
-            $name .= '.'.$extension;
-        }
+        $name = DossierDownloadName::make($document->name, $extension, $document->dossier);
 
         $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file(Storage::disk('local')->path($document->path)) : 'application/octet-stream';
         $inline = $preview && DocumentResponseHeaders::previewable($mime);

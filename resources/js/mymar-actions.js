@@ -98,20 +98,8 @@ export function initMymarActions(root = document, browser = window) {
     const actions = {
         choose(item) {
             if (records[item.dossier_id]) { track(item.dossier_id, records[item.dossier_id]); return; }
-            const view = open('Placer le rendez-vous MAR');
-            view.append(node('p', `${item.last_name} ${item.first_name}`, 'mt-4 font-semibold'));
-            const label = node('label', 'Durée de la visite', 'block mt-4');
-            const select = node('select', '', 'gc-input mt-2'); select.setAttribute('aria-label', 'Durée de la visite MAR');
-            const empty = node('option', 'Choisir une durée'); empty.value = ''; select.append(empty);
-            for (let hours = 1; hours <= 8; hours++) { const option = node('option', `${hours} h`); option.value = String(hours * 60); select.append(option); }
-            label.append(select); view.append(label);
-            const choose = button('Chercher un créneau'); choose.disabled = true; choose.classList.add('mt-4'); view.append(choose);
-            select.addEventListener('change', () => { choose.disabled = !select.value; });
-            choose.addEventListener('click', () => {
-                if (!select.value) return;
-                view.close();
-                browser.dispatchEvent(new browser.CustomEvent('cofrac:mymar:select', { detail: { dossier_id: item.dossier_id, duration_minutes: Number(select.value) } }));
-            });
+            if (!Number.isSafeInteger(item.dossier_id) || item.dossier_id < 1) return;
+            browser.dispatchEvent(new browser.CustomEvent('cofrac:mymar:select', { detail: { dossier_id: item.dossier_id } }));
         },
         problem(item) {
             if (records[item.dossier_id]) { track(item.dossier_id, records[item.dossier_id]); return; }

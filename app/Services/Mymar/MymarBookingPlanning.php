@@ -12,7 +12,7 @@ class MymarBookingPlanning
 {
     public function __construct(private MymarPendingBookings $pending, private MymarActionSettings $settings, private PlanningAddressGeocoder $geocoder) {}
 
-    public function resolve(int $id, int $duration): array
+    public function resolve(int $id): array
     {
         $config = $this->settings->load();
         if (! config('crm.v2_enabled') || ! ($config['writes_enabled'] ?? false)) {
@@ -22,12 +22,14 @@ class MymarBookingPlanning
         if ($item === null || ! MymarPendingBookings::isAfterWorksRequest($item)) {
             throw ValidationException::withMessages(['mymar_dossier_id' => 'Seules les demandes MAR après travaux en prise de RDV peuvent être placées ici. Actualisez la liste.']);
         }
+        $service = app(MymarAfterWorksService::class)->resolve();
+        $duration = app(MymarAfterWorksService::class)->duration($service);
         $point = DossierLocation::point($item['latitude'], $item['longitude']);
         $precision = 'unknown';
         if ($point === null) {
             $located = $this->geocoder->geocode($item['address'], $item['postal_code'], $item['city']);
             $point = DossierLocation::point($located['latitude'] ?? null, $located['longitude'] ?? null);
-            $precision = $located['location_precision'] ?? 'unknown';
+            $precision = $located['precision'] ?? 'unknown';
         }
         if ($point === null) {
             throw ValidationException::withMessages(['mymar_dossier_id' => 'La position du dossier MAR doit être corrigée dans MYMAR avant son placement.']);
@@ -40,7 +42,7 @@ class MymarBookingPlanning
             'customer_name' => trim($item['last_name'].' '.$item['first_name']), 'phone' => $item['phone'], 'email' => $item['email'],
             'address' => $item['address'], 'postal_code' => $item['postal_code'], 'city' => $item['city'],
             'department_code' => DossierLocation::departmentCode($item['postal_code']), ...$point, 'location_precision' => $precision,
-            'service' => ['id' => null, 'type' => 'MAR', 'name' => $label, 'average_duration_minutes' => $duration],
+            'service' => ['id' => $service->id, 'type' => 'MAR', 'name' => $service->name, 'average_duration_minutes' => $duration],
             'service_name' => $label, 'documents' => [], 'comments' => [], 'preferred_starts_at' => null,
             'mymar_technician_ids' => array_column($config['bindings'], 'cofrac_user_id')];
     }

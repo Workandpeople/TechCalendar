@@ -3078,3 +3078,27 @@ Aucun compte, role, mot de passe ou droit n'est reecrit pour passer ces controle
 La repetition de deploiement conserve deux super-admins et leurs hashes, et
 verifie aussi les refus avec zero admin actif, un admin externe et un admin
 rattache a une organisation. Les controles fichier/stdin donnent le meme resultat.
+
+### Placement MAR et noms des PDF (2 novembre 2026)
+
+- Le choix manuel de duree avant l'analyse MAR est retire. La seule prestation
+  MAR active "Visite apres travaux" fournit sa duree et ses habilitations.
+  Les techniciens doivent etre actifs, habilites et faire partie des
+  correspondances pilotes deja approuvees. Ces correspondances ne sont pas elargies.
+- La prestation de production reglee a 50 minutes peut etre alignee a 60 minutes
+  dans Cofrac uniquement avec `php artisan mymar:align-service-duration --apply`.
+  Sans `--apply`, la commande est un controle sans modification. Elle ne modifie
+  que cette duree de 50 a 60 ; une duree deja compatible reste inchangee.
+  Un catalogue absent/ambigu ou une autre duree incompatible est refuse.
+- Cette reservation d'une heure respecte les heures entieres du contrat MYMAR
+  existant sans changer son code, schema, configuration ni passerelles. La duree
+  et l'habilitation sont revalidees avant un nouveau placement. Aucun ajout
+  d'ecriture de commentaires vers MYMAR n'est inclus dans ce lot.
+- Les PDF telecharges depuis un dossier (natifs, archives et documents de lot)
+  comportent le beneficiaire dans leur nom : nom/prenom ou raison sociale.
+  Le libelle et la reference du rapport sont conserves, sans doubler un nom
+  deja present. Seul le nom de reponse HTTP change : aucun fichier stocke
+  n'est renomme et les autorisations restent inchangees.
+- Deployer le paquet applicatif scelle puis executer l'alignement explicite
+  avec le compte runtime `cofrac2-app`. Aucun seeder, import, migration nouvelle,
+  placement de test, mail ou SMS de test n'est necessaire.

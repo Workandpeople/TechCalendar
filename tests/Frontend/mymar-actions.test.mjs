@@ -79,17 +79,13 @@ test('malformed success and rejected HTML are never displayed as confirmed deliv
     assert.throws(() => validateActionResult({ ...result('id', 'queued'), confirmed: true }, 'id'));
 });
 
-test('choosing a MAR visit requires an explicit hour duration before starting the existing analysis', () => {
+test('choosing a MAR visit starts analysis directly without a duration dialog or a write request', () => {
     const ui = fixture();
     initMymarActions(ui.root, ui.browser).choose({ dossier_id: 12, first_name: 'Test', last_name: '<script>not HTML</script>' });
-    const select = ui.nodes.find(node => node.tag === 'select');
-    const search = ui.nodes.find(node => node.textContent === 'Chercher un créneau');
-    assert.equal(search.disabled, true);
-    assert.equal(select.children[0].value, '');
-    select.value = '120'; select.handlers.change(); search.handlers.click();
+    assert.equal(ui.nodes.some(node => ['select', 'dialog'].includes(node.tag)), false);
     assert.equal(ui.calls.length, 0);
     assert.equal(ui.events.at(-1).type, 'cofrac:mymar:select');
-    assert.deepEqual(ui.events.at(-1).detail, { dossier_id: 12, duration_minutes: 120 });
+    assert.deepEqual(ui.events.at(-1).detail, { dossier_id: 12 });
 });
 
 test('does not initialize action endpoints pointing to a different origin', () => {

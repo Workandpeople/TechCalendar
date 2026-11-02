@@ -153,7 +153,7 @@ it('shows existing lot documents without copying them and scopes downloads to th
         ->assertViewHas('lotDocuments', fn ($docs) => $docs->total() === 1);
     expect(DossierDocument::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([$path]);
     $url = route('v2.dossiers.lot-documents.download', [$this->dossier, $document]);
-    $this->get($url)->assertOk()->assertDownload('Piece existante.pdf')->assertHeader('X-Content-Type-Options', 'nosniff');
+    $this->get($url)->assertOk()->assertDownload('Piece existante - Client dossier.pdf')->assertHeader('X-Content-Type-Options', 'nosniff');
     $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER']);
     $this->get(route('v2.dossiers.lot-documents.download', [$other, $document]))->assertNotFound();
     $document->update(['path' => '../secret.txt']);

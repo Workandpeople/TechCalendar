@@ -25,6 +25,8 @@ beforeEach(function () {
     }
     $this->actor = User::factory()->create(['role' => 1, 'admin' => false]);
     $this->tech = User::factory()->create(['role' => 2, 'admin' => false]);
+    $this->marService = Service::create(['type' => 'MAR', 'name' => 'VISITE APRES TRAVAUX', 'average_duration_minutes' => 60]);
+    $this->tech->services()->attach($this->marService);
     $this->config = ['format' => 'cofrac.mymar-actions-client', 'version' => 1, 'guard_enabled' => true, 'writes_enabled' => true,
         'port' => 19848, 'generation' => (string) Str::uuid(), 'bindings' => [['source_technician_id' => 1234, 'cofrac_user_id' => $this->tech->id]]];
     $settings = Mockery::mock(MymarActionSettings::class);
@@ -69,6 +71,33 @@ it('confirms a placement with server-selected identities and no native appointme
     expect(MymarBookingRequest::first()->status)->toBe('confirmed')->and(Appointment::count())->toBe(0);
     $this->postJson(route('planner.book.mar.place'), $this->payload)->assertOk()->assertJsonPath('confirmed', true);
     Http::assertSentCount(1);
+});
+
+it('rejects an unqualified technician or a duration override before sending anything to MYMAR', function (string $change) {
+    if ($change === 'qualification') {
+        $this->tech->services()->detach();
+    } else {
+        $this->payload['duration_minutes'] = 120;
+    }
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)->assertUnprocessable();
+    Http::assertNothingSent();
+    expect(MymarBookingRequest::count())->toBe(0);
+})->with(['qualification', 'duration']);
+
+it('rechecks qualification immediately before dispatch and rejects a concurrently revoked grant', function () {
+    $calls = 0;
+    $pending = Mockery::mock(MymarPendingBookings::class);
+    $pending->shouldReceive('find')->andReturnUsing(function () use (&$calls) {
+        if (++$calls === 2) {
+            $this->tech->services()->detach();
+        }
+
+        return $this->source;
+    });
+    app()->instance(MymarPendingBookings::class, $pending);
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)->assertOk()
+        ->assertJsonPath('state', 'rejected')->assertJsonPath('confirmed', false);
+    Http::assertNothingSent();
 });
 
 it('keeps an uncertain reservation and only reads the receipt on subsequent verification', function () {

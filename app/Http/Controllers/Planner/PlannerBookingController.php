@@ -1226,7 +1226,7 @@ class PlannerBookingController extends Controller
     {
         return [
             'mymar_dossier_id' => ['nullable', 'integer', 'min:1', 'prohibits:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id', 'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id'],
-            'mymar_duration_minutes' => ['required_with:mymar_dossier_id', 'integer', 'min:60', 'max:480', 'multiple_of:60'],
+            'mymar_duration_minutes' => ['nullable', 'integer', 'min:60', 'max:480', 'multiple_of:60'],
             'crm_appointment_id' => ['nullable', 'string', 'prohibits:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id'],
             'crm_service_id' => [
                 'nullable',
@@ -1300,7 +1300,7 @@ class PlannerBookingController extends Controller
         CoffracAppointmentService $coffracAppointments
     ): ?array {
         if (! empty($payload['mymar_dossier_id'])) {
-            return app(MymarBookingPlanning::class)->resolve((int) $payload['mymar_dossier_id'], (int) $payload['mymar_duration_minutes']);
+            return app(MymarBookingPlanning::class)->resolve((int) $payload['mymar_dossier_id']);
         }
         if (! empty($payload['crm_appointment_id'])) {
             $crmAppointmentId = (string) $payload['crm_appointment_id'];

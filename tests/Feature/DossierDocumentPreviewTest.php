@@ -74,6 +74,14 @@ function dossierPreviewFixture($test, string $source, string $content, string $m
     return [$url, $path];
 }
 
+it('adds the beneficiary to native lot and archived PDF filenames without renaming stored files', function (string $source) {
+    $this->dossier->update(['last_name' => 'GIRARD', 'first_name' => 'Claude']);
+    [$url, $path] = dossierPreviewFixture($this, $source, "%PDF-1.4\n%%EOF\n");
+    $this->actingAs($this->staff)->get($url)->assertOk()->assertDownload('Preview - GIRARD Claude.pdf');
+    expect(Storage::disk('local')->exists($path))->toBeTrue();
+    $this->get($url.'?preview=1')->assertOk()->assertHeader('Content-Type', 'application/pdf');
+})->with(['native', 'lot', 'archive']);
+
 it('serves sniffed PDFs and raster images inline with viewer-compatible private headers', function (string $source, string $format) {
     $content = file_get_contents(__DIR__.'/../Fixtures/documents/preview.pdf');
     if ($format !== 'pdf') {

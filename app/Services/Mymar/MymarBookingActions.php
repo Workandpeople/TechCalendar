@@ -49,6 +49,9 @@ class MymarBookingActions
         if ($reservation !== null && $start->isPast()) {
             throw ValidationException::withMessages(['starts_at' => 'Choisissez un créneau à venir.']);
         }
+        if ($reservation !== null) {
+            $this->assertDuration($command->payload['duration_minutes']);
+        }
         $source = $this->pending->find($command->payload['dossier_id'], true);
         if ($source === null || ! MymarPendingBookings::isAfterWorksRequest($source)
             || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
@@ -106,6 +109,7 @@ class MymarBookingActions
                     $actor = User::query()->lockForUpdate()->find($command->payload['cofrac_actor_id']);
                     $this->configuration($actor, true);
                     if ($command->payload['action'] === 'place') {
+                        $this->assertDuration($command->payload['duration_minutes']);
                         $record = MymarBookingRequest::query()->findOrFail($command->payload['request_id']);
                         $technician = $this->lockTechnician($record->cofrac_technician_id);
                         $start = Carbon::parse($record->reserved_starts_at->format('Y-m-d H:i:s'), 'Europe/Paris');
@@ -133,7 +137,18 @@ class MymarBookingActions
 
     private function lockTechnician(int $id): User
     {
-        return User::query()->internal()->where('role', 2)->where('admin', false)->lockForUpdate()->findOrFail($id);
+        $technician = User::query()->internal()->where('role', 2)->where('admin', false)->lockForUpdate()->findOrFail($id);
+        app(MymarAfterWorksService::class)->assertQualified($technician);
+
+        return $technician;
+    }
+
+    private function assertDuration(int $duration): void
+    {
+        $services = app(MymarAfterWorksService::class);
+        if ($duration !== $services->duration($services->resolve())) {
+            throw ValidationException::withMessages(['duration_minutes' => 'La durée MAR a changé. Relancez l’analyse pour utiliser la durée configurée.']);
+        }
     }
 
     private function configuration(?User $actor, bool $write): array

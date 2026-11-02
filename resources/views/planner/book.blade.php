@@ -5376,6 +5376,9 @@
                 : (isSuggestion
                 ? (bookingIsReplacementMode ? 'Tu peux ajuster le replacement avant validation.' : 'Tu peux ajuster l’heure et la durée avant validation.')
                 : 'Détail du rendez-vous déjà placé.');
+            if (currentAppointmentRequest?.is_mymar) {
+                document.getElementById('booking_modal_subtitle').textContent = 'Durée définie par la prestation MAR. Vous pouvez ajuster l’heure avant validation.';
+            }
             document.getElementById('booking_detail_technician').textContent = props.technician_name || '-';
             document.getElementById('booking_detail_customer').textContent = props.customer_name || '-';
             document.getElementById('booking_detail_phone').textContent = props.customer_phone || '-';
@@ -5391,6 +5394,7 @@
             document.getElementById('booking_detail_technician_id').value = props.technician_id || '';
             startsAtInput.value = formatDateTimeForInput(event.start);
             durationInput.value = props.duration_minutes || Math.max(30, Math.round(((event.end || addMinutes(event.start, requestDurationMinutes())) - event.start) / 60000));
+            durationInput.readOnly = Boolean(currentAppointmentRequest?.is_mymar);
             document.getElementById('booking_detail_comment').value = props.comment || '';
             bookingInitialDetailComment = props.comment || '';
             renderRouteSummary(props, null, true);
@@ -5987,9 +5991,8 @@
         @if (config('crm.v2_enabled'))
         window.addEventListener('cofrac:mymar:select', (event) => {
             const detail = event.detail;
-            if (!Number.isSafeInteger(detail?.dossier_id) || !Number.isInteger(detail?.duration_minutes)
-                || detail.duration_minutes < 60 || detail.duration_minutes > 480 || detail.duration_minutes % 60 !== 0) return;
-            void analyzeAppointment({ mymar_dossier_id: detail.dossier_id, mymar_duration_minutes: detail.duration_minutes }, 'RDV MAR');
+            if (!Number.isSafeInteger(detail?.dossier_id) || detail.dossier_id < 1) return;
+            void analyzeAppointment({ mymar_dossier_id: detail.dossier_id }, 'RDV MAR');
         });
         @endif
         const updateLotBookButtonState = (lotAppointmentId) => {

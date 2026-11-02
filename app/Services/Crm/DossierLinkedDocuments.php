@@ -44,7 +44,7 @@ class DossierLinkedDocuments
     {
         $document = $this->query($actor, $dossier)->findOrFail($documentId);
 
-        return $this->respond($document, $preview);
+        return $this->respond($document, $preview, $dossier);
     }
 
     public function queryForAppointment(User $actor, Appointment $appointment): Builder
@@ -57,10 +57,10 @@ class DossierLinkedDocuments
 
     public function downloadForAppointment(User $actor, Appointment $appointment, int $documentId, bool $preview = false): StreamedResponse
     {
-        return $this->respond($this->queryForAppointment($actor, $appointment)->findOrFail($documentId), $preview);
+        return $this->respond($this->queryForAppointment($actor, $appointment)->findOrFail($documentId), $preview, $appointment->dossierOperation?->dossier);
     }
 
-    private function respond(LotAppointmentDocument $document, bool $preview): StreamedResponse
+    private function respond(LotAppointmentDocument $document, bool $preview, ?Dossier $dossier = null): StreamedResponse
     {
         abort_unless($document->disk === 'local', 404);
         $prefix = 'lot-appointment-documents/'.$document->lot_appointment_id.'/';
@@ -75,11 +75,8 @@ class DossierLinkedDocuments
             && $root === rtrim($storageRoot, '/').'/'.rtrim($prefix, '/')
             && str_starts_with($path, $root.'/'), 404);
 
-        $name = preg_replace('/[^\pL\pN ._-]/u', '_', $document->name) ?: 'Document';
         $extension = pathinfo($filename, PATHINFO_EXTENSION);
-        if ($extension !== '' && ! str_ends_with(strtolower($name), '.'.strtolower($extension))) {
-            $name .= '.'.$extension;
-        }
+        $name = DossierDownloadName::make($document->name, $extension, $dossier);
 
         $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file($path) : 'application/octet-stream';
         $inline = $preview && DocumentResponseHeaders::previewable($mime);
