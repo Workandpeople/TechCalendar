@@ -137,3 +137,84 @@ it('invalidates all pending pages immediately after a confirmed action', functio
     expect($pending->page(0, 25, true)['items'])->toBe([]);
     Http::assertSentCount(2);
 });
+
+it('shows only the three after-works requests from a mixed eight-request source including cached pages', function () {
+    $page = ($this->sourcePage)(0, 8);
+    foreach ($page['items'] as $index => &$item) {
+        if (! in_array($index, [1, 4, 7], true)) {
+            $item = array_replace($item, ['status_id' => 1, 'phase' => 'initial', 'last_name' => 'PRIVATE_INITIAL_VISIT']);
+        }
+    }
+    unset($item);
+    Http::fake(fn () => Http::response($page));
+    $this->actingAs($this->actor);
+    foreach (range(1, 2) as $_) {
+        $response = $this->getJson(route('planner.book.mar.index'))->assertOk()->assertJsonCount(3, 'items')
+            ->assertJsonPath('next_after', null)->assertDontSee('PRIVATE_INITIAL_VISIT');
+        expect(array_column($response->json('items'), 'dossier_id'))->toBe([2, 5, 8]);
+        expect(array_unique(array_column($response->json('items'), 'status_id')))->toBe([14]);
+    }
+    Http::assertSentCount(1);
+    expect(Dossier::count())->toBe(0)->and(Appointment::count())->toBe(0);
+});
+
+it('fills filtered pages without skipping an after-works request or looping over initial visits', function () {
+    Http::fake(function ($request) {
+        $after = (int) $request['after'];
+        $page = ($this->sourcePage)($after, $after === 0 || $after === 4 ? 2 : 1, $after < 4 ? $after + ($after === 0 ? 2 : 1) : null);
+        foreach ($page['items'] as &$item) {
+            if ($item['dossier_id'] % 2 === 1) {
+                $item = array_replace($item, ['status_id' => 1, 'phase' => 'initial']);
+            }
+        }
+
+        return Http::response($page);
+    });
+    $pending = app(MymarPendingBookings::class);
+    $first = $pending->page(0, 2);
+    $next = $pending->page($first['next_after'], 2);
+    expect(array_column($first['items'], 'dossier_id'))->toBe([2, 4])->and($first['next_after'])->toBe(4)
+        ->and(array_column($next['items'], 'dossier_id'))->toBe([6])->and($next['next_after'])->toBeNull();
+    Http::assertSentCount(4);
+    Http::assertSent(fn ($request) => $request->method() === 'GET' && $request['after'] === 2 && $request['limit'] === 1);
+});
+
+it('bounds scanning and retains a usable source cursor for a long run of initial visits', function () {
+    Http::fake(function ($request) {
+        $after = (int) $request['after'];
+        $page = ($this->sourcePage)($after, $after < 100 ? 25 : 1, $after < 100 ? $after + 25 : null);
+        if ($after < 100) {
+            foreach ($page['items'] as &$item) {
+                $item = array_replace($item, ['status_id' => 1, 'phase' => 'initial']);
+            }
+        }
+
+        return Http::response($page);
+    });
+    $pending = app(MymarPendingBookings::class);
+    $first = $pending->page();
+    expect($first['items'])->toBe([])->and($first['next_after'])->toBe(100);
+    Http::assertSentCount(4);
+    $next = $pending->page($first['next_after']);
+    expect(array_column($next['items'], 'dossier_id'))->toBe([101])->and($next['next_after'])->toBeNull();
+    Http::assertSentCount(5);
+});
+
+it('does not treat a partially read filtered list as successful when a later source page fails', function () {
+    $page = ($this->sourcePage)(0, 25, 25);
+    $page['items'][0] = array_replace($page['items'][0], ['status_id' => 1, 'phase' => 'initial']);
+    Http::fakeSequence()->push($page)->push(['error' => 'unavailable'], 503);
+    $this->actingAs($this->actor)->getJson(route('planner.book.mar.index'))->assertStatus(503)->assertDontSee('PRIVATE_MAR_BENEFICIARY');
+    Http::assertSentCount(2);
+});
+
+it('finds only the requested after-works dossier without walking to a different pending request', function (bool $initial) {
+    $page = ($this->sourcePage)(122, 1, 123);
+    if ($initial) {
+        $page['items'][0] = array_replace($page['items'][0], ['status_id' => 1, 'phase' => 'initial']);
+    }
+    Http::fake(fn () => Http::response($page));
+    $item = app(MymarPendingBookings::class)->find(123, true);
+    expect($initial ? $item === null : $item['dossier_id'] === 123)->toBeTrue();
+    Http::assertSentCount(1);
+})->with([true, false]);

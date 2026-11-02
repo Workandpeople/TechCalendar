@@ -31,7 +31,7 @@ beforeEach(function () {
     $settings->shouldReceive('load')->andReturnUsing(fn () => $this->config);
     $settings->shouldReceive('token')->andReturn(str_repeat('0123456789abcdef', 4));
     app()->instance(MymarActionSettings::class, $settings);
-    $this->source = ['dossier_id' => 123, 'expected_revision' => str_repeat('a', 64), 'address' => '10 rue Test, 75001 Paris', 'latitude' => 48.86, 'longitude' => 2.35];
+    $this->source = ['dossier_id' => 123, 'status_id' => 14, 'phase' => 'after_works', 'expected_revision' => str_repeat('a', 64), 'address' => '10 rue Test, 75001 Paris', 'latitude' => 48.86, 'longitude' => 2.35];
     $pending = Mockery::mock(MymarPendingBookings::class);
     $pending->shouldReceive('find')->andReturnUsing(fn () => $this->source);
     $pending->shouldReceive('invalidate')->andReturnNull();
@@ -76,6 +76,7 @@ it('keeps an uncertain reservation and only reads the receipt on subsequent veri
     $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)->assertStatus(202)->assertJsonPath('state', 'uncertain');
     $record = MymarBookingRequest::first();
     expect($record->cofrac_technician_id)->toBe($this->tech->id)->and($record->active_dossier_id)->toBe(123);
+    $this->source = array_replace($this->source, ['status_id' => 1, 'phase' => 'initial']);
     $record->forceFill(['lease_until' => time() - 1])->save();
     $this->getJson(route('planner.book.mar.status', $record->id))->assertOk()->assertJsonPath('confirmed', true);
     Http::assertSentCount(2);
@@ -121,6 +122,28 @@ it('records problems using the dedicated contract without a local appointment', 
     $payload = array_intersect_key($this->payload, array_flip(['request_id', 'dossier_id', 'expected_revision'])) + ['comment' => 'Bénéficiaire indisponible', 'reason' => 'Rappel', 'recall_at' => $this->payload['starts_at']];
     $this->actingAs($this->actor)->postJson(route('planner.book.mar.problem'), $payload)->assertOk()->assertJsonPath('confirmed', true);
     expect(MymarBookingRequest::first()->cofrac_technician_id)->toBeNull()->and(Appointment::count())->toBe(0);
+});
+
+it('refuses both placement and problems for an initial visit from a stale tab', function (string $action) {
+    $this->source = array_replace($this->source, ['status_id' => 1, 'phase' => 'initial']);
+    $payload = $action === 'place' ? $this->payload : array_intersect_key($this->payload,
+        array_flip(['request_id', 'dossier_id', 'expected_revision'])) + ['comment' => 'Bénéficiaire indisponible'];
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.'.$action), $payload)->assertUnprocessable();
+    expect(MymarBookingRequest::count())->toBe(0);
+    Http::assertNothingSent();
+})->with(['place', 'problem']);
+
+it('does not dispatch an old queued initial request', function () {
+    $command = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1, 'cofrac_actor_id' => $this->actor->id,
+        'action' => 'place', ...array_replace($this->payload, ['technician_id' => 1234])]);
+    $record = MymarBookingRequest::forceCreate(['id' => $this->payload['request_id'], 'author_id' => $this->actor->id,
+        'source_dossier_id' => 123, 'active_dossier_id' => 123, 'fingerprint' => $command->fingerprint(),
+        'command' => $command->payload, 'status' => 'queued']);
+    $this->source = array_replace($this->source, ['status_id' => 1, 'phase' => 'initial']);
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)
+        ->assertOk()->assertJsonPath('state', 'rejected');
+    expect($record->fresh()->reason)->toBe('booking_not_pending')->and($record->fresh()->active_dossier_id)->toBeNull();
+    Http::assertNothingSent();
 });
 
 it('denies forging, forcing, invalid hour units and access to another authors receipt', function () {

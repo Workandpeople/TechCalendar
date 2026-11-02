@@ -93,14 +93,13 @@ test('MAR actions use the common compact controls without changing their target 
     assert.equal(ui.calls.length, 0);
 });
 
-test('MAR phases and missing data remain explicit without duplicating a locality already in the address', () => {
-    for (const status_id of [1, 14]) {
-        const ui = fixture();
-        const item = { ...page(0, 1).items[0], status_id, phase: status_id === 1 ? 'initial' : 'after_works', address: '1 rue du Test, 01560 LESCHEROUX' };
-        renderPendingRows(ui.children.list, [item]);
-        assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-service-name').textContent, status_id === 1 ? 'Visite initiale' : 'Visite après travaux');
-        assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-address').textContent, item.address);
-    }
+test('only after-works rows render, keeping locality and missing data explicit', () => {
+    const projected = fixture();
+    const item = { ...page(0, 1).items[0], address: '1 rue du Test, 01560 LESCHEROUX' };
+    renderPendingRows(projected.children.list, [item, { ...item, dossier_id: 2, status_id: 1, phase: 'initial' }]);
+    assert.equal(projected.children.list.children.length, 1);
+    assert.equal(projected.nodes.find(node => node.className === 'gc-booking-request-service-name').textContent, 'Visite après travaux');
+    assert.equal(projected.nodes.find(node => node.className === 'gc-booking-request-address').textContent, item.address);
     const ui = fixture();
     renderPendingRows(ui.children.list, [{ ...page(0, 1).items[0], first_name: '', last_name: '', address: '', city: '', postal_code: '', phone: '' }]);
     for (const text of ['Bénéficiaire non renseigné', 'Adresse non renseignée', 'CP non renseigné', 'Téléphone non renseigné']) {
@@ -161,8 +160,22 @@ test('distinguishes empty results, HTTP failures, login redirects, bad contracts
 test('rejects unordered, oversized, mismatched-phase and unsafe cursor pages', () => {
     for (const change of [value => { value.items[0].dossier_id = 0; }, value => { value.items.reverse(); },
         value => { value.items.push(value.items[0]); }, value => { value.items[0].phase = 'initial'; },
-        value => { value.next_after = 999; }, value => { value.read_only = false; }]) {
+        value => { value.items[0].status_id = 1; value.items[0].phase = 'initial'; },
+        value => { value.next_after = 24; }, value => { value.read_only = false; }]) {
         const value = page(); change(value);
         assert.throws(() => pendingPage(value, 0));
     }
+});
+
+test('filtered pages advance through scanned initial visits even when the eligible page is short or empty', async () => {
+    const value = page(0, 1, 50);
+    assert.equal(pendingPage(value, 0).next_after, 50);
+    assert.equal(pendingPage(page(0, 0, 50), 0).next_after, 50);
+    const ui = fixture({ hidden: false, fetch: async url => response(Number(new URL(url).searchParams.get('after')) === 0 ? page(0, 0, 50) : page(50, 3)) });
+    initMymarPending(ui.root, ui.browser); await settle();
+    assert.equal(ui.children.next.disabled, false);
+    ui.children.next.dispatch('click'); await settle();
+    assert.match(ui.calls.at(-1)[0], /after=50$/);
+    assert.equal(ui.children.list.children.length, 3);
+    assert.match(ui.children.status.textContent, /3 demande\(s\) après travaux/);
 });

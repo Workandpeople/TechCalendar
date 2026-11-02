@@ -22,7 +22,7 @@ beforeEach(function () {
     $settings = Mockery::mock(MymarActionSettings::class);
     $settings->shouldReceive('load')->andReturnUsing(fn () => $this->config);
     app()->instance(MymarActionSettings::class, $settings);
-    $this->item = ['dossier_id' => 123, 'phase' => 'after_works', 'expected_revision' => str_repeat('a', 64), 'first_name' => 'Camille',
+    $this->item = ['dossier_id' => 123, 'status_id' => 14, 'phase' => 'after_works', 'expected_revision' => str_repeat('a', 64), 'first_name' => 'Camille',
         'last_name' => 'MAR', 'phone' => '0600000000', 'email' => null, 'postal_code' => '75001', 'city' => 'Paris',
         'address' => '10 rue Test, 75001 Paris', 'latitude' => 48.86, 'longitude' => 2.34];
     $pending = Mockery::mock(MymarPendingBookings::class);
@@ -50,6 +50,14 @@ it('requires an explicit MAR duration rejects mixed sources and never routes MAR
     $this->postJson(route('planner.book.appointments.store'), ['mymar_dossier_id' => 123, 'mymar_duration_minutes' => 60])->assertUnprocessable();
     $this->config['writes_enabled'] = false;
     $this->postJson(route('planner.book.analyze'), ['mymar_dossier_id' => 123, 'mymar_duration_minutes' => 60])->assertUnprocessable();
+    expect(Dossier::count())->toBe(0)->and(Appointment::count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+it('rejects initial visits before looking for technicians or geocoding their address', function () {
+    $this->item = array_replace($this->item, ['status_id' => 1, 'phase' => 'initial', 'latitude' => null, 'longitude' => null]);
+    $this->actingAs($this->actor)->postJson(route('planner.book.analyze'), ['mymar_dossier_id' => 123, 'mymar_duration_minutes' => 60])
+        ->assertUnprocessable()->assertJsonValidationErrors('mymar_dossier_id');
     expect(Dossier::count())->toBe(0)->and(Appointment::count())->toBe(0);
     Http::assertNothingSent();
 });

@@ -13,9 +13,37 @@ use Throwable;
 /** Short-lived encrypted projection, never a native dossier/import or a placement action. */
 class MymarPendingBookings
 {
+    private const MAX_SOURCE_PAGES = 4;
+
     public function __construct(private readonly MymarBookingReaderSettings $settings, private readonly Factory $http) {}
 
     public function page(int $after = 0, int $limit = 25, bool $refresh = false): array
+    {
+        $items = [];
+        $cursor = $after;
+        $checkedAt = now()->timestamp;
+        $deadline = hrtime(true) + 2_000_000_000;
+        for ($attempt = 0; $attempt < self::MAX_SOURCE_PAGES; $attempt++) {
+            $page = $this->sourcePage($cursor, $limit - count($items), $refresh);
+            $items = [...$items, ...array_values(array_filter($page['items'], self::isAfterWorksRequest(...)))];
+            $checkedAt = min($checkedAt, $page['checked_at']);
+            $cursor = $page['next_after'];
+            if ($cursor === null || count($items) === $limit || hrtime(true) >= $deadline) {
+                break;
+            }
+        }
+
+        // Keep the source cursor even when excluded initial visits produce a short page.
+        return ['format' => 'cofrac.mymar-pending-bookings', 'version' => 1, 'items' => $items,
+            'next_after' => $cursor, 'checked_at' => $checkedAt];
+    }
+
+    public static function isAfterWorksRequest(array $item): bool
+    {
+        return ($item['status_id'] ?? null) === 14 && ($item['phase'] ?? null) === 'after_works';
+    }
+
+    private function sourcePage(int $after, int $limit, bool $refresh): array
     {
         if ($after < 0 || $limit < 1 || $limit > 100) {
             throw new RuntimeException('mymar.invalid_booking_page');
@@ -58,10 +86,10 @@ class MymarPendingBookings
         if ($id < 1) {
             throw new RuntimeException('mymar.invalid_booking_id');
         }
-        $page = $this->page($id - 1, 1, $fresh);
+        $page = $this->sourcePage($id - 1, 1, $fresh);
         $item = $page['items'][0] ?? null;
 
-        return ($item['dossier_id'] ?? null) === $id ? $item : null;
+        return ($item['dossier_id'] ?? null) === $id && self::isAfterWorksRequest($item) ? $item : null;
     }
 
     public function invalidate(): void

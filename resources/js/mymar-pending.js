@@ -5,11 +5,11 @@ export function pendingPage(value, after) {
     let last = after;
     for (const item of value.items) {
         if (!item || !Number.isSafeInteger(item.dossier_id) || item.dossier_id <= last
-            || ![1, 14].includes(item.status_id) || item.phase !== (item.status_id === 14 ? 'after_works' : 'initial')
+            || item.status_id !== 14 || item.phase !== 'after_works'
             || ['first_name', 'last_name', 'address', 'phone'].some(key => typeof item[key] !== 'string' || item[key].length > 4096)) throw new Error('invalid item');
         last = item.dossier_id;
     }
-    if (value.next_after !== null && (value.items.length !== 25 || value.next_after !== last)) throw new Error('invalid cursor');
+    if (value.next_after !== null && value.next_after < last) throw new Error('invalid cursor');
     return value;
 }
 
@@ -21,14 +21,14 @@ export function renderPendingRows(list, items, actions = null) {
         if (text !== undefined) node.textContent = text;
         return node;
     };
-    for (const item of items) {
+    for (const item of items.filter(item => item.status_id === 14 && item.phase === 'after_works')) {
         const row = element('article', 'gc-booking-request-row');
         row.setAttribute('role', 'listitem');
         const client = element('div', 'gc-booking-request-client');
         client.append(element('strong', 'gc-booking-request-name', `${item.last_name} ${item.first_name}`.trim() || 'Bénéficiaire non renseigné'));
         const service = element('div', 'gc-booking-request-service');
         service.append(element('span', 'gc-booking-request-service-type', 'MAR'),
-            element('span', 'gc-booking-request-service-name', item.phase === 'after_works' ? 'Visite après travaux' : 'Visite initiale'));
+            element('span', 'gc-booking-request-service-name', 'Visite après travaux'));
         const location = element('div', 'gc-booking-request-location');
         const locality = [item.postal_code, item.city].filter(Boolean).join(' ');
         const address = [item.address, locality && !item.address.toLocaleLowerCase('fr').includes(locality.toLocaleLowerCase('fr')) ? locality : ''].filter(Boolean).join(', ');
@@ -108,7 +108,7 @@ export function initMymarPending(root = document, browser = window) {
             renderPendingRows(list, value.items, actions);
             const note = panel.querySelector('[data-mymar-readonly-note]');
             if (note) note.hidden = Boolean(actions);
-            status.textContent = value.items.length ? `${value.items.length} demande(s) sur cette page${actions ? '' : ' · lecture seule'}` : 'Aucune demande MAR à placer sur cette page.';
+            status.textContent = value.items.length ? `${value.items.length} demande(s) après travaux sur cette page${actions ? '' : ' · lecture seule'}` : 'Aucune demande MAR après travaux à placer sur cette page.';
             panel.querySelector('[data-mymar-page]').textContent = `Page ${history.length + 1}`;
             pager.hidden = history.length === 0 && nextAfter === null;
         } catch {

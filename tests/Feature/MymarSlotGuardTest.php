@@ -37,16 +37,16 @@ it('checks fresh source availability with explicit Paris and hour interpretation
         $body = ['format' => MymarObservation::FORMAT, 'version' => 1, 'complete' => true, 'source_timezone' => 'Europe/Paris', 'duration_unit' => 'hours',
             'generated_at' => gmdate(DATE_ATOM), 'window_start' => $query['window_start'], 'window_end' => $query['window_end'],
             'technician_ids' => [44], 'status_ids' => [3, 16], 'appointments' => $case === 'empty' ? [] : [[
-                'rdv_id' => 99, 'dossier_id' => 123, 'technician_id' => 44, 'status_id' => 16, 'is_old' => 0,
+                'rdv_id' => 99, 'dossier_id' => 123, 'technician_id' => 44, 'status_id' => $case === 'initial_overlap' ? 3 : 16, 'is_old' => 0,
                 'stored_start' => $this->from->format('Y-m-d H:i:s'), 'raw_duration' => $case === 'invalid' ? null : 1]]];
 
         return Http::response($body);
     });
     $conflicts = app(MymarSlotGuard::class)->liveConflicts($this->tech->id, $this->from, $this->to);
     expect(array_column($conflicts, 'type'))->toBe(match ($case) {
-        'empty' => [], 'overlap' => ['mymar_overlap'], default => ['mymar_unknown']
+        'empty' => [], 'overlap', 'initial_overlap' => ['mymar_overlap'], default => ['mymar_unknown']
     });
-})->with(['empty', 'overlap', 'invalid']);
+})->with(['empty', 'overlap', 'initial_overlap', 'invalid']);
 
 it('fails closed on unavailable source without exposing secrets', function () {
     Http::fake(fn () => throw new RuntimeException('PRIVATE_TOKEN_CANARY'));

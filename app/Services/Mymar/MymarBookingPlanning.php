@@ -19,8 +19,8 @@ class MymarBookingPlanning
             throw ValidationException::withMessages(['mymar_dossier_id' => 'Le placement MAR n’est pas activé.']);
         }
         $item = $this->pending->find($id);
-        if ($item === null) {
-            throw ValidationException::withMessages(['mymar_dossier_id' => 'Cette demande MAR n’est plus à placer. Actualisez la liste.']);
+        if ($item === null || ! MymarPendingBookings::isAfterWorksRequest($item)) {
+            throw ValidationException::withMessages(['mymar_dossier_id' => 'Seules les demandes MAR après travaux en prise de RDV peuvent être placées ici. Actualisez la liste.']);
         }
         $point = DossierLocation::point($item['latitude'], $item['longitude']);
         $precision = 'unknown';
@@ -32,7 +32,7 @@ class MymarBookingPlanning
         if ($point === null) {
             throw ValidationException::withMessages(['mymar_dossier_id' => 'La position du dossier MAR doit être corrigée dans MYMAR avant son placement.']);
         }
-        $label = $item['phase'] === 'after_works' ? 'Visite après travaux' : 'Visite initiale';
+        $label = 'Visite après travaux';
 
         return ['id' => 'mymar-'.$id, 'source' => 'mymar', 'is_mymar' => true, 'is_lot' => false, 'is_manual' => false,
             'mymar_dossier_id' => $id, 'expected_revision' => $item['expected_revision'],

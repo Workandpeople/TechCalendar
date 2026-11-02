@@ -1137,3 +1137,25 @@ restent inchanges.
 La repetition Docker couvre le lancement depuis un ancien controle incompatible,
 les refus avant maintenance, puis la reouverture HTTPS des deux domaines en
 conservant une reservation MAR incertaine et les comptes/mots de passe.
+
+### Prise de RDV MAR : apres travaux uniquement (2 novembre 2026)
+
+L'onglet Cofrac ne propose que les demandes `status_id=14`, phase `after_works`
+(prise de RDV apres travaux). Les visites initiales `status_id=1` sont exclues
+de l'affichage, de l'analyse, du placement et du signalement de probleme depuis
+Cofrac, y compris depuis un ancien onglet ou une commande encore non envoyee.
+Les recus des commandes deja envoyees restent consultables sans nouvel envoi.
+
+La passerelle privee garde son contrat general de lecture : la restriction metier
+est appliquee dans Cofrac, apres validation des pages source, y compris en cache.
+Le parcours complete la page avec les demandes eligibles suivantes, en limitant
+le nombre de lectures et le temps de parcours. Le curseur source est conserve
+si une longue serie de visites initiales produit une page courte ou vide ; la
+page suivante reste accessible, sans doublon ni dossier apres travaux saute.
+Aucun nom ni nombre de dossiers n'est code en dur.
+
+Les occupations deja placees des deux phases restent visibles et bloquantes
+selon les regles existantes : exclure les visites initiales des demandes a placer
+ne doit pas liberer artificiellement le planning des techniciens.
+Ce correctif applicatif ne modifie ni MYMAR ni ses passerelles, leurs comptes,
+leurs configurations ou leurs services. Aucun import ni migration requis.

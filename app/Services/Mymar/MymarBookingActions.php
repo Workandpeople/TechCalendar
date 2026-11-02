@@ -50,7 +50,8 @@ class MymarBookingActions
             throw ValidationException::withMessages(['starts_at' => 'Choisissez un créneau à venir.']);
         }
         $source = $this->pending->find($command->payload['dossier_id'], true);
-        if ($source === null || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
+        if ($source === null || ! MymarPendingBookings::isAfterWorksRequest($source)
+            || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
             throw ValidationException::withMessages(['dossier_id' => 'Le dossier MAR a changé. Actualisez la liste avant de continuer.']);
         }
         $record = DB::transaction(function () use ($outbox, $command, $actor, $reservation, $source): MymarBookingRequest {
@@ -91,6 +92,15 @@ class MymarBookingActions
     {
         $before = MymarBookingRequest::query()->findOrFail($id)->status;
         $record = $outbox->process($id, function (MymarBookingCommand $command, \Closure $send): MymarBookingAttempt {
+            try {
+                $source = $this->pending->find($command->payload['dossier_id'], true);
+            } catch (RuntimeException) {
+                return new MymarBookingAttempt('rejected', 'booking_pending_unavailable');
+            }
+            if ($source === null || ! MymarPendingBookings::isAfterWorksRequest($source)
+                || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
+                return new MymarBookingAttempt('rejected', 'booking_not_pending');
+            }
             try {
                 return DB::transaction(function () use ($command, $send): MymarBookingAttempt {
                     $actor = User::query()->lockForUpdate()->find($command->payload['cofrac_actor_id']);
