@@ -31,7 +31,7 @@ class DossierMapPreview
 
         if ($forPlanning) {
             // Imported GPS points are not proof of an address match. Check only the selected dossier.
-            return $this->geocodedCoordinates($address, 'planning-location-v3:'.$dossier->id.':'.hash('sha256', $address), $dossier);
+            return $this->geocodedCoordinates($address, 'planning-location-v4:'.$dossier->id.':'.hash('sha256', $address), $dossier);
         }
 
         $appointment = $dossier->appointments()->withTrashed()->whereNotNull('latitude')->whereNotNull('longitude')

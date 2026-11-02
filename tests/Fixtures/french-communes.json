@@ -90,5 +90,40 @@
         "code": "44188", "nom": "Saint-Philbert-de-Grand-Lieu", "codesPostaux": ["44310"],
         "centre": {"type": "Point", "coordinates": [-1.6443, 47.0689]},
         "departement": {"code": "44", "nom": "Loire-Atlantique"}
+    },
+    {
+        "code": "33073", "nom": "Braud-et-Saint-Louis", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.6581, 45.2569]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33159", "nom": "Étauliers", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.5851, 45.2221]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33326", "nom": "Pleine-Selve", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.5819, 45.3277]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33374", "nom": "Saint-Aubin-de-Blaye", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.5763, 45.2591]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33380", "nom": "Val-de-Livenne", "codesPostaux": ["33820", "33860"],
+        "centre": {"type": "Point", "coordinates": [-0.5099, 45.276]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33389", "nom": "Saint-Ciers-sur-Gironde", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.6648, 45.2947]},
+        "departement": {"code": "33", "nom": "Gironde"}
+    },
+    {
+        "code": "33456", "nom": "Saint-Palais", "codesPostaux": ["33820"],
+        "centre": {"type": "Point", "coordinates": [-0.6007, 45.3078]},
+        "departement": {"code": "33", "nom": "Gironde"}
     }
 ]

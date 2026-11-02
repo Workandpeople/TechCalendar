@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\FrenchLocalityName;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class FrenchCommuneGeocoder
@@ -66,7 +66,7 @@ final class FrenchCommuneGeocoder
     private function communes(?string $postal, string $name): array
     {
         // Cache public commune lists, not addresses or dossier/customer information.
-        $parameters = $postal !== null ? ['codePostal' => $postal] : ['nom' => $name, 'limit' => 8];
+        $parameters = $postal !== null ? ['codePostal' => $postal] : ['nom' => $this->normalize($name), 'limit' => 8];
         $key = 'french-communes:v1:'.hash('sha256', json_encode($parameters, JSON_THROW_ON_ERROR));
 
         return Cache::remember($key, now()->addDay(), function () use ($parameters): array {
@@ -124,7 +124,7 @@ final class FrenchCommuneGeocoder
 
     private function normalize(string $name): string
     {
-        return Str::squish(preg_replace('/[^a-z0-9]+/', ' ', strtolower(Str::ascii($name))) ?? '');
+        return FrenchLocalityName::normalize($name);
     }
 
     private function invalidSelection(): ValidationException

@@ -4,6 +4,7 @@ use App\Models\Dossier;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierBooking;
+use App\Services\Crm\DossierLocation;
 use App\Services\PlanningAddressGeocoder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -54,6 +55,36 @@ it('prefers explicit dossier locality fields over ambiguous numbers in the retai
     $result = app(PlanningAddressGeocoder::class)->geocode('Parcelle 32380 AB, batiment inconnu', '01560', 'Lescheroux');
     expect($result['city'])->toBe('Lescheroux');
     Http::assertSentCount(2);
+});
+
+it('recovers abbreviated official commune names in an unrecognized farm address', function (string $city) {
+    ($this->fakeLocations)();
+    $result = app(PlanningAddressGeocoder::class)->geocode('LA FERME DE L ESTUAIRE - SERRE 1, 33820 '.$city, '33820', $city);
+    expect($result)->toMatchArray(['latitude' => 45.2569, 'longitude' => -0.6581, 'precision' => 'city', 'city' => 'Braud-et-Saint-Louis']);
+    Http::assertSentCount(2);
+})->with(['BRAUD ET ST LOUIS', 'Braud-et-St.-Louis', 'Braud et Saint Louis']);
+
+it('analyzes the reported abbreviated locality without an old negative cache or any dossier mutation', function () {
+    ($this->fakeLocations)();
+    $actor = User::factory()->create(['role' => 1, 'admin' => false]);
+    $service = Service::create(['name' => 'Recontrôle AGRI-117', 'type' => 'COFRAC', 'average_duration_minutes' => 40]);
+    $dossier = Dossier::create(['reference' => 'ABBREVIATED-COMMUNE', 'address' => 'LA FERME DE L ESTUAIRE - SERRE 1', 'postal_code' => '33820', 'city' => 'BRAUD ET ST LOUIS']);
+    $operation = $dossier->operations()->create(['service_id' => $service->id]);
+    $operation->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $before = $dossier->fresh()->getAttributes();
+    $oldKey = 'planning-location-v3:'.$dossier->id.':'.hash('sha256', DossierLocation::address($dossier));
+    Cache::put($oldKey, ['coordinates' => null], now()->addMinutes(5));
+    Cache::put('unrelated-cache-to-retain', 'unchanged');
+    $this->actingAs($actor);
+    foreach (range(1, 2) as $attempt) {
+        $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => 'dossier-'.$operation->id])->assertOk()
+            ->assertJsonPath('crm_appointment.latitude', 45.2569)->assertJsonPath('crm_appointment.longitude', -0.6581)
+            ->assertJsonPath('crm_appointment.city', 'Braud-et-Saint-Louis')->assertJsonPath('filters.department_code', '33')
+            ->assertJsonPath('crm_appointment.location_precision', 'city');
+    }
+    Http::assertSentCount(2);
+    expect($dossier->fresh()->getAttributes())->toBe($before)->and($dossier->activities()->count())->toBe(0)
+        ->and($dossier->appointments()->count())->toBe(0)->and(Cache::get('unrelated-cache-to-retain'))->toBe('unchanged');
 });
 
 it('only accepts a postcode without a town when exactly one commune is associated', function () {

@@ -44,6 +44,8 @@ it('suggests the requested commune instead of another commune sharing its postal
     ['01560 Lesch', 'Lescheroux', 'commune.01212_01560'], ['01560 LESCHEROUX', 'Lescheroux', 'commune.01212_01560'],
     ['32380 BIVE', 'Bivès', 'commune.32055_32380'], ['32380 Bivès', 'Bivès', 'commune.32055_32380'],
     ['44310 SAINT-PHILBERT-DE-GRAND-LI', 'Saint-Philbert-de-Grand-Lieu', 'commune.44188_44310'],
+    ['33820 BRAUD ET ST LOUIS', 'Braud-et-Saint-Louis', 'commune.33073_33820'],
+    ['33820 Braud-et-St.-Louis', 'Braud-et-Saint-Louis', 'commune.33073_33820'],
 ]);
 
 it('validates the exact coordinates of the chosen commune after canonical suggestion selection', function (string $query, string $identifier, string $name, float $latitude, float $longitude) {
@@ -59,6 +61,7 @@ it('validates the exact coordinates of the chosen commune after canonical sugges
     ['Lescheroux, Ain, France', 'commune.01212_01560', 'Lescheroux', 46.4089, 5.1573],
     ['32380 Bivès, Gers, France', 'commune.32055_32380', 'Bivès', 43.8317, 0.8087],
     ['44310 Saint-Philbert-de-Grand-Lieu, Loire-Atlantique, France', 'commune.44188_44310', 'Saint-Philbert-de-Grand-Lieu', 47.0689, -1.6443],
+    ['33820 BRAUD ET ST LOUIS', 'commune.33073_33820', 'Braud-et-Saint-Louis', 45.2569, -0.6581],
 ]);
 
 it('replaces Mapbox postal or place suggestions with independently verifiable commune choices', function () {
@@ -103,7 +106,22 @@ it('does not geocode an ambiguous postal code or a different commune silently', 
     ['32380 Bives', 'commune.01212_01560'], ['01560 Lescheroux', 'postcode.old'],
     ['44310', null], ['44310 SAINT-PHILBERT-DE-GRAND-LI', null],
     ['44310 Saint-Philbert-de-Grand-Lieu', 'commune.44155_44310'],
+    ['33820 BRAUD ET ST LOUIS', 'commune.33159_33820'], ['33820', null], ['33820 Braud', null],
 ]);
+
+it('normalizes abbreviated commune names before public name-only lookup', function () {
+    ($this->fakeCommunes)();
+    $result = app(FrenchCommuneGeocoder::class)->suggestions('Braud et St Louis');
+    expect($result)->toHaveCount(1)->and($result[0]['city'])->toBe('Braud-et-Saint-Louis');
+    Http::assertSent(fn ($request) => $request['nom'] === 'braud et saint louis' && ! isset($request['codePostal']));
+});
+
+it('does not resolve two official communes that become identical after abbreviation normalization', function () {
+    $row = collect($this->communes)->firstWhere('code', '33073');
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$row, [...$row, 'code' => '33999', 'nom' => 'Braud-et-St-Louis']])]);
+    expect(fn () => app(FrenchCommuneGeocoder::class)->geocode('33820 Braud et St Louis', allowPostalOnly: true))
+        ->toThrow(ValidationException::class);
+});
 
 it('analyzes a dossier after selecting the full canonical commune without changing appointments or its street', function () {
     ($this->fakeCommunes)();

@@ -2946,6 +2946,25 @@ Reference : [documentation officielle des communes](https://geo.api.gouv.fr/deco
 - Aucun import, migration, seeder, envoi ou changement de configuration requis.
   L'integration MYMAR et les rendez-vous existants restent inchanges.
 
+### Communes abregees et reprise automatique du planning (2 novembre 2026)
+
+- Le dossier signale avec `33820 BRAUD ET ST LOUIS` etait rejete car le nom
+  officiel est `Braud-et-Saint-Louis`. La normalisation commune aux recherches
+  publiques et a la validation des resultats Mapbox developpe uniquement les
+  mots entiers `St` et `Ste` en `Saint` et `Sainte`, apres nettoyage des accents,
+  tirets et ponctuations. Les autres morceaux de noms restent inchanges.
+- Le repli automatique du planning utilise cette meme correspondance pour le
+  dossier selectionne uniquement. Il conserve les controles de code postal et
+  d'unicite : ni un nom partiel ni un code postal partage ne suffisent pour
+  choisir une commune arbitrairement. Deux communes devenues equivalentes
+  apres normalisation restent ambigues et ne sont pas resolues automatiquement.
+- Une localisation sur la commune reste approximative et ne prouve pas que
+  deux adresses sont distantes de moins de 1 km. La voie / le lieu-dit d'origine
+  reste affiche ; l'analyse ne reecrit aucun dossier ou rendez-vous.
+- Le cache cible du planning passe en `planning-location-v4` pour ne pas reutiliser
+  les anciens echecs pendant cinq minutes. Aucun vidage global du cache, reprise
+  en masse, migration, envoi ou changement de configuration MYMAR n'est requis.
+
 ### Adresse affichee et periode des RDV (30 octobre 2026)
 
 - Selectionner une commune dans la correction d'adresse conserve desormais la

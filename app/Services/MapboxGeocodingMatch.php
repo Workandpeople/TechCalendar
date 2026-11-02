@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Str;
+use App\Support\FrenchLocalityName;
 
 final class MapboxGeocodingMatch
 {
@@ -57,6 +57,6 @@ final class MapboxGeocodingMatch
 
     private function normalize(string $value): string
     {
-        return Str::squish(preg_replace('/[^a-z0-9]+/', ' ', strtolower(Str::ascii($value))) ?? '');
+        return FrenchLocalityName::normalize($value);
     }
 }
