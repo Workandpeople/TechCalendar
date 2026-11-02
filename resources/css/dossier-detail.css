@@ -2,6 +2,7 @@
     .gc-dossier-dialog { position: fixed; inset: 0; margin: auto; width: min(920px, calc(100vw - 24px)); max-height: 92dvh; padding: 0; border: 1px solid #b9c8d9; border-radius: 1rem; background: white; color: var(--gc-text); }
     .gc-dossier-dialog[open] { display: flex; flex-direction: column; }
     .gc-dossier-dialog.gc-address-dialog { width: min(560px, calc(100vw - 24px)); }
+    .gc-dossier-dialog.gc-quick-reschedule { width: min(560px, calc(100vw - 24px)); }
     .gc-dossier-address-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem; }
     .gc-workspace .gc-dossier-address-row .gc-address-edit { min-height: 30px; padding: .3rem .55rem; font-size: .73rem; box-shadow: none; }
     .gc-address-edit svg { width: 14px; height: 14px; }

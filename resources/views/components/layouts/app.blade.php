@@ -294,6 +294,11 @@
                 });
             }
         </script>
+        @if (config('crm.v2_enabled'))
+            @can('viewAny', \App\Models\Dossier::class)
+                @include('planner.partials.quick-reschedule')
+            @endcan
+        @endif
         <x-beta-feedback />
     </body>
 </html>

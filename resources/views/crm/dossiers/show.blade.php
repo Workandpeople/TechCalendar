@@ -2,10 +2,16 @@
     @php
         $planningRoute = (auth()->user()->admin || auth()->user()->role === 0) ? 'manager.appointments' : 'planner.tracking';
         $documentCount = $documents->total() + $legacyDocuments->total() + $lotDocuments->total();
+        $quickOperations = $dossier->operations->filter(fn ($operation) => ! $operation->inspected_on
+            && ! $operation->control_submitted_at && ! $operation->control_validated_at && $operation->service_id
+            && in_array(\App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'], ['pending', 'problem', 'awaiting_visit'], true));
     @endphp
     <div class="gc-dossier-detail space-y-5" data-dossier-id="{{ $dossier->id }}">
         <a href="{{ route('v2.dossiers.index') }}" class="gc-link text-sm">← Tous les dossiers</a>
         <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Détail du dossier" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
+            @if ($quickOperations->count() === 1)
+                <button type="button" class="gc-btn-warning" data-quick-reschedule-url="{{ route('v2.dossiers.appointments.reschedule', [$dossier, $quickOperations->first()], absolute: false) }}"><x-nav-icon name="planning" />Replacer le RDV</button>
+            @endif
             @if ($smsUnavailable === null)<a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>@endif
             <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier les informations</a>
         </x-workspace-heading>

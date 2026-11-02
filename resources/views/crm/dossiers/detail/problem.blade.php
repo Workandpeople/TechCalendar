@@ -4,7 +4,8 @@
         @csrf
         <input type="hidden" name="_form" value="problem-{{ $operation->id }}">
         <input type="hidden" name="version" value="{{ $dossier->version }}">
-        @if ($linkedAppointment)<input type="hidden" name="appointment_id" value="{{ $linkedAppointment->id }}"><p>RDV du {{ $linkedAppointment->starts_at?->format('d/m/Y H:i') }}</p>@endif
+        <input type="hidden" name="appointment_id" value="{{ $linkedAppointment?->id }}" data-problem-appointment>
+        <p data-problem-appointment-date @if (! $linkedAppointment) hidden @endif>RDV du {{ $linkedAppointment?->starts_at?->format('d/m/Y H:i') }}</p>
         @php($failedProblem = old('_form') === 'problem-'.$operation->id)
         <label class="gc-label">Type de problème
             <select class="gc-input" name="problem_type" required><option value="">Choisir</option>

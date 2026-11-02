@@ -4,6 +4,7 @@ use App\Http\Controllers\Crm\AutomaticCapceeController;
 use App\Http\Controllers\Crm\CapceeReportController;
 use App\Http\Controllers\Crm\DossierAddressController;
 use App\Http\Controllers\Crm\DossierAppointmentController;
+use App\Http\Controllers\Crm\DossierAppointmentRescheduleController;
 use App\Http\Controllers\Crm\DossierArchivingController;
 use App\Http\Controllers\Crm\DossierBillingController;
 use App\Http\Controllers\Crm\DossierController;
@@ -47,7 +48,10 @@ Route::prefix('v2')->name('v2.')->middleware(['auth', EnsureCrmV2Enabled::class,
     Route::patch('/dossiers/{dossier}/documents-collectes/{document}/partage', [DossierController::class, 'shareCollectedDocument'])->whereNumber('document')->name('dossiers.collected-documents.sharing');
     Route::patch('/dossiers/{dossier}/documents-lots/{document}/partage', [DossierController::class, 'shareLotDocument'])->whereNumber('document')->name('dossiers.lot-documents.sharing');
     Route::get('/dossiers/{dossier}/prestations/{operation}/rendez-vous', [DossierPlanningController::class, 'index'])->name('dossiers.appointments.index');
+    Route::get('/dossiers/{dossier}/prestations/{operation}/replacement-rapide', [DossierAppointmentRescheduleController::class, 'show'])
+        ->middleware('throttle:60,1')->name('dossiers.appointments.reschedule');
     Route::middleware('throttle:30,1')->group(function (): void {
+        Route::patch('/dossiers/{dossier}/prestations/{operation}/replacement-rapide', [DossierAppointmentRescheduleController::class, 'update']);
         Route::post('/dossiers/actions-groupees', [DossierArchivingController::class, 'batch'])->name('dossiers.batch');
         Route::patch('/dossiers/{dossier}/prestations/{operation}/fiche', DossierServiceController::class)->name('dossiers.operations.service');
         Route::patch('/dossiers/{dossier}/capcee/automatique/{submission}', [AutomaticCapceeController::class, 'update'])->name('capcee.automatic.update');

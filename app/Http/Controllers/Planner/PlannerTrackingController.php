@@ -315,7 +315,7 @@ class PlannerTrackingController extends Controller
                 'technician' => fn ($query) => $query->withTrashed()->select('id', 'first_name', 'last_name', 'email', 'address', 'department_code', 'latitude', 'longitude', 'role'),
                 'technician.departments:code',
                 'creator:id,first_name,last_name',
-            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,inspected_on,control_submitted_at,control_validated_at'));
+            ])->when(auth()->user()?->can('viewAny', Dossier::class), fn ($query) => $query->with('dossierOperation:id,dossier_id,service_id,legacy_status,inspected_on,control_submitted_at,control_validated_at'));
     }
 
     /**
@@ -371,6 +371,11 @@ class PlannerTrackingController extends Controller
                     'dossier_url' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation
                         ? route('v2.dossiers.show', $appointment->dossierOperation->dossier_id)
                         : null,
+                    'quick_reschedule_url' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation
+                        && ! $appointment->dossierOperation->inspected_on && ! $appointment->dossierOperation->control_submitted_at
+                        && ! $appointment->dossierOperation->control_validated_at
+                        && in_array(\App\Services\Crm\DossierStatusCatalog::describe($appointment->dossierOperation->legacy_status)['key'], ['pending', 'problem', 'awaiting_visit'], true)
+                            ? route('v2.dossiers.appointments.reschedule', [$appointment->dossierOperation->dossier_id, $appointment->dossier_operation_id], absolute: false) : null,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                     'customer_first_name' => $appointment->customer_first_name,
                     'customer_last_name' => $appointment->customer_last_name,

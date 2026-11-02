@@ -15,7 +15,8 @@ use Illuminate\Validation\ValidationException;
 
 class AppointmentEditor
 {
-    public function update(int $id, array $data, User $actor): Appointment
+    /** Precomputed checks are only reused while the caller holds the same technician lock. */
+    public function update(int $id, array $data, User $actor, ?array $placementChecks = null): Appointment
     {
         Gate::forUser($actor)->authorize('viewAny', Dossier::class);
         $forced = (bool) ($data['force_placement'] ?? false);
@@ -23,7 +24,7 @@ class AppointmentEditor
             throw ValidationException::withMessages(['force_confirmed' => 'Confirme explicitement le placement forcé.']);
         }
 
-        return DB::transaction(function () use ($id, $data, $actor, $forced) {
+        return DB::transaction(function () use ($id, $data, $actor, $forced, $placementChecks) {
             $appointment = Appointment::query()->lockForUpdate()->findOrFail($id);
             if (array_key_exists('updated_at', $data) && ($appointment->updated_at === null
                 ? $data['updated_at'] !== null
@@ -67,7 +68,7 @@ class AppointmentEditor
                 || ! $end->equalTo($appointment->ends_at) || $data['address'] !== $appointment->address)) {
                 PostVisitWorkflow::assertPlanningMutable($appointment->dossierOperation);
             }
-            $checks = app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end, [
+            $checks = $placementChecks ?? app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end, [
                 'address' => $data['address'], 'latitude' => array_key_exists('latitude', $data) ? $data['latitude'] : $appointment->latitude,
                 'longitude' => array_key_exists('longitude', $data) ? $data['longitude'] : $appointment->longitude,
                 'external_payload' => $appointment->external_payload,

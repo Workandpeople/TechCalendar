@@ -26,6 +26,7 @@ import { initAdminSettings } from './admin-settings';
 import { confirmForcedPlacement } from './booking-force-placement';
 import { initBetaFeedback } from './beta-feedback';
 import { requestAppointmentPlacement, confirmAppointmentAction, initAppointmentAssignments } from './appointment-placement';
+import { initAppointmentReschedule } from './appointment-reschedule';
 import { createAppointmentTooltip } from './appointment-tooltip';
 import * as appointmentDateTime from './appointment-date-time';
 import { initDatePickers } from './date-picker';
@@ -42,6 +43,7 @@ window.TechCalendarAppointments = { request: requestAppointmentPlacement, confir
 window.TechCalendarAppointmentTooltip = { create: createAppointmentTooltip };
 window.TechCalendarDateTime = appointmentDateTime;
 initAppointmentAssignments();
+initAppointmentReschedule();
 initCommentMarkup();
 initCommentExcerpts();
 initCommentEditors();

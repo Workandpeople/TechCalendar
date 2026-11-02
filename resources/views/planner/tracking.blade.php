@@ -169,6 +169,7 @@
                 </div>
                 <div class="gc-appointment-modal-actions">
                     @if(config('crm.v2_enabled'))
+                        <button type="button" id="tracking-quick-reschedule" class="gc-btn-warning" hidden>Replacer rapidement</button>
                         <button type="button" id="tracking-delete-appointment" class="gc-btn-danger" hidden>Supprimer le RDV</button>
                         <button type="button" id="tracking-open-edit" class="gc-btn-primary">Modifier le RDV / horaire</button>
                     @endif
@@ -1897,6 +1898,12 @@
             }
 
             const editButton = document.getElementById('tracking-open-edit');
+            const quickButton = document.getElementById('tracking-quick-reschedule');
+            if (quickButton) {
+                quickButton.hidden = !props.quick_reschedule_url;
+                if (props.quick_reschedule_url) quickButton.dataset.quickRescheduleUrl = props.quick_reschedule_url;
+                else delete quickButton.dataset.quickRescheduleUrl;
+            }
             const deleteButton = document.getElementById('tracking-delete-appointment');
             if (deleteButton) {
                 deleteButton.hidden = props.can_cancel !== true || !event.start || new Date(event.start) <= new Date();
@@ -2377,6 +2384,13 @@
             updateLegend();
             if (trackingCalendar) trackingCalendar.refetchEvents();
         };
+
+        document.addEventListener('techcalendar:appointment-rescheduled', () => {
+            closeTrackingAppointmentModal();
+            refetchCalendar();
+            const list = document.getElementById('tracking-list-panel');
+            if (list && !list.classList.contains('hidden')) void runTrackingAppointmentSearch(trackingSearchPage);
+        });
 
         const refreshTrackingAfterAbsence = () => {
             hideTrackingAppointmentTooltip();
