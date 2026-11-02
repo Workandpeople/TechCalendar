@@ -11,7 +11,7 @@ cp /workspace/tools/deploy/mymar/runtime/{MymarRuntimePlan,MymarRuntimeState}.ph
 cp /workspace/tools/deploy/mymar/MymarReadOnlyAudit.php /reader-package/
 cp /workspace/tools/deploy/mymar/workflow/MymarWorkflowAudit.php /reader-package/
 cp /workspace/tools/deploy/mymar/mapping/MymarApprovedTechnicianMap.php /reader-package/
-cp /workspace/app/Services/Mymar/{MymarBookingCommand,MymarObservation,MymarObservationPolicy,MymarPendingBookingPage}.php /reader-package/
+cp /workspace/app/Services/Mymar/{MymarBookingCommand,MymarObservation,MymarObservationPolicy,MymarReadWindow,MymarPendingBookingPage}.php /reader-package/
 php <<'PHP'
 <?php
 $state='/var/lib/cofrac2-production';
@@ -38,6 +38,9 @@ OLD_PID=$!
 sleep 0.2
 original_api() { php -r '$c=curl_init("http://127.0.0.1:19846/");curl_setopt_array($c,[CURLOPT_PROXY=>"",CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>2]);if(curl_exec($c)!=="ORIGINAL_API")exit(1);'; }
 original_api
+mkdir -m 700 /reader-update-package
+cp /workspace/tools/deploy/mymar/booking-http/update-code.{php,sh} /reader-update-package/
+php /workspace/tools/deploy/tests/mymar-reader-update-package-fixture.php
 snapshot() {
     mysql --defaults-file=/etc/mysql/debian.cnf -NBe 'CHECKSUM TABLE MYMAR.users,MYMAR.clients,MYMAR.roles,MYMAR.model_has_roles,MYMAR.dossiers,MYMAR.dossier_rdv,MYMAR.dossier_historiques,MYMAR.status,cofrac2production.users,cofrac_mymar_integration.booking_commands;'
 }
@@ -74,6 +77,12 @@ foreach(glob($reports[0].'/*')as$file){$body=file_get_contents($file);assert(!st
 $pdo=new PDO('mysql:unix_socket=/var/run/mysqld/mysqld.sock;dbname=MYMAR',$config['database_user'],$config['database_password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
 foreach(['UPDATE MYMAR.dossiers SET status_id=3 WHERE id=10','SELECT password FROM MYMAR.users','DELETE FROM cofrac_mymar_integration.booking_commands']as$sql){try{$pdo->exec($sql);throw new LogicException('Unexpected SQL permission');}catch(PDOException $error){assert(in_array($error->errorInfo[1],[1142,1143],true));}}
 $curl=curl_init('http://127.0.0.1:19847/v1/pending-bookings?limit=1');curl_setopt_array($curl,[CURLOPT_PROXY=>'',CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$config['token']],CURLOPT_TIMEOUT=>5]);
+$query=http_build_query(['window_start'=>'2026-11-01T00:00:00Z','window_end'=>'2026-11-08T00:00:00Z','technician_ids'=>implode(',',$config['technician_ids'])]);
+$calendar=curl_init('http://127.0.0.1:19847/v1/calendar-labels?'.$query);curl_setopt_array($calendar,[CURLOPT_PROXY=>'',CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$config['token']],CURLOPT_TIMEOUT=>5]);
+$labels=json_decode(curl_exec($calendar),true,16,JSON_THROW_ON_ERROR);assert(curl_getinfo($calendar,CURLINFO_RESPONSE_CODE)===200 && $labels['format']==='cofrac.mymar-calendar-labels');
+assert(count($labels['items'])>0);
+foreach($labels['items']as$item){assert(array_keys($item)===['rdv_id','dossier_id','technician_id','customer_name','address','postal_code','city']);assert(in_array($item['technician_id'],$config['technician_ids'],true));}
+assert(!str_contains(json_encode($labels),'"email"')&&!str_contains(json_encode($labels),'"phone"'));
 // Changing a local feature flag must not turn this reader into a write-capable service.
 $config['writes_enabled']=true;file_put_contents($path,json_encode($config,JSON_THROW_ON_ERROR));
 $response=json_decode(curl_exec($curl),true,16,JSON_THROW_ON_ERROR);assert(curl_getinfo($curl,CURLINFO_RESPONSE_CODE)===503 && $response['error']==='booking_reader_unavailable');
@@ -82,6 +91,7 @@ assert(!file_exists('/fixtures/FORBIDDEN_CALL')&&!file_exists('/fixtures/APPLICA
 echo "Reader HTTP: real Apache/FPM/MySQL, SELECT-only permissions, POST refused, secrets private, old application untouched.\n";
 PHP
     bash /workspace/tools/deploy/tests/check-mymar-booking-ui-container.sh
+    bash /workspace/tools/deploy/tests/check-mymar-reader-update-container.sh
     if (cd /reader-package && bash install.sh --install-reader-only > /fixtures/reader-repeat.log 2>&1); then exit 1; fi
     RUN=$(php -r '$r=json_decode(file_get_contents("/var/lib/cofrac2-production/MYMAR-BOOKING-HTTP.json"),true);echo $r["run_directory"];')
     # Cleanup cannot depend on the continuing validity of the original request or mapping.

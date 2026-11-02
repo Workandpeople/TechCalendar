@@ -34,12 +34,13 @@ class MymarCalendarFeed
             if ($selected === []) {
                 return array_replace($meta, ['state' => 'outside_pilot']);
             }
-            $values = Cache::many([$pilot->cacheKey(), $pilot->cacheKey().':failure']);
+            $values = Cache::many([$pilot->cacheKey(), $pilot->cacheKey().':failure', MymarCalendarLabels::cacheKey($pilot)]);
             $snapshot = $values[$pilot->cacheKey()] ?? null;
             if (! is_array($snapshot)) {
                 return $meta;
             }
             MymarCachedObservation::validate($snapshot, $pilot);
+            $labels = MymarCalendarLabels::forSnapshot($values[MymarCalendarLabels::cacheKey($pilot)] ?? null, $pilot, $snapshot);
             $technicians = User::query()->internal()->where('role', 2)->where('admin', false)
                 ->whereIn('id', array_values($pilot->technicianMap))->get(['id', 'first_name', 'last_name']);
             if ($technicians->count() !== count($pilot->technicianMap)) {
@@ -64,7 +65,12 @@ class MymarCalendarFeed
                     continue;
                 }
                 $label = $period['visit_phase'] === 'after_works' ? 'MAR après travaux' : 'MAR visite initiale';
-                $events[] = ['id' => 'mymar:'.$period['source_rdv_id'], 'title' => $label.($blocking ? ' · Lecture seule' : ' · Observation'),
+                $details = $labels[$period['source_rdv_id']] ?? [];
+                if (($details['dossier_id'] ?? null) !== $period['source_dossier_id']
+                    || ($details['technician_id'] ?? null) !== $period['source_technician_id']) {
+                    $details = [];
+                }
+                $events[] = ['id' => 'mymar:'.$period['source_rdv_id'], 'title' => (($details['customer_name'] ?? '') ?: $label).($blocking ? ' · Lecture seule' : ' · Observation'),
                     'start' => $start->setTimezone(new DateTimeZone('Europe/Paris'))->format(DATE_ATOM),
                     'end' => $end->setTimezone(new DateTimeZone('Europe/Paris'))->format(DATE_ATOM),
                     'editable' => false, 'startEditable' => false, 'durationEditable' => false, 'overlap' => true,
@@ -72,7 +78,9 @@ class MymarCalendarFeed
                     'extendedProps' => ['is_mymar' => true, 'observation_only' => true, 'read_only' => true, 'availability_guard_enabled' => $blocking,
                         'technician_id' => $period['cofrac_user_id'], 'technician_name' => $names[$period['cofrac_user_id']],
                         'technician_full_name' => $names[$period['cofrac_user_id']], 'service_label' => $label, 'service_name' => $label,
-                        'customer_name' => $label, 'duration_minutes' => $period['duration_minutes'], 'location_precision' => 'unknown',
+                        'customer_name' => $details['customer_name'] ?? '', 'address' => $details['address'] ?? '',
+                        'postal_code' => $details['postal_code'] ?? '', 'city' => $details['city'] ?? '',
+                        'duration_minutes' => $period['duration_minutes'], 'location_precision' => 'unknown',
                         'synced_at' => $snapshot['generated_at'], 'cache_state' => $state]];
             }
 

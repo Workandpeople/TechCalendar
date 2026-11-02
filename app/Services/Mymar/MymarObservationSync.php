@@ -54,9 +54,11 @@ class MymarObservationSync
                 throw new RuntimeException('mymar.cache_write_failed');
             }
             $cache->forget($pilot->cacheKey().':failure');
+            $labelsReady = app(MymarCalendarLabelsSync::class)->refresh($pilot, $projection);
 
             return ['status' => 'observing', 'periods' => count($projection['periods']), 'generated_at' => $projection['generated_at'],
-                'window_start' => $projection['window_start'], 'window_end' => $projection['window_end'], 'blocking_enabled' => false];
+                'window_start' => $projection['window_start'], 'window_end' => $projection['window_end'], 'blocking_enabled' => false,
+                'calendar_labels_ready' => $labelsReady];
         } catch (Throwable $exception) {
             $reason = $exception instanceof RuntimeException && in_array($exception->getMessage(), ['mymar.target_mapping_changed',
                 'mymar.unusable_observation', 'mymar.gateway_observation_failed', 'mymar.unsafe_pilot_file',

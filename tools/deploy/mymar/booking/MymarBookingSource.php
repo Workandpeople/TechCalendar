@@ -7,6 +7,7 @@ namespace Cofrac2\Deploy\Mymar;
 use App\Services\Mymar\MymarBookingCommand;
 use App\Services\Mymar\MymarObservation;
 use App\Services\Mymar\MymarObservationPolicy;
+use App\Services\Mymar\MymarReadWindow;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -82,6 +83,56 @@ final class MymarBookingSource
 
             return ['format' => 'cofrac.mymar-pending-bookings', 'version' => 1, 'items' => $items,
                 'next_after' => $more ? (int) end($records)['id'] : null];
+        } catch (Throwable $error) {
+            throw $this->failure($error);
+        } finally {
+            $this->rollback();
+        }
+    }
+
+    public function calendarLabels(MymarReadWindow $window, DateTimeImmutable $now): array
+    {
+        if (! $this->readOnlyCredentials) {
+            throw new MymarBookingFailure('booking_disabled', 503);
+        }
+        if (array_diff($window->technicianIds, $this->technicianIds)) {
+            throw new MymarBookingFailure('booking_technician_outside_scope', 403);
+        }
+        $this->begin(readOnly: true);
+        try {
+            [$from, $to] = $window->sourceBounds('Europe/Paris');
+            $records = $this->rows('SELECT /*+ MAX_EXECUTION_TIME(1500) */ r.id AS rdv_id,r.dossier_id,d.technicien_id AS technician_id,'
+                .'c.nom,c.prenom,c.adress,c.zip,c.ville FROM MYMAR.dossier_rdv r'
+                .' JOIN MYMAR.dossiers d ON d.id=r.dossier_id JOIN MYMAR.clients c ON c.id=d.client_id'
+                .' WHERE r.is_old=0 AND d.status_id IN (3,16) AND r.date_rdv>=? AND r.date_rdv<?'
+                .' AND d.technicien_id IN ('.implode(',', array_fill(0, count($window->technicianIds), '?')).')'
+                .' ORDER BY r.id LIMIT 2001', [$from, $to, ...$window->technicianIds]);
+            if (count($records) > MymarObservation::MAXIMUM_ROWS) {
+                throw new MymarBookingFailure('booking_source_limit', 503);
+            }
+            $text = static function (mixed $value, int $maximum): string {
+                $value = (string) ($value ?? '');
+                if (! mb_check_encoding($value, 'UTF-8')) {
+                    throw new MymarBookingFailure('booking_source_invalid', 503);
+                }
+
+                return mb_substr(trim(preg_replace('/[\s\p{C}]+/u', ' ', $value) ?? ''), 0, $maximum);
+            };
+            $items = [];
+            foreach ($records as $record) {
+                $postalCode = $text($record['zip'], 20);
+                $city = $text($record['ville'], 120);
+                $items[] = ['rdv_id' => (int) $record['rdv_id'], 'dossier_id' => (int) $record['dossier_id'],
+                    'technician_id' => (int) $record['technician_id'],
+                    'customer_name' => trim($text($record['prenom'], 120).' '.$text($record['nom'], 180)),
+                    'address' => trim(implode(', ', array_filter([$text($record['adress'], 255), trim($postalCode.' '.$city)]))),
+                    'postal_code' => $postalCode, 'city' => $city];
+            }
+
+            return ['format' => 'cofrac.mymar-calendar-labels', 'version' => 1,
+                'generated_at' => $now->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM),
+                'window_start' => $window->from->format(DATE_ATOM), 'window_end' => $window->to->format(DATE_ATOM),
+                'technician_ids' => $window->technicianIds, 'items' => $items];
         } catch (Throwable $error) {
             throw $this->failure($error);
         } finally {

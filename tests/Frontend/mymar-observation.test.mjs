@@ -92,3 +92,26 @@ test('the active guard is described accurately without enabling calendar editing
     assert.match(banner.textContent, /Disponibilités contrôlées au placement/);
     assert.doesNotMatch(banner.textContent, /sans blocage/);
 });
+
+test('MAR beneficiary and full address are visible on cards, hover text and the read-only detail dialog', () => {
+    const { ui, body } = harness();
+    const appointment = event();
+    appointment.extendedProps.customer_name = '<img src=x> Philippe Martin';
+    appointment.extendedProps.address = '10 rue des Tilleuls, 01560 Lescheroux';
+    const content = ui.content(appointment).domNodes[0];
+    assert.match(text(content), /Philippe Martin/); assert.match(text(content), /01560 Lescheroux/);
+    const card = element('button'); ui.mount({ el: card, event: appointment });
+    assert.match(card.title, /Philippe Martin/); assert.match(card.title, /10 rue des Tilleuls/);
+    ui.open(appointment, card);
+    assert.match(text(body.children[0]), /<img src=x> Philippe Martin/);
+    assert.match(text(body.children[0]), /01560 Lescheroux/);
+    assert.equal(body.children[0].children.filter(child => child.tagName === 'BUTTON').length, 1);
+    assert.doesNotMatch(text(body.children[0]), /Le bénéficiaire.*ne sont pas repris/);
+});
+
+test('old caches keep MAR occupations visible with explicit missing-label placeholders', () => {
+    const { ui } = harness();
+    const content = ui.content(event()).domNodes[0];
+    assert.match(text(content), /Bénéficiaire non disponible/); assert.match(text(content), /Adresse non disponible/);
+    assert.match(text(content), /MAR après travaux/);
+});

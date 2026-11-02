@@ -63,6 +63,21 @@ final readonly class MymarBookingClient
         }
     }
 
+    public function calendarLabels(MymarReadWindow $window): array
+    {
+        $this->assertEnabled();
+        try {
+            [$status, $data] = $this->exchange('GET', '/v1/calendar-labels', $window->query(), 2097152);
+            if ($status !== 200) {
+                throw new RuntimeException('mymar.calendar_labels_unavailable');
+            }
+
+            return MymarCalendarLabels::validate($data, $window, new \DateTimeImmutable);
+        } catch (Throwable) {
+            throw new RuntimeException('mymar.calendar_labels_unavailable');
+        }
+    }
+
     private function request(MymarBookingCommand $command, bool $submit): MymarBookingAttempt
     {
         try {

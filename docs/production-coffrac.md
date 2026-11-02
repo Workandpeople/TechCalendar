@@ -3102,3 +3102,44 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - Deployer le paquet applicatif scelle puis executer l'alignement explicite
   avec le compte runtime `cofrac2-app`. Aucun seeder, import, migration nouvelle,
   placement de test, mail ou SMS de test n'est necessaire.
+
+### Beneficiaire et adresse sur les rendez-vous MAR
+
+- Les cartes MAR des plannings et de la prise de RDV affichent le beneficiaire,
+  l'adresse (voie, code postal, ville), le type de visite, les horaires et le
+  technicien. L'adresse complete reste disponible au survol et au clic.
+- Ces libelles sont recuperes par un GET prive en lecture seule sur le lecteur
+  existant (port 19847, `/v1/calendar-labels`). La passerelle des occupations et
+  son contrat minimal restent inchanges. Aucun code, schema, compte ou reglage
+  de l'application MYMAR n'est modifie ; aucun droit SQL supplementaire requis.
+- Un appel borne par synchronisation alimente un cache de cinq minutes. Les
+  pages ne font aucun appel MYMAR ni requete par rendez-vous. Les libelles sont
+  relies uniquement si les identifiants RDV, dossier et technicien correspondent
+  au cache d'occupations valide. Aucun email, telephone, document ou coordonnee
+  GPS n'est ajoute a ce flux d'affichage.
+- Un lecteur ancien, un refus HTTP ou des libelles invalides/perimes ne masquent
+  jamais les occupations et ne modifient pas les controles de disponibilite.
+  L'interface indique alors que le beneficiaire ou l'adresse est indisponible.
+- Le deploiement applicatif seul ne suffit pas : le code du lecteur prive deja
+  installe doit egalement etre mis a jour par une operation dediee et controlee,
+  puis la synchronisation habituelle doit rafraichir le cache. Ne pas relancer
+  l'installateur initial sur une passerelle existante.
+- `prepare-mymar-reader-code-update.php` construit ce second paquet depuis la
+  revision commitee. Son lanceur exige cette revision deja deployee et verifie
+  les fichiers contre le checkout Cofrac avant toute interruption du lecteur.
+  Seul le couple Apache/FPM prive 19847 est arrete quelques instants. Aucun
+  compte SQL, droit, secret, liaison ou fichier MYMAR n'est modifie. Les appels
+  de controle sont uniquement des GET ; un echec restaure le code precedent.
+
+### Replacement rapide d'un rendez-vous natif
+
+- Les details du dossier, ses prestations et le suivi planning ouvrent un petit
+  formulaire cible : date, heure de Paris, duree et technicien. Un rendez-vous
+  actif est deplace sans supprimer son historique, ses documents ou commentaires.
+- En cas de conflit natif, les raisons sont affichees et un second accord
+  explicite permet le placement force. Les controles MAR indisponibles ou un
+  placement MAR en cours ne peuvent jamais etre contournes par cette option.
+- Si le precedent rendez-vous a deja ete retire du planning, un nouveau est
+  cree ; l'ancien n'est pas restaure. Les prestations engagees dans un controle
+  restent protegees. Version, affectation et disponibilites sont revalidees sous
+  verrou avant ecriture. Aucun traitement global ni envoi de test requis.

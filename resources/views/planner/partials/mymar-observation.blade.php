@@ -7,6 +7,7 @@
     .mymar-event-content { display: flex; flex-direction: column; gap: 3px; padding: 5px; min-width: 0; font-size: 11px; line-height: 1.3; color: #71450a; }
     .mymar-event-content strong { font-size: 12px; }
     .mymar-event-content small { font-size: 10px; }
+    .mymar-event-address { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; white-space: normal; }
     .mymar-observation-dialog { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 22px; border: 1px solid var(--gc-border, #cbd5e1); border-radius: 20px; color: var(--gc-text, #243b48); box-shadow: 0 24px 80px #0f172a33; }
     .mymar-observation-dialog::backdrop { background: #0f172a66; }
     .mymar-observation-dialog h2 { margin: 0 0 14px; font-size: 18px; font-weight: 700; }
@@ -29,7 +30,8 @@
     };
     const summary = event => {
         const props = event.extendedProps || {};
-        return [props.service_label || 'Rendez-vous MAR', props.technician_name || 'Technicien',
+        return [props.service_label || 'Rendez-vous MAR', props.customer_name || 'Bénéficiaire non disponible',
+            props.address || 'Adresse non disponible', props.technician_name || 'Technicien',
             date(event.start, { dateStyle: 'short', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' }),
             props.availability_guard_enabled ? 'Lecture seule. Disponibilité MAR contrôlée au placement.' : 'Observation en lecture seule. Ne bloque pas les créneaux.',
             props.cache_state === 'stale' || props.cache_state === 'degraded' ? 'Données à actualiser.' : 'Horaires à confirmer.'].join(' · ');
@@ -37,9 +39,11 @@
     const content = event => {
         const props = event.extendedProps || {};
         const box = node('span', '', 'mymar-event-content');
-        box.append(node('small', props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'), node('strong', props.service_label || 'Rendez-vous MAR'),
+        box.append(node('small', props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'),
+            node('strong', props.customer_name || 'Bénéficiaire non disponible'), node('span', props.service_label || 'Rendez-vous MAR'),
             node('span', date(event.start, { timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
-            node('span', props.technician_name || 'Technicien'));
+            node('span', props.address || 'Adresse non disponible', 'mymar-event-address'),
+            node('small', props.technician_name || 'Technicien'));
         if (['stale', 'degraded'].includes(props.cache_state)) box.append(node('small', 'Données à actualiser'));
         return { domNodes: [box] };
     };
@@ -50,7 +54,8 @@
         info.el.tabIndex = 0;
         if (info.el.classList.contains('nc-event')) info.el.replaceChildren(...content(info.event).domNodes);
         if (info.el.classList.contains('nc-month-event')) info.el.replaceChildren(node('span',
-            date(info.event.start, { timeStyle: 'short' }) + (info.event.extendedProps?.availability_guard_enabled ? ' · MYMAR' : ' · MYMAR · Observation')));
+            date(info.event.start, { timeStyle: 'short' }) + (info.event.extendedProps?.availability_guard_enabled ? ' · MYMAR' : ' · MYMAR · Observation')
+                + (info.event.extendedProps?.customer_name ? ' · ' + info.event.extendedProps.customer_name : '')));
         if (info.el.tagName !== 'BUTTON' && !info.el.dataset.mymarKeyboard) {
             info.el.dataset.mymarKeyboard = '1';
             info.el.addEventListener('keydown', event => {
@@ -69,10 +74,11 @@
         const close = node('button', 'Fermer');
         close.type = 'button';
         close.addEventListener('click', () => dialog.close());
-        dialog.append(title, node('p', props.technician_name || 'Technicien'),
+        dialog.append(title, node('p', props.customer_name || 'Bénéficiaire non disponible'), node('p', props.address || 'Adresse non disponible'),
+            node('p', props.technician_name || 'Technicien'),
             node('p', date(event.start, { dateStyle: 'full', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
             node('p', props.availability_guard_enabled ? 'Ce rendez-vous est pris en compte dans les disponibilités. Il reste en lecture seule et se modifie dans MYMAR.' : 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
-            node('p', props.availability_guard_enabled ? 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.' : 'Les durées et horaires restent à confirmer. Le bénéficiaire, les documents et les trajets MYMAR ne sont pas repris.'),
+            node('p', props.availability_guard_enabled ? 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.' : 'Les durées et horaires restent à confirmer. Les documents et les trajets MYMAR ne sont pas repris.'),
             node('p', 'Dernière synchronisation : ' + date(props.synced_at, { dateStyle: 'short', timeStyle: 'short' })), close);
         dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus({ preventScroll: true }); }, { once: true });
         document.body.append(dialog);

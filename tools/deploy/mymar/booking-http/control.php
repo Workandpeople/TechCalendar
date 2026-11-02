@@ -184,7 +184,7 @@ try {
                 throw new RuntimeException('mymar.booking_http_directory_failed');
             }
         }
-        foreach (['entry.php', 'MymarBookingCommand.php', 'MymarObservation.php', 'MymarObservationPolicy.php', 'MymarBookingFailure.php',
+        foreach (['entry.php', 'MymarBookingCommand.php', 'MymarObservation.php', 'MymarObservationPolicy.php', 'MymarReadWindow.php', 'MymarBookingFailure.php',
             'MymarBookingSqlAccess.php', 'MymarBookingSource.php', 'MymarBookingGateway.php'] as $file) {
             if (! copy(__DIR__.'/'.$file, Plan::ROOT.'/code/'.$file) || ! chmod(Plan::ROOT.'/code/'.$file, 0644)) {
                 throw new RuntimeException('mymar.booking_http_code_copy_failed');

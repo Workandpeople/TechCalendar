@@ -10,6 +10,26 @@ require_once __DIR__.'/../../tools/deploy/mymar/booking/MymarBookingGateway.php'
 require_once __DIR__.'/../../tools/deploy/mymar/booking/MymarBookingSource.php';
 require_once __DIR__.'/../../tools/deploy/mymar/booking/MymarBookingSqlAccess.php';
 
+it('exposes bounded calendar labels only through an explicitly configured GET reader', function () {
+    $token = hash('sha256', 'synthetic-calendar-token');
+    $seen = [];
+    $calendar = function ($window) use (&$seen) {
+        $seen = $window->technicianIds;
+
+        return ['items' => []];
+    };
+    $gateway = new MymarBookingGateway(true, $token, fn () => [], fn () => throw new LogicException('No writes'), fn () => null, $calendar);
+    $query = http_build_query(['window_start' => '2026-11-01T00:00:00Z', 'window_end' => '2026-11-08T00:00:00Z', 'technician_ids' => '5,6']);
+    $read = fn ($method, $parameters) => $gateway->handle($method, '/v1/calendar-labels', $parameters, '', '', 'Bearer '.$token, '127.0.0.1', new DateTimeImmutable);
+    expect($read('GET', $query)['status'])->toBe(200)->and($seen)->toBe([5, 6]);
+    foreach ([$query.'&technician_ids=7', $query.'&include_emails=1', 'technician_ids=5', str_replace('5%2C6', '5%2C5', $query)] as $invalid) {
+        expect($read('GET', $invalid)['status'])->toBe(422);
+    }
+    expect($read('POST', $query)['status'])->toBe(405);
+    $writer = new MymarBookingGateway(true, $token, fn () => [], fn () => [], fn () => null);
+    expect($writer->handle('GET', '/v1/calendar-labels', $query, '', '', 'Bearer '.$token, '127.0.0.1', new DateTimeImmutable)['status'])->toBe(404);
+});
+
 function mymarBookingBody(): string
 {
     return json_encode(['format' => 'cofrac.mymar-booking-command', 'version' => 1,

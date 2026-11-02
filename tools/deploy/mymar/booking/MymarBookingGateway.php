@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cofrac2\Deploy\Mymar;
 
 use App\Services\Mymar\MymarBookingCommand;
+use App\Services\Mymar\MymarReadWindow;
 use Closure;
 use DateTimeImmutable;
 use InvalidArgumentException;
@@ -19,6 +20,7 @@ final readonly class MymarBookingGateway
         private Closure $pending,
         private Closure $execute,
         private Closure $result,
+        private ?Closure $calendarLabels = null,
     ) {
         if (! preg_match('/^[a-f0-9]{64}$/D', $token) || count(array_unique(str_split($token))) < 8) {
             throw new InvalidArgumentException('mymar.invalid_booking_credential');
@@ -34,14 +36,24 @@ final readonly class MymarBookingGateway
         if (! in_array($peer, ['127.0.0.1', '::1'], true) || ! hash_equals('Bearer '.$this->token, $authorization)) {
             return self::error(403, 'booking_access_denied');
         }
-        if (strlen($body) > 16384 || strlen($query) > 128) {
+        if (strlen($body) > 16384 || strlen($query) > ($path === '/v1/calendar-labels' ? 4096 : 128)) {
             return self::error(413, 'booking_request_too_large');
         }
         if ($method === 'GET' && $body !== '') {
             return self::error(422, 'invalid_booking_request');
         }
         try {
-            if ($path === '/v1/pending-bookings') {
+            if ($path === '/v1/calendar-labels' && $this->calendarLabels !== null) {
+                if ($method !== 'GET') {
+                    return self::error(405, 'booking_method_not_allowed');
+                }
+                try {
+                    $window = self::window($query);
+                } catch (Throwable) {
+                    return self::error(422, 'invalid_booking_calendar_scope');
+                }
+                $payload = ($this->calendarLabels)($window, $now);
+            } elseif ($path === '/v1/pending-bookings') {
                 if ($method !== 'GET') {
                     return self::error(405, 'booking_method_not_allowed');
                 }
@@ -121,6 +133,34 @@ final readonly class MymarBookingGateway
         }
 
         return MymarBookingCommand::fromArray($data);
+    }
+
+    private static function window(string $query): MymarReadWindow
+    {
+        if ($query === '' || preg_match('/%(?![a-fA-F0-9]{2})/', $query)) {
+            throw new InvalidArgumentException;
+        }
+        $values = [];
+        foreach (explode('&', $query) as $pair) {
+            $parts = explode('=', $pair, 2);
+            $key = urldecode($parts[0]);
+            if (count($parts) !== 2 || isset($values[$key]) || ! in_array($key, ['window_start', 'window_end', 'technician_ids'], true)) {
+                throw new InvalidArgumentException;
+            }
+            $values[$key] = urldecode($parts[1]);
+        }
+        if (count($values) !== 3) {
+            throw new InvalidArgumentException;
+        }
+        $ids = [];
+        foreach (explode(',', $values['technician_ids']) as $id) {
+            if (! preg_match('/^[1-9][0-9]{0,17}$/D', $id) || (string) (int) $id !== $id) {
+                throw new InvalidArgumentException;
+            }
+            $ids[] = (int) $id;
+        }
+
+        return new MymarReadWindow($values['window_start'], $values['window_end'], $ids);
     }
 
     private static function page(string $query): array
