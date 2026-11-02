@@ -220,10 +220,37 @@ class PostVisitWorkflow
             ->where(fn (Builder $query) => $query->whereNull('processing_mode')->orWhere('processing_mode', LotAppointment::PROCESSING_MODE_PHYSICAL));
     }
 
-    public static function assertPlanningMutable(DossierOperation $operation): void
+    public static function planningEvidence(DossierOperation $operation): array
     {
-        if ($operation->inspected_on || $operation->control_submitted_at || $operation->control_validated_at) {
-            throw ValidationException::withMessages(['appointment' => 'Cette visite appartient à un contrôle engagé. Son rendez-vous et sa liaison ne peuvent plus être réinitialisés ou déplacés. Utilise le traitement après visite.']);
+        if (! $operation->inspected_on && ! $operation->control_submitted_at && ! $operation->control_validated_at
+            && ! $operation->report_document_id && ! $operation->visit_appointment_id) {
+            return [];
+        }
+
+        return [
+            'inspected_on' => $operation->inspected_on?->toDateString(),
+            'control_submitted_at' => $operation->control_submitted_at?->toIso8601String(),
+            'control_validated_at' => $operation->control_validated_at?->toIso8601String(),
+            'report_document_id' => $operation->report_document_id ? (int) $operation->report_document_id : null,
+            'visit_appointment_id' => $operation->visit_appointment_id ? (int) $operation->visit_appointment_id : null,
+        ];
+    }
+
+    public static function isFollowUp(DossierOperation $operation, Appointment $appointment): bool
+    {
+        $evidence = self::planningEvidence($operation);
+        $snapshot = $appointment->external_payload['quick_reschedule_control'] ?? null;
+
+        // Only the new reservation can move, until a later control makes it evidence itself.
+        return $evidence !== [] && $appointment->dossier_operation_id === $operation->id
+            && (int) $operation->visit_appointment_id !== $appointment->id
+            && is_array($snapshot) && $snapshot == $evidence;
+    }
+
+    public static function assertPlanningMutable(DossierOperation $operation, ?Appointment $appointment = null): void
+    {
+        if (self::planningEvidence($operation) !== [] && (! $appointment || ! self::isFollowUp($operation, $appointment))) {
+            throw ValidationException::withMessages(['appointment' => 'Cette visite appartient à un contrôle engagé. Son rendez-vous et sa liaison ne peuvent plus être réinitialisés ou déplacés. Utilise le replacement rapide pour planifier une nouvelle visite sans modifier cette preuve.']);
         }
     }
 }

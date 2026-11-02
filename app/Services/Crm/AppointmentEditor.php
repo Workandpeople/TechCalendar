@@ -66,7 +66,7 @@ class AppointmentEditor
             if ($appointment->dossierOperation && ($technicianId !== $appointment->technician_id
                 || $serviceId !== $appointment->service_id || ! $start->equalTo($appointment->starts_at)
                 || ! $end->equalTo($appointment->ends_at) || $data['address'] !== $appointment->address)) {
-                PostVisitWorkflow::assertPlanningMutable($appointment->dossierOperation);
+                PostVisitWorkflow::assertPlanningMutable($appointment->dossierOperation, $appointment);
             }
             $checks = $placementChecks ?? app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end, [
                 'address' => $data['address'], 'latitude' => array_key_exists('latitude', $data) ? $data['latitude'] : $appointment->latitude,
@@ -93,7 +93,7 @@ class AppointmentEditor
                 Gate::forUser($actor)->authorize('update', $dossier);
                 $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
                 if ($appointment->isDirty(['technician_id', 'service_id', 'starts_at', 'ends_at', 'address', 'latitude', 'longitude', 'customer_first_name', 'customer_last_name'])) {
-                    PostVisitWorkflow::assertPlanningMutable($operation);
+                    PostVisitWorkflow::assertPlanningMutable($operation, $appointment);
                 }
                 $operation->update(['service_id' => $serviceId]);
                 $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'appointment_updated',

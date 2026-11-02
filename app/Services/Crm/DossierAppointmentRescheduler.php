@@ -33,6 +33,7 @@ final class DossierAppointmentRescheduler
             'starts_at' => AppointmentDateTime::formatStored($previous?->starts_at),
             'duration_minutes' => $previous?->duration_minutes ?: $operation->service->average_duration_minutes,
             'technician_id' => $previous?->technician_id,
+            'preserves_previous_visit' => $appointment === null && $previous !== null,
             'technicians' => User::query()->internal()->where('role', 2)->where('admin', false)
                 ->withExists(['services as qualified' => fn ($query) => $query->where('services.id', $operation->service_id)])
                 ->orderBy('last_name')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
@@ -102,7 +103,8 @@ final class DossierAppointmentRescheduler
                     'customer_phone' => $dossier->phone ?? '', 'address' => $address,
                     'latitude' => $point['latitude'], 'longitude' => $point['longitude'],
                     'starts_at' => $start, 'ends_at' => $end, 'duration_minutes' => $data['duration_minutes'],
-                    'external_source' => 'native', 'external_payload' => ['location_precision' => $precision],
+                    'external_source' => 'native', 'external_payload' => ['location_precision' => $precision,
+                        'quick_reschedule_control' => PostVisitWorkflow::planningEvidence($operation)],
                     'status' => Appointment::STATUS_SCHEDULED,
                 ]);
                 if ($forced) {
@@ -132,17 +134,19 @@ final class DossierAppointmentRescheduler
     {
         Gate::forUser($actor)->authorize('update', $dossier);
         abort_unless($operation->dossier_id === $dossier->id, 404);
-        PostVisitWorkflow::assertPlanningMutable($operation);
-        if (! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], ['pending', 'problem', 'awaiting_visit'], true)
-            || ! $operation->service) {
-            throw ValidationException::withMessages(['appointment' => 'Remets la fiche en prise de RDV avant de replanifier. Ses documents et sa facturation sont conservés.']);
+        if (! $operation->service) {
+            throw ValidationException::withMessages(['appointment' => 'Renseigne la prestation du dossier avant de replacer le RDV.']);
         }
     }
 
     private function current(DossierOperation $operation, bool $lock = false): ?Appointment
     {
         $appointments = $operation->appointments()->where('status', '!=', Appointment::STATUS_CANCELLED)
-            ->when($lock, fn ($query) => $query->lockForUpdate())->limit(2)->get();
+            ->with('lotAppointments.lot:id,status')
+            ->when($lock, fn ($query) => $query->lockForUpdate())->get()
+            ->reject(fn (Appointment $appointment) => (PostVisitWorkflow::planningEvidence($operation) !== []
+                && ! PostVisitWorkflow::isFollowUp($operation, $appointment))
+                || $appointment->lotAppointments->contains(fn ($row) => $this->isLotProof($row)));
         if ($appointments->count() > 1) {
             throw ValidationException::withMessages(['appointment' => 'Plusieurs RDV sont liés à cette fiche. Utilise le planning pour choisir le RDV à déplacer.']);
         }
@@ -160,16 +164,43 @@ final class DossierAppointmentRescheduler
             if ($operation->source === 'lot' && ctype_digit((string) $operation->source_reference)) {
                 $query->orWhere('id', (int) $operation->source_reference);
             }
-        })->lockForUpdate()->get();
+        })->with(['appointment' => fn ($query) => $query->withTrashed()])->lockForUpdate()->get();
+        $mutable = collect();
         foreach ($rows as $row) {
             $lot = Lot::query()->lockForUpdate()->findOrFail($row->lot_id);
-            if (Lot::isArchivedStatus($lot->status) || $row->physical_satisfaction !== null || $row->contact_satisfaction !== null
-                || $row->contact_processed_at !== null || $row->excluded_from_lot_stats
-                || ($row->appointment_id !== null && $row->appointment_id !== $appointment?->id)) {
+            $row->setRelation('lot', $lot);
+            if ($this->isLotProof($row)) {
+                if ($appointment && $row->appointment_id === $appointment->id) {
+                    throw ValidationException::withMessages(['version' => 'Le lot a été traité depuis l’ouverture du formulaire. Ferme puis rouvre le replacement rapide.']);
+                }
+
+                // Preserve processed lot results and their original appointment; the new visit is independent.
+                continue;
+            }
+            if ($row->appointment_id !== $appointment?->id && $row->appointment?->dossier_operation_id === $operation->id
+                && PostVisitWorkflow::planningEvidence($operation) !== []
+                && ! PostVisitWorkflow::isFollowUp($operation, $row->appointment)) {
+                continue;
+            }
+            if ($appointment === null && $row->appointment?->dossier_operation_id === $operation->id
+                && ($row->appointment->trashed() || $row->appointment->status === Appointment::STATUS_CANCELLED)) {
+                $mutable->push($row);
+
+                continue;
+            }
+            if ($row->appointment_id !== null && $row->appointment_id !== $appointment?->id) {
                 throw ValidationException::withMessages(['appointment' => 'Le lot est déjà traité ou rattaché à un autre RDV. Le replacement rapide ne peut pas modifier cette preuve.']);
             }
+            $mutable->push($row);
         }
 
-        return $rows;
+        return $mutable;
+    }
+
+    private function isLotProof(LotAppointment $row): bool
+    {
+        return ! $row->lot || Lot::isArchivedStatus($row->lot->status)
+            || $row->physical_satisfaction !== null || $row->contact_satisfaction !== null
+            || $row->contact_processed_at !== null || $row->excluded_from_lot_stats;
     }
 }

@@ -372,9 +372,7 @@ class PlannerTrackingController extends Controller
                         ? route('v2.dossiers.show', $appointment->dossierOperation->dossier_id)
                         : null,
                     'quick_reschedule_url' => $appointment->relationLoaded('dossierOperation') && $appointment->dossierOperation
-                        && ! $appointment->dossierOperation->inspected_on && ! $appointment->dossierOperation->control_submitted_at
-                        && ! $appointment->dossierOperation->control_validated_at
-                        && in_array(\App\Services\Crm\DossierStatusCatalog::describe($appointment->dossierOperation->legacy_status)['key'], ['pending', 'problem', 'awaiting_visit'], true)
+                        && $appointment->dossierOperation->service_id
                             ? route('v2.dossiers.appointments.reschedule', [$appointment->dossierOperation->dossier_id, $appointment->dossier_operation_id], absolute: false) : null,
                     'customer_name' => trim($appointment->customer_first_name.' '.$appointment->customer_last_name),
                     'customer_first_name' => $appointment->customer_first_name,

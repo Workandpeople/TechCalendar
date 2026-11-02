@@ -121,7 +121,8 @@ export function initAppointmentReschedule(root = document, browser = window) {
                 option.textContent = technician.name + (technician.qualified ? '' : ' · Non habilité'); select.append(option);
             }
             select.value = data.technicians.some(tech => tech.id === data.technician_id) ? String(data.technician_id) : '';
-            feedback.textContent = ''; form.hidden = false; form.elements.date.focus();
+            feedback.textContent = data.preserves_previous_visit ? 'Une nouvelle visite sera planifiée ; l’ancien rendez-vous et ses pièces seront conservés.' : '';
+            form.hidden = false; form.elements.date.focus();
         } catch (error) {
             if (current === sequence && dialog.open) { feedback.textContent = error.name === 'AbortError' ? 'Chargement interrompu. Ferme puis rouvre le replacement.' : error.message; feedback.classList.add('text-rose-700'); }
         } finally { browser.clearTimeout(timeout); }

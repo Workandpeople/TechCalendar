@@ -72,6 +72,13 @@ test('a disabled previous technician is never silently assigned to the first act
     assert.equal(ui.form.elements.technician_id.value, '');
 });
 
+test('explains that a control-linked old visit is preserved before creating a new reservation', async () => {
+    const ui = fixture(); await ui.load({ ...context, appointment_id: null, updated_at: null, preserves_previous_visit: true });
+    assert.match(ui.feedback.textContent, /nouvelle visite/);
+    assert.match(ui.feedback.textContent, /conservés/);
+    assert.equal(ui.requests.length, 1);
+});
+
 test('canceling an initial lookup ignores a late response and never issues a write', async () => {
     const ui = fixture(); ui.click(); ui.close.handlers.click();
     assert.equal(ui.requests[0].options.signal.aborted, true);
