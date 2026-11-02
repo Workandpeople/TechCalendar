@@ -25,7 +25,7 @@ function browserFixture() {
 }
 
 const response = (suggestions = [{ id: 'address.1', label: '8 rue Test, Paris' }], status = 200) => ({
-    ok: status === 200, status, json: async () => ({ suggestions }),
+    ok: status === 200, status, headers: new Headers({ 'Content-Type': 'application/json' }), json: async () => ({ suggestions }),
 });
 
 test('debounces the address lookup and cancels older suggestions immediately on input', async () => {
@@ -61,11 +61,11 @@ test('handles expired sessions, malformed payloads and timeouts without retainin
     loader.search(new URL('https://example.invalid?q=Paris')); ui.run(300); ui.run(12000); await settle();
     assert.match(errors[0], /expiré/);
     loader.search(new URL('https://example.invalid?q=Paris')); ui.run(300);
-    ui.requests[1].resolve({ ok: true, status: 200, json: async () => ({ suggestions: 'invalid' }) }); await settle();
+    ui.requests[1].resolve({ ...response(), json: async () => ({ suggestions: 'invalid' }) }); await settle();
     assert.match(errors[1], /invalide/);
 });
 
-function editorFixture() {
+function editorFixture({ open = false } = {}) {
     const ui = browserFixture();
     class Node {
         constructor() { this.handlers = {}; this.attrs = new Map(); this.children = []; this.hidden = true; this.value = ''; }
@@ -80,11 +80,13 @@ function editorFixture() {
     }
     const input = new Node(), identifier = new Node(), list = new Node(), status = new Node(), submit = new Node(), dialog = new Node(), street = new Node();
     const displayAddress = new Node(); displayAddress.value = 'Lieu-dit original à conserver';
+    const localitySearch = new Node(); localitySearch.dataset = { query: '44310 SAINT-PHILBERT-DE-GRAND-LI' };
+    dialog.open = open;
     list.id = 'dossier-address-options'; input.value = 'Adresse initiale';
     const form = new Node();
     form.elements = { address_query: input, mapbox_id: identifier, display_address: displayAddress };
     form.dataset = { suggestionsUrl: 'https://example.invalid/v2/dossiers/1/adresse/suggestions' };
-    form.querySelector = selector => selector === '[data-address-status]' ? status : selector === '[role="listbox"]' ? list : selector === '[data-address-street]' ? street : submit;
+    form.querySelector = selector => selector === '[data-address-status]' ? status : selector === '[role="listbox"]' ? list : selector === '[data-address-street]' ? street : selector === '[data-address-locality-search]' ? localitySearch : submit;
     form.closest = () => dialog;
     form.contains = node => [input, identifier, list, status, submit].includes(node);
     const root = { querySelectorAll: () => [form], createElement: () => new Node() };
@@ -94,7 +96,7 @@ function editorFixture() {
         input.handlers.keydown(event);
         return event;
     };
-    return { ...ui, input, identifier, list, status, submit, dialog, form, key, street, displayAddress };
+    return { ...ui, input, identifier, list, status, submit, dialog, form, key, street, displayAddress, localitySearch };
 }
 
 test('selects Mapbox suggestions with the keyboard, escapes HTML and clears stale place IDs when typing', async () => {
@@ -125,17 +127,55 @@ test('Escape dismisses suggestions without closing the modal and close cancels p
     assert.equal(ui.list.hidden, true);
 });
 
-test('submit validates manually edited text rather than a previously selected place ID', async () => {
+test('submit blocks unconfirmed text and searches again instead of sending a stale place ID', async () => {
     const ui = editorFixture();
     ui.input.value = '8 rue'; ui.input.handlers.input(); ui.run(300);
     ui.requests[0].resolve(response()); await settle();
     ui.list.children[0].handlers.click();
     assert.equal(ui.identifier.value, 'address.1');
     ui.input.value = 'Adresse changée sans événement input';
-    ui.form.handlers.submit();
+    const event = { preventDefault() { this.prevented = true; } };
+    ui.form.handlers.submit(event);
     assert.equal(ui.identifier.value, '');
+    assert.equal(event.prevented, true);
+    assert.notEqual(ui.submit.disabled, true);
+    assert.match(ui.status.textContent, /suggestions avant de valider/);
+    assert.equal(ui.input.getAttribute('aria-invalid'), 'true');
+    ui.run(300);
+    ui.requests[1].resolve(response()); await settle();
+    ui.list.children[0].handlers.click();
+    assert.equal(ui.input.getAttribute('aria-invalid'), undefined);
+    ui.form.handlers.submit({ preventDefault() { assert.fail('Confirmed suggestion should submit'); } });
     assert.equal(ui.submit.disabled, true);
     assert.match(ui.status.textContent, /recalcul/);
+});
+
+test('focus searches a prefilled address and reopening after validation does not require retyping', () => {
+    const ui = editorFixture();
+    ui.input.handlers.focus(); ui.run(300);
+    assert.match(ui.requests[0].url, /q=Adresse\+initiale/);
+    ui.input.handlers.focus(); ui.run(300);
+    assert.equal(ui.requests.length, 1);
+    ui.dialog.handlers.close();
+    ui.input.handlers.focus(); ui.run(300);
+    assert.equal(ui.requests.length, 2);
+    const reopened = editorFixture({ open: true });
+    reopened.run(300);
+    assert.equal(reopened.requests.length, 1);
+});
+
+test('locality shortcut completes an imported truncated city without changing the retained street', async () => {
+    const ui = editorFixture();
+    ui.localitySearch.handlers.click(); ui.run(300);
+    assert.equal(ui.input.value, '44310 SAINT-PHILBERT-DE-GRAND-LI');
+    assert.match(ui.requests[0].url, /mode=city/);
+    ui.requests[0].resolve(response([{ id: 'commune.44188_44310', label: '44310 Saint-Philbert-de-Grand-Lieu, Loire-Atlantique, France', feature_type: 'place' }]));
+    await settle();
+    ui.list.children[0].handlers.click();
+    assert.equal(ui.identifier.value, 'commune.44188_44310');
+    assert.equal(ui.input.value, '44310 Saint-Philbert-de-Grand-Lieu, Loire-Atlantique, France');
+    assert.equal(ui.displayAddress.value, 'Lieu-dit original à conserver');
+    assert.equal(ui.street.hidden, false);
 });
 
 async function creationFixture({ existing = false, postalCode = '' } = {}) {

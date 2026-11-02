@@ -1510,7 +1510,7 @@
     <script>
         const bookingMode = @json($bookingMode ?? 'create');
         const bookingIsReplacementMode = bookingMode === 'replace';
-        const bookingAnalyzeUrl = @json(route('planner.book.analyze'));
+        const bookingAnalyzeUrl = @json(route('planner.book.analyze', [], false));
         const bookingCrmIndexUrl = @json(route('planner.book.crm-appointments.index'));
         const bookingConnectorsEnabled = @json($bookingConnectorsEnabled);
         const bookingForcePlacementEnabled = @json((bool) config('crm.v2_enabled'));
@@ -1520,7 +1520,7 @@
         const bookingCrmUpdateUrlTemplate = @json(route('planner.book.crm-appointments.update', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingCrmProblemUrlTemplate = @json(route('planner.book.crm-appointments.problem', ['crmAppointmentId' => '__CRM_APPOINTMENT__']));
         const bookingTechnicianSearchUrl = @json(route('planner.book.technicians.search'));
-        const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window'));
+        const bookingCalendarWindowUrl = @json(route('planner.book.calendar-window', [], false));
         const bookingStoreUrl = @json(route('planner.book.appointments.store'));
         const bookingMailPreviewUrlTemplate = @json(route('planner.book.appointments.mail.preview', ['appointment' => '__APPOINTMENT__']));
         const bookingMailSendUrlTemplate = @json(route('planner.book.appointments.mail.send', ['appointment' => '__APPOINTMENT__']));
@@ -5694,6 +5694,8 @@
             try {
                 const response = await fetch(bookingCalendarWindowUrl, {
                     method: 'POST',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
                     signal: calendarWindowAbortController.signal,
                     headers: {
                         Accept: 'application/json',
@@ -5707,7 +5709,7 @@
                         technician_ids: selectedTechnicianIdsArray(),
                     }),
                 });
-                const payload = await response.json();
+                const payload = await window.TechCalendarHttp.readJson(response);
 
                 if (!response.ok) {
                     throw new Error(payload.message || 'Calcul des propositions impossible.');
@@ -5725,7 +5727,7 @@
                 bookingCalendar.removeAllEvents();
                 bookingCalendar.addEventSource(colorizedEvents(currentCalendarEvents, currentCalendarSuggestions));
             } catch (error) {
-                if (error.name !== 'AbortError') {
+                if (requestId === calendarWindowRequestId && error.name !== 'AbortError') {
                     showFeedback(error.message || 'Erreur pendant le calcul des propositions.', 'error');
                 }
             } finally {
@@ -5903,6 +5905,8 @@
             try {
                 const response = await fetch(bookingAnalyzeUrl, {
                     method: 'POST',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
                     headers: {
                         Accept: 'application/json',
                         'Content-Type': 'application/json',
@@ -5911,7 +5915,7 @@
                     body: JSON.stringify(payload),
                 });
 
-                const data = await response.json();
+                const data = await window.TechCalendarHttp.readJson(response);
 
                 if (generation !== bookingAnalysisGeneration) return false;
 
@@ -5961,6 +5965,7 @@
                 if (generation !== bookingAnalysisGeneration) return false;
                 await finishBookingAnalysisLoader('Analyse interrompue.', generation);
                 if (generation !== bookingAnalysisGeneration) return false;
+                techniciansList.textContent = 'Analyse interrompue. Vous pouvez sélectionner à nouveau ce dossier pour réessayer.';
                 showFeedback(error.message || 'Erreur pendant l’analyse du RDV.', 'error');
                 return false;
             }

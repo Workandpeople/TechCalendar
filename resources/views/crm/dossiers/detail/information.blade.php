@@ -31,7 +31,7 @@
         $locationQuery = $approximateLocation ? trim($dossier->postal_code.' '.$dossier->city) : \App\Services\Crm\DossierLocation::address($dossier);
     @endphp
     <x-dossier-dialog id="corriger-adresse" title="Modifier l’adresse de l’intervention" class="gc-address-dialog" :reopen="$errors->any() && old('_form') === 'address'">
-        <form method="POST" action="{{ route('v2.dossiers.address.update', $dossier) }}" class="space-y-4" data-dossier-address data-location-precision="{{ $approximateLocation ? 'city' : 'address' }}" data-suggestions-url="{{ route('v2.dossiers.address.suggestions', $dossier) }}">
+        <form method="POST" action="{{ route('v2.dossiers.address.update', $dossier, false) }}" class="space-y-4" data-dossier-address data-location-precision="{{ $approximateLocation ? 'city' : 'address' }}" data-suggestions-url="{{ route('v2.dossiers.address.suggestions', $dossier, false) }}">
             @csrf @method('PATCH')
             <input type="hidden" name="_form" value="address">
             <input type="hidden" name="version" value="{{ $dossier->version }}">
@@ -41,7 +41,10 @@
                 <input id="dossier-address-query" name="address_query" type="text" required minlength="3" maxlength="255" class="gc-input" value="{{ old('address_query', $locationQuery) }}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dossier-address-options" aria-describedby="dossier-address-status">
                 <ul id="dossier-address-options" class="gc-address-suggestions" role="listbox" aria-label="Adresses ou communes proposées" hidden></ul>
             </div>
-            <p id="dossier-address-status" data-address-status role="status" aria-live="polite" class="text-xs text-slate-500">Saisissez au moins 3 caractères pour rechercher une adresse.</p>
+            <p id="dossier-address-status" data-address-status role="status" aria-live="polite" class="text-xs text-slate-500">Cliquez dans le champ, puis choisissez une adresse ou une commune dans les suggestions.</p>
+            @if (filled($dossier->postal_code) || filled($dossier->city))
+                <button type="button" class="text-sm font-semibold text-blue-700 underline" data-address-locality-search data-query="{{ trim($dossier->postal_code.' '.$dossier->city) }}">Rechercher uniquement le code postal et la commune</button>
+            @endif
             <div data-address-street>
                 <label class="gc-label" for="dossier-display-address">Voie / lieu-dit à conserver sur la fiche</label>
                 <input id="dossier-display-address" name="display_address" type="text" maxlength="500" class="gc-input" value="{{ is_string($retainedAddress) ? $retainedAddress : '' }}" aria-describedby="dossier-display-address-help">

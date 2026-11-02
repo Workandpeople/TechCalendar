@@ -70,5 +70,25 @@
             "code": "32",
             "nom": "Gers"
         }
+    },
+    {
+        "code": "44083", "nom": "La Limouzinière", "codesPostaux": ["44310"],
+        "centre": {"type": "Point", "coordinates": [-1.637, 46.9872]},
+        "departement": {"code": "44", "nom": "Loire-Atlantique"}
+    },
+    {
+        "code": "44155", "nom": "Saint-Colomban", "codesPostaux": ["44310"],
+        "centre": {"type": "Point", "coordinates": [-1.5526, 47.0175]},
+        "departement": {"code": "44", "nom": "Loire-Atlantique"}
+    },
+    {
+        "code": "44174", "nom": "Saint-Lumine-de-Coutais", "codesPostaux": ["44310"],
+        "centre": {"type": "Point", "coordinates": [-1.7235, 47.0578]},
+        "departement": {"code": "44", "nom": "Loire-Atlantique"}
+    },
+    {
+        "code": "44188", "nom": "Saint-Philbert-de-Grand-Lieu", "codesPostaux": ["44310"],
+        "centre": {"type": "Point", "coordinates": [-1.6443, 47.0689]},
+        "departement": {"code": "44", "nom": "Loire-Atlantique"}
     }
 ]

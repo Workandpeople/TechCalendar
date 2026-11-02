@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { initBookingDossierSummary, renderBookingDossierSummary, safeDossierSummaryUrl } from '../../resources/js/booking-dossier-summary.js';
+import { readApiJson } from '../../resources/js/api-response.js';
 
 test('only links to a native dossier on the current origin', () => {
     const origin = 'https://app.test';
@@ -94,11 +95,11 @@ function analysisHarness() {
         hideCalendarLoader() {}, renderTechnicians: (_rows, appointment) => rendered.push(appointment.id),
         selectedTechnicians: () => [], renderMap: async () => {}, renderCalendar() {}, finishBookingAnalysisLoader: async () => {},
         showFeedback: message => errors.push(message),
-        window: { requestAnimationFrame() {}, setTimeout() {} },
+        window: { TechCalendarHttp: { readJson: readApiJson }, requestAnimationFrame() {}, setTimeout() {} },
         fetch: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
     };
     const analyze = runInNewContext(`${analysisCode}\nanalyzeAppointment;`, sandbox);
-    const response = id => ({ ok: true, json: async () => ({ crm_appointment: { id }, technicians: [{}], suggestions: [{}], filters: {} }) });
+    const response = id => ({ ok: true, status: 200, headers: new Headers({ 'Content-Type': 'application/json' }), json: async () => ({ crm_appointment: { id }, technicians: [{}], suggestions: [{}], filters: {} }) });
     return { analyze, pending, summaries, rendered, errors, sandbox, response };
 }
 

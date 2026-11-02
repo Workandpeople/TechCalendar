@@ -2918,6 +2918,34 @@ Mapbox complets avec departement/pays pouvaient ensuite echouer a la validation.
 
 Reference : [documentation officielle des communes](https://geo.api.gouv.fr/decoupage-administratif/communes).
 
+### Selection d'une commune pre-remplie et erreurs du planning (2 novembre 2026)
+
+- Un ancien nom tronque tel que `44310 SAINT-PHILBERT-DE-GRAND-LI` est bien
+  retrouvable dans le referentiel public. Il ne constitue pas une selection
+  canonique : la validation serveur ne doit jamais choisir arbitrairement une
+  autre commune partageant le code postal.
+- Le formulaire relance maintenant la recherche au focus d'une valeur deja
+  remplie, y compris apres sa reouverture sur erreur. Valider sans suggestion
+  selectionnee ouvre la recherche au lieu de soumettre une valeur non confirmee.
+  Un raccourci permet de chercher uniquement code postal + commune du dossier ;
+  le lieu-dit reste dans son champ distinct et n'est pas ecrase.
+- L'analyse et le rechargement du calendrier utilisent des URL relatives au
+  domaine courant. Une reponse HTML, une session expiree ou une erreur de proxy
+  ne sont plus affichees comme une erreur brute de decodage JSON. Le code HTTP
+  reste visible ; aucune requete de placement n'est rejouee automatiquement.
+- Les erreurs 5xx Laravel de ces deux routes ajoutent une reference UUID dans
+  `X-Error-Reference`. La ligne privee `Planning API request failed.` conserve
+  reference, route, statut, identifiant de compte deja en memoire, identifiant
+  d'operation natif valide et emplacements techniques. Aucun corps de requete,
+  adresse, email, jeton ou message brut d'exception n'est ajoute a ce diagnostic.
+  Aucun mail n'est envoye automatiquement. Une erreur generee en amont de
+  Laravel peut rester sans reference et necessite alors les journaux Apache/PHP.
+- Le cas signale avait deja ete place lors de la verification en lecture seule :
+  la cause de sa precedente reponse HTML n'a pas ete reproduite. Le diagnostic
+  ne constitue donc pas une preuve de correction de cette cause sous-jacente.
+- Aucun import, migration, seeder, envoi ou changement de configuration requis.
+  L'integration MYMAR et les rendez-vous existants restent inchanges.
+
 ### Adresse affichee et periode des RDV (30 octobre 2026)
 
 - Selectionner une commune dans la correction d'adresse conserve desormais la

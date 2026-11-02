@@ -1,3 +1,5 @@
+import { readApiJson } from './api-response.js';
+
 export function createAddressSearch(browser, { pending, success, failure }) {
     let generation = 0, controller, timer;
     const cancel = () => { generation++; controller?.abort(); browser.clearTimeout(timer); };
@@ -14,7 +16,7 @@ export function createAddressSearch(browser, { pending, success, failure }) {
                     headers: { Accept: 'application/json' }, signal: request.signal });
                 if ([401, 419].includes(response.status)) throw new Error('Votre session a expiré. Rechargez la fiche.');
                 if (response.status === 403) throw new Error('Vous n’avez plus accès à la modification de cette adresse.');
-                const data = await response.json();
+                const data = await readApiJson(response);
                 if (current !== generation) return;
                 if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || 'Recherche d’adresse ou de commune indisponible. Réessayez dans un instant.');
                 if (!Array.isArray(data.suggestions)) throw new Error('Réponse de recherche invalide.');
@@ -36,10 +38,12 @@ export function initDossierAddress(root = document, browser = window) {
         const list = form.querySelector('[role="listbox"]');
         const dialog = form.closest('dialog');
         const streetSection = form.querySelector('[data-address-street]');
+        const localitySearch = form.querySelector('[data-address-locality-search]');
         const cityQuery = () => /^\s*[0-9]{5}[\s,]+[^0-9]+$/u.test(input.value.trim());
         if (streetSection) streetSection.hidden = form.dataset.locationPrecision !== 'city' && !cityQuery();
         let suggestions = [], highlighted = -1, composing = false;
         let selectedLabel = input.value;
+        let searchMode = 'address', lastQuery = null;
         const hide = () => {
             list.hidden = true;
             input.setAttribute('aria-expanded', 'false');
@@ -58,6 +62,7 @@ export function initDossierAddress(root = document, browser = window) {
             loader.cancel();
             input.value = selectedLabel = item.label;
             identifier.value = item.id;
+            input.removeAttribute('aria-invalid');
             hide();
             const approximate = ['place', 'postcode', 'locality'].includes(item.feature_type);
             if (streetSection) streetSection.hidden = !approximate;
@@ -84,12 +89,10 @@ export function initDossierAddress(root = document, browser = window) {
                 highlighted = -1;
                 status.textContent = items.length ? `${items.length} adresse(s) ou commune(s) proposée(s).` : 'Aucun résultat. Précisez l’adresse ou le code postal et le nom de la commune.';
             },
-            failure(message) { hide(); status.textContent = message; },
+            failure(message) { lastQuery = null; hide(); status.textContent = message; },
         });
-        const changed = () => {
+        const search = () => {
             loader.cancel(); hide();
-            identifier.value = '';
-            selectedLabel = '';
             if (streetSection && cityQuery()) streetSection.hidden = false;
             const query = input.value.trim();
             if (composing) return;
@@ -99,9 +102,27 @@ export function initDossierAddress(root = document, browser = window) {
             }
             const url = new URL(form.dataset.suggestionsUrl, browser.location.href);
             url.searchParams.set('q', query);
+            if (searchMode === 'city') url.searchParams.set('mode', 'city');
+            lastQuery = query;
             loader.search(url);
         };
-        input.addEventListener('input', changed);
+        const changed = () => {
+            identifier.value = '';
+            selectedLabel = '';
+            input.removeAttribute('aria-invalid');
+            search();
+        };
+        input.addEventListener('input', () => { searchMode = 'address'; changed(); });
+        input.addEventListener('focus', () => {
+            if (!identifier.value && lastQuery !== input.value.trim()) search();
+        });
+        localitySearch?.addEventListener('click', () => {
+            searchMode = 'city';
+            input.value = localitySearch.dataset.query || input.value;
+            lastQuery = null;
+            changed();
+            input.focus({ preventScroll: true });
+        });
         input.addEventListener('change', () => { if (input.value !== selectedLabel) identifier.value = ''; });
         input.addEventListener('compositionstart', () => { composing = true; loader.cancel(); hide(); });
         input.addEventListener('compositionend', () => { composing = false; changed(); });
@@ -114,15 +135,24 @@ export function initDossierAddress(root = document, browser = window) {
             if (event.key === 'Escape') { event.stopImmediatePropagation(); loader.cancel(); hide(); }
             if (event.key === 'Tab') { loader.cancel(); hide(); }
         });
-        form.addEventListener('focusout', event => { if (!form.contains(event.relatedTarget)) { loader.cancel(); hide(); } });
-        form.addEventListener('submit', () => {
+        form.addEventListener('focusout', event => { if (!form.contains(event.relatedTarget)) { lastQuery = null; loader.cancel(); hide(); } });
+        form.addEventListener('submit', event => {
             if (input.value !== selectedLabel) identifier.value = '';
+            if (!identifier.value) {
+                event.preventDefault();
+                input.setAttribute('aria-invalid', 'true');
+                search();
+                input.focus({ preventScroll: true });
+                status.textContent = 'Choisissez une adresse ou une commune dans les suggestions avant de valider.';
+                return;
+            }
             loader.cancel(); hide();
             form.querySelector('[type="submit"]').disabled = true;
             status.textContent = 'Validation et recalcul de la position…';
         });
-        dialog?.addEventListener('close', () => { loader.cancel(); hide(); });
+        dialog?.addEventListener('close', () => { lastQuery = null; loader.cancel(); hide(); });
         browser.addEventListener('pagehide', loader.cancel);
+        if (dialog?.open && !identifier.value) search();
     });
 }
 

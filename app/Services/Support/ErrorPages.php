@@ -12,6 +12,10 @@ final class ErrorPages
     public function render(Response $response, Throwable $exception, Request $request): Response
     {
         $status = $response->getStatusCode();
+        if ($status >= 500 && $request->expectsJson() && ! config('app.debug')
+            && $request->routeIs('planner.book.analyze', 'planner.book.calendar-window')) {
+            return $this->planningFailure($response, $exception, $request);
+        }
         if ($status < 400 || $request->expectsJson() || config('app.debug')
             || ! str_contains($response->headers->get('Content-Type', ''), 'text/html')) {
             return $response;
@@ -45,6 +49,32 @@ final class ErrorPages
             }
         } catch (Throwable) {
             // Keep Laravel's original response if the diagnostic itself cannot be rendered.
+        }
+
+        return $response;
+    }
+
+    private function planningFailure(Response $response, Throwable $exception, Request $request): Response
+    {
+        try {
+            $context = app(ReportContext::class)->error($request, $exception, $response->getStatusCode());
+            $operation = $request->input('crm_appointment_id');
+            $operation = is_string($operation) && preg_match('/^dossier-[0-9]{1,12}$/D', $operation) ? $operation : null;
+            Log::error('Planning API request failed.', [
+                'reference' => $context['id'], 'status' => $context['status'], 'route' => $context['route'],
+                'actor_id' => $context['actor_id'], 'operation' => $operation,
+                'exception_class' => $context['exception_class'], 'trace' => $context['trace'],
+            ]);
+            $response->setContent(json_encode([
+                'message' => 'Le calcul du planning a été interrompu. Réessayez dans un instant.',
+                'reference' => $context['id'],
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            $response->headers->set('Content-Type', 'application/json');
+            $response->headers->set('X-Error-Reference', $context['id']);
+            $response->headers->set('Cache-Control', 'no-store, private');
+            $response->headers->remove('Content-Length');
+        } catch (Throwable) {
+            // A failed diagnostic must not replace or hide the original HTTP failure.
         }
 
         return $response;

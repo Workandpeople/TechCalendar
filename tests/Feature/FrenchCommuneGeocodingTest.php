@@ -43,6 +43,7 @@ it('suggests the requested commune instead of another commune sharing its postal
 })->with([
     ['01560 Lesch', 'Lescheroux', 'commune.01212_01560'], ['01560 LESCHEROUX', 'Lescheroux', 'commune.01212_01560'],
     ['32380 BIVE', 'Bivès', 'commune.32055_32380'], ['32380 Bivès', 'Bivès', 'commune.32055_32380'],
+    ['44310 SAINT-PHILBERT-DE-GRAND-LI', 'Saint-Philbert-de-Grand-Lieu', 'commune.44188_44310'],
 ]);
 
 it('validates the exact coordinates of the chosen commune after canonical suggestion selection', function (string $query, string $identifier, string $name, float $latitude, float $longitude) {
@@ -57,6 +58,7 @@ it('validates the exact coordinates of the chosen commune after canonical sugges
     ['01560 Lescheroux, Ain, France', 'commune.01212_01560', 'Lescheroux', 46.4089, 5.1573],
     ['Lescheroux, Ain, France', 'commune.01212_01560', 'Lescheroux', 46.4089, 5.1573],
     ['32380 Bivès, Gers, France', 'commune.32055_32380', 'Bivès', 43.8317, 0.8087],
+    ['44310 Saint-Philbert-de-Grand-Lieu, Loire-Atlantique, France', 'commune.44188_44310', 'Saint-Philbert-de-Grand-Lieu', 47.0689, -1.6443],
 ]);
 
 it('replaces Mapbox postal or place suggestions with independently verifiable commune choices', function () {
@@ -99,7 +101,27 @@ it('does not geocode an ambiguous postal code or a different commune silently', 
 })->with([
     ['01560 Commune inexistante', null], ['01560 Lescheroux', 'commune.01388_01560'],
     ['32380 Bives', 'commune.01212_01560'], ['01560 Lescheroux', 'postcode.old'],
+    ['44310', null], ['44310 SAINT-PHILBERT-DE-GRAND-LI', null],
+    ['44310 Saint-Philbert-de-Grand-Lieu', 'commune.44155_44310'],
 ]);
+
+it('analyzes a dossier after selecting the full canonical commune without changing appointments or its street', function () {
+    ($this->fakeCommunes)();
+    $this->dossier->update(['address' => '3 LA BROSSE TENAUD', 'postal_code' => '44310', 'city' => 'SAINT-PHILBERT-DE-GRAND-LI']);
+    $operation = $this->dossier->operations()->create([]);
+    $operation->forceFill(['legacy_status' => 'PRISE DE RDV'])->save();
+    $suggestion = $this->actingAs($this->actor)->getJson(route('v2.dossiers.address.suggestions', [$this->dossier, 'q' => '44310 SAINT-PHILBERT-DE-GRAND-LI']))
+        ->assertOk()->assertJsonCount(1, 'suggestions')->json('suggestions.0');
+    $this->patch(route('v2.dossiers.address.update', $this->dossier), [
+        'version' => $this->dossier->fresh()->version, 'address_query' => $suggestion['label'], 'mapbox_id' => $suggestion['id'],
+    ])->assertSessionHasNoErrors();
+    $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => 'dossier-'.$operation->id])->assertOk()
+        ->assertJsonPath('crm_appointment.latitude', 47.0689)->assertJsonPath('crm_appointment.longitude', -1.6443);
+    expect($this->dossier->fresh()->address)->toBe('3 LA BROSSE TENAUD')
+        ->and($this->dossier->fresh()->city)->toBe('Saint-Philbert-de-Grand-Lieu')
+        ->and($this->dossier->appointments()->count())->toBe(0);
+    Http::assertSentCount(1);
+});
 
 it('lists all communes for a postal-only search but requires a choice before resolving it', function () {
     ($this->fakeCommunes)();

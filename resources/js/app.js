@@ -31,7 +31,9 @@ import * as appointmentDateTime from './appointment-date-time';
 import { initDatePickers } from './date-picker';
 import { initMymarPending } from './mymar-pending';
 import { initMymarActions } from './mymar-actions';
+import { readApiJson } from './api-response';
 
+window.TechCalendarHttp = { readJson: readApiJson };
 window.TechCalendarLabels = { cofrac: cofracLabel };
 window.TechCalendarComments = { html: commentHtml, text: commentText };
 window.TechCalendarBookingTravel = { create: createBookingTravelTooltip };
