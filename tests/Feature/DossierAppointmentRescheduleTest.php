@@ -7,15 +7,20 @@ use App\Models\Lot;
 use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
+use App\Services\AppointmentTechnicianMailService;
+use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
 use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\PostVisitWorkflow;
+use App\Services\MapboxDrivingRouteService;
 use App\Services\Mymar\MymarSlotGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\Process\Process;
 
 uses(RefreshDatabase::class);
 
@@ -53,6 +58,120 @@ afterEach(function () {
     Http::assertNothingSent();
     Mail::assertNothingOutgoing();
     Queue::assertNothingPushed();
+});
+
+it('opens full planning from every state without moving or reopening the dossier', function (?string $state) {
+    $this->operation->forceFill(['legacy_status' => $state])->save();
+    $before = $this->operation->fresh()->getRawOriginal();
+    $id = 'rebook-'.$this->operation->id;
+    $booking = app(DossierBooking::class)->find($this->actor, $id, geocode: false);
+    expect($booking['id'])->toBe($id)->and($booking['reschedule_context'])->toBe([
+        'version' => 1, 'appointment_id' => $this->appointment->id, 'updated_at' => $this->data['updated_at'],
+    ]);
+    $this->get(route('planner.book', ['crm_appointment_id' => $id]))->assertOk()
+        ->assertViewHas('bookingMode', 'replace')->assertViewHas('initialCrmAppointmentId', $id)
+        ->assertViewHas('crmAppointments', fn ($rows) => $rows->isEmpty())->assertSee('Placer manuellement');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()
+        ->assertSee(route('planner.book', ['crm_appointment_id' => $id]), false)->assertSee('Replanifier avec le planning');
+    expect($this->operation->fresh()->getRawOriginal())->toBe($before)
+        ->and($this->dossier->fresh()->version)->toBe(1)->and(Appointment::count())->toBe(1);
+})->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'RDV VISITE', 'NON CONFORMITES', 'RAPPORT GENIUS', 'DOSSIER ANNULE', null]);
+
+it('renders valid JavaScript for the full planning form and existing calendar actions', function () {
+    $html = $this->get(route('planner.book', ['crm_appointment_id' => 'rebook-'.$this->operation->id]))->assertOk()->getContent();
+    preg_match_all('~<script\b([^>]*)>([\s\S]*?)</script>~i', $html, $tags, PREG_SET_ORDER);
+    $scripts = [];
+    foreach ($tags as $tag) {
+        if (! preg_match('~\b(?:src|type)\s*=~i', $tag[1])) {
+            $scripts[] = $tag[2];
+        }
+    }
+    expect($scripts)->not->toBeEmpty();
+    $check = new Process(['node', '--input-type=commonjs', '-e',
+        'new (require("node:vm").Script)(require("node:fs").readFileSync(0,"utf8"));']);
+    $check->setInput(implode("\n;\n", $scripts))->run();
+    expect($check->getErrorOutput())->toBe('')->and($check->isSuccessful())->toBeTrue();
+});
+
+it('uses the regular booking endpoint to safely replan a completed control and reject a repeated submission', function () {
+    $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS', 'inspected_on' => '2026-11-01',
+        'visit_appointment_id' => $this->appointment->id])->save();
+    $billing = $this->dossier->billings()->create(['dossier_operation_id' => $this->operation->id,
+        'marked_at' => now(), 'marked_by' => $this->actor->id, 'source' => 'native']);
+    $beforeBilling = $billing->fresh()->getRawOriginal();
+    $beforeAppointment = $this->appointment->fresh()->getRawOriginal();
+    $evidence = PostVisitWorkflow::planningEvidence($this->operation);
+    $this->mock(AppointmentTechnicianMailService::class)->shouldReceive('created')->once();
+    $id = 'rebook-'.$this->operation->id;
+    $context = app(DossierBooking::class)->find($this->actor, $id, geocode: false)['reschedule_context'];
+    $data = [...$this->data, 'crm_appointment_id' => $id, 'reschedule_context' => $context,
+        'comment' => 'Nouvelle visite demandée'];
+    unset($data['version'], $data['appointment_id'], $data['updated_at']);
+    $newId = $this->postJson(route('planner.book.appointments.store'), $data)->assertOk()
+        ->assertJsonPath('appointment.start', '2026-11-04T10:40:00+01:00')
+        ->assertJsonPath('forced_placement', false)->json('appointment_id');
+    expect($newId)->not->toBe($this->appointment->id)
+        ->and($this->appointment->fresh()->getRawOriginal())->toBe($beforeAppointment)
+        ->and($billing->fresh()->getRawOriginal())->toBe($beforeBilling)
+        ->and(PostVisitWorkflow::planningEvidence($this->operation->fresh()))->toBe($evidence)
+        ->and($this->operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE');
+    $this->assertDatabaseHas('dossier_activities', ['dossier_id' => $this->dossier->id,
+        'body' => 'Nouvelle visite demandée', 'client_visible' => false, 'delegataire_visible' => false]);
+    $this->postJson(route('planner.book.appointments.store'), $data)->assertUnprocessable()->assertJsonValidationErrors('version');
+    expect(Appointment::count())->toBe(2);
+});
+
+it('validates full replanning snapshots and never bypasses conflicts without explicit confirmation', function () {
+    $id = 'rebook-'.$this->operation->id;
+    $context = app(DossierBooking::class)->find($this->actor, $id, geocode: false)['reschedule_context'];
+    $data = ['crm_appointment_id' => $id, 'technician_id' => $this->otherTech->id,
+        'starts_at' => $this->data['starts_at'], 'duration_minutes' => 45];
+    $url = route('planner.book.appointments.store');
+    $this->postJson($url, $data)->assertUnprocessable()->assertJsonValidationErrors('reschedule_context');
+    TechnicianAbsence::create(['technician_id' => $this->otherTech->id, 'starts_at' => '2026-11-04 09:00:00',
+        'ends_at' => '2026-11-04 18:00:00', 'reason' => 'Formation', 'created_by' => $this->actor->id]);
+    $data['reschedule_context'] = $context;
+    $this->postJson($url, $data)->assertUnprocessable()->assertJsonPath('can_force', true);
+    $this->postJson($url, [...$data, 'force_placement' => true])->assertUnprocessable()->assertJsonValidationErrors('force_confirmed');
+    $this->mock(AppointmentTechnicianMailService::class)->shouldReceive('reassigned')->once();
+    $this->postJson($url, [...$data, 'force_placement' => true, 'force_confirmed' => true])->assertOk()
+        ->assertJsonPath('appointment_id', $this->appointment->id)->assertJsonPath('forced_placement', true);
+    expect(Appointment::count())->toBe(1)->and(DossierActivity::where('kind', 'appointment_forced')->count())->toBe(1);
+});
+
+it('does not expose or replan deleted dossiers or grant external users access to the internal planner', function () {
+    $id = 'rebook-'.$this->operation->id;
+    $this->dossier->delete();
+    expect(app(DossierBooking::class)->find($this->actor, $id, geocode: false))->toBeNull();
+    $this->actingAs($this->tech)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $id])->assertForbidden();
+    $external = User::factory()->create(['role' => User::ROLE_EXTERNAL, 'admin' => false]);
+    $this->actingAs($external)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $id])->assertForbidden();
+    $this->actingAs($this->actor);
+});
+
+it('analyzes a full rebooking without excluding other technicians and never suggests over their own busy visits', function () {
+    $this->tech->forceFill(['latitude' => 48.85, 'longitude' => 2.34])->save();
+    $this->otherTech->forceFill(['latitude' => 48.85, 'longitude' => 2.34])->save();
+    $busy = $this->appointment->replicate();
+    $busy->forceFill(['technician_id' => $this->otherTech->id, 'dossier_operation_id' => null,
+        'starts_at' => '2026-11-04 09:30:00', 'ends_at' => '2026-11-04 10:30:00'])->save();
+    $this->mock(MapboxDrivingRouteService::class)->shouldReceive('estimate')->andReturn([
+        'distance_km' => 2, 'duration_minutes' => 10, 'source' => 'mapbox',
+    ]);
+    $before = $this->appointment->fresh()->getRawOriginal();
+    $response = $this->postJson(route('planner.book.analyze'), ['crm_appointment_id' => 'rebook-'.$this->operation->id])
+        ->assertOk()->assertJsonCount(2, 'technicians')->assertJsonPath('crm_appointment.reschedule_context.appointment_id', $this->appointment->id);
+    $suggestions = collect($response->json('suggestions'));
+    expect($suggestions)->not->toBeEmpty();
+    foreach ($suggestions as $suggestion) {
+        if ($suggestion['extendedProps']['technician_id'] !== $this->otherTech->id) {
+            continue;
+        }
+        $start = Carbon::parse($suggestion['start']);
+        $end = Carbon::parse($suggestion['end']);
+        expect($start->lt($busy->ends_at) && $end->gt($busy->starts_at))->toBeFalse();
+    }
+    expect($this->appointment->fresh()->getRawOriginal())->toBe($before)->and($this->dossier->fresh()->version)->toBe(1);
 });
 
 it('loads a small fresh context with only active internal technicians and without geocoding', function () {

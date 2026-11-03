@@ -185,3 +185,59 @@ test('MYMAR observations are never counted as confirmed Cofrac appointments or s
     observation.extendedProps.is_mymar = true;
     assert.deepEqual(NativeCalendar.prototype.eventCounts([placed, suggestion, observation]), { placed: 1, suggestions: 1, observations: 1 });
 });
+
+test('every calendar view allows clicking a blank area without intercepting appointments or controls', () => {
+    class Node {
+        constructor() { this.children = []; this.dataset = {}; this.handlers = {}; this.style = { setProperty() {} }; this.classList = { add() {} }; }
+        append(...children) { this.children.push(...children); }
+        setAttribute() {} removeAttribute() {}
+        addEventListener(name, callback) { this.handlers[name] = callback; }
+        getBoundingClientRect() { return { left: 0 }; }
+    }
+    const descendants = node => [node, ...node.children.flatMap(descendants)];
+    for (const mode of ['timeGridWeek', 'timeGridDay', 'resourceWeek', 'dayGridMonth', 'listWeek']) {
+        let selection, picked;
+        const calendar = Object.create(NativeCalendar.prototype);
+        Object.assign(calendar, { date: calendarDate('2026-11-04'), mode, zoom: 120, events: [], mounted: [], expandedCells: new Set(),
+            document: { createElement: () => new Node() }, options: { nativeDirectSlotSelection: true,
+                nativeResources: () => [{ id: 12, name: 'Olivia' }], dateClick: info => { selection = info; } } });
+        const range = calendarRange(calendar.date, mode);
+        const method = { timeGridWeek: 'week', timeGridDay: 'timeline', resourceWeek: 'resourceWeek', dayGridMonth: 'month', listWeek: 'list' }[mode];
+        const tree = calendar[method](range, []);
+        const cell = descendants(tree).find(node => node.dataset.placeable === 'true' || node.className === 'nc-timeline-row');
+        assert.ok(cell, mode);
+        cell.handlers.click({ target: cell, clientX: 320, ...(mode === 'timeGridDay' ? {} : { target: { closest: () => null } }) });
+        assert.ok(selection?.date instanceof Date, mode); assert.equal(String(selection.resource.id), '12');
+        picked = selection; selection = null;
+        cell.handlers.click({ target: { closest: () => ({ dataset: { eventId: 'placed' } }) } });
+        assert.equal(selection, null, mode);
+        assert.ok(picked.dateStr.endsWith('Z'));
+    }
+});
+
+test('direct slot selection uses Paris wall time even outside France and does not open a second picker', () => {
+    let selection;
+    const calendar = Object.create(NativeCalendar.prototype);
+    calendar.date = calendarDate('2026-11-04'); calendar.mode = 'timeGridWeek';
+    calendar.options = { nativeDirectSlotSelection: true, dateClick: info => { selection = info; } };
+    const old = process.env.TZ; process.env.TZ = 'America/New_York';
+    try {
+        calendar.pickSlot(calendarDate('2026-11-04'), { id: 12 }, 640);
+        assert.equal(selection.date.toISOString(), '2026-11-04T09:40:00.000Z');
+        calendar.pickSlot(calendarDate('2026-07-01'), { id: 12 }, 640);
+        assert.equal(selection.date.toISOString(), '2026-07-01T08:40:00.000Z');
+    } finally { process.env.TZ = old; }
+});
+
+test('density changes stay local, are remembered, and tolerate denied browser storage', () => {
+    const calendar = Object.create(NativeCalendar.prototype);
+    let draws = 0, saved;
+    calendar.draw = () => { draws++; };
+    calendar.browser = { localStorage: { setItem: (...args) => { saved = args; } } };
+    calendar.setDensity('compact'); assert.equal(calendar.density, 'compact');
+    assert.deepEqual(saved, ['cofrac.calendar.density', 'compact']);
+    calendar.setDensity('detailed'); assert.equal(draws, 2);
+    calendar.setDensity('invalid'); assert.equal(draws, 2);
+    calendar.browser.localStorage.setItem = () => { throw new Error('denied'); };
+    assert.doesNotThrow(() => calendar.setDensity('compact'));
+});

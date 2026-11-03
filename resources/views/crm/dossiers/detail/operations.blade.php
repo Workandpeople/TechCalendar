@@ -43,6 +43,7 @@
                             </details>
                         @endif
                         @if ($quickOperations->contains('id', $operation->id))
+                            <a class="gc-btn-secondary" href="{{ route('planner.book', ['crm_appointment_id' => 'rebook-'.$operation->id]) }}"><x-nav-icon name="planning" />Replanifier avec le planning</a>
                             <button type="button" class="gc-btn-warning" data-quick-reschedule-url="{{ route('v2.dossiers.appointments.reschedule', [$dossier, $operation], absolute: false) }}">Replacement rapide</button>
                             @unless ($linkedAppointment)<a data-operation-planning class="gc-btn-secondary" hidden>Voir le RDV</a>@endunless
                         @endif

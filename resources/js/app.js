@@ -33,6 +33,7 @@ import { initDatePickers } from './date-picker';
 import { initMymarPending } from './mymar-pending';
 import { initMymarActions } from './mymar-actions';
 import { readApiJson } from './api-response';
+import { createBookingPlacementForm } from './booking-placement-form';
 
 window.TechCalendarHttp = { readJson: readApiJson };
 window.TechCalendarLabels = { cofrac: cofracLabel };
@@ -463,3 +464,4 @@ window.TechCalendarForms = {
     refresh: (form) => validateForm(form, false),
     refreshAll: initValidatedForms,
 };
+window.TechCalendarPlacementForm = { create: createBookingPlacementForm };

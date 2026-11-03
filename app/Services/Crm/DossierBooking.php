@@ -37,10 +37,28 @@ class DossierBooking
 
     public function find(User $actor, string $id, bool $geocode = true): ?array
     {
+        if (preg_match('/^rebook-([1-9][0-9]*)$/D', $id, $matches)) {
+            abort_unless(config('crm.v2_enabled'), 404);
+            $operation = $this->query(rescheduling: true)->find($matches[1]);
+            if (! $operation) {
+                return null;
+            }
+            $context = app(DossierAppointmentRescheduler::class)->context($actor, $operation->dossier, $operation, includeTechnicians: false);
+
+            return [...$this->describe($actor, $operation, $geocode), 'id' => $id, 'is_replacement' => true,
+                'replace_appointment_id' => $context['appointment_id'],
+                'reschedule_context' => array_intersect_key($context, array_flip(['version', 'appointment_id', 'updated_at']))];
+        }
         $operation = $this->operation($id);
         if (! $operation) {
             return null;
         }
+
+        return $this->describe($actor, $operation, $geocode);
+    }
+
+    private function describe(User $actor, DossierOperation $operation, bool $geocode): array
+    {
         Gate::forUser($actor)->authorize('view', $operation->dossier);
         $legacy = DB::table('legacy_records')->where('source_table', 'dossiers')->where('dossier_id', $operation->dossier_id)->value('payload');
         $source = json_decode($legacy ?? '{}', true);
@@ -62,6 +80,21 @@ class DossierBooking
         }
 
         return $result;
+    }
+
+    public function rebook(User $actor, string $id, array $data): Appointment
+    {
+        abort_unless(config('crm.v2_enabled') && preg_match('/^rebook-([1-9][0-9]*)$/D', $id, $matches), 404);
+        $snapshot = validator($data, [
+            'reschedule_context' => ['required', 'array:version,appointment_id,updated_at'],
+            'reschedule_context.version' => ['required', 'integer', 'min:1'],
+            'reschedule_context.appointment_id' => ['present', 'nullable', 'integer', 'min:1'],
+            'reschedule_context.updated_at' => ['present', 'nullable', 'date'],
+        ])->validate()['reschedule_context'];
+        $operation = DossierOperation::query()->with('dossier', 'service')->findOrFail($matches[1]);
+
+        return app(DossierAppointmentRescheduler::class)->reschedule($actor, $operation->dossier, $operation,
+            [...$data, ...$snapshot]);
     }
 
     public function update(User $actor, string $id, array $data): array
@@ -153,10 +186,11 @@ class DossierBooking
         $dossier->increment('version');
     }
 
-    private function query(bool $onlyUnscheduled = false): Builder
+    private function query(bool $onlyUnscheduled = false, bool $rescheduling = false): Builder
     {
-        return DossierOperation::query()->when($onlyUnscheduled,
-            fn ($query) => $query->awaitingBooking(), fn ($query) => $query->pendingStatus())->with([
+        return DossierOperation::query()->when(! $rescheduling, fn ($query) => $query->when($onlyUnscheduled,
+            fn ($query) => $query->awaitingBooking(), fn ($query) => $query->pendingStatus()))
+            ->whereHas('dossier', fn ($query) => $query->whereNull('deleted_at'))->with([
                 'service', 'dossier.client', 'dossier.delegataire', 'dossier.documents',
                 'appointments' => fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED)
                     ->orderByDesc('starts_at')->orderByDesc('id')->limit(1),

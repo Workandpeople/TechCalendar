@@ -17,6 +17,8 @@
 .nc-views .nc-button { border-color: transparent; background: transparent; }
 .nc-views .nc-button[aria-pressed='true'] { color: #fff; background: #1764d9; box-shadow: 0 2px 4px #174a9325; }
 .nc-expand { color: #1764d9; }
+.nc-calendar [data-placeable='true'] { cursor: pointer; }
+.nc-calendar [data-placeable='true']:hover { background-color: #edf7ff; }
 .nc-action { color: #075f58; background: #e4f8f3; border-color: #9fdacf; }
 .nc-subbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 0 20px 14px; font-size: 12px; color: var(--nc-muted); }
 .nc-summary { margin: 0; }
@@ -60,6 +62,12 @@
 .nc-location b { color: #18324b; font-size: 12px; flex: none; }
 .nc-location > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .nc-technician { border-top: 1px solid #e8eef5; padding-top: 5px; font-size: 10px; font-weight: 650; color: var(--nc-tone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nc-calendar[data-density='compact'] .nc-event { padding: 5px 7px; gap: 2px; }
+.nc-calendar[data-density='compact'] .nc-event .nc-service,
+.nc-calendar[data-density='compact'] .nc-event .nc-location,
+.nc-calendar[data-density='compact'] .nc-event .nc-technician,
+.nc-calendar[data-density='compact'] .nc-event .nc-duration { display: none; }
+.nc-calendar[data-density='compact'] .nc-event .nc-customer { font-size: 11px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nc-event-state { font-size: 10px; color: var(--nc-tone); font-weight: 700; }
 .nc-add-slot { margin-top: auto; border-style: dashed; background: transparent; color: #607b98; padding: 8px; font-size: 11px; width: 100%; }
 .nc-more { font-size: 11px; border: 0; color: #1764d9; background: #eaf2ff; padding: 7px; }

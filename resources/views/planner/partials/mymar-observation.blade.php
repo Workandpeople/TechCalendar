@@ -8,6 +8,9 @@
     .mymar-event-content strong { font-size: 12px; }
     .mymar-event-content small { font-size: 10px; }
     .mymar-event-address { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; white-space: normal; }
+    .nc-calendar[data-density='compact'] .mymar-event-content { padding: 0; gap: 2px; }
+    .nc-calendar[data-density='compact'] .mymar-event-content strong { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .nc-calendar[data-density='compact'] :is(.mymar-event-service, .mymar-event-address, .mymar-event-technician) { display: none; }
     .mymar-observation-dialog { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 22px; border: 1px solid var(--gc-border, #cbd5e1); border-radius: 20px; color: var(--gc-text, #243b48); box-shadow: 0 24px 80px #0f172a33; }
     .mymar-observation-dialog::backdrop { background: #0f172a66; }
     .mymar-observation-dialog h2 { margin: 0 0 14px; font-size: 18px; font-weight: 700; }
@@ -40,10 +43,10 @@
         const props = event.extendedProps || {};
         const box = node('span', '', 'mymar-event-content');
         box.append(node('small', props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'),
-            node('strong', props.customer_name || 'Bénéficiaire non disponible'), node('span', props.service_label || 'Rendez-vous MAR'),
+            node('strong', props.customer_name || 'Bénéficiaire non disponible'), node('span', props.service_label || 'Rendez-vous MAR', 'mymar-event-service'),
             node('span', date(event.start, { timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
             node('span', props.address || 'Adresse non disponible', 'mymar-event-address'),
-            node('small', props.technician_name || 'Technicien'));
+            node('small', props.technician_name || 'Technicien', 'mymar-event-technician'));
         if (['stale', 'degraded'].includes(props.cache_state)) box.append(node('small', 'Données à actualiser'));
         return { domNodes: [box] };
     };

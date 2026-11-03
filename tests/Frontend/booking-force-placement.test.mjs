@@ -68,11 +68,13 @@ test('does not allow a second confirmation while one is open or when dialog supp
 
 test('normal and forced booking share one single-flight path and never reuse force flags', () => {
     const view = readFileSync(new URL('../../resources/views/planner/book.blade.php', import.meta.url), 'utf8');
-    assert.match(view, /if \(bookingPlacementBusy \|\| !selectedCalendarEvent/);
+    assert.match(view, /if \(bookingPlacementBusy \|\| !\(manual\?\.event \|\| selectedCalendarEvent\)\?\.extendedProps\?\.is_suggestion\) return;/);
     assert.match(view, /delete payload\.force_placement;\s*delete payload\.force_confirmed;/);
-    assert.match(view, /if \(!accepted \|\| selectedCalendarEvent !== confirmedEvent\) return;/);
+    assert.match(view, /if \(!accepted\) \{\s*reportStatus\('Placement forcé annulé/);
+    assert.match(view, /if \(\(!manual && selectedCalendarEvent !== confirmedEvent\) \|\| currentAppointmentRequest !== requestSnapshot\)/);
     assert.match(view, /placeSelectedAppointment\(false\)/);
     assert.match(view, /placeSelectedAppointment\(true\)/);
     assert.match(view, /'booking-place-alongside-btn'/);
-    assert.match(view, /bookingForcePlacementEnabled \? selectedTechnicians\(\) : selectedAvailableTechnicians/);
+    assert.match(view, /getContext: \(\) => \(\{ request: currentAppointmentRequest, technicians: selectedTechnicians\(\)/);
+    assert.match(view, /forceAllowed: bookingForcePlacementEnabled && !currentAppointmentRequest\?\.is_mymar/);
 });

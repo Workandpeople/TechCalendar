@@ -4,6 +4,8 @@ import { calendarDate, calendarFields, dayKey, normalizeCalendarEvent, overlappi
 import { calendarFixture, demoRequests, demoTechnicians, fixtureSuggestions } from './planning/calendar-fixtures.js';
 import { createBookingTravelTooltip } from './booking-travel-tooltip.js';
 import { demoTravelEvent, demoTravelMetric } from './planning/calendar-demo-travel.js';
+import { createBookingPlacementForm } from './booking-placement-form.js';
+import { parseAppointmentDate } from './appointment-date-time.js';
 
 const byId = id => document.getElementById(id);
 const node = (tag, className = '', text = '') => { const element = document.createElement(tag); element.className = className; element.textContent = text; return element; };
@@ -69,9 +71,38 @@ function openDetail(event, trigger = null) {
     byId('lab-detail-close').focus();
 }
 
+const placementForm = createBookingPlacementForm({
+    getContext: () => ({ request: { ...selected, customer_name: selected.customer, service: { name: selected.service } },
+        technicians: demoTechnicians.filter(tech => selectedTechs.has(tech.id)), duration: selected.duration, forceAllowed: true }),
+    onPlace: async ({ values, context, forced, conflict, status, close }) => {
+        if (context.request.id !== selected.id) throw new Error('Le dossier fictif a changé. Rouvrez le formulaire.');
+        const technician = technicianById(values.technician_id), start = parseAppointmentDate(values.starts_at);
+        const candidate = normalizeCalendarEvent({ id: `manual-${Date.now()}`, title: selected.customer, start,
+            end: new Date(start.getTime() + values.duration_minutes * 60000), extendedProps: {
+                technician_id: technician.id, technician_name: technician.name, customer_name: selected.customer,
+                service_label: selected.service, address: selected.address, postal_code: selected.postal, city: selected.city,
+                latitude: selected.latitude, longitude: selected.longitude, is_suggestion: false } });
+        const conflicts = overlappingAppointments(events.map(normalizeCalendarEvent), candidate);
+        if (conflicts.length && !forced) {
+            conflict({ can_force: true });
+            status(`Chevauchement avec ${conflicts.map(item => calendarFields(item).customer).join(', ')}. Simulation locale uniquement.`, 'error');
+            return;
+        }
+        if (forced && !window.confirm('Confirmer le placement forcé dans cette démo fictive ?')) return;
+        events = [...events, candidate]; refresh(); close();
+        notify('Placement fictif enregistré dans le navigateur uniquement. Aucun appel externe ni changement en base.');
+    },
+});
+const openPlacementForm = (info = {}) => {
+    travelTooltip.hide();
+    try { placementForm.open({ date: info.date || `${dayKey(calendar.getDate())}T09:00`, resource: info.resource, trigger: info.trigger }); }
+    catch (error) { notify(error.message); }
+};
 const calendar = new NativeCalendar(byId('calendar-lab'), {
     initialDate: new Date(), initialView: window.innerWidth < 720 ? 'listWeek' : 'timeGridWeek',
     nativeResources: () => demoTechnicians.filter(tech => selectedTechs.has(tech.id)),
+    nativeDirectSlotSelection: true,
+    customButtons: { manualPlacement: { text: 'Placer manuellement', click: (event, button) => openPlacementForm({ trigger: button }) } },
     eventMouseEnter: info => {
         info.el._labTravelMove = event => travelTooltip.move(event);
         info.el.addEventListener('mousemove', info.el._labTravelMove);
@@ -95,13 +126,7 @@ const calendar = new NativeCalendar(byId('calendar-lab'), {
     eventWillUnmount: clearTravelHandlers,
     datesSet: travelTooltip.hide,
     eventClick: ({ event, el }) => openDetail(event, el),
-    dateClick: ({ date, resource }) => openDetail(normalizeCalendarEvent({
-        id: `draft-${Date.now()}`, title: selected.customer, start: date,
-        end: new Date(date.getTime() + selected.duration * 60000),
-        extendedProps: { technician_id: resource.id, technician_name: resource.name,
-            customer_name: selected.customer, service_label: selected.service, address: selected.address,
-            postal_code: selected.postal, city: selected.city, latitude: selected.latitude, longitude: selected.longitude, is_suggestion: true },
-    })),
+    dateClick: openPlacementForm,
 });
 
 function refresh() {

@@ -10,6 +10,7 @@ use App\Models\Lot;
 use App\Models\LotAppointment;
 use App\Models\TechnicianDailyRouteMetric;
 use App\Models\User;
+use App\Support\CommentContent;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +18,7 @@ use Illuminate\Validation\ValidationException;
 
 final class DossierAppointmentRescheduler
 {
-    public function context(User $actor, Dossier $dossier, DossierOperation $operation): array
+    public function context(User $actor, Dossier $dossier, DossierOperation $operation, bool $includeTechnicians = true): array
     {
         $this->authorize($actor, $dossier, $operation);
         $appointment = $this->current($operation);
@@ -34,10 +35,10 @@ final class DossierAppointmentRescheduler
             'duration_minutes' => $previous?->duration_minutes ?: $operation->service->average_duration_minutes,
             'technician_id' => $previous?->technician_id,
             'preserves_previous_visit' => $appointment === null && $previous !== null,
-            'technicians' => User::query()->internal()->where('role', 2)->where('admin', false)
+            'technicians' => $includeTechnicians ? User::query()->internal()->where('role', 2)->where('admin', false)
                 ->withExists(['services as qualified' => fn ($query) => $query->where('services.id', $operation->service_id)])
                 ->orderBy('last_name')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
-                ->map(fn ($tech) => ['id' => $tech->id, 'name' => $tech->full_name, 'qualified' => (bool) $tech->qualified])->all(),
+                ->map(fn ($tech) => ['id' => $tech->id, 'name' => $tech->full_name, 'qualified' => (bool) $tech->qualified])->all() : [],
         ];
     }
 
@@ -116,6 +117,11 @@ final class DossierAppointmentRescheduler
             }
             foreach ($rows as $row) {
                 $row->update(['appointment_id' => $appointment->id, 'status' => LotAppointment::STATUS_PLACED]);
+            }
+            if (filled($data['comment'] ?? null)) {
+                $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment',
+                    'body' => CommentContent::forStorage($data['comment'], 'comment'),
+                    'client_visible' => false, 'delegataire_visible' => false]);
             }
             $dossier->refresh();
             app(DossierWorkflow::class)->changeStatus($actor, $dossier, $operation,

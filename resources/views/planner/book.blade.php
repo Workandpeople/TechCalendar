@@ -300,7 +300,7 @@
             </div>
         </section>
 
-        @if ($isReplacementMode && empty($initialReplaceAppointmentId))
+        @if ($isReplacementMode && empty($initialReplaceAppointmentId) && empty($initialCrmAppointmentId))
             <section id="booking-replacement-search-section" class="gc-card p-5">
                 <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                     <div>
@@ -4072,37 +4072,27 @@
             applyTechnicianToDraftEvent(selectedCalendarEvent, technicianId);
         };
 
-        const openCalendarSlotModal = (info) => {
-            if (!currentAppointmentRequest) {
-                showFeedback('Lance d’abord une recherche Cofrac ou manuelle avant de placer un RDV depuis le calendrier.', 'error');
-                return;
-            }
-
-            let startsAt = new Date(info.date);
-
-            if (info.allDay) {
-                const day = window.TechCalendarDateTime.formatAppointmentInput(startsAt).slice(0, 10);
-                startsAt = window.TechCalendarDateTime.parseAppointmentDate(`${day}T08:00`);
-            }
-
-            const activeTechnicians = bookingForcePlacementEnabled ? selectedTechnicians() : selectedAvailableTechnicians(startsAt);
-
-            if (activeTechnicians.length === 0) {
-                showFeedback('Aucun technicien sélectionné n’est disponible sur ce créneau: ils sont absents ou non sélectionnés.', 'error');
-                return;
-            }
-
-            const durationMinutes = requestDurationMinutes();
-            const technician = activeTechnicians.find(technician => String(technician.id) === String(info.resource?.id)) || activeTechnicians[0];
-            const draftEvent = {
-                id: `calendar-draft-${Date.now()}`,
-                title: `Placement | ${technician.name}`,
-                start: startsAt,
-                end: addMinutes(startsAt, durationMinutes),
-                extendedProps: draftPropsForTechnician(technician, startsAt),
-            };
-
-            openBookingAppointmentModal(draftEvent);
+        let bookingPlacementForm = null;
+        const openCalendarSlotModal = (info = {}) => {
+            try {
+                if (!window.TechCalendarPlacementForm) throw new Error('Le formulaire est en cours de chargement. Réessayez dans un instant.');
+                bookingPlacementForm ||= window.TechCalendarPlacementForm.create({
+                    getContext: () => ({ request: currentAppointmentRequest, technicians: selectedTechnicians(),
+                        duration: requestDurationMinutes(), forceAllowed: bookingForcePlacementEnabled && !currentAppointmentRequest?.is_mymar }),
+                    onPlace: options => {
+                        if (options.context.request !== currentAppointmentRequest) throw new Error('Le dossier sélectionné a changé. Fermez puis rouvrez le formulaire.');
+                        const technician = options.context.technicians.find(tech => Number(tech.id) === options.values.technician_id);
+                        const start = window.TechCalendarDateTime.parseAppointmentDate(options.values.starts_at);
+                        const draft = { id: `calendar-draft-${Date.now()}`, title: `Placement | ${technician.name}`,
+                            start, end: addMinutes(start, options.values.duration_minutes),
+                            extendedProps: draftPropsForTechnician(technician, start) };
+                        return placeSelectedAppointment(options.forced, { ...options, event: draft });
+                    },
+                });
+                const date = info.date || bookingCalendar?.getDate() || new Date();
+                const day = window.TechCalendarDateTime.formatAppointmentInput(date).slice(0, 10);
+                bookingPlacementForm.open({ date: info.date && !info.allDay ? date : `${day}T09:00`, resource: info.resource, trigger: info.trigger });
+            } catch (error) { showFeedback(error.message, 'error'); }
         };
 
         const renderRouteSummary = (props, route = null, isLoading = false) => {
@@ -5212,7 +5202,7 @@
             const props = event?.extendedProps || {};
             const technician = technicianById(payload.technician_id);
             const startsAt = data.appointment?.start || payload.starts_at || event?.start || null;
-            const isReplacement = Boolean(payload.replace_appointment_id);
+            const isReplacement = Boolean(payload.replace_appointment_id || payload.reschedule_context);
 
             calendarWindowAbortController?.abort();
             technicianSearchAbortController?.abort();
@@ -5766,14 +5756,18 @@
                 return;
             }
             bookingCalendar = new BookingCalendar(calendarElement, {
-                @can('create', \App\Models\TechnicianAbsence::class)
-                customButtons: { blockAbsence: { text: 'Bloquer une demi-journée', click: (event, button) => {
+                nativeDirectSlotSelection: true,
+                customButtons: {
+                    manualPlacement: { text: 'Placer manuellement', click: (event, button) => openCalendarSlotModal({ trigger: button }) },
+                    @can('create', \App\Models\TechnicianAbsence::class)
+                    blockAbsence: { text: 'Bloquer une demi-journée', click: (event, button) => {
                     window.dispatchEvent(new CustomEvent('planning:absence-open', { detail: {
                         date: window.TechCalendarDateTime.formatAppointmentInput(bookingCalendar.getDate()).slice(0, 10),
                         period: 'morning', technician_ids: selectedTechnicians().map(technician => technician.id), trigger: button,
                     } }));
-                } } },
-                @endcan
+                    } },
+                    @endcan
+                },
                 nativeResources: () => selectedTechnicians().map(technician => ({ id: technician.id, name: technician.name })),
                 locale: 'fr',
                 initialView: 'timeGridWeek',
@@ -5787,7 +5781,7 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: '@can('create', \App\Models\TechnicianAbsence::class)blockAbsence @endcan timeGridWeek,dayGridMonth',
+                    right: 'manualPlacement @can('create', \App\Models\TechnicianAbsence::class)blockAbsence @endcan timeGridWeek,dayGridMonth',
                 },
                 buttonText: {
                     today: 'Aujourd hui',
@@ -7069,26 +7063,29 @@
         });
 
         let bookingPlacementBusy = false;
-        const placeSelectedAppointment = async (forced = false) => {
-            if (bookingPlacementBusy || !selectedCalendarEvent?.extendedProps?.is_suggestion) return;
-            const button = document.getElementById('booking-confirm-suggestion-btn');
-            const forceButton = document.getElementById('booking-force-placement-btn');
-            const confirmedEvent = selectedCalendarEvent;
+        const placeSelectedAppointment = async (forced = false, manual = null) => {
+            if (bookingPlacementBusy || !(manual?.event || selectedCalendarEvent)?.extendedProps?.is_suggestion) return;
+            const button = manual?.button || document.getElementById('booking-confirm-suggestion-btn');
+            const forceButton = manual ? null : document.getElementById('booking-force-placement-btn');
+            const reportStatus = manual?.status || showDetailStatus;
+            const confirmedEvent = manual?.event || selectedCalendarEvent;
+            const requestSnapshot = currentAppointmentRequest;
             const serviceSelectWrap = document.getElementById('booking_detail_service_select_wrap');
             const serviceSelect = document.getElementById('booking_detail_service_select');
             const lotAliasSelectWrap = document.getElementById('booking_detail_lot_alias_select_wrap');
             const lotAliasSelect = document.getElementById('booking_detail_lot_alias_select');
             const payload = {
                 ...(currentAnalysisPayload || { crm_appointment_id: document.getElementById('booking_detail_crm_id').value }),
-                technician_id: document.getElementById('booking_detail_technician_id').value,
-                starts_at: document.getElementById('booking_detail_starts_at').value,
-                duration_minutes: document.getElementById('booking_detail_duration').value,
-                comment: document.getElementById('booking_detail_comment').value,
+                ...(manual?.values || { technician_id: document.getElementById('booking_detail_technician_id').value,
+                    starts_at: document.getElementById('booking_detail_starts_at').value,
+                    duration_minutes: document.getElementById('booking_detail_duration').value,
+                    comment: document.getElementById('booking_detail_comment').value }),
+                ...(currentAppointmentRequest?.reschedule_context ? { reschedule_context: currentAppointmentRequest.reschedule_context } : {}),
             };
 
-            if (!serviceSelectWrap.classList.contains('hidden')) {
+            if (!manual && !serviceSelectWrap.classList.contains('hidden')) {
                 if (!serviceSelect.value) {
-                    showDetailStatus('Choisis une prestation avant de valider ce RDV Cofrac.', 'error');
+                    reportStatus('Choisis une prestation avant de valider ce RDV Cofrac.', 'error');
                     serviceSelect.focus();
                     return;
                 }
@@ -7096,7 +7093,7 @@
                 payload.crm_service_id = Number(serviceSelect.value);
             }
 
-            if (!lotAliasSelectWrap?.classList.contains('hidden') && lotAliasSelect?.value) {
+            if (!manual && !lotAliasSelectWrap?.classList.contains('hidden') && lotAliasSelect?.value) {
                 payload.lot_service_alias_id = Number(lotAliasSelect.value);
             }
 
@@ -7105,7 +7102,7 @@
             delete payload.force_confirmed;
             if (!payload.technician_id || !window.TechCalendarDateTime.parseAppointmentDate(payload.starts_at)
                 || !Number.isInteger(Number(payload.duration_minutes)) || Number(payload.duration_minutes) < 30 || Number(payload.duration_minutes) > 480) {
-                showDetailStatus('Choisis un technicien, une date et une durée de 30 à 480 minutes.', 'error');
+                reportStatus('Choisis un technicien, une date et une durée de 30 à 480 minutes.', 'error');
                 return;
             }
 
@@ -7121,7 +7118,7 @@
                     const result = await window.CofracMymarActions.place({ dossier_id: Number(payload.mymar_dossier_id),
                         expected_revision: currentAppointmentRequest.expected_revision, technician_id: Number(payload.technician_id),
                         starts_at: payload.starts_at, duration_minutes: Number(payload.duration_minutes) });
-                    closeBookingAppointmentModal();
+                    if (manual) manual.close(); else closeBookingAppointmentModal();
                     if (result?.confirmed) {
                         bookingCalendar?.addEvent({ id: `mymar:${result.source_result.rdv_id}`, title: confirmedEvent.title,
                             start: result.source_result.starts_at, end: addMinutes(new Date(result.source_result.starts_at), result.source_result.duration_minutes),
@@ -7138,7 +7135,14 @@
                         date: formatDateTimeForConfirmation(payload.starts_at),
                         customer: confirmedEvent.extendedProps.customer_name, address: confirmedEvent.extendedProps.address,
                     });
-                    if (!accepted || selectedCalendarEvent !== confirmedEvent) return;
+                    if (!accepted) {
+                        reportStatus('Placement forcé annulé. Aucun rendez-vous modifié.');
+                        return;
+                    }
+                    if ((!manual && selectedCalendarEvent !== confirmedEvent) || currentAppointmentRequest !== requestSnapshot) {
+                        reportStatus('Le dossier sélectionné a changé. Rouvrez le formulaire.', 'error');
+                        return;
+                    }
                     payload.force_placement = true;
                     payload.force_confirmed = true;
                 }
@@ -7152,20 +7156,21 @@
                     },
                     body: JSON.stringify(payload),
                 });
-                const data = await response.json();
+                const data = await window.TechCalendarHttp.readJson(response);
 
                 if (!response.ok) {
+                    manual?.conflict(data);
                     const firstError = data?.errors ? Object.values(data.errors)[0][0] : data.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.');
                     throw new Error(firstError);
                 }
 
-                closeBookingAppointmentModal();
+                if (manual) manual.close(); else closeBookingAppointmentModal();
                 if (!bookingConnectorsEnabled && payload.crm_appointment_id) {
                     renderBookingCrmAppointments(bookingCrmAppointments.filter((row) => row.id !== payload.crm_appointment_id), null);
                 }
                 showPlacementConfirmation(data, payload, confirmedEvent);
             } catch (error) {
-                showDetailStatus(error.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.'), 'error');
+                reportStatus(error.message || (bookingIsReplacementMode ? 'Replacement impossible.' : 'Création impossible.'), 'error');
             } finally {
                 bookingPlacementBusy = false;
                 button.disabled = false;

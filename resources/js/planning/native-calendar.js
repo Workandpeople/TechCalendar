@@ -23,6 +23,8 @@ export class NativeCalendar {
         this.destroyed = false;
         this.sequence = 0;
         this.zoom = 120;
+        this.density = 'detailed';
+        try { if (this.browser.localStorage?.getItem('cofrac.calendar.density') === 'compact') this.density = 'compact'; } catch {}
         this.controller = new AbortController();
         this.setEvents(Array.isArray(options.events) ? options.events : []);
     }
@@ -64,6 +66,15 @@ export class NativeCalendar {
         }
         this.expandButton = this.button('Agrandir', () => this.toggleExpanded(), 'nc-expand');
         this.toolbar.append(navigation, this.heading, this.views, this.expandButton);
+        this.densityControls = this.node('div', 'nc-views nc-density');
+        this.densityControls.setAttribute('role', 'group');
+        this.densityControls.setAttribute('aria-label', 'Densité des rendez-vous');
+        for (const [value, label] of [['compact', 'Compact'], ['detailed', 'Détaillé']]) {
+            const button = this.button(label, () => this.setDensity(value));
+            button.dataset.density = value;
+            this.densityControls.append(button);
+        }
+        this.toolbar.append(this.densityControls);
         for (const [name, action] of Object.entries(this.options.customButtons || {})) {
             if (typeof action.click !== 'function') continue;
             const button = this.button(action.text || name, event => action.click(event, button), 'nc-action');
@@ -141,6 +152,13 @@ export class NativeCalendar {
     }
 
     setZoom(value) { this.zoom = Math.min(240, Math.max(90, value)); this.draw(); }
+
+    setDensity(value) {
+        if (!['compact', 'detailed'].includes(value)) return;
+        this.density = value;
+        try { this.browser.localStorage?.setItem('cofrac.calendar.density', value); } catch {}
+        this.draw();
+    }
 
     setEvents(rawEvents) {
         this.events = rawEvents.map(raw => this.event(raw)).filter(Boolean);
@@ -233,6 +251,8 @@ export class NativeCalendar {
         for (const button of this.views.children) button.setAttribute('aria-pressed', String(button.dataset.view === this.mode));
         this.zoomControls.hidden = this.mode !== 'timeGridDay';
         this.element.dataset.mode = this.mode;
+        this.element.dataset.density = this.density || 'detailed';
+        for (const button of this.densityControls?.children || []) button.setAttribute('aria-pressed', String(button.dataset.density === this.element.dataset.density));
         const content = this.mode === 'listWeek' ? this.list(range, events) : this.mode === 'dayGridMonth' ? this.month(range, events)
             : this.mode === 'timeGridDay' ? this.timeline(range, events) : this.mode === 'resourceWeek' ? this.resourceWeek(range, events) : this.week(range, events);
         this.viewport.replaceChildren(content);
@@ -312,6 +332,15 @@ export class NativeCalendar {
 
     dayEvents(events, day) { return eventsDuring(events, day, addCalendarDays(day, 1)); }
 
+    slotTarget(cell, day, resource, minute = 540) {
+        if (!this.options.dateClick) return;
+        cell.dataset.placeable = 'true';
+        cell.addEventListener('click', event => {
+            if (event.target.closest('button, a, input, select, textarea, [data-event-id]')) return;
+            this.pickSlot(day, resource, minute);
+        });
+    }
+
     appendDayEvents(cell, events, key, showTechnician = true) {
         const placed = events.filter(event => !calendarFields(event).suggestion);
         const suggestions = events.filter(event => calendarFields(event).suggestion);
@@ -336,6 +365,7 @@ export class NativeCalendar {
             board.append(this.resourceLabel(resource, items));
             for (const day of range.days) {
                 const cell = this.node('div', 'nc-day-cell');
+                this.slotTarget(cell, day, resource);
                 this.appendDayEvents(cell, this.dayEvents(items, day), `${resource.id}|${dayKey(day)}`, false);
                 if (this.options.dateClick) cell.append(this.button('+ Choisir un horaire', () => this.pickSlot(day, resource), 'nc-add-slot'));
                 else if (!cell.children.length) cell.append(this.node('span', 'nc-empty-slot', 'Aucun rendez-vous'));
@@ -362,6 +392,7 @@ export class NativeCalendar {
             board.append(this.node('div', 'nc-hour-label', `${String(hour).padStart(2, '0')}:00`));
             range.days.forEach((day, index) => {
                 const cell = this.node('div', 'nc-hour-cell');
+                this.slotTarget(cell, day, resources[0], hour * 60);
                 const items = dayItems[index].filter(event => event.start < day ? hour === firstHour : Math.floor(calendarMinute(event.start) / 60) === hour);
                 this.appendDayEvents(cell, items, `hour|${dayKey(day)}|${hour}`);
                 if (items.length) cell.dataset.occupied = 'true';
@@ -389,7 +420,7 @@ export class NativeCalendar {
             const layout = timelineLayout(items, range.start, { minMinute: bounds.from, maxMinute: bounds.to, pixelsPerHour: this.zoom });
             board.append(this.resourceLabel(resource, items));
             const row = this.node('div', 'nc-timeline-row');
-            const laneHeight = 174;
+            const laneHeight = this.density === 'compact' ? 72 : 174;
             row.style.height = `${layout.lanes * laneHeight + 26}px`;
             row.style.backgroundSize = `${this.zoom}px 100%`;
             for (const item of layout.placements) {
@@ -404,7 +435,7 @@ export class NativeCalendar {
                 row.append(card);
             }
             if (this.options.dateClick) {
-                row.addEventListener('dblclick', event => {
+                row.addEventListener('click', event => {
                     if (event.target !== row) return;
                     const minutes = bounds.from + Math.round((event.clientX - row.getBoundingClientRect().left) / this.zoom * 60 / 15) * 15;
                     this.pickSlot(range.start, resource, Math.max(0, Math.min(1425, minutes)));
@@ -420,10 +451,13 @@ export class NativeCalendar {
         const list = this.node('div', 'nc-agenda');
         for (const day of range.days) {
             const section = this.node('section', 'nc-agenda-day');
+            const resource = this.resources(events)[0];
+            this.slotTarget(section, day, resource);
             section.append(this.node('h3', '', dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })));
             const items = this.dayEvents(events, day);
             for (const event of items) section.append(this.card(event));
             if (!items.length) section.append(this.node('p', 'nc-empty-slot', 'Aucun rendez-vous ce jour.'));
+            if (this.options.dateClick) section.append(this.button('+ Placer un RDV', () => this.pickSlot(day, resource), 'nc-add-slot'));
             list.append(section);
         }
         return list;
@@ -434,6 +468,8 @@ export class NativeCalendar {
         board.style.setProperty('--nc-days', this.options.hiddenDays?.length === 0 ? 7 : range.days.length / 6);
         for (const day of range.days) {
             const section = this.node('section', 'nc-month-day');
+            const resource = this.resources(events)[0];
+            this.slotTarget(section, day, resource);
             if (dayKey(day).slice(0, 7) !== dayKey(this.date).slice(0, 7)) section.classList.add('nc-other-month');
             section.append(this.button(dateLabel(day, { weekday: 'short', day: 'numeric', month: 'short' }), () => this.changeView('timeGridDay', day), 'nc-day-heading'));
             const items = this.dayEvents(events, day);
@@ -450,12 +486,20 @@ export class NativeCalendar {
                 section.append(this.mountEvent(button, event));
             }
             if (items.length > 3) section.append(this.button(`+ ${items.length - 3} RDV`, () => this.changeView('timeGridDay', day), 'nc-more'));
+            if (this.options.dateClick) section.append(this.button('+ Placer', () => this.pickSlot(day, resource), 'nc-add-slot'));
             board.append(section);
         }
         return board;
     }
 
     pickSlot(day, resource, minute = 540) {
+        if (this.options.nativeDirectSlotSelection) {
+            const date = parseAppointmentDate(`${dayKey(day)}T${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
+            if (date) this.options.dateClick?.({ date, dateStr: date.toISOString(), allDay: false, resource, view: this.view });
+            return;
+        }
+        resource ||= this.resources(this.events)[0];
+        if (!resource) return;
         const dialog = this.node('dialog', 'nc-slot-dialog');
         dialog.append(this.node('h2', '', 'Choisir un horaire (heure de Paris)'), this.node('p', '', `${resource.name} · ${dateLabel(day, { dateStyle: 'long' })}`));
         const form = this.node('form');

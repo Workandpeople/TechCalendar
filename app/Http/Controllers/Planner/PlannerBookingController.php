@@ -64,7 +64,7 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify')
-            || $request->filled('replace_appointment_id');
+            || $request->filled('replace_appointment_id') || str_starts_with((string) $request->query('crm_appointment_id'), 'rebook-');
         $isManagerRoute = $request->routeIs('manager.*');
         $services = Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
@@ -470,12 +470,32 @@ class PlannerBookingController extends Controller
             'starts_at' => ['required', 'date'],
             'duration_minutes' => ['required', 'integer', 'min:30', 'max:480'],
             'comment' => ['nullable', 'string', 'max:2000'],
+            'reschedule_context' => ['nullable', 'array:version,appointment_id,updated_at'],
             'force_placement' => ['sometimes', 'boolean', Rule::prohibitedIf(! config('crm.v2_enabled'))],
             'force_confirmed' => [Rule::excludeIf(! $request->boolean('force_placement')), 'required', 'accepted'],
         ]);
 
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
+        if (isset($crmAppointment['reschedule_context'])) {
+            $previous = Appointment::query()->find($payload['reschedule_context']['appointment_id'] ?? 0);
+            $appointment = app(DossierBooking::class)->rebook($request->user(), $payload['crm_appointment_id'], $payload);
+            if ($appointment->wasRecentlyCreated) {
+                $appointmentMails->created($appointment);
+            } elseif ($previous && $previous->technician_id !== $appointment->technician_id) {
+                $appointmentMails->reassigned($appointment, $previous->technician_id);
+            } else {
+                $appointmentMails->detailsUpdated($appointment);
+            }
+
+            return response()->json([
+                'message' => 'RDV replacé. Le dossier est en attente de visite.', 'appointment_id' => $appointment->id,
+                'appointment' => ['id' => $appointment->id, 'start' => AppointmentDateTime::formatStored($appointment->starts_at),
+                    'end' => AppointmentDateTime::formatStored($appointment->ends_at), 'duration_minutes' => $appointment->duration_minutes],
+                'forced_placement' => (bool) ($payload['force_placement'] ?? false),
+                'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment), 'global_plus' => null,
+            ]);
+        }
         $replacementAppointment = ! empty($payload['replace_appointment_id'])
             ? Appointment::query()->findOrFail((int) $payload['replace_appointment_id'])
             : null;

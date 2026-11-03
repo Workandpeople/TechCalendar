@@ -63,12 +63,14 @@ test('the booking handler sends edited input rather than the original suggestion
     const selectedCalendarEvent = { start: new Date('2026-07-15T08:00:00+02:00'), extendedProps: { is_suggestion: true, technician_name: 'Tech' } };
     const context = {
         document: { getElementById: id => nodes[id] || hidden },
-        window: { TechCalendarDateTime: dateTime },
+        window: { TechCalendarDateTime: dateTime, TechCalendarHttp: { readJson: response => response.json() } },
+        currentAppointmentRequest: {},
         selectedCalendarEvent, currentAnalysisPayload: { replace_appointment_id: 12 },
         bookingStoreUrl: '/book', bookingCsrfToken: 'csrf', bookingConnectorsEnabled: false,
         bookingIsReplacementMode: true, bookingConfirmSuggestionLabel: () => 'Confirmer',
         fetch: async (url, options) => { sent = JSON.parse(options.body); return { ok: true, json: async () => ({ appointment_id: 12 }) }; },
         closeBookingAppointmentModal() {}, showPlacementConfirmation: (data, payload) => { confirmation = payload; },
+        bookingCrmAppointments: [], renderBookingCrmAppointments() {},
         showDetailStatus: message => { error = message; },
     };
     await runInNewContext(`${handler}\nplaceSelectedAppointment(false);`, context);
@@ -85,6 +87,16 @@ test('the booking handler sends edited input rather than the original suggestion
     await runInNewContext('placeSelectedAppointment(false);', context);
     assert.equal(sent, null);
     assert.match(error, /date/);
+    context.currentAppointmentRequest = { reschedule_context: { version: 2, appointment_id: 12, updated_at: '2026-07-15T08:00:00+02:00' } };
+    context.currentAnalysisPayload = { crm_appointment_id: 'rebook-1' };
+    let closed = false;
+    context.manual = { event: selectedCalendarEvent, button: {}, status: message => { error = message; }, close: () => { closed = true; },
+        values: { technician_id: 8, starts_at: '2026-07-16T11:15', duration_minutes: 60, comment: 'Placement manuel' } };
+    error = undefined;
+    await runInNewContext('placeSelectedAppointment(false, manual);', context);
+    assert.equal(error, undefined); assert.equal(closed, true);
+    assert.equal(sent.starts_at, '2026-07-16T11:15:00+02:00'); assert.equal(sent.technician_id, 8);
+    assert.equal(sent.crm_appointment_id, 'rebook-1'); assert.deepEqual(sent.reschedule_context, context.currentAppointmentRequest.reschedule_context);
 });
 
 test('placement confirmation uses the server-persisted hour before the draft value', () => {
