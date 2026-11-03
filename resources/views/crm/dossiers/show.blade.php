@@ -8,8 +8,7 @@
         <a href="{{ route('v2.dossiers.index') }}" class="gc-link text-sm">← Tous les dossiers</a>
         <x-workspace-heading :title="$dossier->beneficiaryLabel()" eyebrow="Détail du dossier" :description="'Créé le '.$dossier->created_at?->format('d/m/Y').($dossier->legacy_lot_name ? ' · Lot '.$dossier->legacy_lot_name : '')">
             @if ($quickOperations->count() === 1)
-                <a class="gc-btn-secondary" href="{{ route('planner.book', ['crm_appointment_id' => 'rebook-'.$quickOperations->first()->id]) }}"><x-nav-icon name="planning" />Replanifier avec le planning</a>
-                <button type="button" class="gc-btn-warning" data-quick-reschedule-url="{{ route('v2.dossiers.appointments.reschedule', [$dossier, $quickOperations->first()], absolute: false) }}"><x-nav-icon name="planning" />Replacer le RDV</button>
+                @include('crm.dossiers.detail.booking-actions', ['bookingOperation' => $quickOperations->first()])
             @endif
             @if ($smsUnavailable === null)<a class="gc-btn-secondary" href="#composer-sms"><x-nav-icon name="comment" /> SMS</a>@endif
             <a class="gc-btn-secondary" href="{{ route('v2.dossiers.edit', $dossier) }}" data-dialog-target="modifier-dossier"><x-nav-icon name="edit" /> Modifier les informations</a>

@@ -10,6 +10,7 @@
                 @php
                     $state = \App\Services\Crm\DossierStatusCatalog::describe($operation->legacy_status)['key'];
                     $linkedAppointment = $operation->appointments->first();
+                    $canReplan = $quickOperations->contains('id', $operation->id);
                 @endphp
                 <li id="fiche-{{ $operation->id }}" class="gc-dossier-operation space-y-3 py-4">
                     <div><p class="font-medium" data-operation-label="{{ $operation->id }}">{{ ($operation->service?->name ?: $operation->legacy_service_name ?: 'Prestation à rapprocher') }}</p>
@@ -25,27 +26,15 @@
                         <span data-operation-state><x-dossier-status :status="$operation->legacy_status" /></span>
                         <span class="text-sm text-slate-500" data-operation-appointments-count>{{ $operation->appointments_count }} RDV lié(s)</span>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
+                    <div class="gc-dossier-operation-booking">
                         @if ($linkedAppointment)
-                            <a data-operation-planning href="{{ route($planningRoute, ['appointment_id' => $linkedAppointment->id, 'technician_id' => $linkedAppointment->technician_id, 'date' => $linkedAppointment->starts_at?->toDateString()]) }}" class="gc-btn-secondary">Voir le RDV</a>
-                        @elseif ($state === 'pending')
+                            <a data-operation-planning href="{{ route($planningRoute, ['appointment_id' => $linkedAppointment->id, 'technician_id' => $linkedAppointment->technician_id, 'date' => $linkedAppointment->starts_at?->toDateString()]) }}" class="gc-link text-sm">Voir le RDV dans le planning</a>
+                        @elseif (! $canReplan && $state === 'pending')
                             <a data-operation-booking href="{{ route('planner.book', ['crm_appointment_id' => 'dossier-'.$operation->id]) }}" class="gc-btn-primary">Planifier le RDV</a>
-                        @elseif ($state === 'problem')
-                            <details data-operation-booking class="max-w-sm rounded-lg border border-slate-200 p-3">
-                                <summary class="cursor-pointer text-sm font-semibold">Reprendre la prise de RDV</summary>
-                                <form method="POST" action="{{ route('v2.dossiers.operations.reopen', [$dossier, $operation]) }}" class="mt-3 space-y-3">
-                                    @csrf
-                                    <input type="hidden" name="version" value="{{ $dossier->version }}">
-                                    <label for="reopen-{{ $operation->id }}" class="gc-label">Motif de la reprise</label>
-                                    <textarea id="reopen-{{ $operation->id }}" name="comment" class="gc-input" rows="2" maxlength="2000" required></textarea>
-                                    <button type="submit" class="gc-btn-primary">Remettre en prise de RDV</button>
-                                </form>
-                            </details>
                         @endif
-                        @if ($quickOperations->contains('id', $operation->id))
-                            <a class="gc-btn-secondary" href="{{ route('planner.book', ['crm_appointment_id' => 'rebook-'.$operation->id]) }}"><x-nav-icon name="planning" />Replanifier avec le planning</a>
-                            <button type="button" class="gc-btn-warning" data-quick-reschedule-url="{{ route('v2.dossiers.appointments.reschedule', [$dossier, $operation], absolute: false) }}">Replacement rapide</button>
-                            @unless ($linkedAppointment)<a data-operation-planning class="gc-btn-secondary" hidden>Voir le RDV</a>@endunless
+                        @if ($canReplan)
+                            @include('crm.dossiers.detail.booking-actions', ['bookingOperation' => $operation])
+                            @unless ($linkedAppointment)<a data-operation-planning class="gc-link text-sm" hidden>Voir le RDV dans le planning</a>@endunless
                         @endif
                     </div>
                     <p class="text-sm font-semibold text-sky-800" data-rescheduled-summary hidden></p>

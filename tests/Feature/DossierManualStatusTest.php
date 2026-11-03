@@ -170,6 +170,13 @@ it('allows the workflow service to change status without a reason', function () 
         ->and($this->dossier->statusChanges()->sole()->author_id)->toBe($this->actor->id);
 });
 
+it('returns a problem dossier to the booking queue through the normal status form without requiring a reason', function () {
+    $this->operation->forceFill(['legacy_status' => 'PROBLÈME RENDEZ-VOUS'])->save();
+    $this->patch($this->url, ['version' => 1, 'status' => 'pending'])->assertRedirect()->assertSessionHasNoErrors();
+    expect($this->operation->fresh()->legacy_status)->toBe('PRISE DE RDV')
+        ->and($this->dossier->statusChanges()->sole()->author_id)->toBe($this->actor->id);
+});
+
 it('rejects concurrent changes foreign operations and deleted dossiers', function () {
     $this->dossier->forceFill(['version' => 2])->save();
     $this->patchJson($this->url, $this->data)->assertUnprocessable()->assertJsonValidationErrors('version');
@@ -189,7 +196,7 @@ it('modifies only the chosen operation and cannot create duplicate bookings when
     expect($other->fresh()->legacy_status)->toBe('CONTROLE RT')->and(Appointment::count())->toBe(1)
         ->and($this->operation->fresh()->legacy_status)->toBe('PRISE DE RDV')
         ->and(DossierOperation::query()->awaitingBooking()->whereKey($this->operation->id)->exists())->toBeFalse();
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Replacer le RDV');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Replacer rapidement');
 });
 
 it('forbids changing statuses without internal editing rights', function (int $role, bool $disabled) {

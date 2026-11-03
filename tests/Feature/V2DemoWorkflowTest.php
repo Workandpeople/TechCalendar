@@ -107,10 +107,11 @@ it('reopens an unplaced problem with a reason and checks stale state and scope',
     $url = route('v2.dossiers.operations.reopen', [$dossier, $operation]);
     $this->postJson($url, ['version' => 1])->assertUnprocessable()->assertJsonValidationErrors('comment');
     $this->postJson($url, ['version' => 99, 'comment' => 'Reprise'])->assertUnprocessable();
-    $this->get(route('v2.dossiers.show', $dossier))->assertOk()->assertSee('Reprendre la prise de RDV');
+    $this->get(route('v2.dossiers.show', $dossier))->assertOk()->assertDontSee('Reprendre la prise de RDV')
+        ->assertDontSee('Motif de la reprise')->assertSee('Replacer rapidement')->assertSee('Replanifier avec le planning');
     $this->post($url, ['version' => 1, 'comment' => 'Client de nouveau disponible'])->assertRedirect()->assertSessionHasNoErrors();
     expect($operation->fresh()->legacy_status)->toBe('PRISE DE RDV');
-    $this->get(route('v2.dossiers.show', $dossier))->assertSee(route('planner.book', ['crm_appointment_id' => 'dossier-'.$operation->id]), false);
+    $this->get(route('v2.dossiers.show', $dossier))->assertSee(route('planner.book', ['crm_appointment_id' => 'rebook-'.$operation->id]), false);
     $this->postJson($url, ['version' => 2, 'comment' => 'Reprise'])->assertUnprocessable();
     $other = Dossier::create(['reference' => 'OTHER-DEMO', 'address' => 'Paris', 'city' => 'Paris']);
     $this->postJson(route('v2.dossiers.operations.reopen', [$other, $operation]), ['version' => 1, 'comment' => 'Reprise'])->assertNotFound();

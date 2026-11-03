@@ -77,6 +77,35 @@ it('opens full planning from every state without moving or reopening the dossier
         ->and($this->dossier->fresh()->version)->toBe(1)->and(Appointment::count())->toBe(1);
 })->with(['PRISE DE RDV', 'RDV ATTENTE VISITE', 'RDV VISITE', 'NON CONFORMITES', 'RAPPORT GENIUS', 'DOSSIER ANNULE', null]);
 
+it('shows one consistent booking action group per operation without the obsolete reason form', function (string $state, bool $hasAppointment) {
+    if (! $hasAppointment) {
+        $this->appointment->delete();
+    }
+    $this->operation->forceFill(['legacy_status' => $state])->save();
+    $before = $this->operation->fresh()->getRawOriginal();
+    $html = $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()
+        ->assertDontSee('Reprendre la prise de RDV')->assertDontSee('Motif de la reprise')->getContent();
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="utf-8" ?>'.$html, LIBXML_NONET);
+    $xpath = new DOMXPath($dom);
+    $scope = '//*[@id="fiche-'.$this->operation->id.'"]';
+    $groups = $xpath->query($scope.'//div[contains(@class,"gc-dossier-booking-actions")]');
+    expect($groups->length)->toBe(1);
+    $group = $groups->item(0);
+    expect($xpath->query('.//button[@data-quick-reschedule-url]', $group)->length)->toBe(1)
+        ->and($xpath->query('.//a[contains(@href,"crm_appointment_id=rebook-")]', $group)->length)->toBe(1)
+        ->and($xpath->query($scope.'//a[contains(@href,"crm_appointment_id=dossier-")]')->length)->toBe(0)
+        ->and($xpath->query($scope.'//form[@action="'.route('v2.dossiers.operations.reopen', [$this->dossier, $this->operation]).'"]')->length)->toBe(0)
+        ->and($xpath->query($scope.'//select[@name="status"]/option[@value="pending"]')->length)->toBe(1)
+        ->and($this->operation->fresh()->getRawOriginal())->toBe($before)
+        ->and($this->dossier->fresh()->version)->toBe(1);
+    $header = $xpath->query('//*[contains(@class,"gc-workspace-heading-actions")]//div[contains(@class,"gc-dossier-booking-actions")]')->item(0);
+    expect($header)->not->toBeNull()->and($header->textContent)->toBe($group->textContent);
+})->with([
+    ['PRISE DE RDV', false], ['PROBLÈME RENDEZ-VOUS', false], ['PROBLÈME RENDEZ-VOUS', true],
+    ['RDV ATTENTE VISITE', true], ['RAPPORT GENIUS', true],
+]);
+
 it('renders valid JavaScript for the full planning form and existing calendar actions', function () {
     $html = $this->get(route('planner.book', ['crm_appointment_id' => 'rebook-'.$this->operation->id]))->assertOk()->getContent();
     preg_match_all('~<script\b([^>]*)>([\s\S]*?)</script>~i', $html, $tags, PREG_SET_ORDER);
@@ -333,7 +362,7 @@ it('keeps the report billing dates and inspected appointment when reopening a fi
         'marked_at' => now()->subDay(), 'marked_by' => $this->actor->id, 'source' => 'native']);
     $beforeOperation = $this->operation->fresh()->getRawOriginal();
     $beforeBilling = $billing->fresh()->getRawOriginal();
-    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Replacer le RDV');
+    $this->get(route('v2.dossiers.show', $this->dossier))->assertOk()->assertSee('Replacer rapidement');
     $this->patchJson($this->url, [...$this->data, 'appointment_id' => null, 'updated_at' => null])->assertOk();
     expect($document->fresh()->trashed())->toBeFalse()
         ->and($billing->fresh()->getRawOriginal())->toBe($beforeBilling)

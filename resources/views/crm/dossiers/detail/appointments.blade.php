@@ -43,7 +43,7 @@
                     </div>
                 </li>
             @empty
-                <li data-no-appointments class="py-6 text-sm text-slate-500">Aucun rendez-vous lié. Utilise « Planifier le RDV » sur la prestation à traiter.</li>
+                <li data-no-appointments class="py-6 text-sm text-slate-500">Aucun rendez-vous lié. Choisis un créneau dans « Statut et fiches », en placement rapide ou avec le planning.</li>
             @endforelse
         </ul>
         {{ $appointments->links() }}

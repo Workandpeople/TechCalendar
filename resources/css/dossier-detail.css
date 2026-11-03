@@ -63,6 +63,13 @@
     .gc-dossier-side { overflow-wrap: anywhere; }
     .gc-dossier-side .gc-dossier-panel-heading { padding: .9rem 1rem; }
     .gc-dossier-side .gc-dossier-panel-body { padding: 1rem; }
+    .gc-dossier-booking-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+    .gc-dossier-operation-booking { display: grid; gap: .65rem; }
+    .gc-dossier-operation-booking .gc-dossier-booking-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .gc-workspace .gc-dossier-booking-actions :is(a, button) { justify-content: center; min-height: 36px; padding: .5rem .65rem; font-size: .78rem; box-shadow: none; }
+    @media (pointer: coarse) {
+        .gc-workspace .gc-dossier-booking-actions :is(a, button) { min-height: 44px; }
+    }
     .gc-dossier-side .gc-btn-primary, .gc-dossier-side .gc-btn-secondary, .gc-dossier-side .gc-btn-soft { max-width: 100%; }
     .gc-dossier-side nav[role='navigation'] { flex-wrap: wrap; }
     .gc-dossier-history { border-left: 2px solid #dce3e9; margin-left: .3rem; padding-left: 1rem; display: grid; gap: 1.2rem; }
