@@ -36,7 +36,7 @@ class DossierRegistry
             'client', 'delegataire', 'operations.service', 'operations.billing', 'planningUser:id,first_name,last_name,deleted_at',
             'latestStatusChange',
             'listingAppointment.technician' => fn ($query) => $query->withTrashed()->with('departments'),
-            'comments' => fn ($query) => $query->with('author:id,first_name,last_name')
+            'comments' => fn ($query) => $query->withAuthorLabel()
                 ->orderByDesc('created_at')->orderByDesc('id')->limit(3),
         ])->withCount(['appointments', 'comments']);
         $dossiers = $query->paginate($filters['per_page'] ?? 10);

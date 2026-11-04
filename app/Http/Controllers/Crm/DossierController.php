@@ -104,7 +104,7 @@ class DossierController extends Controller
                 'legacyDocuments' => DB::table('legacy_records')->where('dossier_id', $dossier->id)
                     ->where('source_table', 'dossier_document')->whereNull('hidden_at')->orderByDesc('source_id')
                     ->paginate(20, ['*'], 'legacy_documents_page')->through(fn ($record) => $collectedDocuments->describe($record)),
-                'activities' => $dossier->activities()->with('author')->latest('id')->paginate(25, ['*'], 'history_page'),
+                'activities' => $dossier->activities()->withAuthorLabel()->latest('id')->paginate(25, ['*'], 'history_page'),
             ]);
         }
         $dossier->load(['client', 'delegataire', 'planningUser', 'operations' => fn ($query) => $query
@@ -137,10 +137,10 @@ class DossierController extends Controller
                 ->whereHas('document', fn ($query) => $query->where('dossier_id', $dossier->id))
                 ->with('document', 'delivery')->latest('id')->limit(30)->get(),
             'legacyDocuments' => $legacyDocuments,
-            'comments' => $dossier->comments()->with('author')->latest('created_at')->latest('id')
+            'comments' => $dossier->comments()->withAuthorLabel()->latest('created_at')->latest('id')
                 ->paginate(25, ['*'], 'comments_page')->withQueryString()->fragment('commentaires'),
             'activities' => $dossier->activities()->whereNotIn('kind', DossierActivity::COMMENT_KINDS)
-                ->with('author')->latest('created_at')->latest('id')->paginate(25, ['*'], 'history_page')->withQueryString()->fragment('historique'),
+                ->withAuthorLabel()->latest('created_at')->latest('id')->paginate(25, ['*'], 'history_page')->withQueryString()->fragment('historique'),
             'documents' => $dossier->documents()->with('author')->latest('id')->paginate(25, ['*'], 'documents_page')->withQueryString()->fragment('documents'),
             'appointments' => $dossier->appointments()->withTrashed()
                 ->with(['technician' => fn ($query) => $query->withTrashed(), 'service', 'lotAppointments.lot'])

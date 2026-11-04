@@ -9,14 +9,32 @@ use App\Models\MymarBookingRequest;
 use App\Models\User;
 use App\Services\Crm\AppointmentSlotAvailability;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class MymarBookingActions
 {
     public function __construct(private MymarActionSettings $settings, private MymarPendingBookings $pending, private Factory $http, private MymarBookingReaderSettings $reader) {}
+
+    public function scheduled(User $actor, int $rdvId): array
+    {
+        $config = $this->configuration($actor, true);
+        $source = $this->scheduledSource($rdvId);
+        $currentId = collect($config['bindings'])->firstWhere('source_technician_id', $source['technician_id'])['cofrac_user_id'] ?? null;
+        abort_unless($currentId !== null, 403);
+        $service = app(MymarAfterWorksService::class)->resolve();
+        $technicians = User::query()->internal()->where('role', 2)->where('admin', false)
+            ->whereIn('id', array_column($config['bindings'], 'cofrac_user_id'))
+            ->whereHas('services', fn ($query) => $query->whereKey($service->id))
+            ->orderBy('first_name')->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
+            ->map(fn (User $user) => ['id' => $user->id, 'name' => trim($user->first_name.' '.$user->last_name)])->all();
+
+        return [...$source, 'technician_id' => $currentId, 'technicians' => $technicians, 'service' => 'MAR · Visite après travaux'];
+    }
 
     public function submit(User $actor, array $data, string $action): array
     {
@@ -24,13 +42,16 @@ class MymarBookingActions
         $reservation = null;
         $payload = ['format' => 'cofrac.mymar-booking-command', 'version' => 1, 'request_id' => $data['request_id'],
             'action' => $action, 'dossier_id' => (int) $data['dossier_id'], 'cofrac_actor_id' => $actor->id, 'expected_revision' => $data['expected_revision']];
-        if ($action === 'place') {
+        if (in_array($action, ['place', 'reschedule'], true)) {
             $nativeId = (int) $data['technician_id'];
             $sourceId = collect($config['bindings'])->firstWhere('cofrac_user_id', $nativeId)['source_technician_id'] ?? null;
             if ($sourceId === null) {
                 throw ValidationException::withMessages(['technician_id' => 'Ce technicien n’a pas de correspondance MAR validée.']);
             }
             $payload += ['technician_id' => $sourceId, 'starts_at' => $data['starts_at'], 'duration_minutes' => (int) $data['duration_minutes']];
+            if ($action === 'reschedule') {
+                $payload['rdv_id'] = (int) $data['rdv_id'];
+            }
             $start = Carbon::instance(MymarBookingCommand::instant($data['starts_at']));
             $reservation = ['cofrac_technician_id' => $nativeId, 'reserved_starts_at' => $start->format('Y-m-d H:i:s'),
                 'reserved_ends_at' => $start->copy()->addMinutes((int) $data['duration_minutes'])->format('Y-m-d H:i:s')];
@@ -49,12 +70,11 @@ class MymarBookingActions
         if ($reservation !== null && $start->isPast()) {
             throw ValidationException::withMessages(['starts_at' => 'Choisissez un créneau à venir.']);
         }
-        if ($reservation !== null) {
+        if ($action === 'place') {
             $this->assertDuration($command->payload['duration_minutes']);
         }
-        $source = $this->pending->find($command->payload['dossier_id'], true);
-        if ($source === null || ! MymarPendingBookings::isAfterWorksRequest($source)
-            || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
+        $source = $this->source($command);
+        if (! $this->matchesSource($source, $command)) {
             throw ValidationException::withMessages(['dossier_id' => 'Le dossier MAR a changé. Actualisez la liste avant de continuer.']);
         }
         $record = DB::transaction(function () use ($outbox, $command, $actor, $reservation, $source): MymarBookingRequest {
@@ -96,20 +116,21 @@ class MymarBookingActions
         $before = MymarBookingRequest::query()->findOrFail($id)->status;
         $record = $outbox->process($id, function (MymarBookingCommand $command, \Closure $send): MymarBookingAttempt {
             try {
-                $source = $this->pending->find($command->payload['dossier_id'], true);
+                $source = $this->source($command);
             } catch (RuntimeException) {
                 return new MymarBookingAttempt('rejected', 'booking_pending_unavailable');
             }
-            if ($source === null || ! MymarPendingBookings::isAfterWorksRequest($source)
-                || ! hash_equals($source['expected_revision'], $command->payload['expected_revision'])) {
+            if (! $this->matchesSource($source, $command)) {
                 return new MymarBookingAttempt('rejected', 'booking_not_pending');
             }
             try {
                 return DB::transaction(function () use ($command, $send): MymarBookingAttempt {
                     $actor = User::query()->lockForUpdate()->find($command->payload['cofrac_actor_id']);
                     $this->configuration($actor, true);
-                    if ($command->payload['action'] === 'place') {
-                        $this->assertDuration($command->payload['duration_minutes']);
+                    if (in_array($command->payload['action'], ['place', 'reschedule'], true)) {
+                        if ($command->payload['action'] === 'place') {
+                            $this->assertDuration($command->payload['duration_minutes']);
+                        }
                         $record = MymarBookingRequest::query()->findOrFail($command->payload['request_id']);
                         $technician = $this->lockTechnician($record->cofrac_technician_id);
                         $start = Carbon::parse($record->reserved_starts_at->format('Y-m-d H:i:s'), 'Europe/Paris');
@@ -118,13 +139,22 @@ class MymarBookingActions
                             throw ValidationException::withMessages(['starts_at' => 'Le créneau est passé.']);
                         }
                         // Held through the bounded POST; an uncertain result keeps its reservation.
-                        app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end,
-                            ['mymar_request_id' => $record->id, 'location_precision' => 'unknown']);
+                        if ($command->payload['action'] === 'reschedule') {
+                            $checks = app(AppointmentSlotAvailability::class)->inspect($technician, $start, $end,
+                                ['mymar_request_id' => $record->id, 'location_precision' => 'unknown']);
+                            $conflicts = [...$checks['conflicts'], ...app(MymarSlotGuard::class)->liveConflicts($technician->id, $start, $end, $command->payload['rdv_id'])];
+                            if ($conflicts !== []) {
+                                throw AppointmentPlacementConflict::fromConflicts($conflicts, canForce: false);
+                            }
+                        } else {
+                            app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end,
+                                ['mymar_request_id' => $record->id, 'location_precision' => 'unknown']);
+                        }
                     }
 
                     return $send();
                 });
-            } catch (ValidationException) {
+            } catch (ValidationException|ModelNotFoundException|HttpExceptionInterface) {
                 return new MymarBookingAttempt('rejected', 'booking_native_slot_changed');
             }
         });
@@ -141,6 +171,30 @@ class MymarBookingActions
         app(MymarAfterWorksService::class)->assertQualified($technician);
 
         return $technician;
+    }
+
+    private function scheduledSource(int $rdvId): array
+    {
+        if ($this->reader->load() === null) {
+            throw new RuntimeException('mymar.booking_reader_disabled');
+        }
+
+        return (new MymarBookingClient($this->http, enabled: true, port: 19847, token: $this->reader->token()))->scheduled($rdvId);
+    }
+
+    private function source(MymarBookingCommand $command): ?array
+    {
+        return $command->payload['action'] === 'reschedule' ? $this->scheduledSource($command->payload['rdv_id'])
+            : $this->pending->find($command->payload['dossier_id'], true);
+    }
+
+    private function matchesSource(?array $source, MymarBookingCommand $command): bool
+    {
+        return $source !== null && ($source['dossier_id'] ?? null) === $command->payload['dossier_id']
+            && hash_equals($source['expected_revision'], $command->payload['expected_revision'])
+            && ($command->payload['action'] === 'reschedule'
+                ? $source['rdv_id'] === $command->payload['rdv_id'] && $source['duration_minutes'] === $command->payload['duration_minutes']
+                : MymarPendingBookings::isAfterWorksRequest($source));
     }
 
     private function assertDuration(int $duration): void
@@ -175,10 +229,26 @@ class MymarBookingActions
     private function result(MymarBookingRequest $record, User $actor): array
     {
         $message = match ($record->status) {
-            'confirmed' => $record->command['action'] === 'place' ? 'Rendez-vous placé et confirmé dans MYMAR.' : 'Problème rendez-vous enregistré dans MYMAR.',
+            'confirmed' => match ($record->command['action']) {
+                'place' => 'Rendez-vous placé et confirmé dans MYMAR.',
+                'reschedule' => 'Rendez-vous replacé et confirmé dans MYMAR. L’ancien créneau est conservé dans son historique.',
+                default => 'Problème rendez-vous enregistré dans MYMAR.',
+            },
             'rejected' => 'La demande a été refusée. Aucun nouveau placement confirmé ; actualisez puis choisissez un autre créneau.',
             default => 'Confirmation MYMAR en attente. Ne renouvelez pas la demande : utilisez « Vérifier la confirmation ».',
         };
+
+        if ($record->status === 'confirmed' && $record->command['action'] === 'reschedule') {
+            try {
+                $synchronized = (app(MymarObservationSync::class)->run()['status'] ?? null) === 'observing';
+            } catch (\Throwable) {
+                // A cache outage must not hide a committed MYMAR receipt.
+                $synchronized = false;
+            }
+            if (! $synchronized) {
+                $message .= ' Le planning est en attente de synchronisation ; ne renouvelez pas le replacement.';
+            }
+        }
 
         return ['request_id' => $record->id, 'state' => $record->status, 'message' => $message,
             'confirmed' => $record->status === 'confirmed', 'terminal' => in_array($record->status, ['confirmed', 'rejected'], true),

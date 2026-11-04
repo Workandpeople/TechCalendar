@@ -175,6 +175,10 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/planner/book/mar/place', [MymarBookingActionController::class, 'place'])->middleware('throttle:15,1')->name('planner.book.mar.place');
     Route::post('/planner/book/mar/problem', [MymarBookingActionController::class, 'problem'])->middleware('throttle:15,1')->name('planner.book.mar.problem');
     Route::get('/planner/book/mar/requests/{id}', [MymarBookingActionController::class, 'status'])->middleware('throttle:60,1')->name('planner.book.mar.status');
+    Route::get('/planner/book/mar/appointments/{rdv}/replacement-rapide', [MymarBookingActionController::class, 'scheduled'])
+        ->whereNumber('rdv')->middleware('throttle:30,1')->name('planner.book.mar.scheduled');
+    Route::post('/planner/book/mar/reschedule', [MymarBookingActionController::class, 'reschedule'])
+        ->middleware('throttle:20,1')->name('planner.book.mar.reschedule');
     Route::get('/planner/appointments/modify', [PlannerBookingController::class, 'index'])->name('planner.appointments.modify');
     Route::get('/planner/book/crm-appointments', [PlannerBookingController::class, 'crmAppointments'])->name('planner.book.crm-appointments.index');
     Route::post('/planner/book/crm-appointments/refresh', [PlannerBookingController::class, 'refreshCrmAppointments'])->name('planner.book.crm-appointments.refresh');

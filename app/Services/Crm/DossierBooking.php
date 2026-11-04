@@ -194,7 +194,7 @@ class DossierBooking
                 'service', 'dossier.client', 'dossier.delegataire', 'dossier.documents',
                 'appointments' => fn ($query) => $query->where('status', Appointment::STATUS_SCHEDULED)
                     ->orderByDesc('starts_at')->orderByDesc('id')->limit(1),
-                'dossier.comments' => fn ($query) => $query->with('author:id,first_name,last_name')->orderByDesc('created_at')->orderByDesc('id')->limit(10),
+                'dossier.comments' => fn ($query) => $query->withAuthorLabel()->orderByDesc('created_at')->orderByDesc('id')->limit(10),
             ]);
     }
 
@@ -285,7 +285,7 @@ class DossierBooking
             'comment' => '',
             'comments' => $dossier->comments->map(fn ($comment) => [
                 'id' => $comment->id, 'body' => $comment->body, 'comment' => $comment->body,
-                'author_name' => $comment->author?->full_name ?: 'TechCalendar', 'created_at' => $comment->created_at?->toIso8601String(),
+                'author_name' => $comment->authorLabel(), 'created_at' => $comment->created_at?->toIso8601String(),
             ])->all(),
             'documents' => [...$dossier->documents->map(fn ($document) => [
                 'id' => $document->id, 'name' => $document->name, 'mime_type' => $document->mime_type,

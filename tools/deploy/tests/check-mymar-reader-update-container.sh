@@ -14,6 +14,7 @@ $path='/var/lib/cofrac-mymar-booking-gateway/code/entry.php';
 $body=file_get_contents($path);
 $body=str_replace("'MymarReadWindow', ", '', $body, $count);if($count!==1)exit(1);
 $body=str_replace(",\n        static fn (\$window, \$now) => \$reader()->calendarLabels(\$window, \$now)", '', $body, $count);if($count!==1)exit(1);
+$body=str_replace(",\n        static fn (\$id) => \$reader()->scheduled(\$id)", '', $body, $count);if($count!==1)exit(1);
 file_put_contents($path,$body);
 unlink(dirname($path).'/MymarReadWindow.php');
 PHP

@@ -32,6 +32,7 @@ import * as appointmentDateTime from './appointment-date-time';
 import { initDatePickers } from './date-picker';
 import { initMymarPending } from './mymar-pending';
 import { initMymarActions } from './mymar-actions';
+import { initMymarReschedule } from './mymar-reschedule';
 import { readApiJson } from './api-response';
 import { createBookingPlacementForm } from './booking-placement-form';
 
@@ -74,6 +75,7 @@ initBetaFeedback();
 initDatePickers();
 initMymarPending();
 window.CofracMymarActions = initMymarActions(document, window);
+initMymarReschedule(document, window);
 
 const reverbConfig = {
     key: window.TechCalendarReverbConfig?.key || import.meta.env.VITE_REVERB_APP_KEY,

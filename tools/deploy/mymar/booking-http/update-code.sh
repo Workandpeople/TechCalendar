@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Only replaces code of the already-installed SELECT-only loopback reader.
+# Only replaces code of the pinned, already-installed loopback gateway selected by REQUEST.json.
 set +x
 set -Eeuo pipefail
 umask 077

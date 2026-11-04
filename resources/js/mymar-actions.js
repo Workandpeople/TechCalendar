@@ -8,11 +8,17 @@ export function validateActionResult(value, id) {
 }
 
 export function initMymarActions(root = document, browser = window) {
-    const panel = root.querySelector('[data-mymar-pending]');
+    const panel = root.querySelector('[data-mymar-pending]') || root.querySelector('[data-mymar-actions]');
     if (!panel || !browser.crypto?.randomUUID || typeof browser.fetch !== 'function') return null;
     const urls = {};
     try {
         for (const [key, attribute] of [['place', 'placeUrl'], ['problem', 'problemUrl'], ['status', 'statusUrl']]) {
+            const url = new URL(panel.dataset[attribute], browser.location.origin);
+            if (url.origin !== browser.location.origin || url.search || url.hash || url.username || url.password) return null;
+            urls[key] = url.href;
+        }
+        for (const [key, attribute] of [['reschedule', 'rescheduleUrl'], ['scheduled', 'scheduledUrl']]) {
+            if (!panel.dataset[attribute]) continue;
             const url = new URL(panel.dataset[attribute], browser.location.origin);
             if (url.origin !== browser.location.origin || url.search || url.hash || url.username || url.password) return null;
             urls[key] = url.href;
@@ -27,10 +33,11 @@ export function initMymarActions(root = document, browser = window) {
             if (/^[0-9]+$/.test(key) && /^[a-f0-9-]{36}$/.test(row?.id || '')) records[key] = { id: row.id, action: row.action };
         }
     } catch { /* Server-side unique keys still prevent duplicate active commands. */ }
-    const resumeButton = panel.querySelector('[data-mymar-resume]');
+    const resumeButtons = root.querySelectorAll ? [...root.querySelectorAll('[data-mymar-resume]')]
+        : [panel.querySelector('[data-mymar-resume]')].filter(Boolean);
     const save = () => {
         try { browser.sessionStorage.setItem(storageKey, JSON.stringify(records)); } catch {}
-        if (resumeButton) resumeButton.style.display = Object.keys(records).length ? '' : 'none';
+        for (const button of resumeButtons) button.style.display = Object.keys(records).length ? '' : 'none';
     };
     const node = (tag, text = '', className = '') => { const element = ownerDocument.createElement(tag); element.textContent = text; element.className = className; return element; };
     const button = text => { const value = node('button', text, 'gc-btn-secondary'); value.type = 'button'; return value; };
@@ -44,10 +51,13 @@ export function initMymarActions(root = document, browser = window) {
         dialog.append(header); ownerDocument.body.append(dialog); dialog.showModal();
         return dialog;
     };
-    const changed = () => panel.dispatchEvent(new browser.Event('cofrac:mymar:changed'));
-    const request = async (url, method, data = null) => {
+    const changed = action => {
+        panel.dispatchEvent(new browser.Event('cofrac:mymar:changed'));
+        if (action === 'reschedule') root.dispatchEvent?.(new browser.Event('cofrac:mymar:updated'));
+    };
+    const request = async (url, method, data = null, timeout = 15000) => {
         const controller = new browser.AbortController();
-        const timer = browser.setTimeout(() => controller.abort(), 15000);
+        const timer = browser.setTimeout(() => controller.abort(), timeout);
         try {
             const response = await browser.fetch(url, { method, credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
                 headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': panel.dataset.csrf },
@@ -74,7 +84,7 @@ export function initMymarActions(root = document, browser = window) {
             try {
                 const result = validateActionResult(await request(urls.status.replace('__REQUEST__', record.id), 'GET'), record.id);
                 message.textContent = result.message;
-                if (result.terminal) { delete records[dossierId]; save(); verify.hidden = true; changed(); }
+                if (result.terminal) { delete records[dossierId]; save(); verify.hidden = true; changed(record.action); }
             } catch (error) { message.textContent = `${error.message} Conservez cette référence et ne créez pas une deuxième demande.`; }
             finally { verify.disabled = false; }
         });
@@ -85,9 +95,9 @@ export function initMymarActions(root = document, browser = window) {
         const record = { id: browser.crypto.randomUUID(), action };
         records[key] = record; save();
         try {
-            const result = validateActionResult(await request(urls[action], 'POST', { ...payload, request_id: record.id }), record.id);
-            if (result.terminal) { delete records[key]; save(); changed(); }
-            if (!result.confirmed) track(key, record, result);
+            const result = validateActionResult(await request(urls[action], 'POST', { ...payload, request_id: record.id }, action === 'reschedule' ? 30000 : 15000), record.id);
+            if (result.terminal) { delete records[key]; save(); changed(action); }
+            if (!result.confirmed || action === 'reschedule') track(key, record, result);
             return result;
         } catch (error) {
             if (error.definitelyNotQueued) { delete records[key]; save(); throw error; }
@@ -125,9 +135,17 @@ export function initMymarActions(root = document, browser = window) {
             });
         },
         place: payload => submit('place', payload),
+        reschedule: payload => {
+            if (!urls.reschedule) throw new Error('Le replacement MAR n’est pas disponible. Actualisez la page.');
+            return submit('reschedule', payload);
+        },
+        scheduled: id => {
+            if (!urls.scheduled || !Number.isSafeInteger(id) || id < 1) throw new Error('Rendez-vous MAR invalide.');
+            return request(urls.scheduled.replace('__RDV__', String(id)), 'GET');
+        },
         resume() { const entry = Object.entries(records)[0]; if (entry) track(...entry); },
     };
-    resumeButton?.addEventListener('click', () => actions.resume());
+    for (const button of resumeButtons) button.addEventListener('click', () => actions.resume());
     save();
     return actions;
 }

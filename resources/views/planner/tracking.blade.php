@@ -2384,6 +2384,7 @@
             updateLegend();
             if (trackingCalendar) trackingCalendar.refetchEvents();
         };
+        document.addEventListener('cofrac:mymar:updated', refetchCalendar);
 
         document.addEventListener('techcalendar:appointment-rescheduled', () => {
             closeTrackingAppointmentModal();

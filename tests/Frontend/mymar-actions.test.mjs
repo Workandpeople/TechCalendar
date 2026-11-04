@@ -18,7 +18,7 @@ function fixture({ fetch, storage = new Map(), override = {} } = {}) {
     document.body = document.createElement('body');
     const resume = document.createElement('button');
     const panel = { ownerDocument: document, dataset: { placeUrl: '/mar/place', problemUrl: '/mar/problem',
-        statusUrl: '/mar/status/__REQUEST__', csrf: 'csrf', userId: '1' }, querySelector: () => resume,
+        statusUrl: '/mar/status/__REQUEST__', rescheduleUrl: '/mar/reschedule', scheduledUrl: '/mar/scheduled/__RDV__', csrf: 'csrf', userId: '1' }, querySelector: () => resume,
         dispatchEvent(event) { events.push(event); } };
     const browser = { location: { origin: 'https://cofrac.test' }, crypto: { randomUUID }, AbortController,
         sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
@@ -108,4 +108,26 @@ test('production-minified actions initialize with the browser defaults, includin
     const unrelated = { document: { querySelector: () => null }, window: ui.browser, URL };
     runInNewContext(`${code}\nglobalThis.result = MymarActions.initMymarActions();`, unrelated);
     assert.equal(unrelated.result, null);
+});
+
+test('quick replacement reads its source first and confirms one POST with a distinct result dialog', async () => {
+    const ui = fixture({ fetch: async (_url, options) => options.method === 'GET' ? json({ rdv_id: 555 })
+        : json(result(JSON.parse(options.body).request_id, 'confirmed')) });
+    const actions = initMymarActions(ui.root, ui.browser);
+    assert.equal((await actions.scheduled(555)).rdv_id, 555);
+    assert.equal(ui.calls[0][1].method, 'GET');
+    await actions.reschedule({ ...payload, rdv_id: 555 });
+    assert.equal(JSON.parse(ui.calls[1][1].body).rdv_id, 555);
+    assert.equal(ui.calls[1][0], 'https://cofrac.test/mar/reschedule');
+    assert.equal(ui.nodes.some(node => node.tag === 'h2' && node.textContent === 'Confirmation MYMAR'), true);
+    assert.equal(ui.nodes.findLast(node => node.textContent === 'Vérifier la confirmation').hidden, true);
+});
+
+test('a replacement timeout is only verified, never posted twice', async () => {
+    const ui = fixture({ fetch: async () => { throw new Error('timeout'); } });
+    const actions = initMymarActions(ui.root, ui.browser);
+    await actions.reschedule({ ...payload, rdv_id: 555 });
+    await actions.reschedule({ ...payload, rdv_id: 555 });
+    assert.equal(ui.calls.length, 1);
+    assert.equal(JSON.parse(ui.storage.get('cofrac.mar.confirmations.1'))['12'].action, 'reschedule');
 });

@@ -2,6 +2,21 @@
 # Test-only PID manager; any command touching an existing service is forbidden.
 set -Eeuo pipefail
 case "$*" in
+    'is-active --quiet cofrac-mymar-actions-fpm.service cofrac-mymar-actions-http.service')
+        kill -0 "$(cat /fixtures/actions-fpm.pid)" && kill -0 "$(cat /fixtures/actions-http.pid)"; exit ;;
+    'stop cofrac-mymar-actions-http.service cofrac-mymar-actions-fpm.service')
+        for name in http fpm; do kill -TERM "$(cat "/fixtures/actions-$name.pid")" 2>/dev/null || true; done
+        for _ in $(seq 1 50); do [ -n "$(ss -H -ltn 'sport = :19848')" ] || break; sleep 0.1; done
+        sleep 0.2; exit ;;
+    'start cofrac-mymar-actions-fpm.service cofrac-mymar-actions-http.service')
+        if [ -f /fixtures/actions-restart-fail-once ]; then rm /fixtures/actions-restart-fail-once; exit 1; fi
+        (exec 8>&- 9>&-; exec /usr/sbin/php-fpm8.4 --nodaemonize --fpm-config /etc/cofrac-mymar-actions-gateway/php-fpm.conf) > /fixtures/actions-fpm.log 2>&1 &
+        echo "$!" > /fixtures/actions-fpm.pid
+        for _ in $(seq 1 30); do [ ! -S /run/cofrac-mymar-actions-fpm/php.sock ] || break; sleep 0.1; done
+        (exec 8>&- 9>&-; exec /usr/sbin/apache2 -f /etc/cofrac-mymar-actions-gateway/apache.conf -DFOREGROUND) > /fixtures/actions-http.log 2>&1 &
+        echo "$!" > /fixtures/actions-http.pid; exit ;;
+esac
+case "$*" in
     'show cofrac-mymar-booking-fpm.service -p LoadState --value'|'show cofrac-mymar-booking-http.service -p LoadState --value')
         if [ -f "/etc/systemd/system/$2" ]; then echo loaded; else echo not-found; fi ;;
     'daemon-reload') echo daemon-reload >> /fixtures/reader-unit-actions ;;

@@ -21,6 +21,26 @@ final class MymarBookingActionController extends Controller
         return $this->submit($request, $actions, 'problem');
     }
 
+    public function scheduled(Request $request, int $rdv, MymarBookingActions $actions): JsonResponse
+    {
+        $this->authorizeActor($request);
+        try {
+            return response()->json($actions->scheduled($request->user(), $rdv))->header('Cache-Control', 'private, no-store');
+        } catch (RuntimeException $exception) {
+            if ($exception instanceof HttpExceptionInterface) {
+                throw $exception;
+            }
+
+            return response()->json(['message' => 'Ce RDV MAR ne peut pas être chargé pour replacement. Vérifiez qu’il est toujours en attente de visite après travaux et actualisez le planning.'], 503)
+                ->header('Cache-Control', 'private, no-store');
+        }
+    }
+
+    public function reschedule(Request $request, MymarBookingActions $actions): JsonResponse
+    {
+        return $this->submit($request, $actions, 'reschedule');
+    }
+
     public function status(Request $request, string $id, MymarBookingActions $actions): JsonResponse
     {
         $this->authorizeActor($request);
@@ -35,10 +55,13 @@ final class MymarBookingActionController extends Controller
         $rules = ['request_id' => ['required', 'regex:/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/'],
             'dossier_id' => ['required', 'integer', 'min:1'], 'expected_revision' => ['required', 'regex:/^[a-f0-9]{64}$/'],
             'force_placement' => ['prohibited'], 'force_confirmed' => ['prohibited']];
-        $rules += $action === 'place' ? ['technician_id' => ['required', 'integer', 'min:1'],
+        $rules += in_array($action, ['place', 'reschedule'], true) ? ['technician_id' => ['required', 'integer', 'min:1'],
             'starts_at' => ['required', 'string', 'max:40'], 'duration_minutes' => ['required', 'integer', 'min:60', 'max:480', 'multiple_of:60']]
             : ['comment' => ['required', 'string', 'min:3', 'max:255', 'not_regex:/[<>]/'],
                 'reason' => ['nullable', 'string', 'max:100', 'not_regex:/[<>]/'], 'recall_at' => ['nullable', 'string', 'max:40']];
+        if ($action === 'reschedule') {
+            $rules['rdv_id'] = ['required', 'integer', 'min:1'];
+        }
         $data = $request->validate($rules);
 
         return $this->respond(fn () => $actions->submit($request->user(), $data, $action));

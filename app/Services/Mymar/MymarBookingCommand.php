@@ -19,6 +19,7 @@ final readonly class MymarBookingCommand
         $action = $data['action'] ?? null;
         $fields = match ($action) {
             'place' => ['technician_id', 'starts_at', 'duration_minutes'],
+            'reschedule' => ['rdv_id', 'technician_id', 'starts_at', 'duration_minutes'],
             'problem' => ['comment', 'reason', 'recall_at'],
             default => throw new InvalidArgumentException('mymar.invalid_booking_command'),
         };
@@ -32,7 +33,7 @@ final readonly class MymarBookingCommand
             throw new InvalidArgumentException('mymar.invalid_booking_command');
         }
         $payload = array_intersect_key($data, array_flip($common));
-        if ($action === 'place') {
+        if (in_array($action, ['place', 'reschedule'], true)) {
             if (! is_int($data['technician_id'] ?? null) || $data['technician_id'] < 1
                 || ! is_int($data['duration_minutes'] ?? null) || $data['duration_minutes'] < 60
                 || $data['duration_minutes'] > 480 || $data['duration_minutes'] % 60 !== 0) {
@@ -48,6 +49,12 @@ final readonly class MymarBookingCommand
             }
             $payload += ['technician_id' => $data['technician_id'], 'starts_at' => $start->format(DATE_ATOM),
                 'duration_minutes' => $data['duration_minutes']];
+            if ($action === 'reschedule') {
+                if (! is_int($data['rdv_id'] ?? null) || $data['rdv_id'] < 1) {
+                    throw new InvalidArgumentException('mymar.invalid_booking_rdv');
+                }
+                $payload['rdv_id'] = $data['rdv_id'];
+            }
         } else {
             $comment = self::text($data['comment'] ?? null, 3, 255);
             $reason = ($data['reason'] ?? null) === null ? null : self::text($data['reason'], 1, 100);
@@ -72,6 +79,7 @@ final readonly class MymarBookingCommand
         return match ([$pendingStatus, $action]) {
             [1, 'place'] => 3, [14, 'place'] => 16,
             [1, 'problem'] => 2, [14, 'problem'] => 15,
+            [16, 'reschedule'] => 16,
             default => throw new InvalidArgumentException('mymar.booking_not_pending'),
         };
     }

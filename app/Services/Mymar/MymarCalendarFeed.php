@@ -28,7 +28,8 @@ class MymarCalendarFeed
                 return $empty;
             }
             $selected = array_values(array_intersect(array_values($pilot->technicianMap), array_map('intval', $technicianIds)));
-            $blocking = (bool) ($this->actions->load()['guard_enabled'] ?? false);
+            $actionConfig = $this->actions->load();
+            $blocking = (bool) ($actionConfig['guard_enabled'] ?? false);
             $meta = ['events' => [], 'state' => 'unavailable', 'blocking_enabled' => $blocking, 'pilot_technicians' => count($pilot->technicianMap),
                 'covered_technicians' => count($selected), 'selected_technicians' => count(array_unique($technicianIds))];
             if ($selected === []) {
@@ -77,6 +78,8 @@ class MymarCalendarFeed
                     'backgroundColor' => '#fff7db', 'borderColor' => '#c58615', 'textColor' => '#71450a', 'classNames' => ['mymar-observation-event'],
                     'extendedProps' => ['is_mymar' => true, 'observation_only' => true, 'read_only' => true, 'availability_guard_enabled' => $blocking,
                         'technician_id' => $period['cofrac_user_id'], 'technician_name' => $names[$period['cofrac_user_id']],
+                        'source_rdv_id' => $period['source_rdv_id'], 'visit_phase' => $period['visit_phase'],
+                        'can_reschedule' => ($actionConfig['writes_enabled'] ?? false) && $period['visit_phase'] === 'after_works',
                         'technician_full_name' => $names[$period['cofrac_user_id']], 'service_label' => $label, 'service_name' => $label,
                         'customer_name' => $details['customer_name'] ?? '', 'address' => $details['address'] ?? '',
                         'postal_code' => $details['postal_code'] ?? '', 'city' => $details['city'] ?? '',

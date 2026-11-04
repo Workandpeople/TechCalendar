@@ -63,3 +63,17 @@ it('preserves plain problem text and recall time, with a stable canonical comman
         expect(fn () => MymarBookingCommand::fromArray([...$data, 'comment' => $text]))->toThrow(InvalidArgumentException::class);
     }
 });
+
+it('reschedules only after-works visits with a mandatory current appointment identity', function () {
+    $data = mymarPlacePayload(['action' => 'reschedule', 'rdv_id' => 123]);
+    expect(MymarBookingCommand::fromArray($data)->payload['rdv_id'])->toBe(123)
+        ->and(MymarBookingCommand::targetStatus(16, 'reschedule'))->toBe(16);
+    foreach ([1, 2, 3, 14, 15] as $status) {
+        expect(fn () => MymarBookingCommand::targetStatus($status, 'reschedule'))->toThrow(InvalidArgumentException::class);
+    }
+    foreach ([null, 0, -1, '123'] as $invalid) {
+        expect(fn () => MymarBookingCommand::fromArray([...$data, 'rdv_id' => $invalid]))->toThrow(InvalidArgumentException::class);
+    }
+    unset($data['rdv_id']);
+    expect(fn () => MymarBookingCommand::fromArray($data))->toThrow(InvalidArgumentException::class);
+});

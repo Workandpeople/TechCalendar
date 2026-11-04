@@ -78,6 +78,34 @@ final readonly class MymarBookingClient
         }
     }
 
+    public function scheduled(int $rdvId): array
+    {
+        $this->assertEnabled();
+        if ($rdvId < 1) {
+            throw new RuntimeException('mymar.invalid_booking_id');
+        }
+        try {
+            [$status, $data] = $this->exchange('GET', '/v1/scheduled-bookings/'.$rdvId, [], 16384);
+            if ($status !== 200 || count($data) !== 10 || ($data['format'] ?? null) !== 'cofrac.mymar-scheduled-booking'
+                || ($data['version'] ?? null) !== 1 || ($data['rdv_id'] ?? null) !== $rdvId) {
+                throw new RuntimeException;
+            }
+            foreach (['customer' => 1024, 'address' => 4096] as $field => $limit) {
+                if (! is_string($data[$field] ?? null) || strlen($data[$field]) > $limit || ! mb_check_encoding($data[$field], 'UTF-8')
+                    || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $data[$field])) {
+                    throw new RuntimeException;
+                }
+            }
+            MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,
+                'request_id' => '00000000-0000-4000-8000-000000000000', 'cofrac_actor_id' => 1, 'action' => 'reschedule',
+                ...array_intersect_key($data, array_flip(['rdv_id', 'dossier_id', 'expected_revision', 'technician_id', 'starts_at', 'duration_minutes']))]);
+
+            return $data;
+        } catch (Throwable) {
+            throw new RuntimeException('mymar.scheduled_booking_unavailable');
+        }
+    }
+
     private function request(MymarBookingCommand $command, bool $submit): MymarBookingAttempt
     {
         try {
@@ -150,11 +178,15 @@ final readonly class MymarBookingClient
         if (array_diff(array_keys($result), $fields) || array_diff($fields, array_keys($result))
             || $result['format'] !== 'cofrac.mymar-booking-result' || $result['version'] !== 1 || $result['source_committed'] !== true
             || $result['request_id'] !== $payload['request_id'] || $result['dossier_id'] !== $payload['dossier_id']
-            || $result['action'] !== $payload['action'] || ! in_array($result['status_id'], $payload['action'] === 'place' ? [3, 16] : [2, 15], true)) {
+            || $result['action'] !== $payload['action'] || ! in_array($result['status_id'], match ($payload['action']) {
+                'place' => [3, 16], 'reschedule' => [16], default => [2, 15]
+            }, true)) {
             throw new RuntimeException('mymar.invalid_booking_result');
         }
-        if ($payload['action'] === 'place') {
-            if (! is_int($result['rdv_id']) || $result['rdv_id'] < 1 || $result['duration_minutes'] !== $payload['duration_minutes']
+        if (in_array($payload['action'], ['place', 'reschedule'], true)) {
+            if (! is_int($result['rdv_id']) || $result['rdv_id'] < 1
+                || ($payload['action'] === 'reschedule' && $result['rdv_id'] === $payload['rdv_id'])
+                || $result['duration_minutes'] !== $payload['duration_minutes']
                 || MymarBookingCommand::instant($result['starts_at'])->format(DATE_ATOM) !== $payload['starts_at']) {
                 throw new RuntimeException('mymar.invalid_booking_result');
             }

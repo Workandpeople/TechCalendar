@@ -32,7 +32,7 @@
         </section>
         <section class="gc-card space-y-3">
             <h2 class="font-semibold">Historique conservé</h2>
-            <ol class="divide-y divide-slate-100">@foreach ($activities as $activity)<li class="py-2"><p class="text-xs text-slate-500">{{ $activity->created_at?->format('d/m/Y H:i') }} · {{ $activity->author?->full_name ?: 'Historique Cofrac' }}</p><x-comment-body :body="$activity->body" /></li>@endforeach</ol>
+            <ol class="divide-y divide-slate-100">@foreach ($activities as $activity)<li class="py-2"><p class="text-xs text-slate-500">{{ $activity->created_at?->format('d/m/Y H:i') }} · {{ $activity->authorLabel() }}</p><x-comment-body :body="$activity->body" /></li>@endforeach</ol>
             {{ $activities->links() }}
         </section>
     </div>

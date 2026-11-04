@@ -56,6 +56,10 @@ PHP
 printf '{"ready":true,"mapped_technicians":2,"post_requests":false}\n' > "$RUN/application-probe.json"
 chmod 0600 "$RUN/application-probe.json"
 php8.4 /actions-package/control.php --enable "$RUN"
+printf '%s\n' "$FPM" > /fixtures/actions-fpm.pid
+printf '%s\n' "$HTTP" > /fixtures/actions-http.pid
+bash /workspace/tools/deploy/tests/check-mymar-actions-update-container.sh
+FPM=$(cat /fixtures/actions-fpm.pid); HTTP=$(cat /fixtures/actions-http.pid)
 php -d zend.assertions=1 -d assert.exception=1 <<'PHP'
 <?php
 require '/workspace/vendor/autoload.php';
@@ -79,13 +83,22 @@ $root->exec("ALTER USER '".$reader['database_user']."'@'localhost' ACCOUNT UNLOC
 $readerPdo=new PDO('mysql:unix_socket=/var/run/mysqld/mysqld.sock;dbname=MYMAR',$reader['database_user'],$reader['database_password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
 $receipts=new Cofrac2\Deploy\Mymar\MymarBookingSource($readerPdo,$reader['technical_author_id'],$reader['technician_ids'],enabled:true,readOnlyCredentials:true);
 assert($receipts->result($place->payload['request_id'])===$result->result);
+$scheduled=$receipts->scheduled($result->result['rdv_id']);
+$replacement=App\Services\Mymar\MymarBookingCommand::fromArray(['format'=>'cofrac.mymar-booking-command','version'=>1,
+ 'request_id'=>Illuminate\Support\Str::uuid()->toString(),'action'=>'reschedule','cofrac_actor_id'=>101,
+ 'rdv_id'=>$scheduled['rdv_id'],'dossier_id'=>$scheduled['dossier_id'],'expected_revision'=>$scheduled['expected_revision'],
+ 'technician_id'=>6,'starts_at'=>'2030-11-06T11:40:00+01:00','duration_minutes'=>$scheduled['duration_minutes']]);
+$replaced=$client->submit($replacement);assert($replaced->state==='confirmed'&&$replaced->result['status_id']===16);
+assert($replaced->result['rdv_id']!==$scheduled['rdv_id']&&$client->submit($replacement)->result===$replaced->result);
+assert($receipts->result($replacement->payload['request_id'])===$replaced->result);
+assert((int)$root->query('SELECT is_old FROM MYMAR.dossier_rdv WHERE id='.$scheduled['rdv_id'])->fetchColumn()===1);
 $root->exec("ALTER USER '".$reader['database_user']."'@'localhost' ACCOUNT LOCK");
-assert((int)$root->query('SELECT COUNT(*) FROM cofrac_mymar_integration.booking_commands')->fetchColumn()===2);
-assert((int)$root->query('SELECT COUNT(*) FROM MYMAR.dossier_historiques')->fetchColumn()===2);
+assert((int)$root->query('SELECT COUNT(*) FROM cofrac_mymar_integration.booking_commands')->fetchColumn()===3);
+assert((int)$root->query('SELECT COUNT(*) FROM MYMAR.dossier_historiques')->fetchColumn()===3);
 assert((int)$root->query('SELECT COUNT(*) FROM MYMAR.users WHERE id='.$config['technical_author_id'].' AND enabled=0')->fetchColumn()===1);
 assert(!str_contains(file_get_contents('/etc/cofrac2-mymar-actions/actions.json'),$config['database_password']));
 file_put_contents('/fixtures/actions-secret-check.json',json_encode(['token'=>$config['token'],'password'=>$config['database_password']],JSON_THROW_ON_ERROR));
-echo "Writer HTTP: confirmed place/problem, identical replay, source history, disabled technical author verified.\n";
+echo "Writer HTTP: confirmed place/problem/reschedule, identical replay, source history, disabled technical author verified.\n";
 PHP
 # Shutdown remains possible with an obsolete request; it keeps reservation protection on.
 printf '{}\n' > /actions-package/REQUEST.json

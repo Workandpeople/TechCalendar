@@ -22,11 +22,14 @@
                 $groups = [
                     'Bénéficiaire' => [
                         'company_name' => ['Raison sociale', 190], 'last_name' => ['Nom', 120],
-                        'first_name' => ['Prénom', 120], 'email' => ['Email', 190], 'phone' => ['Téléphone', 500],
+                        'first_name' => ['Prénom', 120],
                     ],
                     'Lieu d’inspection' => [
                         'site_name' => ['Nom du site / bâtiment', 190], 'address' => ['Adresse *', 500],
                         'postal_code' => ['Code postal', 10], 'city' => ['Ville *', 190],
+                    ],
+                    'Coordonnées du bénéficiaire' => [
+                        'email' => ['Email', 190], 'phone' => ['Téléphone', 500],
                     ],
                     'Adresse administrative du bénéficiaire' => [
                         'beneficiary_address' => ['Adresse', 500], 'beneficiary_postal_code' => ['Code postal', 10], 'beneficiary_city' => ['Ville', 190],
@@ -38,7 +41,7 @@
             @endphp
             <div class="grid gap-6 xl:grid-cols-2">
                 @foreach ($groups as $label => $fields)
-                    <section class="gc-card p-5">
+                    <section class="gc-card p-5 {{ $label === 'Coordonnées du bénéficiaire' ? 'xl:col-span-2' : '' }}">
                         <h2 class="mb-4 text-lg font-semibold">{{ $label }}</h2>
                         @if ($label === 'Bénéficiaire')<p class="mb-4 text-sm text-slate-500">Renseigne au minimum la raison sociale ou le nom.</p>@endif
                         @if ($label === 'Lieu d’inspection')

@@ -11,7 +11,8 @@ export function placementSelection(fields) {
     return { technician_id: technicianId, starts_at: startsAt, duration_minutes: duration, comment: fields.comment.value.trim() };
 }
 
-export function createBookingPlacementForm({ getContext, onPlace, root = document }) {
+export function createBookingPlacementForm({ getContext, onPlace, root = document, title: titleText = 'Placer le rendez-vous',
+    titleId = 'booking-placement-title', submitLabel = 'Placer le RDV' }) {
     const node = (tag, className = '', text = '') => {
         const element = root.createElement(tag); element.className = className; element.textContent = text; return element;
     };
@@ -19,10 +20,10 @@ export function createBookingPlacementForm({ getContext, onPlace, root = documen
         const element = node('button', style, text); element.type = 'button'; return element;
     };
     const dialog = node('dialog', 'gc-dossier-dialog gc-placement-dialog');
-    dialog.setAttribute('aria-labelledby', 'booking-placement-title');
+    dialog.setAttribute('aria-labelledby', titleId);
     const header = node('header');
     const heading = node('div');
-    const title = node('h2', '', 'Placer le rendez-vous'); title.id = 'booking-placement-title';
+    const title = node('h2', '', titleText); title.id = titleId;
     heading.append(node('p', 'gc-placement-eyebrow', 'Placement manuel · Heure de Paris'), title);
     const close = button('Fermer'); header.append(heading, close);
     const body = node('div', 'gc-dossier-dialog-body');
@@ -45,7 +46,7 @@ export function createBookingPlacementForm({ getContext, onPlace, root = documen
     const end = node('p', 'gc-placement-end'); end.setAttribute('aria-live', 'polite');
     const feedback = node('p', 'gc-placement-feedback'); feedback.setAttribute('role', 'status');
     const actions = node('footer', 'gc-dialog-actions');
-    const cancel = button('Annuler'), force = button('Forcer le placement', 'gc-btn-warning'), submit = button('Placer le RDV', 'gc-btn-primary');
+    const cancel = button('Annuler'), force = button('Forcer le placement', 'gc-btn-warning'), submit = button(submitLabel, 'gc-btn-primary');
     submit.type = 'submit'; force.hidden = true; actions.append(cancel, force, submit);
     fieldset.append(end, feedback, actions); form.append(fieldset); body.append(summary, form); dialog.append(header, body);
     root.body.append(dialog);
@@ -74,7 +75,7 @@ export function createBookingPlacementForm({ getContext, onPlace, root = documen
                 conflict: data => { force.hidden = !context?.forceAllowed || data?.can_force !== true; },
                 close: () => dialog.close() });
         } catch (error) { status(error.message || 'Placement impossible. Aucun enregistrement confirmé.', 'error'); }
-        finally { busy = false; fieldset.disabled = false; close.disabled = false; submit.textContent = 'Placer le RDV'; }
+        finally { busy = false; fieldset.disabled = false; close.disabled = false; submit.textContent = submitLabel; }
     };
     form.addEventListener('submit', event => { event.preventDefault(); place(false); });
     force.addEventListener('click', () => place(true));

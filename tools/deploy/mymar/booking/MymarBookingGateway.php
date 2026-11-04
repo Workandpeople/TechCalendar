@@ -21,6 +21,7 @@ final readonly class MymarBookingGateway
         private Closure $execute,
         private Closure $result,
         private ?Closure $calendarLabels = null,
+        private ?Closure $scheduled = null,
     ) {
         if (! preg_match('/^[a-f0-9]{64}$/D', $token) || count(array_unique(str_split($token))) < 8) {
             throw new InvalidArgumentException('mymar.invalid_booking_credential');
@@ -43,7 +44,15 @@ final readonly class MymarBookingGateway
             return self::error(422, 'invalid_booking_request');
         }
         try {
-            if ($path === '/v1/calendar-labels' && $this->calendarLabels !== null) {
+            if (preg_match('~^/v1/scheduled-bookings/([1-9][0-9]{0,17})$~D', $path, $matches) && $this->scheduled !== null) {
+                if ($method !== 'GET') {
+                    return self::error(405, 'booking_method_not_allowed');
+                }
+                if ($query !== '') {
+                    return self::error(422, 'invalid_booking_request');
+                }
+                $payload = ($this->scheduled)((int) $matches[1]);
+            } elseif ($path === '/v1/calendar-labels' && $this->calendarLabels !== null) {
                 if ($method !== 'GET') {
                     return self::error(405, 'booking_method_not_allowed');
                 }

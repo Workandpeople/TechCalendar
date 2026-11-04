@@ -17,12 +17,12 @@ class AppointmentComments
 
         $models = (new Appointment)->newCollection($appointments->all());
         $models->loadMissing(['dossierOperation.dossier.comments' => fn ($query) => $query
-            ->with('author')->latest('created_at')->latest('id')->limit(10)]);
+            ->withAuthorLabel()->latest('created_at')->latest('id')->limit(10)]);
 
         return $models->mapWithKeys(fn ($appointment): array => [
             $appointment->id => $appointment->dossierOperation?->dossier?->comments->map(fn ($comment): array => [
                 'id' => $comment->id, 'body' => $comment->body, 'comment' => $comment->body,
-                'author_name' => $comment->author?->full_name ?: 'Historique dossier',
+                'author_name' => $comment->authorLabel(),
                 'created_at' => $comment->created_at?->toIso8601String(),
             ])->all() ?? [],
         ])->all();

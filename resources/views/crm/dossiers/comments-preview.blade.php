@@ -3,7 +3,7 @@
     @forelse ($dossier->comments as $comment)
         <div class="gc-dossier-comment">
             <p class="gc-dossier-comment-meta">
-                <span>{{ $comment->author?->full_name ?: 'Auteur non renseigné' }}</span>
+                <span>{{ $comment->authorLabel() }}</span>
                 <time>{{ $comment->created_at?->format('d/m/Y H:i') }}</time>
                 @if ($comment->changed_fields['is_private'] ?? false)<span>Privé</span>@endif
             </p>

@@ -28,7 +28,7 @@ class MymarSlotGuard
         return $busy ? [['field' => 'starts_at', 'type' => 'mymar_pending', 'message' => 'Une confirmation MAR est encore en cours sur ce créneau. Ne renouvelez pas la demande.']] : [];
     }
 
-    public function liveConflicts(int $technicianId, CarbonInterface $start, CarbonInterface $end): array
+    public function liveConflicts(int $technicianId, CarbonInterface $start, CarbonInterface $end, ?int $ignoreRdvId = null): array
     {
         $sourceId = $this->covered($technicianId);
         if ($sourceId === null) {
@@ -43,6 +43,9 @@ class MymarSlotGuard
                 throw new \RuntimeException('mymar.incomplete_live_window');
             }
             foreach ($report['candidates'] as $period) {
+                if ($ignoreRdvId !== null && $period['source_rdv_id'] === $ignoreRdvId) {
+                    continue;
+                }
                 if (new DateTimeImmutable($period['starts_at']) < $end && new DateTimeImmutable($period['ends_at']) > $start) {
                     return [['field' => 'starts_at', 'type' => 'mymar_overlap', 'message' => 'Ce technicien a déjà un rendez-vous MAR sur ce créneau.']];
                 }

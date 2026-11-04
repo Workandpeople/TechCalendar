@@ -53,7 +53,8 @@ try {
         static fn ($after, $limit) => $reader()->pending($after, $limit),
         static fn () => throw new MymarBookingFailure('booking_disabled', 503),
         static fn ($id) => $reader()->result($id),
-        static fn ($window, $now) => $reader()->calendarLabels($window, $now));
+        static fn ($window, $now) => $reader()->calendarLabels($window, $now),
+        static fn ($id) => $reader()->scheduled($id));
     $body = file_get_contents('php://input', false, null, 0, 16385);
     $uri = explode('?', $_SERVER['REQUEST_URI'] ?? '', 2)[0];
     $response = $gateway->handle($_SERVER['REQUEST_METHOD'] ?? '', $uri, $_SERVER['QUERY_STRING'] ?? '',

@@ -3165,3 +3165,53 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - Validation : `MYMAR_ROSTER_ACTIVATION_TEST=1 bash tools/deploy/tests/check-mymar-roster-activation.sh`.
   Fixture MySQL jetable, GET prives et cache Laravel ; controles d'idempotence,
   restauration, permissions et empreintes SQL/code avant/apres, sans POST.
+
+### Replacement rapide MAR apres travaux
+
+- Depuis le detail d'un RDV MAR affiche dans « Prendre un RDV » ou « Les RDV »,
+  « Replacer le rendez-vous MAR » ouvre date, heure de Paris et technicien
+  preselectionnes. La duree reelle MYMAR est conservee, sans arrondi ni nouveau
+  choix de duree. Seuls les techniciens actifs, habilites MAR et relies sont proposes.
+- L'action est reservee aux comptes internes de planning/gestion autorises.
+  Les visites initiales restent en lecture seule. Le dossier doit etre encore
+  en attente de visite apres travaux (16), avec un seul rendez-vous courant.
+- GET prive `19847/v1/scheduled-bookings/{rdv}` : lecture ponctuelle et bornee du
+  rendez-vous courant et de sa revision, sans email ni secret. La page normale
+  continue d'afficher son cache, sans appel par rendez-vous.
+- Commande idempotente `reschedule` sur le POST prive existant 19848 : controles
+  Cofrac + occupations MAR a jour, exclusion du seul ancien RDV concerne,
+  revalidation de revision sous verrou MYMAR, ancien RDV marque historique,
+  insertion du nouveau, affectation et historique traces dans la meme transaction.
+  Le statut MYMAR reste 16. Aucun dossier ni rendez-vous MAR n'est duplique dans
+  Cofrac. Aucun changement de code, configuration ou schema de l'application MYMAR.
+- Un conflit ou une disponibilite invérifiable bloque le replacement ; aucun
+  forçage MAR n'est ajoute. Une reponse HTTP incertaine conserve sa reservation
+  et sa reference. « Verifier la confirmation » lit le recu sans rejouer le POST.
+  Un succes n'est affiche qu'apres reception du recu de commit MYMAR.
+- Apres confirmation, rafraichissement borne du cache puis du calendrier courant,
+  sans changer la vue ni la periode. Si la synchronisation echoue, le succes
+  reste visible avec une indication de synchronisation en attente.
+- Deploiement en trois etapes, sans reexecuter les installateurs initiaux :
+  application puis paquet lecteur `php tools/deploy/prepare-mymar-reader-code-update.php`,
+  puis paquet ecriture `php tools/deploy/prepare-mymar-reader-code-update.php --actions`.
+  Chaque paquet exige la revision applicative commitee deja deployee. Son lanceur
+  `update-code.sh --apply SHA256_DU_MANIFEST` ne remplace que le code du service
+  concerne et redemarre son Apache/FPM isole, jamais Apache/PHP du site.
+  Configuration, comptes SQL, droits et liaisons restent identiques. Controles GET
+  uniquement ; retour automatique au code precedent en cas d'echec. Les autres
+  operations MYMAR et les modes mail/SMS ne sont pas modifies.
+- Validation isolee : `MYMAR_BOOKING_TEST=1 MYMAR_BOOKING_HTTP_TEST=1 MYMAR_ACTIONS_TEST=1 bash tools/deploy/tests/check-mymar-booking.sh`.
+  Base synthetique MySQL 8, vrai Apache/FPM prive, idempotence, conflits,
+  historique, rollback transactionnel et rollback de mise a jour des deux passerelles.
+
+### Libelles des commentaires et ordre de saisie
+
+- Les commentaires d'un compte externe affichent sa societe cliente ou
+  delegataire, y compris dans les apercus et commentaires du planning. Les
+  comptes internes gardent leur nom complet. Les auteurs existants, meme
+  desactives, sont resolus sans reecriture des commentaires ni migration.
+  Aucun auteur manquant n'est deduit de l'affectation actuelle du dossier.
+  Les organisations sont chargees en lot, sans requete par commentaire.
+- En creation interne et client, l'adresse, le code postal et la ville precedent
+  l'email et le telephone du beneficiaire. Le RDV manuel presente egalement
+  l'adresse avant le telephone. Les champs, droits et validations restent identiques.

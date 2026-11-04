@@ -80,3 +80,18 @@ it('keeps uncertain reservations unforceable and ignores only the command curren
         expect($error->canForce)->toBeFalse();
     }
 });
+
+it('ignores only the replaced MAR appointment, never another visit on the same slot', function (bool $other) {
+    Http::fake(function ($request) use ($other) {
+        $query = $request->data();
+        $appointment = ['rdv_id' => 99, 'dossier_id' => 123, 'technician_id' => 44, 'status_id' => 16, 'is_old' => 0,
+            'stored_start' => $this->from->format('Y-m-d H:i:s'), 'raw_duration' => 1];
+
+        return Http::response(['format' => MymarObservation::FORMAT, 'version' => 1, 'complete' => true,
+            'source_timezone' => 'Europe/Paris', 'duration_unit' => 'hours', 'generated_at' => gmdate(DATE_ATOM),
+            'window_start' => $query['window_start'], 'window_end' => $query['window_end'], 'technician_ids' => [44], 'status_ids' => [3, 16],
+            'appointments' => $other ? [$appointment, [...$appointment, 'rdv_id' => 100, 'dossier_id' => 124]] : [$appointment]]);
+    });
+    $conflicts = app(MymarSlotGuard::class)->liveConflicts($this->tech->id, $this->from, $this->to, 99);
+    expect(array_column($conflicts, 'type'))->toBe($other ? ['mymar_overlap'] : []);
+})->with([false, true]);

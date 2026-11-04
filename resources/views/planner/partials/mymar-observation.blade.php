@@ -1,6 +1,15 @@
 <div id="{{ $mymarBannerId }}" class="mymar-observation-status" role="status" aria-live="polite" hidden></div>
 @once
+<div data-mymar-actions data-place-url="{{ route('planner.book.mar.place', [], false) }}" data-problem-url="{{ route('planner.book.mar.problem', [], false) }}"
+    data-status-url="{{ route('planner.book.mar.status', ['id' => '__REQUEST__'], false) }}"
+    data-reschedule-url="{{ route('planner.book.mar.reschedule', [], false) }}" data-scheduled-url="{{ route('planner.book.mar.scheduled', ['rdv' => '__RDV__'], false) }}"
+    data-user-id="{{ auth()->id() }}" data-csrf="{{ csrf_token() }}">
+    <button type="button" class="gc-btn-secondary mb-3" data-mymar-resume style="display:none">Confirmation MAR à vérifier</button>
+</div>
+<p data-mymar-reschedule-feedback class="mb-3 text-sm" role="status" aria-live="polite" hidden></p>
 <style>
+    .gc-mymar-action-dialog { margin: auto; width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--gc-border, #cbd5e1); background: var(--gc-surface, white); color: var(--gc-text, #243b48); }
+    .gc-mymar-action-dialog::backdrop { background: #0f172a99; }
     .mymar-observation-status { padding: 10px 14px; margin-bottom: 12px; border: 1px solid #e6c37b; border-radius: 12px; color: #71450a; background: #fff9e8; font-size: 12px; line-height: 1.5; }
     .mymar-observation-status[hidden] { display: none; }
     .mymar-observation-event { background: #fff7db !important; color: #71450a !important; border: 1px dashed #c58615 !important; box-shadow: none !important; }
@@ -36,13 +45,13 @@
         return [props.service_label || 'Rendez-vous MAR', props.customer_name || 'Bénéficiaire non disponible',
             props.address || 'Adresse non disponible', props.technician_name || 'Technicien',
             date(event.start, { dateStyle: 'short', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' }),
-            props.availability_guard_enabled ? 'Lecture seule. Disponibilité MAR contrôlée au placement.' : 'Observation en lecture seule. Ne bloque pas les créneaux.',
+            props.can_reschedule ? 'Replacement disponible depuis le détail. Disponibilité MAR contrôlée au placement.' : props.availability_guard_enabled ? 'Lecture seule. Disponibilité MAR contrôlée au placement.' : 'Observation en lecture seule. Ne bloque pas les créneaux.',
             props.cache_state === 'stale' || props.cache_state === 'degraded' ? 'Données à actualiser.' : 'Horaires à confirmer.'].join(' · ');
     };
     const content = event => {
         const props = event.extendedProps || {};
         const box = node('span', '', 'mymar-event-content');
-        box.append(node('small', props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'),
+        box.append(node('small', props.can_reschedule ? 'MYMAR · Après travaux' : props.availability_guard_enabled ? 'MYMAR · Lecture seule' : 'MYMAR · Observation · Lecture seule'),
             node('strong', props.customer_name || 'Bénéficiaire non disponible'), node('span', props.service_label || 'Rendez-vous MAR', 'mymar-event-service'),
             node('span', date(event.start, { timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
             node('span', props.address || 'Adresse non disponible', 'mymar-event-address'),
@@ -80,9 +89,14 @@
         dialog.append(title, node('p', props.customer_name || 'Bénéficiaire non disponible'), node('p', props.address || 'Adresse non disponible'),
             node('p', props.technician_name || 'Technicien'),
             node('p', date(event.start, { dateStyle: 'full', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
-            node('p', props.availability_guard_enabled ? 'Ce rendez-vous est pris en compte dans les disponibilités. Il reste en lecture seule et se modifie dans MYMAR.' : 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
+            node('p', props.can_reschedule ? 'Le replacement sera enregistré dans MYMAR ; l’ancien créneau et son historique seront conservés.' : props.availability_guard_enabled ? 'Ce rendez-vous est pris en compte dans les disponibilités. Il reste en lecture seule et se modifie dans MYMAR.' : 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
             node('p', props.availability_guard_enabled ? 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.' : 'Les durées et horaires restent à confirmer. Les documents et les trajets MYMAR ne sont pas repris.'),
             node('p', 'Dernière synchronisation : ' + date(props.synced_at, { dateStyle: 'short', timeStyle: 'short' })), close);
+        if (props.can_reschedule === true && props.visit_phase === 'after_works' && Number.isSafeInteger(props.source_rdv_id) && props.source_rdv_id > 0) {
+            const replan = node('button', 'Replacer le rendez-vous MAR');
+            replan.type = 'button'; replan.className = 'gc-btn-warning'; replan.dataset.mymarRescheduleId = String(props.source_rdv_id);
+            dialog.append(replan);
+        }
         dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus({ preventScroll: true }); }, { once: true });
         document.body.append(dialog);
         dialog.showModal();

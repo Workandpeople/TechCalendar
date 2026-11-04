@@ -46,6 +46,16 @@ it('offers Mapbox and the locality fallback on both creation forms without sendi
     Http::assertNothingSent();
 });
 
+it('puts the intervention address and locality before beneficiary contact details on internal and client forms', function () {
+    foreach ([[$this->staff, 'v2.dossiers.create'], [$this->client, 'client.dossiers.create']] as [$actor, $route]) {
+        $this->actingAs($actor)->get(route($route))->assertOk()
+            ->assertSeeInOrder(['id="address"', 'id="postal_code"', 'id="city"', 'id="email"', 'id="phone"'], false);
+    }
+    $this->actingAs($this->staff)->get(route('planner.book'))->assertOk()
+        ->assertSeeInOrder(['id="manual_address"', 'id="manual_phone"'], false);
+    Http::assertNothingSent();
+});
+
 it('creates a dossier at an explicitly approximate locality without losing the original address', function (bool $external) {
     Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
     $this->actingAs($external ? $this->client : $this->staff)->post(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'), $this->payload)

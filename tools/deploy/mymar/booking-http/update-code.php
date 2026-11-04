@@ -7,7 +7,7 @@ use App\Services\Mymar\MymarPendingBookingPage;
 use App\Services\Mymar\MymarReadWindow;
 use Cofrac2\Deploy\Mymar\MymarBookingSqlAccess;
 
-// Code-only reader upgrade. No application bootstrap, SQL writes or write-gateway request.
+// Code-only gateway upgrade. Health checks are GET-only, including on the writer.
 umask(0077);
 ini_set('display_errors', '0');
 ini_set('zend.exception_ignore_args', '1');
@@ -50,7 +50,7 @@ function upgradeProof(): array
         }
     }
     $proof = [];
-    foreach (['/var/lib/cofrac-mymar-gateway/private/config.json', '/var/lib/cofrac-mymar-gateway/private/scope.json',
+    foreach (['/var/lib/cofrac2-production/MYMAR-ACTIONS.json', '/var/lib/cofrac-mymar-gateway/private/config.json', '/var/lib/cofrac-mymar-gateway/private/scope.json',
         '/var/lib/cofrac-mymar-actions-gateway/private/config.json'] as $optional) {
         if (file_exists($optional) || is_link($optional)) {
             $paths[] = $optional;
@@ -67,10 +67,11 @@ function upgradeProof(): array
     return $proof;
 }
 
-function upgradeFetch(string $path, #[SensitiveParameter] string $token): array
+function upgradeFetch(string $path, #[SensitiveParameter] string $token, int $expectedStatus = 200): array
 {
+    global $port;
     $body = '';
-    $curl = curl_init('http://127.0.0.1:19847'.$path);
+    $curl = curl_init('http://127.0.0.1:'.$port.$path);
     curl_setopt_array($curl, [CURLOPT_PROXY => '', CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT_MS => 1000,
         CURLOPT_TIMEOUT_MS => 5000, CURLOPT_HTTPHEADER => ['Authorization: Bearer '.$token],
         CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$body): int {
@@ -81,7 +82,7 @@ function upgradeFetch(string $path, #[SensitiveParameter] string $token): array
 
             return strlen($chunk);
         }]);
-    if (curl_exec($curl) === false || curl_getinfo($curl, CURLINFO_RESPONSE_CODE) !== 200
+    if (curl_exec($curl) === false || curl_getinfo($curl, CURLINFO_RESPONSE_CODE) !== $expectedStatus
         || ! str_starts_with((string) curl_getinfo($curl, CURLINFO_CONTENT_TYPE), 'application/json')) {
         throw new RuntimeException('mymar.reader_get_check_failed');
     }
@@ -91,9 +92,17 @@ function upgradeFetch(string $path, #[SensitiveParameter] string $token): array
 
 function upgradePendingCheck(#[SensitiveParameter] string $token): void
 {
+    global $writer;
     for ($attempt = 0; $attempt < 30; $attempt++) {
         try {
-            MymarPendingBookingPage::fromArray(upgradeFetch('/v1/pending-bookings?after=0&limit=1', $token), 0, 1);
+            if ($writer) {
+                $receipt = upgradeFetch('/v1/booking-commands/ffffffff-ffff-4fff-bfff-ffffffffffff', $token, 404);
+                if (($receipt['error'] ?? null) !== 'booking_receipt_not_found' || ($receipt['outcome'] ?? null) !== 'unknown') {
+                    throw new RuntimeException('mymar.writer_get_check_failed');
+                }
+            } else {
+                MymarPendingBookingPage::fromArray(upgradeFetch('/v1/pending-bookings?after=0&limit=1', $token), 0, 1);
+            }
 
             return;
         } catch (Throwable $error) {
@@ -115,15 +124,24 @@ try {
         throw new RuntimeException('mymar.invalid_reader_upgrade_invocation');
     }
     $request = upgradeRead(__DIR__.'/REQUEST.json');
+    $target = $request['target'] ?? 'reader';
+    if (! in_array($target, ['reader', 'actions'], true)) {
+        throw new RuntimeException('mymar.invalid_gateway_upgrade_target');
+    }
+    $writer = $target === 'actions';
+    $port = $writer ? 19848 : 19847;
+    $units = $writer ? ['cofrac-mymar-actions-fpm.service', 'cofrac-mymar-actions-http.service']
+        : ['cofrac-mymar-booking-fpm.service', 'cofrac-mymar-booking-http.service'];
     $revision = $request['revision'] ?? '';
-    $root = '/var/lib/cofrac-mymar-booking-gateway';
+    $root = $writer ? '/var/lib/cofrac-mymar-actions-gateway' : '/var/lib/cofrac-mymar-booking-gateway';
     $code = $root.'/code';
     $backup = $root.'/code-before-'.basename($run);
     $next = $root.'/code-next-'.basename($run);
-    if (($request['format'] ?? null) !== 'cofrac.mymar-reader-code-update' || ($request['version'] ?? null) !== 1
+    if (($request['format'] ?? null) !== ($writer ? 'cofrac.mymar-actions-code-update' : 'cofrac.mymar-reader-code-update') || ($request['version'] ?? null) !== 1
         || ! preg_match('/^[a-f0-9]{40}$/D', $revision)
         || (upgradeRead('/var/lib/cofrac2-production/RUNTIME-PREPARED.json')['revision'] ?? null) !== $revision
         || (upgradeRead('/var/lib/cofrac2-production/MYMAR-BOOKING-HTTP.json')['stage'] ?? null) !== 'reader_only'
+        || ($writer && (upgradeRead('/var/lib/cofrac2-production/MYMAR-ACTIONS.json')['stage'] ?? null) !== 'pilot_actions_enabled')
         || realpath($root) !== $root || fileowner($root) !== 0 || (fileperms($root) & 0022) !== 0
         || realpath($code) !== $code || fileowner($code) !== 0 || (fileperms($code) & 0022) !== 0
         || file_exists($backup) || is_link($backup) || file_exists($next) || is_link($next)) {
@@ -134,9 +152,9 @@ try {
     }
     require __DIR__.'/code/MymarBookingSqlAccess.php';
     $config = upgradeRead($root.'/private/config.json', 0640);
-    if (($config['format'] ?? null) !== 'cofrac.mymar-booking-reader' || ($config['version'] ?? null) !== 1
-        || ($config['read_enabled'] ?? null) !== true || ($config['writes_enabled'] ?? null) !== false
-        || ! preg_match('/^cofrac_mymar_br_[a-f0-9]{8}$/D', $config['database_user'] ?? '')
+    if (($config['format'] ?? null) !== ($writer ? 'cofrac.mymar-actions-gateway' : 'cofrac.mymar-booking-reader') || ($config['version'] ?? null) !== 1
+        || ($config['read_enabled'] ?? null) !== true || ($config['writes_enabled'] ?? null) !== $writer
+        || ! preg_match($writer ? '/^cofrac_mymar_rw_[a-f0-9]{8}$/D' : '/^cofrac_mymar_br_[a-f0-9]{8}$/D', $config['database_user'] ?? '')
         || ! preg_match('/^Mb3![a-f0-9]{64}$/D', $config['database_password'] ?? '')
         || ! preg_match('/^[a-f0-9]{64}$/D', $config['token'] ?? '')) {
         throw new RuntimeException('mymar.reader_upgrade_configuration_refused');
@@ -148,10 +166,10 @@ try {
     if ($pdo->query('SELECT CURRENT_USER()')->fetchColumn() !== $config['database_user'].'@localhost') {
         throw new RuntimeException('mymar.reader_sql_identity_changed');
     }
-    MymarBookingSqlAccess::validateGrants($pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), readOnly: true);
+    MymarBookingSqlAccess::validateGrants($pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), readOnly: ! $writer);
     unset($pdo);
-    MymarPendingBookingPage::fromArray(upgradeFetch('/v1/pending-bookings?after=0&limit=1', $config['token']), 0, 1);
-    $files = ['entry.php' => 'tools/deploy/mymar/booking-http/entry.php'];
+    upgradePendingCheck($config['token']);
+    $files = ['entry.php' => $writer ? 'tools/deploy/mymar/actions/entry.php' : 'tools/deploy/mymar/booking-http/entry.php'];
     foreach (['MymarBookingCommand', 'MymarObservation', 'MymarObservationPolicy', 'MymarReadWindow'] as $class) {
         $files[$class.'.php'] = 'app/Services/Mymar/'.$class.'.php';
     }
@@ -182,9 +200,9 @@ try {
         upgradeCommand(['/usr/bin/php8.4', '-l', $next.'/'.$name]);
     }
     $proof = upgradeProof();
-    upgradeCommand(['/usr/bin/systemctl', 'is-active', '--quiet', 'cofrac-mymar-booking-fpm.service', 'cofrac-mymar-booking-http.service']);
+    upgradeCommand(['/usr/bin/systemctl', 'is-active', '--quiet', ...$units]);
     $stopped = true;
-    upgradeCommand(['/usr/bin/systemctl', 'stop', 'cofrac-mymar-booking-http.service', 'cofrac-mymar-booking-fpm.service']);
+    upgradeCommand(['/usr/bin/systemctl', 'stop', ...array_reverse($units)]);
     if (! rename($code, $backup)) {
         throw new RuntimeException('mymar.reader_backup_failed');
     }
@@ -192,22 +210,29 @@ try {
     if (! rename($next, $code)) {
         throw new RuntimeException('mymar.reader_swap_failed');
     }
-    upgradeCommand(['/usr/bin/systemctl', 'start', 'cofrac-mymar-booking-fpm.service', 'cofrac-mymar-booking-http.service']);
+    upgradeCommand(['/usr/bin/systemctl', 'start', ...$units]);
     upgradePendingCheck($config['token']);
-    $labels = upgradeFetch('/v1/calendar-labels?'.http_build_query($window->query()), $config['token']);
-    MymarCalendarLabels::validate($labels, $window, new DateTimeImmutable);
+    $labels = ['items' => []];
+    if (! $writer) {
+        $labels = upgradeFetch('/v1/calendar-labels?'.http_build_query($window->query()), $config['token']);
+        MymarCalendarLabels::validate($labels, $window, new DateTimeImmutable);
+        $missing = upgradeFetch('/v1/scheduled-bookings/999999999999999999', $config['token'], 404);
+        if (($missing['error'] ?? null) !== 'booking_appointment_not_found') {
+            throw new RuntimeException('mymar.reader_scheduled_check_failed');
+        }
+    }
     if ($proof !== upgradeProof()) {
         throw new RuntimeException('mymar.reader_upgrade_configuration_changed');
     }
-    file_put_contents($run.'/summary.json', json_encode(['format' => 'cofrac.mymar-reader-code-update', 'version' => 1,
-        'complete' => true, 'revision' => $revision, 'calendar_labels_ready' => true, 'label_count' => count($labels['items']),
+    file_put_contents($run.'/summary.json', json_encode(['format' => $request['format'], 'version' => 1,
+        'complete' => true, 'target' => $target, 'revision' => $revision, 'calendar_labels_ready' => ! $writer, 'label_count' => count($labels['items']),
         'configuration_unchanged' => true, 'sql_writes' => false, 'mymar_application_unchanged' => true,
         'backup_directory' => $backup], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
-    echo "Lecteur MAR mis a jour et GET verifies. Aucun compte, reglage, placement ou message modifie.\nDiagnostic prive : $run\n";
+    echo "Passerelle MAR ($target) mise a jour et GET verifies. Aucun compte, reglage, placement ou message modifie.\nDiagnostic prive : $run\n";
 } catch (Throwable $failure) {
     if ($stopped) {
         try {
-            upgradeCommand(['/usr/bin/systemctl', 'stop', 'cofrac-mymar-booking-http.service', 'cofrac-mymar-booking-fpm.service']);
+            upgradeCommand(['/usr/bin/systemctl', 'stop', ...array_reverse($units)]);
             if ($changed) {
                 if (is_dir($code) && ! rename($code, $root.'/code-rejected-'.basename($run))) {
                     throw new RuntimeException;
@@ -216,7 +241,7 @@ try {
                     throw new RuntimeException;
                 }
             }
-            upgradeCommand(['/usr/bin/systemctl', 'start', 'cofrac-mymar-booking-fpm.service', 'cofrac-mymar-booking-http.service']);
+            upgradeCommand(['/usr/bin/systemctl', 'start', ...$units]);
             upgradePendingCheck($config['token']);
             fwrite(STDERR, "Ancien lecteur restaure et verifie. Cofrac et MYMAR restent inchanges.\n");
         } catch (Throwable) {

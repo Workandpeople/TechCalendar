@@ -23,6 +23,28 @@ class DossierActivity extends Model
         return $this->belongsTo(User::class, 'author_id')->withTrashed();
     }
 
+    public function scopeWithAuthorLabel(Builder $query): void
+    {
+        $query->with(['author' => fn ($authors) => $authors
+            ->select(['id', 'first_name', 'last_name', 'role', 'external_client_id'])
+            ->with('externalClient:id,name')]);
+    }
+
+    public function authorLabel(): string
+    {
+        if ($author = $this->author) {
+            $organisation = $author->isExternal() ? trim((string) $author->externalClient?->name) : '';
+
+            return $organisation ?: ($author->full_name ?: 'Compte #'.$author->id);
+        }
+        if (str_starts_with($this->kind, 'legacy_')) {
+            return 'Auteur Cofrac #'.($this->changed_fields['source_author_id'] ?? '?');
+        }
+
+        return $this->author_id !== null || in_array($this->kind, self::COMMENT_KINDS, true)
+            ? 'Auteur non renseigné' : 'Système';
+    }
+
     public function scopeStatusChanges(Builder $query): void
     {
         $query->where(function (Builder $query): void {

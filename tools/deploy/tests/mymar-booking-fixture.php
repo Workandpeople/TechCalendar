@@ -27,6 +27,8 @@ if ($argv[1] === 'prepare') {
     $root->exec(MymarBookingSqlAccess::createSql('cofrac_mymar_rw_abcdef01', $password));
     assert($root->query("SELECT account_locked FROM mysql.user WHERE User='cofrac_mymar_rw_abcdef01'")->fetchColumn() === 'Y');
     $root->exec("ALTER USER 'cofrac_mymar_rw_abcdef01'@'localhost' ACCOUNT UNLOCK");
+    $root->exec(MymarBookingSqlAccess::createSql('cofrac_mymar_br_abcdef01', $password, readOnly: true));
+    $root->exec("ALTER USER 'cofrac_mymar_br_abcdef01'@'localhost' ACCOUNT UNLOCK");
     exit;
 }
 class BookingFixturePdo extends PDO
@@ -166,6 +168,37 @@ $before = snapshot($root);
 expectFailure(fn () => $source->execute($unknown, $now), 'booking_source_availability_unknown');
 assert($before === snapshot($root));
 $root->exec('UPDATE MYMAR.dossier_rdv SET duree=2 WHERE id=4');
+
+// Rebooking is the same bounded writer protocol, with a separate SELECT-only snapshot.
+$reader = new MymarBookingSource(new PDO($dsn, 'cofrac_mymar_br_abcdef01', $password), 99, [5, 6, 7, 9], enabled: true, readOnlyCredentials: true);
+$scheduled = $reader->scheduled(4);
+assert($scheduled['duration_minutes'] === 120 && $scheduled['technician_id'] === 5);
+expectFailure(fn () => $reader->scheduled(3), 'booking_appointment_not_found');
+$rebook = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,
+    'request_id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'action' => 'reschedule', 'cofrac_actor_id' => 101,
+    'dossier_id' => 23, 'rdv_id' => 4, 'expected_revision' => $scheduled['expected_revision'],
+    'technician_id' => 6, 'starts_at' => '2026-11-02T10:40:00+01:00', 'duration_minutes' => 120]);
+$before = snapshot($root);
+expectFailure(fn () => $source->execute($rebook, $now), 'booking_source_slot_occupied');
+assert(snapshot($root) === $before);
+$rebook = MymarBookingCommand::fromArray([...$rebook->payload, 'starts_at' => '2026-11-12T10:40:00+01:00']);
+$root->exec("CREATE TRIGGER MYMAR.fixture_rebook_failure BEFORE INSERT ON MYMAR.dossier_historiques FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='FIXTURE_ONLY'");
+$before = snapshot($root);
+expectFailure(fn () => $source->execute($rebook, $now), 'booking_storage_unavailable');
+assert(snapshot($root) === $before);
+$root->exec('DROP TRIGGER MYMAR.fixture_rebook_failure');
+$result = $source->execute($rebook, $now);
+assert($result['action'] === 'reschedule' && $result['status_id'] === 16 && $result['rdv_id'] !== 4);
+assert($source->execute($rebook, $now) === $result && $source->result($rebook->payload['request_id']) === $result);
+assert((int) $root->query('SELECT is_old FROM MYMAR.dossier_rdv WHERE id=4')->fetchColumn() === 1);
+assert((int) $root->query('SELECT COUNT(*) FROM MYMAR.dossier_rdv WHERE dossier_id=23 AND is_old=0')->fetchColumn() === 1);
+assert($root->query('SELECT status_id,technicien_id FROM MYMAR.dossiers WHERE id=23')->fetch(PDO::FETCH_ASSOC) === ['status_id' => 16, 'technicien_id' => 6]);
+assert(str_contains($root->query('SELECT text FROM MYMAR.dossier_historiques WHERE dossier_id=23')->fetchColumn(), 'RDV MAR #4'));
+expectFailure(fn () => $reader->scheduled(4), 'booking_appointment_not_found');
+$before = snapshot($root);
+expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$rebook->payload, 'request_id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc']), $now), 'booking_source_changed');
+assert(snapshot($root) === $before);
+echo "Reschedule: SELECT-only snapshot, source conflicts, atomic rollback, old slot history, new technician and idempotent receipt verified.\n";
 
 // Durable commands for two independent processes simulating concurrent planners.
 $first = command($source, 24, '88888888-8888-4888-8888-888888888888', ['starts_at' => '2026-11-10T09:00:00+01:00']);

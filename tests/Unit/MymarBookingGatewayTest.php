@@ -158,3 +158,20 @@ it('includes beneficiary changes and every current appointment in the optimistic
         ->and(MymarBookingSource::revision($record, [[...$rdv, 'duree' => 2]]))->not->toBe($revision)
         ->and(MymarBookingSource::revision($record, []))->not->toBe($revision);
 });
+
+it('exposes a scheduled appointment only through the authenticated GET reader', function () {
+    $token = hash('sha256', 'synthetic-scheduled-token');
+    $seen = [];
+    $gateway = new MymarBookingGateway(true, $token, fn () => [], fn () => throw new LogicException('No write'), fn () => null,
+        scheduled: function ($id) use (&$seen) {
+            $seen[] = $id;
+
+            return ['rdv_id' => $id];
+        });
+    $get = fn ($method = 'GET', $query = '', $authorization = null) => $gateway->handle($method, '/v1/scheduled-bookings/123', $query, '', '', $authorization ?? 'Bearer '.$token, '127.0.0.1', new DateTimeImmutable);
+    expect($get()['status'])->toBe(200)->and($seen)->toBe([123]);
+    expect($get('POST')['status'])->toBe(405)->and($get('GET', 'force=1')['status'])->toBe(422)
+        ->and($get('GET', '', 'Bearer invalid')['status'])->toBe(403)->and($seen)->toBe([123]);
+    $writer = new MymarBookingGateway(true, $token, fn () => [], fn () => [], fn () => null);
+    expect($writer->handle('GET', '/v1/scheduled-bookings/123', '', '', '', 'Bearer '.$token, '127.0.0.1', new DateTimeImmutable)['status'])->toBe(404);
+});

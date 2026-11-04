@@ -8,7 +8,7 @@
             @forelse ($comments as $comment)
                 <li class="gc-dossier-comment gc-comment-row">
                     <div class="gc-comment-meta">
-                        <p>{{ $comment->author?->full_name ?: ($comment->kind === 'legacy_comment' ? 'Auteur Cofrac #'.($comment->changed_fields['source_author_id'] ?? '?') : 'Système') }}</p>
+                        <p>{{ $comment->authorLabel() }}</p>
                         <time datetime="{{ $comment->created_at?->toIso8601String() }}">{{ $comment->created_at?->format('d/m/Y H:i') }}</time>
                     </div>
                     <x-comment-excerpt :body="$comment->body" />
@@ -19,7 +19,7 @@
                             :label="'Commentaire #'.$comment->id" :compact="true" />
                     </div>
                     @if (in_array($comment->kind, ['comment', 'legacy_comment'], true))
-                        <a href="#supprimer-commentaire-{{ $comment->id }}" class="gc-compact-action" data-tone="danger" title="Supprimer ce commentaire" aria-label="Supprimer le commentaire de {{ $comment->author?->full_name ?: 'Système' }} du {{ $comment->created_at?->format('d/m/Y H:i') }}"><x-nav-icon name="trash" /></a>
+                        <a href="#supprimer-commentaire-{{ $comment->id }}" class="gc-compact-action" data-tone="danger" title="Supprimer ce commentaire" aria-label="Supprimer le commentaire de {{ $comment->authorLabel() }} du {{ $comment->created_at?->format('d/m/Y H:i') }}"><x-nav-icon name="trash" /></a>
                         <x-dossier-dialog :id="'supprimer-commentaire-'.$comment->id" title="Supprimer le commentaire">
                             <form method="POST" action="{{ route('v2.dossiers.comments.destroy', [$dossier, $comment->id]) }}" class="mt-2 space-y-2">@csrf @method('DELETE')<p class="text-xs">Ce commentaire ne sera plus visible sur la fiche ni dans l’espace externe. Sa trace est conservée.</p><button type="submit" class="gc-btn-danger">Confirmer la suppression</button></form>
                         </x-dossier-dialog>

@@ -115,3 +115,15 @@ test('old caches keep MAR occupations visible with explicit missing-label placeh
     assert.match(text(content), /Bénéficiaire non disponible/); assert.match(text(content), /Adresse non disponible/);
     assert.match(text(content), /MAR après travaux/);
 });
+
+test('only a current after-works appointment explicitly enabled by the server offers quick replacement', () => {
+    for (const phase of ['initial', 'after_works']) {
+        const { ui, body } = harness();
+        const appointment = event();
+        Object.assign(appointment.extendedProps, { can_reschedule: true, source_rdv_id: 555, visit_phase: phase });
+        ui.open(appointment, element('button'));
+        const rebook = body.children[0].children.find(child => child.dataset.mymarRescheduleId);
+        assert.equal(Boolean(rebook), phase === 'after_works');
+        if (rebook) assert.equal(rebook.dataset.mymarRescheduleId, '555');
+    }
+});

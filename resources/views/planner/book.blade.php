@@ -845,6 +845,7 @@
             @if (config('crm.v2_enabled'))
                 <div id="booking-mymar-source" class="hidden space-y-3" role="tabpanel" aria-labelledby="booking-source-tab-mymar" data-mymar-pending data-url="{{ route('planner.book.mar.index', [], false) }}"
                     data-place-url="{{ route('planner.book.mar.place', [], false) }}" data-problem-url="{{ route('planner.book.mar.problem', [], false) }}"
+                    data-reschedule-url="{{ route('planner.book.mar.reschedule', [], false) }}" data-scheduled-url="{{ route('planner.book.mar.scheduled', ['rdv' => '__RDV__'], false) }}"
                     data-status-url="{{ route('planner.book.mar.status', ['id' => '__REQUEST__'], false) }}" data-user-id="{{ auth()->id() }}" data-csrf="{{ csrf_token() }}" hidden>
                     <header class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold" style="color:var(--gc-text);">Demandes MAR à placer <span class="font-normal" style="color:var(--gc-text-soft);">· Après travaux uniquement</span></h3><button class="gc-booking-request-action" type="button" data-mymar-refresh>Actualiser</button></header>
                     <p class="mt-2 text-sm" style="color:var(--gc-text-soft);" data-mymar-readonly-note hidden>Le placement et le signalement d'un problème depuis cet espace ne sont pas encore activés. Continuez à les effectuer dans MYMAR pour le moment.</p>
@@ -872,6 +873,14 @@
                     <label class="gc-label" for="manual_first_name">Prénom client</label>
                     <input id="manual_first_name" type="text" class="gc-input" maxlength="120" required />
                 </div>
+                <div class="relative xl:col-span-12">
+                    <label class="gc-label" for="manual_address">Adresse du RDV</label>
+                    <input id="manual_address" type="text" class="gc-input" maxlength="255" autocomplete="off" required />
+                    <input id="manual_department_code" type="hidden" />
+                    <input id="manual_latitude" type="hidden" />
+                    <input id="manual_longitude" type="hidden" />
+                </div>
+
                 <div class="xl:col-span-3">
                     <label class="gc-label" for="manual_phone">Téléphone</label>
                     <input id="manual_phone" type="tel" class="gc-input" maxlength="255" required />
@@ -886,14 +895,6 @@
                             </option>
                         @endforeach
                     </select>
-                </div>
-
-                <div class="relative xl:col-span-12">
-                    <label class="gc-label" for="manual_address">Adresse du RDV</label>
-                    <input id="manual_address" type="text" class="gc-input" maxlength="255" autocomplete="off" required />
-                    <input id="manual_department_code" type="hidden" />
-                    <input id="manual_latitude" type="hidden" />
-                    <input id="manual_longitude" type="hidden" />
                 </div>
 
                 <div class="xl:col-span-12">
@@ -1384,8 +1385,6 @@
     <style>
         .gc-booking-force-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
         .gc-booking-force-dialog::backdrop { background: #0f172a99; }
-        .gc-mymar-action-dialog { margin: auto; width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--gc-border); background: var(--gc-surface, white); color: var(--gc-text); }
-        .gc-mymar-action-dialog::backdrop { background: #0f172a99; }
         .booking-lot-details > summary::-webkit-details-marker {
             display: none;
         }
@@ -5852,6 +5851,10 @@
                 renderCalendar(...args);
             }
         }, { once: true });
+
+        document.addEventListener('cofrac:mymar:updated', () => {
+            if (bookingCalendar && lastCalendarDateInfo) void refreshCalendarWindow(lastCalendarDateInfo, { force: true });
+        });
 
         const refreshBookingOutputs = async ({ fetchCalendar = false } = {}) => {
             if (!currentAppointmentRequest || !currentFilters) return;

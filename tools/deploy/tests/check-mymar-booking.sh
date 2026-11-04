@@ -51,7 +51,7 @@ cmp "$WORK/accounts.expected" "$WORK/accounts.after"
 echo 'MySQL 8.0.46 : commandes transactionnelles, reprise idempotente, conflit concurrent et rollback verifies ; aucun compte/droit applicatif modifie.'
 
 # A second, fresh fixture exercises the exact disabled operator preparation.
-docker exec "$DB" mysql -e 'DROP DATABASE cofrac_mymar_integration; DROP DATABASE MYMAR; DROP DATABASE cofrac2production;'
+docker exec "$DB" mysql -e "DROP DATABASE cofrac_mymar_integration; DROP DATABASE MYMAR; DROP DATABASE cofrac2production; DROP USER 'cofrac_mymar_br_abcdef01'@'localhost';"
 docker exec -i "$DB" mysql < "$ROOT/tools/deploy/tests/mymar-booking-fixture.sql"
 docker exec -i "$PHP" bash <<'SH'
 set -Eeuo pipefail
