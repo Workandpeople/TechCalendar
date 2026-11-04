@@ -241,3 +241,73 @@ test('density changes stay local, are remembered, and tolerate denied browser st
     calendar.browser.localStorage.setItem = () => { throw new Error('denied'); };
     assert.doesNotThrow(() => calendar.setDensity('compact'));
 });
+
+function calendarWithStorage(localStorage, options = {}) {
+    return new NativeCalendar({ ownerDocument: { defaultView: { localStorage } } }, options);
+}
+
+test('every supported view is restored before the first render without changing the requested date', () => {
+    for (const mode of ['timeGridWeek', 'timeGridDay', 'dayGridMonth', 'listWeek', 'resourceWeek']) {
+        const calendar = calendarWithStorage({ getItem: key => key === 'cofrac.calendar.view' ? mode : null }, {
+            initialView: 'timeGridWeek', initialDate: '2026-11-04',
+        });
+        assert.equal(calendar.mode, mode);
+        assert.equal(calendar.view.type, mode);
+        assert.equal(dayKey(calendar.getDate()), '2026-11-04');
+        assert.equal(calendar.dateInfo().startStr, calendar.view.currentStart.toISOString());
+    }
+});
+
+test('changing views persists the choice across calendar recreation and navigation between pages', () => {
+    const saved = new Map();
+    const storage = { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) };
+    const booking = calendarWithStorage(storage);
+    let draws = 0, notifications = 0;
+    booking.draw = () => { draws++; };
+    booking.notifyDates = () => { notifications++; };
+    for (const mode of ['resourceWeek', 'timeGridDay', 'dayGridMonth', 'listWeek', 'timeGridWeek']) {
+        booking.changeView(mode);
+        assert.equal(saved.get('cofrac.calendar.view'), mode);
+        assert.equal(calendarWithStorage(storage, { initialView: 'timeGridWeek' }).mode, mode);
+    }
+    assert.equal(draws, 5);
+    assert.equal(notifications, 5);
+    assert.deepEqual([...saved.keys()], ['cofrac.calendar.view']);
+});
+
+test('invalid saved views keep the configured default, and inaccessible storage never breaks navigation', () => {
+    for (const saved of [null, '', 'unknown', 'resourceDay', '{}', 'undefined']) {
+        assert.equal(calendarWithStorage({ getItem: () => saved }, { initialView: 'listWeek' }).mode, 'listWeek');
+    }
+    assert.equal(calendarWithStorage(undefined, { initialView: 'invalid' }).mode, 'timeGridWeek');
+    const denied = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('full'); } };
+    const calendar = calendarWithStorage(denied, { initialView: 'timeGridDay' });
+    assert.equal(calendar.mode, 'timeGridDay');
+    let fetched = 0;
+    calendar.draw = () => {};
+    calendar.notifyDates = () => {};
+    calendar.options.events = () => {};
+    calendar.refetchEvents = () => { fetched++; };
+    assert.doesNotThrow(() => calendar.changeView('resourceWeek'));
+    assert.equal(calendar.mode, 'resourceWeek');
+    assert.equal(fetched, 1);
+
+    const browser = {};
+    Object.defineProperty(browser, 'localStorage', { get() { throw new Error('blocked'); } });
+    assert.doesNotThrow(() => new NativeCalendar({ ownerDocument: { defaultView: browser } }));
+    calendar.browser = browser;
+    assert.doesNotThrow(() => calendar.changeView('listWeek'));
+    assert.equal(calendar.mode, 'listWeek');
+});
+
+test('invalid views and destroyed calendars do not overwrite the remembered choice', () => {
+    const writes = [];
+    const calendar = calendarWithStorage({ getItem: () => null, setItem: (...args) => writes.push(args) });
+    calendar.draw = () => assert.fail('unexpected render');
+    calendar.notifyDates = () => assert.fail('unexpected notification');
+    calendar.changeView('invalid');
+    calendar.destroyed = true;
+    calendar.changeView('resourceWeek');
+    assert.deepEqual(writes, []);
+    assert.equal(calendar.mode, 'timeGridWeek');
+});

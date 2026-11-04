@@ -5,6 +5,7 @@ const time = date => formatAppointmentDateTime(date, { hour: '2-digit', minute: 
 const dateLabel = (date, options) => formatAppointmentDateTime(date, options);
 const palette = ['#1764d9', '#008574', '#bd5719', '#ac3e58', '#416b97', '#697512'];
 const tone = id => palette[[...String(id)].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length];
+const viewStorageKey = 'cofrac.calendar.view';
 
 // Local calendar engine. Server-side authorization and placement validation remain unchanged.
 export class NativeCalendar {
@@ -15,6 +16,10 @@ export class NativeCalendar {
         this.options = options;
         this.date = calendarDate(options.initialDate) || new Date();
         this.mode = CALENDAR_MODES.includes(options.initialView) ? options.initialView : 'timeGridWeek';
+        try {
+            const savedView = this.browser.localStorage?.getItem(viewStorageKey);
+            if (CALENDAR_MODES.includes(savedView)) this.mode = savedView;
+        } catch {}
         this.events = [];
         this.mounted = [];
         this.expandedCells = new Set();
@@ -145,6 +150,7 @@ export class NativeCalendar {
     changeView(mode, date = this.date) {
         if (!CALENDAR_MODES.includes(mode) || this.destroyed) return;
         this.mode = mode;
+        try { this.browser.localStorage?.setItem(viewStorageKey, mode); } catch {}
         this.date = calendarDate(date) || this.date;
         this.draw();
         this.notifyDates();
