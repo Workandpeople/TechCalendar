@@ -238,7 +238,7 @@ class MymarBookingActions
             default => 'Confirmation MYMAR en attente. Ne renouvelez pas la demande : utilisez « Vérifier la confirmation ».',
         };
 
-        if ($record->status === 'confirmed' && $record->command['action'] === 'reschedule') {
+        if ($record->status === 'confirmed') {
             try {
                 $synchronized = (app(MymarObservationSync::class)->run()['status'] ?? null) === 'observing';
             } catch (\Throwable) {
@@ -246,7 +246,7 @@ class MymarBookingActions
                 $synchronized = false;
             }
             if (! $synchronized) {
-                $message .= ' Le planning est en attente de synchronisation ; ne renouvelez pas le replacement.';
+                $message .= ' Le planning est en attente de synchronisation ; ne renouvelez pas la demande.';
             }
         }
 

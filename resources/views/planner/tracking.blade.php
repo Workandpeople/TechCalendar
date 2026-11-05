@@ -2069,7 +2069,8 @@
                 const props = event.extendedProps || {};
                 const fullAddress = trackingAppointmentFullAddress(props);
                 const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
-                const statusLabel = props.is_historical ? 'Historique' : (props.status === 'problem' ? 'Problème RDV' : 'Planifié');
+                const statusLabel = props.is_mymar ? (props.visit_phase === 'after_works' ? 'MAR · Après travaux' : 'MAR · Visite initiale')
+                    : (props.is_historical ? 'Historique' : (props.status === 'problem' ? 'Problème RDV' : 'Planifié'));
                 const statusStyle = props.is_historical
                     ? 'background:#f1f5f9;color:#334155;border-color:#94a3b8;'
                     : (props.status === 'problem'
@@ -2127,6 +2128,7 @@
                     },
                     body: JSON.stringify({
                         q: trackingSearchQuery?.value.trim() || null,
+                        source: document.getElementById('tracking_search_source')?.value || 'all',
                         date_from: trackingSearchDateFrom?.value || null,
                         date_to: trackingSearchDateTo?.value || null,
                         technician_ids: selectedTechnicianIds(),
@@ -2145,6 +2147,8 @@
                 }
 
                 renderTrackingSearchResults(payload.appointments || []);
+                const marCoverage = document.getElementById('tracking-search-mar-coverage');
+                if (marCoverage) marCoverage.textContent = payload.mymar?.message || '';
                 if (trackingSearchSummary) trackingSearchSummary.textContent = `${payload.total ?? payload.count} RDV · page ${payload.page || 1}/${payload.last_page || 1}`;
                 const previousPage = document.getElementById('tracking-list-previous');
                 const nextPage = document.getElementById('tracking-list-next');
@@ -2621,6 +2625,10 @@
             if (trackingSearchQuery) trackingSearchQuery.value = '';
             if (trackingSearchDateFrom) trackingSearchDateFrom.value = '';
             if (trackingSearchDateTo) trackingSearchDateTo.value = '';
+            const sourceFilter = document.getElementById('tracking_search_source');
+            if (sourceFilter) sourceFilter.value = 'all';
+            const marCoverage = document.getElementById('tracking-search-mar-coverage');
+            if (marCoverage) marCoverage.textContent = '';
             trackingSearchResultEvents.clear();
             if (trackingSearchSummary) trackingSearchSummary.textContent = 'Aucune recherche lancée.';
             if (trackingSearchResults) {
@@ -2638,7 +2646,8 @@
 
             if (appointmentEvent) {
                 hideTrackingAppointmentTooltip();
-                openTrackingAppointmentModal(appointmentEvent);
+                if (window.CofracMymarCalendar?.isMymar(appointmentEvent)) window.CofracMymarCalendar.open(appointmentEvent, button);
+                else openTrackingAppointmentModal(appointmentEvent);
             }
         });
         trackingReassignSelect?.addEventListener('change', updateTrackingReassignButtonState);

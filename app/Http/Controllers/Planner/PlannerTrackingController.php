@@ -18,7 +18,9 @@ use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\AppointmentEditor;
 use App\Services\Crm\AppointmentProblemReport;
+use App\Services\Crm\TrackingSearchPage;
 use App\Services\Mymar\MymarCalendarFeed;
+use App\Services\Mymar\MymarCalendarSearch;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -221,6 +223,7 @@ class PlannerTrackingController extends Controller
 
         $payload = $request->validate([
             'q' => ['nullable', 'string', 'max:160'],
+            'source' => ['nullable', Rule::in(['all', 'cofrac', 'mar'])],
             'technician_ids' => ['nullable', 'array', 'max:100'],
             'technician_ids.*' => [
                 'required',
@@ -286,21 +289,25 @@ class PlannerTrackingController extends Controller
         }
 
         $page = (int) ($payload['page'] ?? 1);
-        $total = (clone $appointmentsQuery)->count();
-        $appointments = $appointmentsQuery
-            ->orderByDesc('starts_at')
-            ->orderByDesc('id')
-            ->offset(($page - 1) * $limit)
-            ->limit($limit)
-            ->get();
+        $mar = ($payload['source'] ?? 'all') === 'cofrac' ? ['events' => [], 'state' => 'not_requested', 'message' => '']
+            : app(MymarCalendarSearch::class)->search([...$payload, 'technician_ids' => $technicianIds->all()]);
+        if (($payload['source'] ?? 'all') === 'mar') {
+            $appointmentsQuery->whereRaw('1=0');
+        }
+        $result = app(TrackingSearchPage::class)->paginate($appointmentsQuery, $mar['events'], $page, $limit);
+        $nativeIds = array_column(array_filter($result['rows'], fn ($row) => $row['native'] === 1), 'id');
+        $appointments = $nativeIds === [] ? collect() : $appointmentsQuery->whereKey($nativeIds)->get();
+        $nativeEvents = $this->appointmentEvents($appointments, $appointmentMailData)->keyBy('id');
+        $events = collect($result['rows'])->map(fn ($row) => $row['event'] ?? $nativeEvents->get($row['id']))->filter()->values();
 
         return response()->json([
-            'appointments' => $this->appointmentEvents($appointments, $appointmentMailData),
-            'count' => $appointments->count(),
+            'appointments' => $events,
+            'mymar' => array_diff_key($mar, ['events' => true]),
+            'count' => $events->count(),
             'limit' => $limit,
-            'total' => $total,
+            'total' => $result['total'],
             'page' => $page,
-            'last_page' => max(1, (int) ceil($total / $limit)),
+            'last_page' => $result['last_page'],
         ]);
     }
 

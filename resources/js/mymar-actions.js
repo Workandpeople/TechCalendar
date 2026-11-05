@@ -51,9 +51,9 @@ export function initMymarActions(root = document, browser = window) {
         dialog.append(header); ownerDocument.body.append(dialog); dialog.showModal();
         return dialog;
     };
-    const changed = action => {
+    const changed = confirmed => {
         panel.dispatchEvent(new browser.Event('cofrac:mymar:changed'));
-        if (action === 'reschedule') root.dispatchEvent?.(new browser.Event('cofrac:mymar:updated'));
+        if (confirmed) root.dispatchEvent?.(new browser.Event('cofrac:mymar:updated'));
     };
     const request = async (url, method, data = null, timeout = 15000) => {
         const controller = new browser.AbortController();
@@ -84,7 +84,7 @@ export function initMymarActions(root = document, browser = window) {
             try {
                 const result = validateActionResult(await request(urls.status.replace('__REQUEST__', record.id), 'GET'), record.id);
                 message.textContent = result.message;
-                if (result.terminal) { delete records[dossierId]; save(); verify.hidden = true; changed(record.action); }
+                if (result.terminal) { delete records[dossierId]; save(); verify.hidden = true; changed(result.confirmed); }
             } catch (error) { message.textContent = `${error.message} Conservez cette référence et ne créez pas une deuxième demande.`; }
             finally { verify.disabled = false; }
         });
@@ -95,8 +95,8 @@ export function initMymarActions(root = document, browser = window) {
         const record = { id: browser.crypto.randomUUID(), action };
         records[key] = record; save();
         try {
-            const result = validateActionResult(await request(urls[action], 'POST', { ...payload, request_id: record.id }, action === 'reschedule' ? 30000 : 15000), record.id);
-            if (result.terminal) { delete records[key]; save(); changed(action); }
+            const result = validateActionResult(await request(urls[action], 'POST', { ...payload, request_id: record.id }, 30000), record.id);
+            if (result.terminal) { delete records[key]; save(); changed(result.confirmed); }
             if (!result.confirmed || action === 'reschedule') track(key, record, result);
             return result;
         } catch (error) {

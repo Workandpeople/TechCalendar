@@ -25,7 +25,7 @@ function fixture({ fetch, storage = new Map(), override = {} } = {}) {
         Event, CustomEvent, dispatchEvent: event => events.push(event), setTimeout, clearTimeout,
         TechCalendarDateTime: { serializeAppointmentInput: input => `${input}:00+01:00` },
         fetch: async (url, options) => { calls.push([url, options]); return fetch(url, options); }, ...override };
-    return { root: { querySelector: () => panel }, browser, nodes, calls, panel, storage, events, resume };
+    return { root: { querySelector: () => panel, dispatchEvent: event => events.push(event) }, browser, nodes, calls, panel, storage, events, resume };
 }
 const json = (body, status = 200) => ({ ok: status < 400, status, redirected: false,
     headers: new Headers({ 'Content-Type': 'application/json' }), json: async () => body });
@@ -42,6 +42,7 @@ test('never sends during initialization and posts once with CSRF and a persisten
     assert.equal(ui.calls[0][1].credentials, 'same-origin');
     assert.equal(ui.calls[0][1].method, 'POST');
     assert.deepEqual(JSON.parse(ui.storage.get('cofrac.mar.confirmations.1')), {});
+    assert.equal(ui.events.some(event => event.type === 'cofrac:mymar:updated'), true);
 });
 
 test('a timeout does not retry POST; reopening or reloading only offers receipt verification', async () => {
@@ -62,6 +63,14 @@ test('a timeout does not retry POST; reopening or reloading only offers receipt 
     assert.match(reloaded.calls[0][0], new RegExp(`/mar/status/${record.id}$`));
     assert.deepEqual(JSON.parse(reloaded.storage.get('cofrac.mar.confirmations.1')), {});
     assert.equal(verify.hidden, true);
+});
+
+test('initial placement allows the same bounded confirmation and cache refresh time as replacement', async () => {
+    const delays = [];
+    const ui = fixture({ override: { setTimeout: (_callback, delay) => { delays.push(delay); return 1; }, clearTimeout() {} },
+        fetch: async (_url, options) => json(result(JSON.parse(options.body).request_id, 'confirmed')) });
+    await initMymarActions(ui.root, ui.browser).place(payload);
+    assert.deepEqual(delays, [30000]);
 });
 
 test('definitive validation errors do not leave a misleading in-flight command', async () => {
@@ -130,4 +139,11 @@ test('a replacement timeout is only verified, never posted twice', async () => {
     await actions.reschedule({ ...payload, rdv_id: 555 });
     assert.equal(ui.calls.length, 1);
     assert.equal(JSON.parse(ui.storage.get('cofrac.mar.confirmations.1'))['12'].action, 'reschedule');
+});
+
+test('rejected commands refresh the pending list but do not announce a changed calendar', async () => {
+    const ui = fixture({ fetch: async (_url, options) => json(result(JSON.parse(options.body).request_id, 'rejected')) });
+    await initMymarActions(ui.root, ui.browser).place(payload);
+    assert.equal(ui.events.some(event => event.type === 'cofrac:mymar:changed'), true);
+    assert.equal(ui.events.some(event => event.type === 'cofrac:mymar:updated'), false);
 });

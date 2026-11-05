@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Mymar\MymarActionSettings;
 use App\Services\Mymar\MymarBookingCommand;
 use App\Services\Mymar\MymarBookingReaderSettings;
+use App\Services\Mymar\MymarObservationSync;
 use App\Services\Mymar\MymarPendingBookings;
 use App\Services\Mymar\MymarSlotGuard;
 use Carbon\Carbon;
@@ -58,6 +59,25 @@ beforeEach(function () {
         'request_id' => $this->payload['request_id'], 'action' => 'place', 'dossier_id' => 123, 'status_id' => 16,
         'rdv_id' => 555, 'starts_at' => $this->payload['starts_at'], 'duration_minutes' => 60, 'source_committed' => true], $data);
     Http::preventStrayRequests();
+    $this->syncResult = ['status' => 'observing'];
+    $sync = Mockery::mock(MymarObservationSync::class);
+    $sync->shouldReceive('run')->andReturnUsing(fn () => $this->syncResult);
+    app()->instance(MymarObservationSync::class, $sync);
+});
+
+it('refreshes the MAR calendar immediately after the first confirmed placement', function () {
+    $this->mock(MymarObservationSync::class)->shouldReceive('run')->once()->andReturn(['status' => 'observing']);
+    Http::fake(['http://127.0.0.1:19848/*' => Http::response(($this->receipt)(), 200, ['Content-Type' => 'application/json'])]);
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)->assertOk()->assertJsonPath('confirmed', true);
+    Http::assertSentCount(1);
+});
+
+it('keeps the confirmed placement visible when the calendar synchronization is delayed', function () {
+    $this->syncResult = ['status' => 'busy'];
+    Http::fake(['http://127.0.0.1:19848/*' => Http::response(($this->receipt)(), 200, ['Content-Type' => 'application/json'])]);
+    $this->actingAs($this->actor)->postJson(route('planner.book.mar.place'), $this->payload)->assertOk()->assertJsonPath('confirmed', true)
+        ->assertJsonPath('message', fn ($message) => str_contains($message, 'attente de synchronisation'));
+    Http::assertSentCount(1);
 });
 
 it('confirms a placement with server-selected identities and no native appointment copy', function () {
