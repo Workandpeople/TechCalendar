@@ -112,7 +112,7 @@ final class MymarWorkflowAudit
         return true;
     }
 
-    public static function methods(string $source, bool $all = false): array
+    public static function methods(string $source, bool $all = false, ?array $selectedMethods = null, array $extraStrings = []): array
     {
         $tokens = token_get_all($source);
         $names = $excerpts = [];
@@ -133,7 +133,7 @@ final class MymarWorkflowAudit
                 throw new RuntimeException('Method count limit.');
             }
             $names[] = $name;
-            if (! $all && ! in_array($name, self::METHODS, true)) {
+            if (! $all && ! in_array($name, $selectedMethods ?? self::METHODS, true)) {
                 continue;
             }
             while (isset($tokens[$j]) && ! in_array($tokens[$j], ['{', ';'], true)) {
@@ -159,13 +159,13 @@ final class MymarWorkflowAudit
                 throw new RuntimeException('Method excerpt limit.');
             }
             $excerpts[] = ['method' => $name, 'line' => $token[2], 'source_sha256' => hash('sha256', $body),
-                'code_redacted' => self::redact('<?php '.$body)];
+                'code_redacted' => self::redact('<?php '.$body, $extraStrings)];
         }
 
         return ['methods' => array_values(array_unique($names)), 'mutation_excerpts' => $excerpts];
     }
 
-    public static function redact(string $source): string
+    public static function redact(string $source, array $extraStrings = []): string
     {
         $result = '';
         foreach (token_get_all($source) as $token) {
@@ -180,7 +180,7 @@ final class MymarWorkflowAudit
             } elseif ($type === T_CONSTANT_ENCAPSED_STRING) {
                 // Whitelist exact quoted spellings; do not decode escape sequences or evaluate strings.
                 $literal = substr($value, 1, -1);
-                $result .= in_array($literal, [...self::STRINGS, ...self::METHODS], true) ? var_export($literal, true) : "'[MASKED]'";
+                $result .= in_array($literal, [...self::STRINGS, ...self::METHODS, ...$extraStrings], true) ? var_export($literal, true) : "'[MASKED]'";
             } elseif (in_array($type, [T_LNUMBER, T_DNUMBER], true)) {
                 $result .= '0/*masked: see business_facts*/';
             } elseif (in_array($type, [T_ENCAPSED_AND_WHITESPACE, T_INLINE_HTML, T_NUM_STRING], true)) {

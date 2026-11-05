@@ -3250,3 +3250,86 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
   pieces de lots sans avis explicite ne recoivent pas de prefixe deduit.
 - Aucun fichier deplace ou renomme sur disque, aucun titre/rapport reecrit,
   aucun changement des droits, aucune notification ni appel API.
+
+### Actualisation et recherche des RDV MAR
+
+- Le rafraichissement borne du cache de lecture puis du calendrier est demande
+  apres toute action MAR confirmee : premier placement, replacement et probleme
+  RDV. Une synchronisation indisponible ne transforme pas un commit confirme en
+  echec : le message demande d'attendre la synchronisation sans refaire le POST.
+- La recherche de la page Les RDV accepte les origines Cofrac et MAR, avec
+  filtres par technicien, prestation et dates. MAR est lu uniquement dans le
+  cache local, par nom du beneficiaire, adresse, technicien et reference MYMAR.
+  La periode synchronisee est toujours indiquee ; ce n'est pas une recherche
+  dans tout l'historique MYMAR. Un cache indisponible n'empeche pas la recherche
+  des RDV natifs et produit un avertissement explicite.
+- Tri et pagination communs, sans charger tout l'historique natif. Seuls les
+  RDV natifs de la page sont hydrates avec leurs relations et documents. Les
+  resultats MAR ouvrent leur fiche MAR, jamais le modal d'un RDV natif.
+
+### Preparation des factures/devis MYMAR et de la VT2
+
+- Besoin confirme : le technicien consulte la facture avant sa visite ; ensuite
+  l'equipe depose la VT2 dans Cofrac. La transmission confirmee a MYMAR devra
+  faire passer le dossier en Depot. Le code et le schema MYMAR restent intacts.
+- L'audit `tools/deploy/mymar/documents-audit` est preparatoire : lecture statique
+  masquee de neuf sources, metadonnees de quatre tables et catalogue de statuts.
+  Aucun fichier client, ligne de dossier/document/compte ou configuration secrete
+  n'est lu. SQL READ ONLY avec limites de temps et controles de troncature.
+  Aucun bootstrap MYMAR, appel HTTP, nouveau droit, upload ou changement d'etat.
+- Les references documentaires et le statut Depot exact sont confirmes ci-dessous.
+  La lecture technicien devra
+  etre limitee a ses RDV, sans exposer de chemin public, et la transmission VT2
+  devra conserver les protections de fichier, d'idempotence et de confirmation.
+
+#### Resultat de l'audit documentaire du 5 novembre 2026
+
+- Rapport valide : `cofrac2-mymar-documents-analysis-WkJ2CguW`, empreintes
+  controlees. Source MYMAR inchangee ; aucun document ou dossier metier lu.
+- Cible confirmee : statut 19, `DEPOT (solde)`, actif. Ne pas confondre avec
+  20 `Depot fini (solde)` ou 29 `Probleme DEPOT (solde)`.
+- `dossier_documents` contient `dossier_id`, `author_id`, `path`, `nom`,
+  `description`, `is_public`, `is_validated`, `request_data` et les dates.
+  Pas de colonne type VT2/facture/devis. La signification du champ texte
+  `dossiers.facture` n'est pas une preuve qu'il reference un fichier.
+- Le chemin standard du disque public est `storage/app/public`. Verification
+  complementaire dans l'interface MYMAR, sans ouverture des fichiers : les liens
+  documentaires pointent vers `/storage/uploads/<fichier>`. Le formulaire demande
+  un nom libre et propose seulement un suffixe VT/Audit. Aucun type facture/devis
+  structure. `dossiers.facture` sert aux marquages VT facture/VT payee/VT2 payee.
+- Les quatre tables auditees sont InnoDB, sans trigger exporte dans le schema.
+  `addDocument` insere la piece sans changer le statut. `changeStatusPost`
+  peut envoyer des mails : ne pas appeler ce controleur pour la transmission VT2.
+- La future passerelle doit confirmer dans une meme transaction l'insertion
+  documentaire, le statut 19, l'historique avec auteur technique et le recu
+  idempotent. Aucun succes annonce avant le commit ; une erreur ne doit pas
+  laisser le dossier en Depot sans sa VT2 ni provoquer un renvoi automatique.
+- Lecture facture/devis reservee au technicien actuellement affecte, avec
+  revalidation MYMAR au telechargement ; aucun lien public ou droit sur toutes
+  les pieces. Depot VT2 reserve a l'equipe interne autorisee, pas aux comptes
+  client/delegataire ou technicien. Aucun nouveau droit active par cet audit.
+
+#### Socle documentaire local, desactive
+
+- `tools/deploy/mymar/documents` contient l'adaptateur isole et un journal SQL
+  inactif dans la base d'integration. Aucune route, service, migration active,
+  configuration ou ecriture de production n'est ajoutee. L'installation du
+  transport prive, les ecrans et l'outbox restent a raccorder.
+- Perimetre confirme : factures/devis de travaux uniquement, pas AMO/MAR,
+  contrats, impots ou identites. Les noms ambigus sont refuses. Le classement
+  est une selection conservatrice du libelle, pas une verification du contenu.
+- La lecture recontrole l'affectation MYMAR et le compte technicien a chaque
+  ouverture, sans URL source publique et sans recopier le dossier MYMAR.
+- La VT2 utilise un PDF borne a 1 Gio, SHA-256, staging prive, reserve disque
+  de 50 Gio et publication exclusive sans ecraser un fichier existant. Le gros
+  controle du contenu precede le verrouillage SQL. La transaction lie la VT2,
+  l'etat 19, l'historique et le recu de la demande ; repetition sans doublon,
+  erreur tardive sans changement d'etat. Les fichiers orphelins eventuels restent
+  conserves, jamais supprimes apres une confirmation incertaine.
+- Les nouveaux comptes SQL lecteur/ecrivain seraient distincts de ceux du
+  planning, initialement verrouilles, avec droits par colonnes verifies au runtime.
+  Le schema doit rester InnoDB. Les triggers et champs obligatoires devront etre
+  revalides par la preparation privilegiee avant toute ouverture.
+- Limite historique a traiter avant activation : le disque MYMAR est public.
+  `is_public=0` ne prouve pas une protection HTTP. Aucun nouveau droit n'est
+  ouvert et aucun document client n'est copie par cette preparation locale.
