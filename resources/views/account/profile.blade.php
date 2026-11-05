@@ -6,6 +6,10 @@
         };
         $selectedStatuses = old('statuses', $errors->notifications->any() ? [] : $preferences['statuses']);
         $selectedStatuses = is_array($selectedStatuses) ? $selectedStatuses : [];
+        $notificationRecipients = old('recipients', $preferences['recipients']);
+        $notificationRecipients = is_array($notificationRecipients)
+            ? implode("\n", array_filter($notificationRecipients, is_string(...)))
+            : (is_string($notificationRecipients) ? $notificationRecipients : '');
     @endphp
     <div class="mx-auto max-w-5xl space-y-5 pb-16">
         <x-workspace-heading title="Mon profil" eyebrow="Mon compte" description="Vos informations, votre sécurité et vos préférences de notification.">
@@ -64,7 +68,7 @@
         @if ($account->isExternal())
             <section id="notifications" class="scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="notifications-heading">
                 <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div><h2 id="notifications-heading" class="text-lg font-semibold">Mes notifications par email</h2><p class="mt-1 text-sm text-slate-500">Choisissez ce qui mérite un email, envoyé à {{ $account->email }}.</p></div>
+                    <div><h2 id="notifications-heading" class="text-lg font-semibold">Mes notifications par email</h2><p class="mt-1 text-sm text-slate-500">Choisissez les destinataires et les événements à suivre sur vos dossiers.</p></div>
                     <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $preferences['email_enabled'] ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600' }}">{{ $preferences['email_enabled'] ? 'Emails activés' : 'Emails désactivés' }}</span>
                 </div>
                 <form method="POST" action="{{ route('profile.notifications') }}" class="mt-5 space-y-5">
@@ -75,22 +79,31 @@
                         <input type="checkbox" class="mt-1 h-4 w-4 shrink-0 accent-cyan-700" name="email_enabled" value="1" @checked(in_array(old('email_enabled', $preferences['email_enabled']), [true, 1, '1'], true))>
                         <span><strong class="block text-sm">Recevoir les notifications par email</strong><span class="text-xs text-slate-600">À chaque événement sélectionné, après traitement par le service d’envoi. Aucun SMS.</span></span>
                     </label>
-                    <fieldset>
-                        <legend class="text-sm font-semibold">Nouveaux éléments partagés</legend>
+                    <div class="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 sm:gap-6">
+                        <div>
+                            <label for="notification-recipients" class="gc-label">Adresses destinataires</label>
+                            <p id="notification-recipients-help" class="mt-1 text-xs leading-relaxed text-slate-500">Une adresse par ligne, {{ \App\Services\Crm\PortalNotificationSettings::MAX_RECIPIENTS }} maximum. Votre email de connexion ne change pas.</p>
+                            <p class="mt-2 text-xs leading-relaxed text-slate-500">Utilisez uniquement les adresses autorisées à recevoir les informations de vos dossiers. Chaque adresse reçoit un email séparé, sans voir les autres destinataires.</p>
+                        </div>
+                        <textarea id="notification-recipients" name="recipients" class="gc-input min-h-24 text-sm" rows="3" maxlength="2560" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="notification-recipients-help" aria-invalid="{{ $errors->notifications->has('recipients') || $errors->notifications->has('recipients.*') ? 'true' : 'false' }}">{{ $notificationRecipients }}</textarea>
+                    </div>
+                    <fieldset class="border-t border-slate-100 pt-4">
+                        <legend class="pr-2 text-sm font-semibold">Quand un dossier passe dans un de ces états</legend>
+                        <p class="mt-1 text-xs text-slate-500">Cochez les états qui déclenchent un email. Seuls ceux accessibles à votre organisation sont proposés.</p>
+                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            @forelse ($notificationCategories as $key => $category)
+                                <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm"><input type="checkbox" name="statuses[]" class="h-4 w-4 shrink-0 accent-cyan-700" value="{{ $key }}" @checked(in_array($key, $selectedStatuses, true))>{{ $category['label'] }}</label>
+                            @empty<p class="text-sm text-slate-500">Aucune catégorie de dossier accessible actuellement.</p>@endforelse
+                        </div>
+                    </fieldset>
+                    <fieldset class="border-t border-slate-100 pt-4">
+                        <legend class="pr-2 text-sm font-semibold">Autres événements à suivre</legend>
+                        <p class="mt-1 text-xs text-slate-500">Ces alertes sont indépendantes des changements d’état, uniquement sur les dossiers accessibles à votre compte.</p>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             @foreach (['comment_added' => ['Un nouveau commentaire', 'Uniquement les commentaires que votre compte peut lire.'], 'document_added' => ['Un nouveau document', 'Uniquement les documents partagés avec votre compte.']] as $key => [$label, $description])
                                 <input type="hidden" name="{{ $key }}" value="0">
                                 <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3"><input type="checkbox" class="mt-1 h-4 w-4 shrink-0 accent-cyan-700" name="{{ $key }}" value="1" @checked(in_array(old($key, $preferences[$key]), [true, 1, '1'], true))><span><span class="block text-sm font-medium">{{ $label }}</span><span class="text-xs text-slate-500">{{ $description }}</span></span></label>
                             @endforeach
-                        </div>
-                    </fieldset>
-                    <fieldset>
-                        <legend class="text-sm font-semibold">Quand un dossier passe dans un de ces statuts</legend>
-                        <p class="mt-1 text-xs text-slate-500">Seules les catégories accessibles à votre organisation sont proposées.</p>
-                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            @forelse ($notificationCategories as $key => $category)
-                                <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm"><input type="checkbox" name="statuses[]" class="h-4 w-4 shrink-0 accent-cyan-700" value="{{ $key }}" @checked(in_array($key, $selectedStatuses, true))>{{ $category['label'] }}</label>
-                            @empty<p class="text-sm text-slate-500">Aucune catégorie de dossier accessible actuellement.</p>@endforelse
                         </div>
                     </fieldset>
                     <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">

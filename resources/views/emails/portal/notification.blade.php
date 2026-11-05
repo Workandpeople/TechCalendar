@@ -13,7 +13,7 @@ Bonjour {{ $recipientName }},
 Consulter mon dossier
 </x-mail::button>
 
-Vous pouvez modifier les événements suivis ou désactiver ces emails dans [Mon profil]({{ route('profile') }}#notifications).
+Ces notifications sont configurées par {{ $recipientName }}. Ce compte peut modifier les destinataires et les événements suivis, ou désactiver ces emails dans [Mon profil]({{ route('profile') }}#notifications).
 
 À bientôt,<br>
 L’équipe Genius Contrôle

@@ -20,10 +20,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'last_synced_at',
     'portal_categories',
     'capcee_enabled',
+    'report_download_naming',
 ])]
 class ExternalDelegataire extends Model
 {
     public const KINDS = ['delegataire' => 'Délégataire', 'client' => 'Client'];
+
+    public const REPORT_DOWNLOAD_STANDARD = 'standard';
+
+    public const REPORT_DOWNLOAD_OUTCOME_PREFIX = 'outcome_prefix';
+
+    public static function reportDownloadNamingOptions(): array
+    {
+        return [
+            self::REPORT_DOWNLOAD_STANDARD => 'Nommage habituel',
+            self::REPORT_DOWNLOAD_OUTCOME_PREFIX => 'Avis (S / NS / NV) - référence - bénéficiaire',
+        ];
+    }
 
     public function accounts(): HasMany
     {

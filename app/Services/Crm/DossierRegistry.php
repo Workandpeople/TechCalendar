@@ -333,7 +333,8 @@ class DossierRegistry
             || ! app(ClientAccess::class)->allows($actor, 'documents')), 404);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
         $extension = pathinfo($document->path, PATHINFO_EXTENSION);
-        $name = DossierDownloadName::make($document->name, $extension, $document->dossier);
+        $name = DossierDownloadName::make($document->name, $extension, $document->dossier,
+            isReport: $document->document_type === 'report', reportOutcome: $document->control_outcome);
 
         $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file(Storage::disk('local')->path($document->path)) : 'application/octet-stream';
         $inline = $preview && DocumentResponseHeaders::previewable($mime);

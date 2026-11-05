@@ -47,7 +47,9 @@ class PortalNotifications
                 foreach ($recipients as $recipient) {
                     if (($audiences === null || in_array($recipient->externalClient?->kind, $audiences, true))
                         && $this->context($recipient, $event, $dossierId, $sourceId, $status)) {
-                        SendPortalNotification::dispatch($recipient->id, $event, $dossierId, $sourceId, $status);
+                        foreach ($this->settings->values($recipient)['recipients'] as $email) {
+                            SendPortalNotification::dispatch($recipient->id, $event, $dossierId, $sourceId, $status, hash('sha256', $email));
+                        }
                     }
                 }
             } catch (Throwable $exception) {
@@ -57,22 +59,30 @@ class PortalNotifications
         });
     }
 
-    public function deliver(int $userId, string $event, int $dossierId, int $sourceId, ?string $status): void
+    public function deliver(int $userId, string $event, int $dossierId, int $sourceId, ?string $status, ?string $recipientHash = null): void
     {
         $recipient = User::query()->with('externalClient')->find($userId);
         if (! $recipient || ! ($context = $this->context($recipient, $event, $dossierId, $sourceId, $status))) {
             return;
         }
 
-        // Recheck live preferences, assignment and visibility in the worker, not just at dispatch.
-        Mail::to($recipient->email)->send(new PortalNotificationMail($context));
+        // Old queued jobs target only the login email, if it is still subscribed.
+        $recipientHash ??= hash('sha256', strtolower(trim((string) $recipient->email)));
+        foreach ($this->settings->values($recipient)['recipients'] as $email) {
+            if (hash_equals($recipientHash, hash('sha256', $email))) {
+                // One job/message per address: private recipients and independent retries.
+                Mail::to($email)->send(new PortalNotificationMail($context));
+
+                return;
+            }
+        }
     }
 
     public function context(User $recipient, string $event, int $dossierId, int $sourceId, ?string $status): ?array
     {
         $preferences = $this->settings->values($recipient);
         if (! $this->enabled() || ! $preferences['email_enabled'] || ! $this->access->active($recipient)
-            || $recipient->must_change_password || ! filter_var($recipient->email, FILTER_VALIDATE_EMAIL)) {
+            || $recipient->must_change_password || $preferences['recipients'] === []) {
             return null;
         }
         $dossier = Dossier::find($dossierId);

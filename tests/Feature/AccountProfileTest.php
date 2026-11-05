@@ -111,6 +111,7 @@ it('saves independent notification preferences for each client or delegataire ac
         'document_added' => '0', 'statuses' => ['visited', 'report'], 'user_id' => $this->other->id, 'portal_permissions' => []])
         ->assertRedirect(route('profile').'#notifications')->assertSessionHasNoErrors();
     expect($this->account->fresh()->portal_notification_preferences)->toBe(['email_enabled' => true,
+        'recipients' => [strtolower($this->account->email)],
         'comment_added' => true, 'document_added' => false, 'statuses' => ['visited', 'report']])
         ->and($this->account->fresh()->portal_permissions)->toBe($permissions)
         ->and($this->other->fresh()->portal_notification_preferences)->toBeNull();
@@ -132,7 +133,65 @@ it('can unsubscribe from everything without changing access rights', function ()
     $this->actingAs($this->account)->put(route('profile.notifications'), ['email_enabled' => 0, 'comment_added' => 0, 'document_added' => 0])
         ->assertSessionHasNoErrors();
     expect($this->account->fresh()->portal_notification_preferences)->toBe(['email_enabled' => false,
+        'recipients' => [strtolower($this->account->email)],
         'comment_added' => false, 'document_added' => false, 'statuses' => []])->and($this->account->fresh()->portal_enabled)->toBeTrue();
+});
+
+it('saves multiple destinations without changing login or another accounts preferences', function (string $kind) {
+    $this->organisation->update(['kind' => $kind]);
+    $email = $this->account->email;
+    $password = $this->account->getRawOriginal('password');
+    $this->actingAs($this->account)->put(route('profile.notifications'), [
+        'email_enabled' => 1, 'comment_added' => 0, 'document_added' => 0, 'statuses' => ['report'],
+        'recipients' => " Planning@Example.com \r\nConformite@example.com; planning@EXAMPLE.COM, direction@example.com\n",
+        'email' => 'injected@example.com', 'user_id' => $this->other->id,
+    ])->assertRedirect(route('profile').'#notifications')->assertSessionHasNoErrors();
+
+    $preferences = $this->account->fresh()->portal_notification_preferences;
+    expect($preferences['recipients'])->toBe(['planning@example.com', 'conformite@example.com', 'direction@example.com'])
+        ->and($preferences['statuses'])->toBe(['report'])
+        ->and($this->account->fresh()->email)->toBe($email)
+        ->and($this->account->fresh()->getRawOriginal('password'))->toBe($password)
+        ->and($this->other->fresh()->portal_notification_preferences)->toBeNull();
+    $this->get(route('profile'))->assertOk()->assertSee('planning@example.com')->assertSee('conformite@example.com')
+        ->assertSee('Quand un dossier passe dans un de ces états')->assertSee('Chaque adresse reçoit un email séparé');
+    Queue::assertNothingPushed();
+})->with(['client', 'delegataire']);
+
+it('preserves custom destinations when submitting a previously opened form without the new field', function () {
+    $this->account->forceFill(['portal_notification_preferences' => ['email_enabled' => true, 'recipients' => ['team@example.com'],
+        'comment_added' => false, 'document_added' => false, 'statuses' => ['report']]])->save();
+    $this->actingAs($this->account)->put(route('profile.notifications'), ['email_enabled' => 1, 'comment_added' => 1, 'document_added' => 0])
+        ->assertSessionHasNoErrors();
+    expect($this->account->fresh()->portal_notification_preferences['recipients'])->toBe(['team@example.com']);
+});
+
+it('rejects invalid excessive or missing recipients while retaining valid form values', function (mixed $recipients) {
+    $this->actingAs($this->account)->from(route('profile'))->put(route('profile.notifications'), [
+        'email_enabled' => 1, 'comment_added' => 0, 'document_added' => 0, 'statuses' => ['report'], 'recipients' => $recipients,
+    ])->assertRedirect(route('profile'))->assertSessionHasErrors([], null, 'notifications');
+    expect($this->account->fresh()->portal_notification_preferences)->toBeNull();
+    $this->get(route('profile'))->assertOk()->assertSee('value="report" checked', false);
+    Queue::assertNothingPushed();
+})->with([
+    'empty' => [''], 'no addresses' => [[]], 'null' => [null], 'non email' => ['invalid'],
+    'display name' => ['Planning <planning@example.com>'], 'header injection' => ["team@example.com\r\nBcc: attacker@example.com"],
+    'nested input' => [[['team@example.com']]], 'not a string' => [123],
+    'overlong' => [str_repeat('a', 300).'@example.com'], 'unbounded' => [str_repeat('a', 3000)],
+    'too many addresses' => [array_map(fn ($index) => 'team'.$index.'@example.com', range(1, 11))],
+]);
+
+it('accepts ten recipients and can clear them when disabling notifications', function () {
+    $recipients = array_map(fn ($index) => 'team'.$index.'@example.com', range(1, 10));
+    $this->actingAs($this->account)->put(route('profile.notifications'), [
+        'email_enabled' => 1, 'comment_added' => 0, 'document_added' => 0, 'statuses' => ['visited'], 'recipients' => $recipients,
+    ])->assertSessionHasNoErrors();
+    expect($this->account->fresh()->portal_notification_preferences['recipients'])->toBe($recipients);
+    $this->put(route('profile.notifications'), [
+        'email_enabled' => 0, 'comment_added' => 0, 'document_added' => 0, 'recipients' => '',
+    ])->assertSessionHasNoErrors();
+    expect($this->account->fresh()->portal_notification_preferences['recipients'])->toBe([])
+        ->and($this->account->fresh()->portal_notification_preferences['email_enabled'])->toBeFalse();
 });
 
 it('asks for an event when enabling emails instead of silently subscribing to nothing', function () {

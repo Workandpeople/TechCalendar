@@ -1,12 +1,6 @@
 @props(['outcome' => null])
 @php
-    $value = is_string($outcome) ? \Illuminate\Support\Str::lower(\Illuminate\Support\Str::squish(\Illuminate\Support\Str::ascii($outcome))) : '';
-    $key = match ($value) {
-        'satisfactory', 'satisfaisant' => 'satisfactory',
-        'unsatisfactory', 'non satisfaisant' => 'unsatisfactory',
-        'unverifiable', 'inaccessible', 'non verifiable', 'inaccessible / non verifiable' => 'unverifiable',
-        default => null,
-    };
+    $key = \App\Support\ReportOutcome::normalize(is_string($outcome) ? $outcome : null);
     $label = \App\Services\Crm\PostVisitWorkflow::OUTCOMES[$key] ?? null;
 @endphp
 @if ($label)

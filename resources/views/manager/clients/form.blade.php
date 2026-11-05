@@ -14,6 +14,15 @@
                 <div><label for="phone" class="gc-label">Téléphone</label><input id="phone" name="phone" value="{{ old('phone', $client->phone) }}" class="gc-input" maxlength="60"></div>
                 <div><label for="is_active" class="gc-label">Accès de l’organisation</label><select id="is_active" name="is_active" class="gc-input"><option value="1" @selected(old('is_active', $client->is_active))>Actif</option><option value="0" @selected(! old('is_active', $client->is_active))>Désactivé</option></select><p class="mt-2 text-xs text-slate-500">Désactiver bloque immédiatement tous ses comptes, sans supprimer ses dossiers.</p></div>
             </div>
+            <div class="max-w-xl space-y-2">
+                <label for="report_download_naming" class="gc-label">Nommage des rapports téléchargés</label>
+                <select id="report_download_naming" name="report_download_naming" class="gc-input" aria-describedby="report-download-naming-help">
+                    @foreach (\App\Models\ExternalDelegataire::reportDownloadNamingOptions() as $value => $label)
+                        <option value="{{ $value }}" @selected(old('report_download_naming', $client->report_download_naming ?? 'standard') === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <p id="report-download-naming-help" class="text-xs text-slate-500">Au téléchargement des rapports PDF uniquement : S = satisfaisant, NS = non satisfaisant, NV = non vérifiable. La référence et le bénéficiaire sont conservés. Sans avis connu, le nom habituel reste utilisé. Les fichiers stockés et les autres documents ne changent pas.</p>
+            </div>
             <fieldset class="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-2" data-capcee-organisation>
                 <legend class="px-2 font-semibold">Intégration CAPCEE</legend>
                 <input type="hidden" name="capcee_enabled" value="0">

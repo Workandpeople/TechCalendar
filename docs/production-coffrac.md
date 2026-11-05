@@ -2810,6 +2810,14 @@ rejeu d'historique, seed ou envoi pendant cette migration ou l'enregistrement.
 Les comptes internes conservent leurs preferences technicien existantes ; les
 nouveaux reglages de notification sont reserves aux comptes externes actifs.
 
+Le profil accepte de 1 a 10 emails destinataires (un par ligne, virgules et
+points-virgules egalement acceptes), distincts de l'email de connexion. Les adresses
+sont validees, normalisees et dedoublonnees. Les anciens abonnements sans liste
+explicite continuent d'utiliser l'email du compte ; une liste vide ou invalide
+ne declenche aucun envoi. Aucun abonnement n'est active automatiquement.
+Les destinataires sont stockes dans le JSON existant : aucune migration
+supplementaire. Enregistrer les preferences n'envoie ni test ni historique.
+
 Evenements : changement vers un statut choisi parmi les categories accessibles,
 nouveau commentaire partage et nouveau document natif partage. Les observateurs
 couvrent les ecritures Eloquent natives, y compris les automatismes de workflow ;
@@ -2818,8 +2826,14 @@ extension de partage notifie seulement la nouvelle audience. Les ajouts de
 l'utilisateur lui-meme et les actions privees ne le notifient pas.
 
 L'envoi utilise SendPortalNotification et le worker habituel apres le commit
-de la transaction externe. Chaque job ne transporte que des identifiants et le
-type d'evenement. Avant l'envoi, relire les preferences, les droits, l'affectation,
+de la transaction externe. Un job et un email separes par adresse evitent
+d'exposer les destinataires et permettent des reprises independantes. Le job
+ne transporte que des identifiants, le type d'evenement et l'empreinte SHA-256
+de l'adresse, sans email ni contenu metier. Un destinataire retire avant le
+traitement est ignore ; une adresse ajoutee ensuite ne recoit pas les anciens
+evenements. Les jobs deja en attente avant cette evolution gardent uniquement
+l'email du compte s'il figure encore parmi les destinataires autorises.
+Avant l'envoi, relire les preferences, les droits, l'affectation,
 la categorie et la visibilite ; ignorer un evenement supprime ou devenu interdit.
 Les emails sont en francais, sans texte de commentaire ni piece jointe, avec un
 lien authentifie vers le dossier. La configuration mail globale et ses verrous
@@ -3215,3 +3229,24 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - En creation interne et client, l'adresse, le code postal et la ville precedent
   l'email et le telephone du beneficiaire. Le RDV manuel presente egalement
   l'adresse avant le telephone. Les champs, droits et validations restent identiques.
+
+### Nommage des rapports ALVEA au telechargement
+
+- Migration additive : `2026_11_05_130000_add_organisation_report_download_naming`.
+  Le nommage reste `standard` par defaut. La migration active `outcome_prefix`
+  uniquement pour les organisations dont le nom ou la raison sociale est
+  exactement ALVEA, ALVEA CEE ou ALVEA DELEGATAIRE (casse, accents et espaces ignores).
+  Les autres variantes ne sont pas devinees : verifier leur fiche organisation.
+- Le reglage reste administrable dans Clients et delegataires > Gerer >
+  Nommage des rapports telecharges. Il suit l'organisation, pas son nom futur.
+- Un rapport PDF lie au client ou delegataire configure utilise S, NS ou NV
+  selon son propre avis, jamais selon l'etat du dossier ou un autre rapport.
+  Le libelle initial Rapport de controle est remplace ; sans ce libelle, le
+  prefixe est ajoute devant le titre existant. La reference et le beneficiaire
+  sont conserves, avec les protections de nom de fichier existantes.
+- Rapports natifs et archives avec reference de controle : meme regle pour les
+  telechargements et le nom propose par l'apercu, quel que soit le compte autorise.
+  Sans avis reconnu, le nom habituel reste utilise. Les documents libres et les
+  pieces de lots sans avis explicite ne recoivent pas de prefixe deduit.
+- Aucun fichier deplace ou renomme sur disque, aucun titre/rapport reecrit,
+  aucun changement des droits, aucune notification ni appel API.

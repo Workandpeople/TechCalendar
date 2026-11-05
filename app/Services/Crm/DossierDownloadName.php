@@ -3,17 +3,28 @@
 namespace App\Services\Crm;
 
 use App\Models\Dossier;
+use App\Models\ExternalDelegataire;
+use App\Support\ReportOutcome;
 use Illuminate\Support\Str;
 
 final class DossierDownloadName
 {
-    public static function make(string $name, string $extension, ?Dossier $dossier = null): string
+    public static function make(string $name, string $extension, ?Dossier $dossier = null, bool $isReport = false, ?string $reportOutcome = null): string
     {
         $extension = strtolower($extension);
         $extension = preg_match('/^[a-z0-9]{1,10}$/D', $extension) ? $extension : '';
         $name = self::clean($name) ?: 'Document';
         if ($extension !== '' && str_ends_with(strtolower($name), '.'.$extension)) {
             $name = substr($name, 0, -strlen($extension) - 1);
+        }
+        $prefix = $isReport && $extension === 'pdf' ? ReportOutcome::downloadPrefix($reportOutcome) : null;
+        if ($prefix !== null && $dossier !== null && self::usesOutcomePrefix($dossier)) {
+            $reference = preg_replace('/^rapport de contr[oô]le(?:\s*-\s*|\s+|$)/iu', '', $name, 1, $replacements) ?? $name;
+            if ($replacements > 0) {
+                $name = $prefix.($reference !== '' ? ' - '.$reference : '');
+            } elseif (! preg_match('/^'.preg_quote($prefix, '/').'\s*-\s*/u', $name)) {
+                $name = $prefix.' - '.$name;
+            }
         }
         $suffix = '';
         if ($extension === 'pdf' && $dossier !== null) {
@@ -31,6 +42,21 @@ final class DossierDownloadName
         $base = rtrim(mb_strcut($name, 0, 190 - strlen($suffix), 'UTF-8'), '. ') ?: 'Document';
 
         return $base.$suffix.($extension !== '' ? '.'.$extension : '');
+    }
+
+    private static function usesOutcomePrefix(Dossier $dossier): bool
+    {
+        foreach (['client', 'delegataire'] as $relation) {
+            if (! $dossier->relationLoaded($relation) && $dossier->getAttribute($relation.'_id') !== null) {
+                $dossier->loadMissing($relation);
+            }
+            if ($dossier->relationLoaded($relation)
+                && $dossier->getRelation($relation)?->report_download_naming === ExternalDelegataire::REPORT_DOWNLOAD_OUTCOME_PREFIX) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function clean(string $value): string

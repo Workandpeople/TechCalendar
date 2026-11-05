@@ -112,7 +112,9 @@ class CollectedDossierDocuments
         abort_unless($path !== null, 404, 'Fichier non collecté, vide ou indisponible.');
         abort_if($actor->isExternal() && ! app(ClientAccess::class)->canReadLegacyDocument($actor, $source, $this->override($record), $this->delegataireOverride($record)), 404);
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $name = DossierDownloadName::make($this->describe($record)['name'], $extension, $dossier);
+        $name = DossierDownloadName::make($this->describe($record)['name'], $extension, $dossier,
+            isReport: filled($source['reference_controle'] ?? null) || ($source['document_type'] ?? null) === 'report',
+            reportOutcome: is_string($source['status'] ?? null) ? $source['status'] : null);
 
         $mime = $preview ? (new \finfo(FILEINFO_MIME_TYPE))->file($path) : 'application/octet-stream';
         $inline = $preview && DocumentResponseHeaders::previewable($mime);

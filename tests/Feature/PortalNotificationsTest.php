@@ -148,10 +148,12 @@ it('rechecks subscriptions permissions assignment and visibility before sending'
         'removed' => $document->delete(),
         'dossier_removed' => $this->dossier->delete(),
         'delivery_disabled' => config(['mail.delivery_enabled' => false]),
+        'recipient_removed' => $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences, 'recipients' => ['someone-else@example.com']]])->save(),
     };
-    (new SendPortalNotification($this->clientUser->id, 'document_added', $this->dossier->id, $document->id))->handle(app(PortalNotifications::class));
+    (new SendPortalNotification($this->clientUser->id, 'document_added', $this->dossier->id, $document->id,
+        recipientHash: hash('sha256', strtolower($this->clientUser->email))))->handle(app(PortalNotifications::class));
     Mail::assertNothingOutgoing();
-})->with(['unsubscribe', 'event_disabled', 'disabled', 'deleted', 'organisation', 'categories', 'permission', 'assignment', 'private', 'removed', 'dossier_removed', 'delivery_disabled']);
+})->with(['unsubscribe', 'event_disabled', 'disabled', 'deleted', 'organisation', 'categories', 'permission', 'assignment', 'private', 'removed', 'dossier_removed', 'delivery_disabled', 'recipient_removed']);
 
 it('skips obsolete status notifications when the dossier has moved again', function () {
     $this->operation->forceFill(['legacy_status' => 'RDV VISITE'])->save();
@@ -187,3 +189,96 @@ it('fails closed on malformed stored notification settings', function (mixed $st
     ($this->comment)();
     Queue::assertNothingPushed();
 })->with([['corrupt'], [['email_enabled' => 'true', 'statuses' => [['report']]]]]);
+
+it('queues and sends private independent messages to every distinct configured recipient', function () {
+    $this->delegataireUser->forceFill(['portal_notification_preferences' => null])->save();
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences,
+        'recipients' => ['planning@example.com', 'CONFORMITE@example.com', 'Planning@example.com']]])->save();
+    $comment = ($this->comment)();
+    Queue::assertPushed(SendPortalNotification::class, 2);
+    $jobs = Queue::pushed(SendPortalNotification::class);
+    expect($jobs->pluck('recipientHash')->all())->toBe([hash('sha256', 'planning@example.com'), hash('sha256', 'conformite@example.com')]);
+    foreach ($jobs as $job) {
+        expect(serialize($job))->not->toContain('planning@example.com', 'conformite@example.com', $this->clientUser->email, 'SENSITIVE COMMENT BODY');
+        $job->handle(app(PortalNotifications::class));
+    }
+    Mail::assertSent(PortalNotificationMail::class, 2);
+    foreach (['planning@example.com', 'conformite@example.com'] as $email) {
+        Mail::assertSent(PortalNotificationMail::class, function ($mail) use ($email) {
+            return $mail->hasTo($email) && count($mail->to) === 1 && $mail->cc === [] && $mail->bcc === []
+                && ! str_contains($mail->render(), 'SENSITIVE COMMENT BODY');
+        });
+    }
+    Mail::assertNotSent(PortalNotificationMail::class, fn ($mail) => $mail->hasTo($this->clientUser->email));
+});
+
+it('does not redirect a queued notification to a newly added recipient', function () {
+    $this->delegataireUser->forceFill(['portal_notification_preferences' => null])->save();
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences, 'recipients' => ['former@example.com']]])->save();
+    ($this->comment)();
+    $jobs = Queue::pushed(SendPortalNotification::class);
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences, 'recipients' => ['new@example.com']]])->save();
+    foreach ($jobs as $job) {
+        $job->handle(app(PortalNotifications::class));
+    }
+    Mail::assertNothingOutgoing();
+});
+
+it('keeps recipient retries independent when a mail transport rejects one delivery', function () {
+    $this->delegataireUser->forceFill(['portal_notification_preferences' => null])->save();
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences,
+        'recipients' => ['rejected@example.com', 'accepted@example.com']]])->save();
+    ($this->comment)();
+    $jobs = Queue::pushed(SendPortalNotification::class);
+    $fakeMailer = Mail::getFacadeRoot();
+    $acceptedMail = $fakeMailer->to('accepted@example.com');
+    Mail::shouldReceive('to')->once()->with('rejected@example.com')->andThrow(new RuntimeException('SMTP fixture rejection'));
+    Mail::shouldReceive('to')->once()->with('accepted@example.com')->andReturn($acceptedMail);
+
+    expect(fn () => $jobs->first()->handle(app(PortalNotifications::class)))->toThrow(RuntimeException::class, 'SMTP fixture rejection');
+    $jobs->last()->handle(app(PortalNotifications::class));
+    $fakeMailer->assertSent(PortalNotificationMail::class, 1);
+    $fakeMailer->assertSent(PortalNotificationMail::class, fn ($mail) => $mail->hasTo('accepted@example.com'));
+});
+
+it('keeps older queued jobs compatible but never expands their original recipient list', function (bool $stillSubscribed) {
+    $comment = ($this->comment)();
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences,
+        'recipients' => $stillSubscribed ? [strtolower($this->clientUser->email), 'team@example.com'] : ['team@example.com']]])->save();
+    $job = new SendPortalNotification($this->clientUser->id, 'comment_added', $this->dossier->id, $comment->id);
+    unset($job->recipientHash);
+    $oldJob = unserialize(serialize($job));
+    expect($oldJob->recipientHash)->toBeNull();
+    $oldJob->handle(app(PortalNotifications::class));
+    if ($stillSubscribed) {
+        Mail::assertSent(PortalNotificationMail::class, 1);
+        Mail::assertSent(PortalNotificationMail::class, fn ($mail) => $mail->hasTo(strtolower($this->clientUser->email)));
+    } else {
+        Mail::assertNothingOutgoing();
+    }
+    Mail::assertNotSent(PortalNotificationMail::class, fn ($mail) => $mail->hasTo('team@example.com'));
+})->with([true, false]);
+
+it('sends only selected accessible status changes to custom addresses', function () {
+    $this->delegataireUser->forceFill(['portal_notification_preferences' => null])->save();
+    $this->clientUser->forceFill(['portal_notification_preferences' => ['email_enabled' => true, 'recipients' => ['team@example.com'],
+        'comment_added' => false, 'document_added' => false, 'statuses' => ['report']]])->save();
+    ($this->comment)();
+    ($this->document)();
+    $this->operation->forceFill(['legacy_status' => 'RDV VISITE'])->save();
+    Queue::assertNothingPushed();
+    $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
+    Queue::assertPushed(SendPortalNotification::class, 1);
+    Queue::pushed(SendPortalNotification::class)->first()->handle(app(PortalNotifications::class));
+    Mail::assertSent(PortalNotificationMail::class, fn ($mail) => $mail->hasTo('team@example.com')
+        && str_contains($mail->render(), 'Rapport Genius'));
+});
+
+it('never falls back to the login email when an explicit recipient list is empty or corrupt', function (mixed $recipients) {
+    $this->delegataireUser->forceFill(['portal_notification_preferences' => null])->save();
+    $this->clientUser->forceFill(['portal_notification_preferences' => [...$this->preferences, 'recipients' => $recipients]])->save();
+    $comment = ($this->comment)();
+    Queue::assertNothingPushed();
+    (new SendPortalNotification($this->clientUser->id, 'comment_added', $this->dossier->id, $comment->id))->handle(app(PortalNotifications::class));
+    Mail::assertNothingOutgoing();
+})->with([[[]], [null], ['team@example.com'], [['team@example.com', 'bad-address']], [[['team@example.com']]]]);
