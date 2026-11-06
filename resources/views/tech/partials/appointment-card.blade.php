@@ -11,4 +11,5 @@
         @if ($card['phone']['href'] ?? null)<a href="{{ $card['phone']['href'] }}"><x-nav-icon name="phone" />Appeler<span class="sr-only"> {{ $card['customer'] }}</span></a>@else<span>Téléphone non renseigné</span>@endif
         @if ($card['maps_url'])<a href="{{ $card['maps_url'] }}" target="_blank" rel="noopener noreferrer"><x-nav-icon name="location" />Itinéraire<span class="sr-only"> vers {{ $card['customer'] }}</span></a>@endif
     </div>
+    @can('reportOnSiteProblem', $appointment)<a class="tech-report-link" href="{{ $card['detail_url'] }}#tech-on-site-report"><x-nav-icon name="alert" />Signaler un problème sur place</a>@endcan
 </li>

@@ -1,5 +1,6 @@
 import { initDossierMailStatus } from './dossier-mail-status';
 import { initLotReportExports } from './lot-report-exports';
+import { initOnSiteReports } from './tech-on-site-report';
 import { cofracLabel } from './cofrac-label';
 import { initSidebar } from './sidebar';
 import { initSidebarSections } from './sidebar-sections';
@@ -70,6 +71,7 @@ initDossierService();
 initDossierMail();
 initDossierMailStatus();
 initLotReportExports();
+initOnSiteReports();
 initDossierAddress();
 initCreationAddress();
 initAdminSettings();

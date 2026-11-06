@@ -1,4 +1,28 @@
 @layer components {
+    .tech-report-link { display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; margin-top: .75rem; color: #9b3b15; font-size: .85rem; font-weight: 700; text-decoration: none; }
+    .tech-on-site-report { border-color: #edd4bc; background: linear-gradient(120deg, #fffcf7, #fff); }
+    .tech-on-site-report summary { display: flex; align-items: center; gap: .75rem; min-height: 48px; color: #934018; cursor: pointer; list-style: none; }
+    .tech-on-site-report summary::-webkit-details-marker { display: none; }
+    .tech-on-site-report summary > span:first-of-type { flex: 1; font-weight: 750; }
+    .tech-on-site-report summary small { display: block; margin-top: .2rem; font-size: .78rem; font-weight: 400; color: #795b48; }
+    .tech-on-site-report[open] summary > span:last-child { transform: rotate(45deg); }
+    .tech-on-site-report form { display: grid; gap: .65rem; padding-top: 1.25rem; }
+    .tech-on-site-report form > label { margin-top: .35rem; font-size: .9rem; font-weight: 650; }
+    .tech-on-site-report :is(input, select, textarea) { width: 100%; min-height: 48px; font-size: 16px; }
+    .tech-on-site-report input[type='file'] { border: 1px dashed #d9b18e; border-radius: .65rem; padding: .6rem; background: #fffaf3; }
+    .tech-report-intro, .tech-report-help { color: #667786; font-size: .8rem; line-height: 1.5; font-weight: 400; }
+    .tech-report-photo-label { display: flex; align-items: center; gap: .65rem; }
+    .tech-report-photo-label small { display: block; font-size: .75rem; font-weight: 400; color: #667786; }
+    .tech-on-site-report figure { margin: 0; border: 1px solid #d5e0eb; border-radius: .75rem; padding: .5rem; background: #fff; }
+    .tech-on-site-report figure img { max-height: 220px; width: 100%; object-fit: contain; }
+    .tech-on-site-report figcaption { padding: .3rem; font-size: .75rem; color: #536c7e; overflow-wrap: anywhere; }
+    .tech-report-draft { border-radius: .6rem; padding: .75rem; font-size: .78rem; line-height: 1.5; background: #eef4fa; color: #486278; }
+    .tech-report-feedback, .tech-report-errors { border-radius: .6rem; padding: .75rem; background: #fff0ec; color: #9d311c; font-size: .85rem; overflow-wrap: anywhere; }
+    .tech-report-actions { display: flex; flex-wrap: wrap; gap: .6rem; padding-top: .4rem; }
+    .tech-report-actions button { min-height: 48px; flex: 1 1 180px; }
+    .tech-report-confirmed { display: flex; gap: .75rem; border-color: #a8d9c5; background: #f0fbf6; }
+    .tech-report-confirmed h2 { color: #145e49; font-weight: 750; }
+    .tech-report-confirmed p { margin-top: .35rem; font-size: .85rem; line-height: 1.5; }
     .tech-mobile-brand { display: flex; align-items: center; gap: .55rem; margin-right: auto; text-decoration: none; color: #385768; font-size: .65rem; line-height: 1.25; }
     .tech-mobile-brand img { width: auto; height: 34px; }
     .tech-mobile-brand strong { display: block; font-size: .78rem; color: #21495a; }

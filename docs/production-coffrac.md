@@ -3379,3 +3379,39 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - Un rapport manquant est signale dans le suivi et `Informations.txt` ; une
   archive vide ou un faux PDF n'est pas publie. Une erreur n'est pas masquee
   par un message de succes. L'actualisation du suivi ne relance aucun export.
+
+### Signalement terrain par le technicien (6 novembre 2026)
+
+- Depuis une intervention mobile Cofrac ou lot rattachee a un dossier natif,
+  « Signaler un probleme sur place » ouvre un formulaire compact : client absent,
+  injoignable, acces impossible ou autre motif avec commentaire obligatoire.
+  Une photo JPEG/PNG/WebP est obligatoire pour valider ce signalement, pas pour
+  consulter les documents ou realiser normalement une visite.
+- Seul le technicien actuellement affecte peut le faire, sur un RDV planifie
+  dont la fiche reste en prise de RDV/attente de visite. Aucun nouveau droit
+  d'administration, changement de statut libre ou upload de rapport technique
+  n'est accorde. Affectation, compte actif, role et etat sont reverifies sous
+  verrou SQL apres le traitement de la photo. Un RDV deplace depuis l'ouverture
+  du formulaire exige une nouvelle verification, y compris apres travail hors ligne.
+- L'enregistrement atomique met le RDV et sa prestation en probleme RDV, ajoute
+  un commentaire signe par le technicien et une photo de type document libre,
+  conserve les consignes du planning, les horaires et l'historique precedents.
+  L'horodatage est celui de reception serveur, pas une preuve certifiee de l'heure
+  de prise de vue ou de la presence. Aucune geolocalisation appareil n'est collectee.
+- Portee explicite, par defaut client uniquement, commune a la photo et au
+  commentaire. Les notifications existantes suivent les droits, categories,
+  preferences et adresses des destinataires, apres validation de la transaction.
+  Aucun SMS, appel API, envoi de justificatif a un tiers ou notification imposee.
+- Photo limitee a 10 Mio/12 megapixels, reduite au navigateur si possible, puis
+  decodee et reencodee en JPEG prive (maximum 2000 pixels) avec suppression des
+  metadonnees EXIF/GPS et des contenus annexes. Echec SQL ou reaffectation pendant
+  le traitement : annulation des ecritures et nettoyage de la seule photo preparee.
+- Une cle de requete rend la repetition d'un meme envoi sans doublon. La photo,
+  le commentaire et les choix du formulaire peuvent etre gardes dans IndexedDB,
+  separes par compte et RDV, avec validite de 24 h et nettoyage a la prochaine
+  ouverture. Suppression locale apres confirmation ou action « Effacer le brouillon ».
+  Un appareil sans stockage local disponible affiche un avertissement. Aucun envoi
+  automatique au retour du reseau ; le technicien doit valider explicitement.
+- Aucun schema, service ou package supplementaire. PHP GD est deja un prerequis
+  du runtime. MYMAR et ses rendez-vous restent exclus de cette action : aucune
+  extension de ses droits ou de son workflow documentaire dans ce correctif.

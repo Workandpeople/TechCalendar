@@ -218,6 +218,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/tech/planning', [TechPlanningController::class, 'index'])->name('tech.planning');
     Route::middleware(EnsureCrmV2Enabled::class)->group(function (): void {
         Route::get('/tech/planning/appointments/{appointment}', [TechAppointmentController::class, 'show'])->whereNumber('appointment')->name('tech.appointments.show');
+        Route::post('/tech/planning/appointments/{appointment}/on-site-report', [TechAppointmentController::class, 'report'])
+            ->whereNumber('appointment')->middleware('throttle:10,1')->name('tech.appointments.on-site-report');
         Route::get('/tech/planning/appointments/{appointment}/documents/{kind}/{document}', [TechAppointmentController::class, 'download'])
             ->whereNumber(['appointment', 'document'])->whereIn('kind', ['dossier', 'archive', 'lot'])->name('tech.documents.download');
     });

@@ -7,6 +7,7 @@
             <p class="tech-address"><x-nav-icon name="location" /><span>{{ $card['address'] ?: 'Adresse non renseignée' }}</span></p>
             <div class="tech-contact-actions">@if ($card['phone']['href'] ?? null)<a href="{{ $card['phone']['href'] }}"><x-nav-icon name="phone" />{{ $card['phone']['label'] }}</a>@endif @if ($card['maps_url'])<a href="{{ $card['maps_url'] }}" target="_blank" rel="noopener noreferrer"><x-nav-icon name="location" />Itinéraire</a>@endif</div>
         </header>
+        @include('tech.partials.on-site-report')
         <section id="tech-documents" class="tech-panel tech-files-panel" aria-labelledby="tech-documents-heading">
             <header class="tech-files-heading"><span class="tech-file-icon"><x-nav-icon name="document" /></span><div><h2 id="tech-documents-heading">Documents du dossier <span>{{ $documentCount }}</span></h2><p>Vos pièces utiles, à portée de main.</p></div></header>
             <form class="tech-document-search" method="GET" action="{{ route('tech.appointments.show', $appointment) }}#tech-documents" role="search" aria-label="Rechercher un document"><label class="sr-only" for="document-q">Nom du document</label><input id="document-q" type="search" name="document_q" value="{{ $documentSearch }}" maxlength="120" class="gc-input" placeholder="Rechercher un document…"><button type="submit" class="tech-small-button"><x-nav-icon name="search" /><span class="sr-only">Rechercher</span></button></form>

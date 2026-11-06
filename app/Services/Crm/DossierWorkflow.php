@@ -86,9 +86,26 @@ class DossierWorkflow
     /** The caller also updates the appointment inside this transaction, when there is one. */
     public function recordProblem(User $actor, DossierOperation $operation, array $data): void
     {
-        DB::transaction(function () use ($actor, $operation, $data): void {
+        $this->recordProblemWithPermission($actor, $operation, $data);
+    }
+
+    public function recordOnSiteProblem(User $actor, Appointment $appointment, array $data): void
+    {
+        Gate::forUser($actor)->authorize('reportOnSiteProblem', $appointment);
+        $this->recordProblemWithPermission($actor, $appointment->dossierOperation, $data, $appointment);
+    }
+
+    private function recordProblemWithPermission(User $actor, DossierOperation $operation, array $data, ?Appointment $onSite = null): void
+    {
+        DB::transaction(function () use ($actor, $operation, $data, $onSite): void {
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($operation->dossier_id);
-            Gate::forUser($actor)->authorize('update', $dossier);
+            if ($onSite) {
+                $onSite = Appointment::query()->lockForUpdate()->findOrFail($onSite->id);
+                abort_unless($onSite->dossier_operation_id === $operation->id, 404);
+                Gate::forUser($actor)->authorize('reportOnSiteProblem', $onSite);
+            } else {
+                Gate::forUser($actor)->authorize('update', $dossier);
+            }
             $operation = $dossier->operations()->lockForUpdate()->findOrFail($operation->id);
             if ($operation->legacy_status && ! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], ['pending', 'problem', 'awaiting_visit'], true)) {
                 throw ValidationException::withMessages(['comment' => 'Cette fiche est dans le circuit de contrôle ou de clôture. Un problème RDV ne peut pas écraser cet état.']);
