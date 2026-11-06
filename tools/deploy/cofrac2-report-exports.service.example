@@ -1,0 +1,25 @@
+[Unit]
+Description=Cofrac private lot report archive worker
+After=network.target mysql.service
+
+[Service]
+User=cofrac2-app
+Group=cofrac2-app
+WorkingDirectory=/var/www/cofrac2
+ExecStart=/usr/bin/php8.4 artisan queue:work database --queue=report-exports --sleep=2 --tries=3 --timeout=600 --memory=192 --max-time=3600
+Restart=always
+RestartSec=5
+TimeoutStopSec=650
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/cofrac2/storage /var/www/cofrac2/bootstrap/cache
+NoNewPrivileges=true
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

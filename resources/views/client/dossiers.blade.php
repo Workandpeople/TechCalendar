@@ -13,6 +13,7 @@
             <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états autorisés</option>@foreach (collect($categories)->except('all') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
             <div class="flex items-end gap-3"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
         </form>
+        @include('client.partials.report-exports')
         <div data-ajax-results="dossiers">
         <p class="text-sm text-slate-500">{{ $dossiers->total() }} dossier(s)</p>
         <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="p-4">Voir</th><th class="p-4">Numéro de lot</th><th class="p-4">Bénéficiaire</th><th class="p-4">Date RDV</th><th class="p-4">Lieu d’inspection</th><th class="p-4">Prestations et états</th></tr></thead><tbody class="divide-y divide-slate-100">

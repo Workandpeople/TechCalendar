@@ -3,6 +3,7 @@
 use App\Http\Controllers\Crm\ClientManagementController;
 use App\Http\Controllers\Crm\ClientPortalController;
 use App\Http\Controllers\Crm\DossierAddressController;
+use App\Http\Controllers\Crm\LotReportExportController;
 use App\Http\Middleware\EnsureClientPortal;
 use App\Http\Middleware\EnsureCrmV2Enabled;
 use Illuminate\Support\Facades\Route;
@@ -19,6 +20,10 @@ Route::middleware(['auth', EnsureCrmV2Enabled::class])->group(function (): void 
         Route::put('/{client}/accounts/{account}', 'updateAccount')->name('accounts.update');
     });
     Route::prefix('espace-client')->name('client.')->middleware(EnsureClientPortal::class)->controller(ClientPortalController::class)->group(function (): void {
+        Route::get('/rapports-lots', [LotReportExportController::class, 'index'])->middleware('throttle:60,1')->name('report-exports.index');
+        Route::get('/rapports-lots/selection', [LotReportExportController::class, 'lots'])->middleware('throttle:60,1')->name('report-exports.lots');
+        Route::post('/rapports-lots', [LotReportExportController::class, 'store'])->middleware('throttle:5,1')->name('report-exports.store');
+        Route::get('/rapports-lots/{export}/telecharger', [LotReportExportController::class, 'download'])->whereUuid('export')->middleware('throttle:10,1')->name('report-exports.download');
         Route::get('/', 'index')->name('dossiers');
         Route::get('/dossiers/nouveau', 'create')->name('dossiers.create');
         Route::get('/dossiers/adresse/suggestions', [DossierAddressController::class, 'creationSuggestions'])->middleware('throttle:60,1')->name('dossiers.address.creation-suggestions');

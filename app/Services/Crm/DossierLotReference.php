@@ -29,6 +29,13 @@ final class DossierLotReference
             ->orWhereExists(self::linked()->selectRaw('1')->whereRaw("lots.name LIKE ? ESCAPE '!'", [$pattern])));
     }
 
+    public static function exact(Builder $query, string $name): void
+    {
+        $query->where(fn ($matching) => $matching
+            ->whereRaw('TRIM(dossiers.legacy_lot_name) = ?', [$name])
+            ->orWhereExists(self::linked()->selectRaw('1')->whereRaw('TRIM(lots.name) = ?', [$name])));
+    }
+
     private static function linked(): QueryBuilder
     {
         return DB::table('lot_appointments')->join('lots', 'lots.id', '=', 'lot_appointments.lot_id')

@@ -10,6 +10,8 @@ routes/crm.php
 database/migrations/2026_10_28_200000_create_appointment_mail_deliveries_table.php
 database/migrations/2026_10_29_150000_add_portal_notification_preferences_to_users.php
 database/migrations/2026_11_05_130000_add_organisation_report_download_naming.php
+database/migrations/2026_11_06_120000_create_lot_report_exports_table.php
+config/report_exports.php
 config/admin.php
 config/calendar.php
 vite.config.js

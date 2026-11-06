@@ -124,6 +124,24 @@ class CollectedDossierDocuments
             $inline ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT)->setPrivate();
     }
 
+    /** Used only after an organisation-scoped dossier query; paths never leave the export worker. */
+    public function reportFile(User $actor, Dossier $dossier, object $record): ?array
+    {
+        $source = $this->payload($record);
+        if ((int) $record->dossier_id !== (int) $dossier->id || $record->hidden_at !== null
+            || (! filled($source['reference_controle'] ?? null) && ($source['document_type'] ?? null) !== 'report')
+            || ! app(ClientAccess::class)->canReadLegacyDocument($actor, $source, $this->override($record), $this->delegataireOverride($record))) {
+            return null;
+        }
+        $path = $this->resolve($source['path'] ?? null);
+        if ($path === null || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'pdf') {
+            return null;
+        }
+
+        return ['path' => $path, 'name' => DossierDownloadName::make(CofracText::normalize($source['name'] ?? 'Rapport'), 'pdf', $dossier,
+            isReport: true, reportOutcome: is_string($source['status'] ?? null) ? $source['status'] : null)];
+    }
+
     public function share(User $actor, Dossier $dossier, int $sourceId, bool $visible, ?bool $delegataireVisible = null): void
     {
         Gate::forUser($actor)->authorize('update', $dossier);

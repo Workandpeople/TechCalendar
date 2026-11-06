@@ -19,6 +19,7 @@ validate_release_scope() {
             database/migrations/2026_10_28_200000_create_appointment_mail_deliveries_table.php) ;;
             database/migrations/2026_10_29_150000_add_portal_notification_preferences_to_users.php) ;;
             database/migrations/2026_11_05_130000_add_organisation_report_download_naming.php) ;;
+            config/report_exports.php|database/migrations/2026_11_06_120000_create_lot_report_exports_table.php) ;;
             config/calendar.php|vite.config.js|tools/local/*) ;;
             *) stop 'changement hors perimetre applicatif du correctif.' ;;
         esac
@@ -56,6 +57,11 @@ for name in php-fpm queue reverb; do
     ! systemctl is-active --quiet "cofrac2-$name.service" || stop 'les seuls services V2 doivent etre arretes.'
     cmp -s "/etc/systemd/system/cofrac2-$name.service" "$HERE/cofrac2-$name.service.example" || stop 'unite dediee V2 modifiee.'
 done
+if [ -e /etc/systemd/system/cofrac2-report-exports.service ] || [ -L /etc/systemd/system/cofrac2-report-exports.service ]; then
+    [ ! -L /etc/systemd/system/cofrac2-report-exports.service ] \
+        && cmp -s /etc/systemd/system/cofrac2-report-exports.service "$HERE/cofrac2-report-exports.service.example" \
+        && ! systemctl is-active --quiet cofrac2-report-exports.service || stop 'arreter uniquement le worker archives V2 avant la mise a jour.'
+fi
 git_app() { runuser -u cofrac2-deploy -- git -C "$APP" "$@"; }
 [ "$(git_app branch --show-current)" = v2 ] && [ -z "$(git_app status --porcelain)" ] || stop 'checkout V2 propre requis.'
 REVISION=$(git_app rev-parse HEAD)
@@ -147,7 +153,8 @@ for migration in 2026_10_25_110000_add_reversible_dossier_deletion 2026_10_25_12
     2026_10_26_100000_activate_existing_mail_templates 2026_10_26_110000_add_dossier_inspection_geocode \
     2026_10_28_140000_add_appointment_planning_window_index 2026_10_28_200000_create_appointment_mail_deliveries_table \
     2026_10_29_150000_add_portal_notification_preferences_to_users \
-    2026_11_05_130000_add_organisation_report_download_naming; do
+    2026_11_05_130000_add_organisation_report_download_naming \
+    2026_11_06_120000_create_lot_report_exports_table; do
     app_cli artisan migrate --force --no-interaction --no-ansi --path="database/migrations/$migration.php" >> "$WORK/migrations.log" 2>&1 \
         || stop 'migration en echec ; consulter le journal prive, ne pas reinitialiser la base.'
 done

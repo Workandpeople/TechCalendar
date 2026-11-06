@@ -1,4 +1,5 @@
 import { initDossierMailStatus } from './dossier-mail-status';
+import { initLotReportExports } from './lot-report-exports';
 import { cofracLabel } from './cofrac-label';
 import { initSidebar } from './sidebar';
 import { initSidebarSections } from './sidebar-sections';
@@ -68,6 +69,7 @@ initSelectMenus();
 initDossierService();
 initDossierMail();
 initDossierMailStatus();
+initLotReportExports();
 initDossierAddress();
 initCreationAddress();
 initAdminSettings();

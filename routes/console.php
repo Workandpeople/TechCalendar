@@ -16,6 +16,10 @@ Artisan::command('inspire', function () {
 
 Schedule::command('support:prune')->dailyAt('03:30')->withoutOverlapping(10);
 
+if (config('crm.v2_enabled')) {
+    Schedule::command('reports:prune')->everyThirtyMinutes()->withoutOverlapping(10);
+}
+
 Artisan::command('route-metrics:compute {--from=} {--to=}', function (TechnicianDailyRouteMetricService $routeMetrics): int {
     $from = $this->option('from')
         ? Carbon::parse($this->option('from'))->startOfDay()

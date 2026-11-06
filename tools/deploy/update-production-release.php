@@ -15,6 +15,9 @@ try {
         throw new RuntimeException('Controle reserve au serveur de production V2.');
     }
     require $app.'/vendor/autoload.php';
+    if (! class_exists(ZipArchive::class)) {
+        throw new RuntimeException('Extension PHP ZIP requise pour les archives de rapports. Aucun service ferme.');
+    }
     require $app.'/tools/deploy/lib/ProductionAssetUpdate.php';
     $bundle = new ProductionAssetUpdate($argv[2], $argv[3]);
     $prepared = json_decode(file_get_contents('/var/lib/cofrac2-production/RUNTIME-PREPARED.json'), true, 32, JSON_THROW_ON_ERROR);
@@ -81,7 +84,8 @@ try {
     $allowed = ['2026_10_25_110000_add_reversible_dossier_deletion', '2026_10_25_120000_add_automatic_capcee_reports',
         '2026_10_26_100000_activate_existing_mail_templates', '2026_10_26_110000_add_dossier_inspection_geocode',
         '2026_10_28_140000_add_appointment_planning_window_index', '2026_10_28_200000_create_appointment_mail_deliveries_table',
-        '2026_10_29_150000_add_portal_notification_preferences_to_users', '2026_11_05_130000_add_organisation_report_download_naming'];
+        '2026_10_29_150000_add_portal_notification_preferences_to_users', '2026_11_05_130000_add_organisation_report_download_naming',
+        '2026_11_06_120000_create_lot_report_exports_table'];
     if (array_diff($pending, $allowed) !== [] || array_diff($applied, [...$expected, ...$optional]) !== []) {
         throw new RuntimeException('Migrations appliquees ou en attente non reconnues. Aucun schema modifie.');
     }

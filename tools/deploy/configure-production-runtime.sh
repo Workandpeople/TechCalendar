@@ -65,6 +65,12 @@ legacy_write() {
     done
 }
 UNITS=(cofrac2-php-fpm.service cofrac2-queue.service cofrac2-reverb.service)
+if [ -e /etc/systemd/system/cofrac2-report-exports.service ] || [ -L /etc/systemd/system/cofrac2-report-exports.service ]; then
+    [ ! -L /etc/systemd/system/cofrac2-report-exports.service ] \
+        && cmp -s /etc/systemd/system/cofrac2-report-exports.service "$HERE/cofrac2-report-exports.service.example" \
+        || stop 'unite du worker archives modifiee ; examiner avant intervention.'
+    UNITS+=(cofrac2-report-exports.service)
+fi
 app_cli() {
     runuser -u "$RUNTIME" -- env -i PATH="$PATH" HOME=/var/lib/cofrac2-app USER="$RUNTIME" LOGNAME="$RUNTIME" \
         php8.4 -d memory_limit=768M "$@"

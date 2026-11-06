@@ -3333,3 +3333,49 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - Limite historique a traiter avant activation : le disque MYMAR est public.
   `is_public=0` ne prouve pas une protection HTTP. Aucun nouveau droit n'est
   ouvert et aucun document client n'est copie par cette preparation locale.
+
+### Telechargement des rapports par lot (6 novembre 2026)
+
+- Dans l'espace client/delegataire, bouton « Telecharger les rapports d'un lot »
+  sur les dossiers et le detail d'un lot. Selection explicite du numero complet,
+  parmi les lots des dossiers accessibles ; la recherche partielle ne declenche
+  jamais un export de plusieurs numeros voisins. Les homonymes exacts sont
+  traites comme un meme numero de lot au sein du perimetre de l'organisation.
+- L'export prend tous les PDF identifies comme rapports, natifs ou archives,
+  pas seulement la page affichee et sans appliquer les autres filtres de liste.
+  Toutes les versions partagees sont conservees. Factures, documents libres,
+  visites techniques et documents de lot sans type rapport fiable sont exclus.
+- Les droits de consultation, affectations, categories et audiences sont
+  controles pendant la preparation, avant publication et au telechargement.
+  Le ZIP est personnel : meme un autre compte de la meme organisation ne peut
+  pas l'ouvrir. Un changement de contenu/acces impose une nouvelle preparation.
+- Meme nom que le telechargement individuel, avec S/NS/NV selon la regle de
+  l'organisation et l'avis propre au rapport. Suffixe numerique en cas de noms
+  identiques. Aucun PDF original ni libelle SQL n'est renomme ou modifie.
+- La preparation utilise la file `report-exports`, jamais `default` (emails).
+  Apres le deploiement applicatif et la reouverture habituels, installer le seul
+  worker prive :
+
+  ```bash
+  sudo bash /var/www/cofrac2/tools/deploy/configure-report-exports.sh --install
+  sudo systemctl is-active cofrac2-report-exports.service
+  ```
+
+  Aucun mail, SMS, appel MYMAR ou placement de test. Aucun changement des
+  services Apache/MySQL/PHP partages. Une fois installe, le worker est inclus
+  dans la maintenance/reouverture V2 pour ne pas travailler pendant une migration.
+- Extension PHP ZIP verifiee avant maintenance. Migration V2 ciblee
+  `2026_11_06_120000_create_lot_report_exports_table`. Aucun nouveau package.
+- Stockage dans `storage/app/private/report-exports`, dossiers 0700/fichiers
+  0600, hors HTTP public. Generation serialisee par verrou fichier ; maximum
+  2 000 rapports et 2 Gio de sources par ZIP, quota global 5 Gio et reserve
+  libre 50 Gio. PDF ajoutes sans recompression pour limiter la charge CPU.
+  Un manque d'espace refuse uniquement l'export, sans suppression de rapports.
+- Expiration 4 h apres demande. Purge `reports:prune` programmee toutes les
+  30 minutes et opportuniste avant une nouvelle demande/preparation. Verifier
+  l'ordonnanceur Laravel habituel ; la commande peut aussi etre lancee seule.
+  Elle ne supprime que les ZIP/manifestes temporaires et fichiers partiels
+  reconnus. Les sources et les documents MYMAR sont intacts.
+- Un rapport manquant est signale dans le suivi et `Informations.txt` ; une
+  archive vide ou un faux PDF n'est pas publie. Une erreur n'est pas masquee
+  par un message de succes. L'actualisation du suivi ne relance aucun export.

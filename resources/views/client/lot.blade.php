@@ -6,6 +6,7 @@
     <div class="space-y-6">
         <a class="gc-link" href="{{ route('client.lots') }}">← Mes lots</a>
         <x-workspace-heading :title="$lot->name" :eyebrow="\App\Models\Lot::statusLabelFor($lot->status)" :description="'Réception : '.($lot->received_at?->format('d/m/Y') ?: 'non renseignée')" />
+        @include('client.partials.report-exports', ['exportLot' => $lot->name])
         <section class="grid gap-4 sm:grid-cols-3">
             <div class="gc-card p-5">
                 <p class="text-sm text-slate-500">Dossiers du lot</p>
