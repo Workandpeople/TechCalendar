@@ -47,7 +47,7 @@ final readonly class MymarDocumentSource
             }
             $documents = [];
             foreach ($rows as $row) {
-                $kind = MymarDocumentPolicy::kind((string) ($row['nom'] ?? ''), $context['customer'], (string) $row['path']);
+                $kind = MymarDocumentPolicy::kind((string) ($row['nom'] ?? ''), (string) $row['path']);
                 if ($kind === null) {
                     continue;
                 }
@@ -60,7 +60,9 @@ final readonly class MymarDocumentSource
 
                     continue;
                 }
-                $documents[] = ['id' => (int) $row['id'], 'name' => (string) $row['nom'], 'kind' => $kind, 'bytes' => $metadata['bytes']];
+                $name = trim((string) ($row['nom'] ?? ''));
+                $documents[] = ['id' => (int) $row['id'], 'name' => $name !== '' ? $name : ($kind === 'invoice' ? 'Facture' : 'Devis'),
+                    'kind' => $kind, 'bytes' => $metadata['bytes']];
             }
 
             return ['format' => 'cofrac.mymar-document-catalogue', 'version' => 1,
@@ -79,7 +81,7 @@ final readonly class MymarDocumentSource
         try {
             $context = $this->context($rdvId, $technicianId);
             $record = $this->rows('SELECT id,nom,path FROM MYMAR.dossier_documents WHERE dossier_id=? AND id=?', [$context['dossier_id'], $documentId])[0] ?? null;
-            if ($documentId < 1 || $record === null || MymarDocumentPolicy::kind((string) ($record['nom'] ?? ''), $context['customer'], (string) $record['path']) === null) {
+            if ($documentId < 1 || $record === null || MymarDocumentPolicy::kind((string) ($record['nom'] ?? ''), (string) $record['path']) === null) {
                 throw new MymarDocumentFailure('documents_file_unavailable', 404);
             }
 

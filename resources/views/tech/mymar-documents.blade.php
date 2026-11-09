@@ -1,6 +1,6 @@
 <x-layouts.app>
     <div class="mx-auto max-w-3xl space-y-5 px-4 py-6">
-        <header><p class="text-sm font-semibold text-amber-700">Rendez-vous MAR après travaux</p><h1 class="mt-1 text-2xl font-semibold">Documents de travaux</h1><p class="mt-2 text-sm text-slate-600">Factures et devis de l’intervention. Les autres pièces du dossier MYMAR ne sont pas accessibles ici.</p></header>
+        <header><p class="text-sm font-semibold text-amber-700">Rendez-vous MAR après travaux</p><h1 class="mt-1 text-2xl font-semibold">Documents de travaux</h1><p class="mt-2 text-sm text-slate-600">Factures et devis de l’intervention, du plus récent au plus ancien. Les pièces AMO/MAR et documents sensibles sont exclus.</p></header>
         @if ($unavailable)
             <section class="gc-card p-5" role="status"><h2 class="font-semibold">Documents momentanément indisponibles</h2><p class="mt-2 text-sm">L’accès documentaire MAR doit être configuré ou vérifié. Aucun document n’a été transmis.</p><a class="gc-btn-secondary mt-4" href="{{ request()->fullUrl() }}">Réessayer</a></section>
         @else

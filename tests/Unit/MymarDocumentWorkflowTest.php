@@ -19,21 +19,28 @@ function vt2TestCommand(array $changes = []): MymarVt2Command
         'sha256' => hash('sha256', $pdf), 'bytes' => strlen($pdf)], $changes));
 }
 
-it('recognizes only unambiguous invoices and works quotes', function (string $name, ?string $kind) {
-    expect(MymarDocumentPolicy::kind($name, 'Vincent MOHEDANO'))->toBe($kind);
+it('recognizes invoice and quote titles without requiring beneficiary or works wording', function (string $name, ?string $kind) {
+    expect(MymarDocumentPolicy::kind($name))->toBe($kind);
 })->with([
     ['FACTURE MOHEDANO', 'invoice'], ['FACTURE MOHEDANO (tamponnée)', 'invoice'],
-    ['Facture travaux acquittée Vincent Mohedano', 'invoice'], ['DEVIS', null], ['DEVIS travaux', 'quote'],
-    ['MOHEDANO DEVIS 2', 'quote'], ['FACTURE + DEVIS MOHEDANO', null],
+    ['Facture travaux acquittée Vincent Mohedano', 'invoice'], ['DEVIS', 'quote'], ['DEVIS travaux', 'quote'],
+    ['MOHEDANO DEVIS 2', 'quote'], ['FACTURE + DEVIS MOHEDANO', 'invoice'],
     ['DEVIS MOHEDANO 2', 'quote'], ['Facture AMO', null], ['devis my mar', null],
     ['Attestation travaux (devis)', null], ['ATTESTATION + PLAN DE FINANCEMENT', null],
     ['CNI MOHEDANO', null], ['IMPOTS MOHEDANO', null], ['RAPPORT VT2', null],
     ['Facture honoraires MOHEDANO', null], ['Facture AMO travaux', null], ['CONTRAT', null],
-    ['Facture inconnu', null], ['Facture MOHEDANO contrat', null], ["Facture\nMOHEDANO", null],
+    ['Facture inconnu', 'invoice'], ['Facture MOHEDANO contrat', null], ["Facture\nMOHEDANO", null],
+    ['FACTURE', 'invoice'], ['Factures finales', 'invoice'], ['Devis retour ANAH', 'quote'],
+    ['Facture acompte menuiseries', 'invoice'], ['DEVIS AVANCE', 'quote'], ['FACTURE2026-003', 'invoice'],
+    ['Devis123', 'quote'], ['Préparation des devis signés', 'quote'],
+    ['Facturation', null], ['devise', null], ['préfacture', null], ['MOHEDANO', null], ['', null],
+    ['FACTURE CNI', null], ['Devis et RIB', null], ['Facture IBAN', null], ['Devis mandat', null],
+    ['Facture passeport', null], ['Facture contrats', null], ['Facture honoraires', null],
+    [str_repeat('Facture ', 300), null], ["Facture\xFF", null],
 ]);
 
-it('uses original filenames for generic titles without opening unrelated or sensitive documents', function (string $name, string $filename, ?string $kind) {
-    expect(MymarDocumentPolicy::kind($name, 'Camille MARTIN', $filename))->toBe($kind);
+it('accepts keywords in either source name while excluding AMO MAR and sensitive bundles in both', function (string $name, string $filename, ?string $kind) {
+    expect(MymarDocumentPolicy::kind($name, $filename))->toBe($kind);
 })->with([
     ['FACTURE', '1793961996_FACTURE MR ET MME MARTIN.pdf', 'invoice'],
     ['FACTURE', '1793961996_Facture travaux.pdf', 'invoice'],
@@ -42,25 +49,41 @@ it('uses original filenames for generic titles without opening unrelated or sens
     ['NOUVEAI DEVIS', '1793961996_DEVIS SIGNE MR ET MME MARTIN.pdf', 'quote'],
     ['DEVIS AVANCE', '1793961996_DEVIS SIGNE MR ET MME MARTIN.pdf', 'quote'],
     ['devis', '1793961996_Devis signée Mme MARTIN.pdf.pdf', 'quote'],
-    ['FACTURE', '1793961996_FACTURE.pdf', null],
-    ['FACTURE', '1793961996_FACTURE INCONNU.pdf', null],
-    ['FACTURE', '1793961996_FACTURE CAMILLE AUTRE.pdf', null],
-    ['FACTURE', '1793961996_DEVIS MARTIN.pdf', null],
-    ['devis', '1793961996_FACTURE MARTIN.pdf', null],
-    ['FACTURE', '1793961996_MARTIN.pdf', null],
-    ['Facture autre', '1793961996_FACTURE MARTIN.pdf', null],
+    ['FACTURE', '1793961996_FACTURE.pdf', 'invoice'],
+    ['FACTURE', '1793961996_FACTURE INCONNU.pdf', 'invoice'],
+    ['FACTURE', '1793961996_FACTURE CAMILLE AUTRE.pdf', 'invoice'],
+    ['FACTURE', '1793961996_DEVIS MARTIN.pdf', 'invoice'],
+    ['devis', '1793961996_FACTURE MARTIN.pdf', 'quote'],
+    ['FACTURE', '1793961996_MARTIN.pdf', 'invoice'],
+    ['Facture autre', '1793961996_FACTURE MARTIN.pdf', 'invoice'],
     ['Facture AMO', '1793961996_FACTURE MARTIN.pdf', null],
     ['Facture travaux', '1793961996_FACTURE AMO MARTIN.pdf', null],
     ['FACTURE', '1793961996_FACTURE HONORAIRES MARTIN.pdf', null],
     ['FACTURE', '1793961996_FACTURE CNI MARTIN.pdf', null],
     ['FACTURE', '1793961996_FACTURE CONTRAT MARTIN.pdf', null],
-    ['FACTURE AVANCE', '1793961996_FACTURE MARTIN.pdf', null],
+    ['FACTURE AVANCE', '1793961996_FACTURE MARTIN.pdf', 'invoice'],
     ['devis mar', '1793961996_DEVIS MARTIN.pdf', null],
     ['Nouveau devis', '1793961996_DEVIS MAR MARTIN.pdf', null],
-    ['devis', '1793961996_DEVIS ANAH MARTIN.pdf', null],
+    ['devis', '1793961996_DEVIS ANAH MARTIN.pdf', 'quote'],
     ['devis', '1793961996_ATTESTATION TRAVAUX DEVIS MARTIN.pdf', null],
     ["FACTURE\n", '1793961996_FACTURE MARTIN.pdf', null],
     ['FACTURE', "1793961996_FACTURE\nMARTIN.pdf", null],
+    ['Pièce jointe', '1793961996_Facture2026-003.pdf', 'invoice'],
+    ['', '1793961996_DEVIS FOURNISSEUR.pdf', 'quote'],
+    ['Document', '1793961996_DEVIS FINAL.doc.pdf', 'quote'],
+    ['FACTURE', 'scan.pdf', 'invoice'],
+    ['Devis', '1793961996_scan.pdf', 'quote'],
+    ['Document', '1793961996_scan.pdf', null],
+    ['Facture AMO', '1793961996_devis.pdf', null],
+    ['Pièce jointe', '1793961996_FACTURE_RIB.pdf', null],
+    ['Devis', '1793961996_PASSEPORT.pdf', null],
+    ['Document', '1793961996_facturation.pdf', null],
+    ['Document', '1793961996_prefacture.pdf', null],
+    ['FactureAMO', '1793961996_facture.pdf', null],
+    ['Devis', '1793961996_devisMAR2026.pdf', null],
+    ['Facture', '1793961996_AMO2026.pdf', null],
+    ['Facture', '1793961996_CNI2026.pdf', null],
+    ['Document', '1793961996_AMOfacture.pdf', null],
 ]);
 
 it('rejects incomplete or overbroad VT2 commands and fingerprints every field', function () {

@@ -1184,15 +1184,20 @@ RDV MAR proviennent du cache local avec sa periode de couverture affichee.
 ### Factures et devis de travaux : activation separee en lecture seule
 
 Les techniciens disposent d'un acces `Factures et devis` depuis leurs rendez-vous
-MAR du jour. Le detail MAR du planning comporte egalement ce lien. Seules les
-factures et devis de travaux identifies sans ambiguite sont proposes ; contrats,
-factures AMO, impots, pieces d'identite et noms ambigus restent exclus.
+MAR du jour. Le detail MAR du planning comporte egalement ce lien. Seuls les
+documents PDF dont le titre ou le nom de fichier original contient le mot
+`facture` (ou `factures`) ou `devis` sont proposes, sans exiger le nom du
+beneficiaire ni la mention `travaux`. Un numero accole au mot est accepte
+(`Facture2026`, `Devis123`). Le titre determine le type affiche en priorite ;
+un fichier regroupant facture et devis reste consultable.
 
-Les titres generiques (`FACTURE`, `devis`, `Nouveau devis`) sont rapproches du
-nom de fichier original, sans lire le contenu du PDF pour le classer. Ce nom doit
-confirmer le meme type et identifier le beneficiaire ou mentionner les travaux.
-Les exclusions AMO/MAR/ANAH et pieces sensibles restent prioritaires dans les
-deux noms ; un nom inconnu ou contradictoire ne suffit jamais a ouvrir une piece.
+Tous les documents correspondants sont conserves dans la liste, par identifiant
+de depot decroissant, sans filtrage sur l'auteur ni restriction au dernier depot.
+Les devis de retour ANAH et factures d'acompte de travaux restent eligibles.
+Les exclusions AMO/MAR, honoraires, contrats, impots, attestations, pieces
+d'identite, RIB/IBAN et mandats restent prioritaires dans les deux noms. Une
+piece sans aucun marqueur facture/devis reste exclue. Aucun contenu PDF n'est
+lu pour decider de sa classification ; les controles de fichier restent actifs.
 La meme regle est reappliquee lors du telechargement. Aucun renommage MYMAR,
 nouveau privilege SQL ni changement de configuration du lecteur n'est requis.
 

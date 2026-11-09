@@ -127,29 +127,43 @@ foreach ([2, 3, 5, 6, 7, 8, 9] as $id) {
     $denied(fn () => $source->open(40, 5, $id), 'documents_file_unavailable');
 }
 $genericDocuments = [
-    [10, 'FACTURE', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf'],
-    [11, 'devis', '1793961996_DEVIS SIGNE BENEFICIARY.pdf'],
-    [12, 'FACTURE', '1793961996_FACTURE AMO BENEFICIARY.pdf'],
-    [13, 'Facture AMO', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf'],
-    [14, 'Nouveau devis', '1793961996_Nouveau devis _BENEFICIARY (2).pdf'],
-    [15, 'FACTURE', '1793961996_DEVIS SIGNE BENEFICIARY.pdf'],
+    [10, 'FACTURE', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf', 'invoice'],
+    [11, 'devis', '1793961996_DEVIS SIGNE BENEFICIARY.pdf', 'quote'],
+    [12, 'FACTURE', '1793961996_FACTURE AMO BENEFICIARY.pdf', null],
+    [13, 'Facture AMO', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf', null],
+    [14, 'Nouveau devis', '1793961996_Nouveau devis _BENEFICIARY (2).pdf', 'quote'],
+    [15, 'FACTURE', '1793961996_DEVIS SIGNE BENEFICIARY.pdf', 'invoice'],
+    [16, 'FACTURE', '1793961996_scan.pdf', 'invoice'],
+    [17, 'Devis retour ANAH', '1793961996_scan2.pdf', 'quote'],
+    [18, 'Piece jointe', '1793961996_Facture2026-003.pdf', 'invoice'],
+    [19, 'FACTURE + DEVIS', '1793961996_regroupement.pdf', 'invoice'],
+    [20, null, '1793961996_DEVIS2026.pdf', 'quote'],
+    [21, 'FACTURE', '1793961996_FACTURE_RIB.pdf', null],
+    [22, 'Facture acompte travaux', '1793961996_scan3.pdf', 'invoice'],
 ];
 $insert = $db->prepare('INSERT INTO MYMAR.dossier_documents (id,dossier_id,author_id,path,nom,is_public) VALUES (?,20,99,?,?,1)');
 foreach ($genericDocuments as [$id, $label, $filename]) {
     file_put_contents('/fixtures/uploads/'.$filename, '%PDF-Synthetic generic document');
     $insert->execute([$id, $filename, $label]);
 }
-assert(array_column($reader->catalogue(40, 5)['documents'], 'id') === [14, 11, 10, 4, 1]);
-foreach ([10, 11, 14] as $id) {
-    $stream = $reader->open(40, 5, $id);
-    assert(str_contains(stream_get_contents($stream), 'Synthetic generic document'));
-    fclose($stream);
+$listed = $reader->catalogue(40, 5)['documents'];
+$expected = array_column(array_reverse(array_values(array_filter($genericDocuments, static fn ($row) => $row[3] !== null))), 0);
+assert(array_column($listed, 'id') === [...$expected, 4, 1]);
+assert(array_values(array_filter($listed, static fn ($row) => $row['id'] === 20))[0]['name'] === 'Devis');
+foreach ($genericDocuments as [$id, $label, $filename, $kind]) {
+    if ($kind === null) {
+        $denied(fn () => $reader->open(40, 5, $id), 'documents_file_unavailable');
+    } else {
+        $stream = $reader->open(40, 5, $id);
+        assert(str_contains(stream_get_contents($stream), 'Synthetic generic document'));
+        fclose($stream);
+        assert(array_values(array_filter($listed, static fn ($row) => $row['id'] === $id))[0]['kind'] === $kind);
+    }
 }
-foreach ([12, 13, 15] as $id) {
-    $denied(fn () => $reader->open(40, 5, $id), 'documents_file_unavailable');
-}
-$db->exec('DELETE FROM MYMAR.dossier_documents WHERE id BETWEEN 10 AND 15');
-echo "Libelles generiques : catalogue et telechargement reconcilies via le fichier, AMO et types contradictoires refuses.\n";
+$db->exec("UPDATE MYMAR.dossier_documents SET nom='Facture AMO' WHERE id=16");
+$denied(fn () => $reader->open(40, 5, 16), 'documents_file_unavailable');
+$db->exec('DELETE FROM MYMAR.dossier_documents WHERE id BETWEEN 10 AND 22');
+echo "Factures et devis : tous les depots correspondants, titres et fichiers generiques acceptes ; AMO et pieces sensibles refuses meme apres modification.\n";
 $denied(fn () => $source->catalogue(40, 6), 'documents_appointment_not_found');
 $denied(fn () => $source->catalogue(40, 999), 'documents_appointment_not_found');
 $db->exec('UPDATE MYMAR.users SET enabled=0 WHERE id=5');

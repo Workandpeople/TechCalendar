@@ -4,61 +4,45 @@ declare(strict_types=1);
 
 namespace Cofrac2\Deploy\Mymar;
 
-/** Legacy documents have no reliable type column. Unknown labels stay closed. */
+/** Match the approved invoice/quote names without exposing unrelated source documents. */
 final class MymarDocumentPolicy
 {
-    private const EXCLUDED = ['amo', 'mar', 'anah', 'contrat', 'impot', 'impots', 'cni', 'identite', 'attestation', 'acompte', 'honoraires'];
+    private const EXCLUDED = ['amo', 'mar', 'contrat', 'contrats', 'impot', 'impots', 'cni', 'identite',
+        'attestation', 'attestations', 'honoraire', 'honoraires', 'rib', 'iban', 'mandat', 'mandats', 'passeport'];
 
-    public static function kind(string $label, string $customer, ?string $filename = null): ?string
+    public static function kind(string $label, ?string $filename = null): ?string
     {
-        $label = self::words($label);
-        $customer = self::words($customer);
+        $title = self::words($label);
         $file = $filename === null ? [] : self::words(preg_replace('/(?:\.pdf)+$/iD', '', preg_replace('/^\d{9,13}[_ -]+/', '', $filename)));
-        if ($label === [] || $customer === [] || count($label) > 40
-            || array_intersect([...$label, ...$file], self::EXCLUDED)) {
+        if (($label !== '' && $title === []) || ($filename !== null && $filename !== '' && $file === [])
+            || count($title) > 80 || count($file) > 80 || self::containsExcludedWords([...$title, ...$file])) {
             return null;
         }
-        $kind = self::identifiedKind($label, $customer);
-        if ($kind !== null) {
-            return $kind;
-        }
-        // Generic source titles need independent identity/works evidence in the original filename.
-        $generic = ['facture', 'factures', 'devis', 'nouveau', 'nouvelle', 'nouveaux', 'nouvelles', 'nouveai',
-            'final', 'finale', 'signe', 'signee', 'tamponne', 'tamponnee', 'acquitte', 'acquittee', 'avance'];
-        $markers = array_values(array_intersect($label, ['facture', 'factures', 'devis']));
-        if ($file === [] || count($file) > 40 || count($markers) !== 1 || array_diff($label, $generic)
-            || ($markers[0] !== 'devis' && in_array('avance', $label, true))) {
-            return null;
-        }
-        $expected = $markers[0] === 'devis' ? 'quote' : 'invoice';
-
-        return self::identifiedKind($file, $customer) === $expected ? $expected : null;
-    }
-
-    private static function identifiedKind(array $label, array $customer): ?string
-    {
-        if ($label === [] || array_intersect($label, self::EXCLUDED)) {
-            return null;
-        }
-        $markers = array_values(array_intersect($label, ['facture', 'factures', 'devis']));
-        if (count($markers) !== 1) {
-            return null;
-        }
-        $kind = $markers[0] === 'devis' ? 'quote' : 'invoice';
-        $label = array_values(array_diff($label, $markers));
-        $identity = array_values(array_diff($customer, ['de', 'du', 'des', 'le', 'la', 'les', 'et']));
-        if (! in_array('travaux', $label, true) && array_intersect($label, $identity) === []) {
-            return null;
-        }
-        $allowed = [...$customer, 'travaux', 'finale', 'final', 'tamponnee', 'tamponne', 'acquittee', 'acquitte',
-            'signe', 'signee', 'nouveau', 'nouvelle', 'mr', 'mme', 'monsieur', 'madame', 'et'];
-        foreach ($label as $word) {
-            if (! in_array($word, $allowed, true) && ! ctype_digit($word)) {
-                return null;
+        // A source title takes precedence over the original filename; neither requires the beneficiary name.
+        foreach ([$title, $file] as $words) {
+            foreach (['factures?' => 'invoice', 'devis' => 'quote'] as $marker => $kind) {
+                foreach ($words as $word) {
+                    if (preg_match('/^'.$marker.'(?:[0-9][a-z0-9]*)?$/D', $word)) {
+                        return $kind;
+                    }
+                }
             }
         }
 
-        return $kind;
+        return null;
+    }
+
+    private static function containsExcludedWords(array $words): bool
+    {
+        foreach ($words as $word) {
+            // Legacy names also use AMO2026, FactureAMO and similar joined abbreviations.
+            if (preg_match('/^(?:'.implode('|', self::EXCLUDED).')(?:[0-9]+)?$/D', $word)
+                || preg_match('/^(?:(?:factures?|devis)(?:amo|mar)|(?:amo|mar)(?:factures?|devis))(?:[0-9]+)?$/D', $word)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function words(string $text): array
