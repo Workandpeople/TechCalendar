@@ -114,8 +114,9 @@ php8.4 -- --check "$CHECK/bundle" "$SHA" "$REV" "$CHECK/mysql.cnf" \
 rm -f -- "$CHECK/mysql.cnf"
 php8.4 -r '
     $p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
-    if (($p["pending_migrations"]??null)!==[]) {
-        fwrite(STDERR,"STOP : migrations en attente hors de ce lot sans changement de schema. Aucune maintenance demandee.\n");
+    $pending=$p["pending_migrations"]??null;
+    if (!is_array($pending) || array_diff($pending,["2026_11_09_200000_create_technician_incidents_table"])!==[]) {
+        fwrite(STDERR,"STOP : migrations en attente hors du schema de signalements approuve. Aucune maintenance demandee.\n");
         exit(1);
     }
 ' "$CHECK/package.json"

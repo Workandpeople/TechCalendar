@@ -6,17 +6,20 @@ use App\Models\Appointment;
 use App\Models\DossierOperation;
 use App\Models\Lot;
 use App\Models\LotAppointment;
+use App\Models\TechnicianIncident;
 use App\Models\User;
+use App\Services\Tech\TechnicianIncidentInbox;
 
 class SidebarNotifications
 {
     public function forUser(User $user): array
     {
         if ($user->isExternal()) {
-            return ['settings' => 0, 'today' => 0, 'pending' => 0];
+            return ['settings' => 0, 'today' => 0, 'pending' => 0, 'incidents' => null];
         }
 
         return [
+            'incidents' => $user->can('viewAny', TechnicianIncident::class) ? app(TechnicianIncidentInbox::class)->counts($user) : null,
             'settings' => $user->admin ? app(ApplicationSettings::class)->missingCount() : 0,
             'today' => Appointment::query()->where('technician_id', $user->id)
                 ->where('status', Appointment::STATUS_SCHEDULED)

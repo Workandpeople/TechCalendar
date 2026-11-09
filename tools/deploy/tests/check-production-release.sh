@@ -47,7 +47,7 @@ bash "$APP/tools/deploy/configure-production-runtime.sh" --maintenance --reload-
 sha256sum "$APP/.env" /srv/cofrac2-runtime/documents.list0 > /tmp/release-inputs.sha256
 sql 'UPDATE cofrac2production.dossiers SET deleted_at=NULL;'
 # Restore only this disposable fixture to the pre-release schema to exercise the targeted migrations.
-runuser -u cofrac2-app -- php8.4 "$APP/artisan" migrate:rollback --step=9 --force --no-interaction > /tmp/release-rollback-fixture.log 2>&1
+runuser -u cofrac2-app -- php8.4 "$APP/artisan" migrate:rollback --step=10 --force --no-interaction > /tmp/release-rollback-fixture.log 2>&1
 sql "INSERT INTO cofrac2production.dossiers (id,reference,address,city,created_at,updated_at) VALUES (80001,'LEGACY-DELETED-TEST','Fixture','Paris',NOW(),NOW());"
 sql "INSERT INTO cofrac2production.external_delegataires (source,external_id,kind,name,is_active,created_at,updated_at) VALUES ('native','release-alvea','delegataire','ALVEA DELEGATAIRE',1,NOW(),NOW());"
 sql "INSERT INTO cofrac2production.mail_templates (name,slug,subject,markdown_body,is_active,created_at,updated_at) VALUES
@@ -88,6 +88,7 @@ gzip -dc "$FAILED_WORK/database-before.sql.gz" | mysql --defaults-file=/etc/mysq
 test "$(sql 'SELECT COUNT(*) FROM cofrac2_release_restore_fixture.dossiers WHERE id=80001;')" = 1
 test ! -e "$FAILED_WORK/mysql.cnf"
 bash "$SCRIPT" --apply "$BUNDLE" "$SHA" > /tmp/release-update.log 2>&1
+[ "$(sql "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='cofrac2production' AND TABLE_NAME='technician_incidents';")" = 1 ]
 test "$(sql 'SELECT COUNT(*) FROM cofrac2production.dossiers WHERE id=80001 AND deleted_at IS NOT NULL AND deletion_source="legacy_status";')" = 1
 test "$(sql 'SELECT COUNT(*) FROM cofrac2production.capcee_automatic_submissions;')" = 0
 test "$(sql 'SELECT COUNT(*) FROM cofrac2production.external_delegataires WHERE capcee_enabled=1;')" = 0

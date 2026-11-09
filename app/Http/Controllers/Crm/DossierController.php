@@ -12,6 +12,7 @@ use App\Models\Dossier;
 use App\Models\DossierActivity;
 use App\Models\DossierDocument;
 use App\Models\DossierSms;
+use App\Models\TechnicianIncident;
 use App\Models\User;
 use App\Services\Capcee\CapceeReports;
 use App\Services\Crm\CollectedDossierDocuments;
@@ -110,6 +111,9 @@ class DossierController extends Controller
         $dossier->load(['client', 'delegataire', 'planningUser', 'operations' => fn ($query) => $query
             ->with(['service', 'billing.marker', 'reportDocument', 'controlValidator', 'capceeReports.latestDelivery', 'appointments' => fn ($appointments) => $appointments->latest('starts_at')->latest('id')->limit(1)])
             ->withCount('appointments')]);
+        if ($request->user()->can('reviewBilling', TechnicianIncident::class)) {
+            $dossier->loadCount(['technicianIncidents as travel_review_count' => fn ($query) => $query->whereIn('billing_status', ['review', 'billable'])]);
+        }
         $legacyDocuments = DB::table('legacy_records')->where('dossier_id', $dossier->id)
             ->where('source_table', 'dossier_document')->whereNull('hidden_at')->orderByDesc('source_id')
             ->paginate(20, ['*'], 'legacy_documents_page')->withQueryString()->fragment('documents');

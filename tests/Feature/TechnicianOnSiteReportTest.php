@@ -6,6 +6,7 @@ use App\Models\Dossier;
 use App\Models\DossierDocument;
 use App\Models\ExternalDelegataire;
 use App\Models\Service;
+use App\Models\TechnicianIncident;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
 use App\Services\Tech\OnSitePhoto;
@@ -105,6 +106,10 @@ it('atomically records a timestamped incident its private raster photo and the c
         ->and($this->dossier->fresh()->version)->toBe($version + 1);
     Storage::disk('local')->assertExists($document->path);
     expect(getimagesize(Storage::disk('local')->path($document->path))['mime'])->toBe('image/jpeg');
+    $incident = TechnicianIncident::sole();
+    expect($incident->request_id)->toBe($payload['request_id'])->and($incident->document_id)->toBe($document->id)
+        ->and($incident->technician_id)->toBe($this->tech->id)->and($incident->planning_status)->toBe('pending')
+        ->and($incident->billing_status)->toBe('review');
     $this->get(route('tech.appointments.show', $appointment))->assertOk()->assertSee('Signalement enregistré');
     $this->get(route('tech.documents.download', [$appointment, 'dossier', $document->id]).'?preview=1')->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     $this->actingAs($this->other)->get(route('tech.documents.download', [$appointment, 'dossier', $document->id]))->assertForbidden();
@@ -117,6 +122,7 @@ it('acknowledges the same request again without duplicating the photo comment st
     $version = $this->dossier->fresh()->version;
     $this->postJson($this->url, $payload)->assertOk();
     expect($this->dossier->documents()->count())->toBe(1)->and($this->dossier->comments()->count())->toBe(1)
+        ->and(TechnicianIncident::count())->toBe(1)
         ->and($this->dossier->fresh()->version)->toBe($version)->and(Storage::disk('local')->allFiles())->toHaveCount(1);
     $this->postJson($this->url, ($this->payload)())->assertForbidden();
 });

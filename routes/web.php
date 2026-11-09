@@ -23,6 +23,7 @@ use App\Http\Controllers\Planner\PlannerAppointmentMailController;
 use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
 use App\Http\Controllers\Planner\PlannerTrackingController;
+use App\Http\Controllers\Planner\TechnicianIncidentController;
 use App\Http\Controllers\SupportReportController;
 use App\Http\Controllers\Tech\MymarDocumentController;
 use App\Http\Controllers\Tech\TechAppointmentController;
@@ -83,6 +84,11 @@ Route::middleware('auth')->group(function (): void {
     })->name('dashboard');
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+    Route::get('/planner/incidents', [TechnicianIncidentController::class, 'index'])->name('planner.incidents');
+    Route::get('/planner/incidents/counts', [TechnicianIncidentController::class, 'counts'])
+        ->middleware('throttle:20,1')->name('planner.incidents.counts');
+    Route::patch('/planner/incidents/{incident}', [TechnicianIncidentController::class, 'update'])
+        ->whereNumber('incident')->middleware('throttle:30,1')->name('planner.incidents.update');
     Route::put('/profile', [ProfileController::class, 'update'])->middleware('throttle:20,1')->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
     Route::put('/profile/notifications', [ProfileController::class, 'notifications'])->middleware('throttle:20,1')->name('profile.notifications');

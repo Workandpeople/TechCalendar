@@ -6,6 +6,11 @@
 <section id="facturation" class="gc-card gc-dossier-panel scroll-mt-24" aria-labelledby="billing-title">
     <header class="gc-dossier-panel-heading"><h2 id="billing-title"><x-nav-icon name="check" />Suivi de facturation</h2></header>
     <div class="gc-dossier-panel-body space-y-4">
+        @if (($dossier->travel_review_count ?? 0) > 0)
+            <a href="{{ route('planner.incidents', ['dossier_id' => $dossier->id, 'status' => 'all']) }}" class="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                <strong>{{ $dossier->travel_review_count }} déplacement(s) à vérifier / facturer</strong><br>Ouvrir le suivi des signalements techniciens. Indépendant de la facturation du dossier.
+            </a>
+        @endif
         <div class="flex flex-wrap items-center gap-2">
             <x-billing-badge :label="$billingSummary['label']" :tone="$billingSummary['tone']" />
             @if ($billingSummary['tone'] !== 'slate')<x-billing-date :date="\App\Services\Crm\DossierBillingService::firstMarkedAt($dossier)" />@endif

@@ -5,6 +5,7 @@ namespace App\Services\Tech;
 use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierDocument;
+use App\Models\TechnicianIncident;
 use App\Models\User;
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierWorkflow;
@@ -88,6 +89,12 @@ class TechnicianOnSiteReports
                     'request_id' => $data['request_id'], 'author_id' => $actor->id, 'reason' => $data['reason'],
                     'reported_at' => $reportedAt->toIso8601String(), 'document_id' => $document->id,
                 ];
+                TechnicianIncident::create([
+                    'request_id' => $data['request_id'], 'dossier_id' => $dossier->id,
+                    'appointment_id' => $locked->id, 'technician_id' => $actor->id, 'document_id' => $document->id,
+                    'reason' => $data['reason'], 'comment' => trim($data['comment'] ?? ''),
+                    'reported_at' => $reportedAt, 'appointment_starts_at' => $locked->starts_at,
+                ]);
                 $locked->forceFill([
                     'status' => Appointment::STATUS_PROBLEM, 'problem_reported_at' => $reportedAt,
                     'external_payload' => [...($locked->external_payload ?? []), 'techcalendar_on_site' => $report,
@@ -117,6 +124,12 @@ class TechnicianOnSiteReports
 
     private function existing(User $actor, Appointment $appointment, string $requestId): ?array
     {
+        $incident = TechnicianIncident::where('request_id', $requestId)->where('appointment_id', $appointment->id)
+            ->where('technician_id', $actor->id)->first();
+        if ($incident) {
+            return ['request_id' => $requestId, 'author_id' => $actor->id, 'reason' => $incident->reason,
+                'reported_at' => $incident->reported_at->toIso8601String(), 'document_id' => $incident->document_id];
+        }
         $report = $appointment->external_payload['techcalendar_on_site'] ?? null;
 
         return is_array($report) && ($report['author_id'] ?? null) === $actor->id

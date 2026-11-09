@@ -31,7 +31,7 @@
         @php
             /** @var \App\Models\User $user */
             $user = auth()->user();
-            $notifications = app(\App\Services\SidebarNotifications::class)->forUser($user);
+            $notifications = app(\App\Services\SidebarNotifications::class)->forUser($user) + ['incidents' => null];
 
             $sections = [];
             $dossierItems = $user->can('viewAny', \App\Models\Dossier::class)
@@ -94,6 +94,7 @@
                         ...($user->role === 0 && ! $user->admin ? [] : $dossierItems),
                         ['route' => 'planner.book', 'active' => 'planner.book*', 'label' => 'Prendre un RDV', 'icon' => 'book', 'badge' => $notifications['pending'], 'badge_label' => config('crm.v2_enabled') ? 'dossier(s) en prise de RDV' : 'RDV à placer'],
                         ['route' => 'planner.tracking', 'active' => ['planner.tracking*', 'planner.appointments.modify'], 'label' => 'Les RDV', 'icon' => 'tracking'],
+                        ...($notifications['incidents'] !== null ? [['route' => 'planner.incidents', 'active' => 'planner.incidents*', 'label' => 'Signalements techniciens', 'icon' => 'alert']] : []),
                     ],
                 ];
             }
@@ -152,6 +153,12 @@
                         @endif
                         <div class="gc-workspace-location hidden min-w-0 flex-1 md:flex" aria-label="Rubrique actuelle"><x-nav-icon :name="$workspace['icon']" /><span>{{ $workspace['label'] }}</span></div>
                         <x-workspace-help :context="$workspace" />
+                        @if ($notifications['incidents'] !== null)
+                            <a href="{{ route('planner.incidents') }}" class="gc-btn-secondary shrink-0" title="Signalements techniciens à traiter"
+                                data-incident-notifications data-counts-url="{{ route('planner.incidents.counts') }}" data-latest-id="{{ $notifications['incidents']['latest_id'] }}">
+                                <x-nav-icon name="alert" /><span class="sr-only">Signalements techniciens à traiter : </span><span data-incident-pending-count>{{ $notifications['incidents']['pending'] }}</span>
+                            </a>
+                        @endif
                         <div id="header-user-menu" class="header-user-menu relative">
                             <button id="header-user-menu-trigger" type="button" class="flex items-center gap-3 rounded-xl border border-[color:var(--gc-border)] px-3 py-2" aria-haspopup="menu" aria-expanded="false">
                                 <span class="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--gc-primary)] text-sm font-semibold text-white">{{ $user->initials }}</span>
@@ -184,6 +191,11 @@
                         </div>
                     @endif
                     <div class="gc-workspace-content">
+                        @if ($notifications['incidents'] !== null)
+                            <div role="status" class="hidden mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-incident-alert>
+                                <a href="{{ route('planner.incidents') }}" class="font-semibold underline">Nouveau signalement technicien. Ouvrir la file de traitement</a>
+                            </div>
+                        @endif
                         {{ $slot }}
                     </div>
                 </main>

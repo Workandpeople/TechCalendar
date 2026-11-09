@@ -20,6 +20,7 @@ validate_release_scope() {
             database/migrations/2026_10_29_150000_add_portal_notification_preferences_to_users.php) ;;
             database/migrations/2026_11_05_130000_add_organisation_report_download_naming.php) ;;
             config/report_exports.php|database/migrations/2026_11_06_120000_create_lot_report_exports_table.php) ;;
+            database/migrations/2026_11_09_200000_create_technician_incidents_table.php) ;;
             config/calendar.php|vite.config.js|tools/local/*) ;;
             *) stop 'changement hors perimetre applicatif du correctif.' ;;
         esac
@@ -154,10 +155,13 @@ for migration in 2026_10_25_110000_add_reversible_dossier_deletion 2026_10_25_12
     2026_10_28_140000_add_appointment_planning_window_index 2026_10_28_200000_create_appointment_mail_deliveries_table \
     2026_10_29_150000_add_portal_notification_preferences_to_users \
     2026_11_05_130000_add_organisation_report_download_naming \
-    2026_11_06_120000_create_lot_report_exports_table; do
+    2026_11_06_120000_create_lot_report_exports_table \
+    2026_11_09_200000_create_technician_incidents_table; do
     app_cli artisan migrate --force --no-interaction --no-ansi --path="database/migrations/$migration.php" >> "$WORK/migrations.log" 2>&1 \
         || stop 'migration en echec ; consulter le journal prive, ne pas reinitialiser la base.'
 done
+app_cli artisan tech:backfill-incidents --apply --no-interaction --no-ansi >> "$WORK/incident-backfill.log" 2>&1 \
+    || stop 'reprise des signalements en echec ; consulter le diagnostic prive, ne pas rejouer de signalement.'
 for command in package:discover config:cache route:cache view:cache; do
     app_cli artisan "$command" --no-interaction --no-ansi >> "$WORK/caches.log" 2>&1 || stop 'cache en echec ; consulter le journal prive.'
 done

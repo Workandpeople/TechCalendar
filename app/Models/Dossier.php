@@ -52,6 +52,11 @@ class Dossier extends Model
         return $this->hasMany(DossierBilling::class);
     }
 
+    public function technicianIncidents(): HasMany
+    {
+        return $this->hasMany(TechnicianIncident::class);
+    }
+
     public function planningUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'planning_user_id')->withTrashed();

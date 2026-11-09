@@ -115,7 +115,8 @@ CASE;
     file_put_contents($out.'/revision.txt', $revision."\n");
     file_put_contents($out.'/README.txt', ($applicationOnly ? "Correctif applicatif uniquement ; integration MYMAR inchangee.\n" : "Correctifs applicatifs + preparation MYMAR DESACTIVEE.\n")
         ."Controles avant maintenance, sauvegarde V2, mise a jour ciblee, reouverture des deux domaines.\n"
-        ."Aucun import, seeder, migration nouvelle, Node/Composer, message de test ou activation MYMAR.\n"
+        ."Migration ciblee des signalements si absente et reprise idempotente de leurs preuves existantes.\n"
+        ."Aucun import de source, seeder, Node/Composer, message de test ou activation MYMAR.\n"
         ."Les modes mail/SMS et les identifiants SMTP sont conserves. Aucun compte SQL MYMAR cree.\n"
         .'Lancer depuis /home/ubuntu/'.basename($out)." : sha256sum -c SHA256SUMS && sudo bash ./deploy.sh\n"
         ."Si STOP avant maintenance : ne pas lancer de pull manuel ni fermer le site, transmettre le message.\n");

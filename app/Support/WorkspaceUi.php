@@ -10,6 +10,7 @@ final class WorkspaceUi
     public static function forRoute(?string $route): array
     {
         $area = match (true) {
+            Str::is('planner.incidents*', $route ?? '') => 'incidents',
             Str::is(['profile', 'profile.*'], $route ?? '') => 'profile',
             Str::is('client.lots*', $route ?? '') => 'client-lots',
             Str::is('client.*', $route ?? '') => 'client-dossiers',
@@ -26,6 +27,11 @@ final class WorkspaceUi
         };
 
         [$label, $tone, $icon, $steps] = match ($area) {
+            'incidents' => ['Signalements techniciens', 'ochre', 'alert', [
+                ['Vérifier', 'Retrouvez le motif, la photo et l’heure de chaque signalement sur place.'],
+                ['Traiter', 'Contactez la société puis renseignez le suivi planning. Ce suivi ne change pas le statut du dossier.'],
+                ['Suivre le déplacement', 'La comptabilité décide séparément si le déplacement doit être facturé. Aucune facture n’est créée automatiquement.'],
+            ]],
             'profile' => ['Mon profil', 'cyan', 'users', [
                 ['Mes informations', 'Retrouvez votre identité, votre adresse de connexion et votre organisation.'],
                 ['Sécuriser mon compte', 'Modifiez votre mot de passe avec votre mot de passe actuel.'],
