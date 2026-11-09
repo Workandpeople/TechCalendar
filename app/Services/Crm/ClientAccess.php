@@ -6,6 +6,7 @@ use App\Models\Dossier;
 use App\Models\DossierActivity;
 use App\Models\DossierOperation;
 use App\Models\Lot;
+use App\Models\Service;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -109,6 +110,12 @@ class ClientAccess
             && (int) ($user->externalClient->kind === 'client'
                 ? ($dossier->client_id ?? $dossier->delegataire_id) : $dossier->delegataire_id) === $user->external_client_id
             && $this->categories->restrict(Dossier::query()->whereKey($dossier->id), $this->categoryKeys($user))->exists();
+    }
+
+    public function dossierServices(User $user): Builder
+    {
+        return Service::query()->whereIn('services.id', DossierOperation::query()->select('service_id')
+            ->whereIn('dossier_id', $this->dossiers($user)->select('dossiers.id')));
     }
 
     public function categoryKeys(User $user): array

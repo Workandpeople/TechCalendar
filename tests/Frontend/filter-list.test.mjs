@@ -38,7 +38,7 @@ test('rejects authentication redirects server failures and request timeouts with
 
 test('paginates an implicit default filter and keeps pending search values on category changes', () => {
     const handlers = {}, requests = [];
-    const fields = [{ name: 'status', value: 'active', tagName: 'SELECT', options: [{ value: 'active' }] },
+    const fields = [{ name: 'status', value: 'active', tagName: 'SELECT', options: [{ value: 'active' }], dispatchEvent() {} },
         { name: 'q', value: '', tagName: 'INPUT' }];
     const form = { action: url.href, elements: fields, after() {}, addEventListener() {} };
     const listing = { dataset: { ajaxList: 'users' }, querySelector: () => form, setAttribute() {},
@@ -46,6 +46,7 @@ test('paginates an implicit default filter and keeps pending search values on ca
     const root = { querySelectorAll: () => [listing],
         createElement: () => ({ setAttribute() {}, hidden: false, textContent: '' }) };
     const browser = { location: url, addEventListener() {}, clearTimeout() {}, setTimeout: () => 1,
+        Event: class { constructor(type) { this.type = type; } },
         FormData: class { *[Symbol.iterator]() { for (const field of fields) yield [field.name, field.value]; } },
         fetch(href) { requests.push(new URL(href)); return new Promise(() => {}); } };
     initFilterLists(root, browser);
@@ -66,4 +67,44 @@ test('paginates an implicit default filter and keeps pending search values on ca
     const category = click(`${url}?status=disabled`, true);
     assert.equal(category.searchParams.get('status'), 'disabled');
     assert.equal(category.searchParams.get('q'), 'Pending search');
+});
+
+test('keeps the CEE multiselect synchronized on category links reset and browser history without extra submissions', () => {
+    const handlers = {}, browserHandlers = {}, requests = [], syncEvents = [];
+    const select = { name: 'service_ids[]', tagName: 'SELECT', multiple: true,
+        options: [{ value: '11', selected: true }, { value: '22', selected: true }],
+        dispatchEvent: event => syncEvents.push(event.type) };
+    const status = { name: 'status', tagName: 'SELECT', value: '', options: [{ value: '' }], dispatchEvent() {} };
+    const form = { action: 'https://example.test/espace-client', elements: [select, status], after() {}, addEventListener() {} };
+    const listing = { dataset: { ajaxList: 'client-dossiers' }, querySelector: () => form, setAttribute() {},
+        addEventListener: (name, handler) => { handlers[name] = handler; } };
+    const root = { querySelectorAll: () => [listing], createElement: () => ({ setAttribute() {} }) };
+    const browser = { location: new URL(form.action), clearTimeout() {}, setTimeout: () => 1,
+        addEventListener: (name, handler) => { browserHandlers[name] = handler; },
+        Event: class { constructor(type) { this.type = type; } },
+        FormData: class { *[Symbol.iterator]() {
+            for (const option of select.options) if (option.selected) yield [select.name, option.value];
+            yield [status.name, status.value];
+        } },
+        fetch(href) { requests.push(new URL(href)); return new Promise(() => {}); } };
+    initFilterLists(root, browser);
+    const click = (href, category = false, pagination = false) => {
+        const link = { href, target: '', hasAttribute: () => false, matches: () => category, closest: () => pagination ? {} : null };
+        handlers.click({ button: 0, target: { closest: () => link }, preventDefault() {} });
+        return requests.at(-1);
+    };
+    const page = click(`${form.action}?service_ids[0]=11&service_ids[1]=22&page=2`, false, true);
+    assert.equal(page.searchParams.get('page'), '2');
+    assert.deepEqual(select.options.map(option => option.selected), [true, true]);
+    const category = click(`${form.action}?status=report`, true);
+    assert.deepEqual(category.searchParams.getAll('service_ids[]'), ['11', '22']);
+    assert.equal(category.searchParams.get('status'), 'report');
+    click(form.action);
+    assert.equal(select.options.some(option => option.selected), false);
+    browser.location = new URL(`${form.action}?service_ids[0]=22&status=pending`);
+    browserHandlers.popstate();
+    assert.deepEqual(select.options.map(option => option.selected), [false, true]);
+    assert.equal(status.value, 'pending');
+    assert.deepEqual(syncEvents, Array(4).fill('techcalendar:selection-sync'));
+    assert.equal(requests.length, 4);
 });

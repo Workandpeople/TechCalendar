@@ -19,6 +19,10 @@ class ClientPortal
         $allowed = $this->access->categoryKeys($actor);
         abort_if(filled($filters['status'] ?? null) && ! in_array($filters['status'], $allowed, true), 403);
         $query = $this->access->dossiers($actor);
+        $serviceIds = DossierServiceFilter::ids($filters);
+        if ($serviceIds !== []) {
+            $query->whereHas('operations', fn ($operations) => $operations->whereIn('service_id', $serviceIds));
+        }
         if (filled($filters['lot'] ?? null)) {
             DossierLotReference::filter($query, $filters['lot']);
         }
@@ -28,6 +32,7 @@ class ClientPortal
         [$categorySql, $bindings] = DossierStatusCatalog::categorySql();
         $counts = DB::query()->fromSub((clone $query)->select('dossiers.id'), 'visible_dossiers')
             ->leftJoin('dossier_operations', 'dossier_operations.dossier_id', '=', 'visible_dossiers.id')
+            ->when($serviceIds !== [], fn ($query) => $query->whereIn('dossier_operations.service_id', $serviceIds))
             ->selectRaw($categorySql.' AS category, COUNT(DISTINCT visible_dossiers.id) AS aggregate', $bindings)
             ->groupBy('category')->pluck('aggregate', 'category');
         $categories = ['all' => ['label' => 'Tous mes dossiers', 'tone' => 'slate', 'count' => (clone $query)->count()]];
@@ -35,9 +40,12 @@ class ClientPortal
             $categories[$key] = [...PortalCategoryAccess::catalogue()[$key], 'count' => (int) ($counts[$key] ?? 0)];
         }
         if (filled($filters['status'] ?? null)) {
-            $query->where(function ($query) use ($filters): void {
-                $query->whereHas('operations', fn ($operations) => DossierStatusCatalog::filter($operations, $filters['status']));
-                if ($filters['status'] === 'unknown') {
+            $query->where(function ($query) use ($filters, $serviceIds): void {
+                $query->whereHas('operations', function ($operations) use ($filters, $serviceIds): void {
+                    $operations->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds));
+                    DossierStatusCatalog::filter($operations, $filters['status']);
+                });
+                if ($filters['status'] === 'unknown' && $serviceIds === []) {
                     $query->orWhereDoesntHave('operations');
                 }
             });
@@ -46,19 +54,24 @@ class ClientPortal
         $now = now(AppointmentDateTime::TIMEZONE)->format('Y-m-d H:i:s');
         DossierLotReference::select($query->select('dossiers.*'));
 
-        return ['dossiers' => $query->with(['operations.service', 'appointments' => function ($appointments) use ($now): void {
-            $appointments->withTrashed()->select(['appointments.id', 'appointments.starts_at', 'appointments.ends_at', 'appointments.deleted_at', 'appointments.status',
-                'dossier_operations.legacy_status as listing_operation_status'])
-                ->whereIn('appointments.status', [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM, Appointment::STATUS_CANCELLED])
-                ->whereNotNull('appointments.starts_at')
-                ->orderByRaw('CASE WHEN appointments.deleted_at IS NULL AND appointments.status = ? THEN 0 WHEN appointments.deleted_at IS NULL THEN 1 ELSE 2 END', [Appointment::STATUS_SCHEDULED])
-                ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN 0 ELSE 1 END', [$now])
-                ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN appointments.starts_at END ASC', [$now])
-                ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')
-                // Grouped eager limit: one appointment per dossier, only for this page.
-                ->limit(1);
-        }])->latest('id')->paginate(25)->withQueryString(),
-            'filters' => $filters, 'categories' => $categories];
+        return ['dossiers' => $query->with([
+            'operations' => fn ($operations) => $operations->with('service')
+                ->when($serviceIds !== [], fn ($query) => $query->whereIn('service_id', $serviceIds)),
+            'appointments' => function ($appointments) use ($now, $serviceIds): void {
+                $appointments->withTrashed()->select(['appointments.id', 'appointments.starts_at', 'appointments.ends_at', 'appointments.deleted_at', 'appointments.status',
+                    'dossier_operations.legacy_status as listing_operation_status'])
+                    ->whereIn('appointments.status', [Appointment::STATUS_SCHEDULED, Appointment::STATUS_PROBLEM, Appointment::STATUS_CANCELLED])
+                    ->whereNotNull('appointments.starts_at')
+                    ->when($serviceIds !== [], fn ($query) => $query->whereIn('dossier_operations.service_id', $serviceIds))
+                    ->orderByRaw('CASE WHEN appointments.deleted_at IS NULL AND appointments.status = ? THEN 0 WHEN appointments.deleted_at IS NULL THEN 1 ELSE 2 END', [Appointment::STATUS_SCHEDULED])
+                    ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN 0 ELSE 1 END', [$now])
+                    ->orderByRaw('CASE WHEN appointments.ends_at >= ? THEN appointments.starts_at END ASC', [$now])
+                    ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')
+                    // Grouped eager limit: one appointment per dossier, only for this page.
+                    ->limit(1);
+            }])->latest('id')->paginate(25)->withQueryString(),
+            'filters' => $filters, 'categories' => $categories,
+            'services' => $this->access->dossierServices($actor)->orderBy('name')->get(['services.id', 'services.name'])];
     }
 
     public function dossier(User $actor, Dossier $dossier): array

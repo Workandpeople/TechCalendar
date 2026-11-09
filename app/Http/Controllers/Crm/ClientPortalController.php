@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Crm\ClientCorrectionRequest;
+use App\Http\Requests\Crm\ClientDossierListRequest;
 use App\Http\Requests\Crm\ClientDossierRequest;
 use App\Models\Dossier;
 use App\Models\DossierDocument;
@@ -14,23 +15,17 @@ use App\Services\Crm\ClientPortal;
 use App\Services\Crm\CollectedDossierDocuments;
 use App\Services\Crm\DossierLinkedDocuments;
 use App\Services\Crm\DossierRegistry;
-use App\Services\Crm\DossierStatusCatalog;
 use App\Services\Crm\PostVisitWorkflow;
 use App\Services\DocumentUpload;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class ClientPortalController extends Controller
 {
-    public function index(Request $request, ClientPortal $portal)
+    public function index(ClientDossierListRequest $request, ClientPortal $portal)
     {
-        $filters = $request->validate(['q' => ['nullable', 'string', 'max:255'],
-            'lot' => ['nullable', 'string', 'max:256'],
-            'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))]]);
-
-        return view('client.dossiers', $portal->dossiers($request->user(), $filters));
+        return view('client.dossiers', $portal->dossiers($request->user(), $request->validated()));
     }
 
     public function show(Request $request, Dossier $dossier, ClientPortal $portal)

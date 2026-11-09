@@ -62,10 +62,15 @@ export function initFilterLists(root = document, browser = window) {
         const syncForm = url => {
             for (const input of form.elements) {
                 if (!input.name || input.type === 'submit' || input.type === 'button') continue;
-                const values = url.searchParams.getAll(input.name);
+                const arrayName = input.name.endsWith('[]') ? input.name.slice(0, -2) : null;
+                // PHP pagination uses field[0], while browser FormData uses field[].
+                const values = arrayName === null ? url.searchParams.getAll(input.name) : Array.from(url.searchParams)
+                    .filter(([name]) => name === input.name || (name.startsWith(`${arrayName}[`) && /^\d+\]$/.test(name.slice(arrayName.length + 1))))
+                    .map(([, value]) => value);
                 if (input.type === 'checkbox' || input.type === 'radio') input.checked = values.includes(input.value);
                 else if (input.multiple) for (const option of input.options) option.selected = values.includes(option.value);
                 else input.value = values[0] ?? (input.tagName === 'SELECT' ? (input.options[0]?.value || '') : '');
+                if (input.tagName === 'SELECT') input.dispatchEvent(new browser.Event('techcalendar:selection-sync'));
             }
             browser.TechCalendarForms?.refresh(form);
         };

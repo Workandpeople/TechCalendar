@@ -7,11 +7,21 @@
         </x-workspace-heading>
         @include('client.notice')
         <div data-ajax-results="categories">@include('crm.dossiers.categories', ['categoryRoute' => 'client.dossiers'])</div>
-        <form data-ajax-filters method="GET" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-4">
+        @php($selectedServices = \App\Services\Crm\DossierServiceFilter::ids($filters))
+        <form data-ajax-filters method="GET" action="{{ route('client.dossiers') }}" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-4">
             <div><label class="gc-label" for="q">Recherche</label><input class="gc-input" id="q" name="q" value="{{ $filters['q'] ?? '' }}" maxlength="255" placeholder="Référence, bénéficiaire, adresse complète"></div>
+            <div>
+                <label class="gc-label" for="service_ids">Fiches CEE</label>
+                <select class="gc-input" id="service_ids" name="service_ids[]" multiple size="4" data-multi-select
+                    data-empty-label="Toutes les fiches" data-selected-label="fiches sélectionnées"
+                    data-search-label="Rechercher une fiche CEE" data-options-label="Fiches CEE disponibles"
+                    data-no-results-label="Aucune fiche ne correspond à la recherche.">
+                    @foreach ($services as $service)<option value="{{ $service->id }}" @selected(in_array($service->id, $selectedServices, true))>{{ $service->name }}</option>@endforeach
+                </select>
+            </div>
             <div><label class="gc-label" for="lot">Numéro de lot</label><input class="gc-input" id="lot" name="lot" value="{{ $filters['lot'] ?? '' }}" maxlength="256" placeholder="Tout ou partie du numéro"></div>
             <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états autorisés</option>@foreach (collect($categories)->except('all') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
-            <div class="flex items-end gap-3"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
+            <div class="flex items-end justify-end gap-3 sm:col-span-2 xl:col-span-4"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
         </form>
         @include('client.partials.report-exports')
         <div data-ajax-results="dossiers">
