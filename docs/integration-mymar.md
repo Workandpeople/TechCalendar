@@ -1188,6 +1188,14 @@ MAR du jour. Le detail MAR du planning comporte egalement ce lien. Seules les
 factures et devis de travaux identifies sans ambiguite sont proposes ; contrats,
 factures AMO, impots, pieces d'identite et noms ambigus restent exclus.
 
+Les titres generiques (`FACTURE`, `devis`, `Nouveau devis`) sont rapproches du
+nom de fichier original, sans lire le contenu du PDF pour le classer. Ce nom doit
+confirmer le meme type et identifier le beneficiaire ou mentionner les travaux.
+Les exclusions AMO/MAR/ANAH et pieces sensibles restent prioritaires dans les
+deux noms ; un nom inconnu ou contradictoire ne suffit jamais a ouvrir une piece.
+La meme regle est reappliquee lors du telechargement. Aucun renommage MYMAR,
+nouveau privilege SQL ni changement de configuration du lecteur n'est requis.
+
 L'adaptateur lit les fichiers sur place et la base MYMAR via un nouveau compte
 SQL dedie limite aux seules colonnes SELECT necessaires. Il ne charge pas
 l'application MYMAR et ne reutilise pas ses identifiants. Chaque acces revalide

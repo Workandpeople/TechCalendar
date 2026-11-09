@@ -32,6 +32,37 @@ it('recognizes only unambiguous invoices and works quotes', function (string $na
     ['Facture inconnu', null], ['Facture MOHEDANO contrat', null], ["Facture\nMOHEDANO", null],
 ]);
 
+it('uses original filenames for generic titles without opening unrelated or sensitive documents', function (string $name, string $filename, ?string $kind) {
+    expect(MymarDocumentPolicy::kind($name, 'Camille MARTIN', $filename))->toBe($kind);
+})->with([
+    ['FACTURE', '1793961996_FACTURE MR ET MME MARTIN.pdf', 'invoice'],
+    ['FACTURE', '1793961996_Facture travaux.pdf', 'invoice'],
+    ['devis', '1793961996_DEVIS SIGNE MR ET MME MARTIN.pdf', 'quote'],
+    ['Nouveau devis', '1793961996_Nouveau devis _Martin (2).pdf', 'quote'],
+    ['NOUVEAI DEVIS', '1793961996_DEVIS SIGNE MR ET MME MARTIN.pdf', 'quote'],
+    ['DEVIS AVANCE', '1793961996_DEVIS SIGNE MR ET MME MARTIN.pdf', 'quote'],
+    ['devis', '1793961996_Devis signée Mme MARTIN.pdf.pdf', 'quote'],
+    ['FACTURE', '1793961996_FACTURE.pdf', null],
+    ['FACTURE', '1793961996_FACTURE INCONNU.pdf', null],
+    ['FACTURE', '1793961996_FACTURE CAMILLE AUTRE.pdf', null],
+    ['FACTURE', '1793961996_DEVIS MARTIN.pdf', null],
+    ['devis', '1793961996_FACTURE MARTIN.pdf', null],
+    ['FACTURE', '1793961996_MARTIN.pdf', null],
+    ['Facture autre', '1793961996_FACTURE MARTIN.pdf', null],
+    ['Facture AMO', '1793961996_FACTURE MARTIN.pdf', null],
+    ['Facture travaux', '1793961996_FACTURE AMO MARTIN.pdf', null],
+    ['FACTURE', '1793961996_FACTURE HONORAIRES MARTIN.pdf', null],
+    ['FACTURE', '1793961996_FACTURE CNI MARTIN.pdf', null],
+    ['FACTURE', '1793961996_FACTURE CONTRAT MARTIN.pdf', null],
+    ['FACTURE AVANCE', '1793961996_FACTURE MARTIN.pdf', null],
+    ['devis mar', '1793961996_DEVIS MARTIN.pdf', null],
+    ['Nouveau devis', '1793961996_DEVIS MAR MARTIN.pdf', null],
+    ['devis', '1793961996_DEVIS ANAH MARTIN.pdf', null],
+    ['devis', '1793961996_ATTESTATION TRAVAUX DEVIS MARTIN.pdf', null],
+    ["FACTURE\n", '1793961996_FACTURE MARTIN.pdf', null],
+    ['FACTURE', "1793961996_FACTURE\nMARTIN.pdf", null],
+]);
+
 it('rejects incomplete or overbroad VT2 commands and fingerprints every field', function () {
     $command = vt2TestCommand();
     foreach (['path' => '/etc/passwd', 'status_id' => 20, 'is_public' => true] as $key => $value) {

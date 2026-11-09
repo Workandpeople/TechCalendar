@@ -126,6 +126,30 @@ fclose($stream);
 foreach ([2, 3, 5, 6, 7, 8, 9] as $id) {
     $denied(fn () => $source->open(40, 5, $id), 'documents_file_unavailable');
 }
+$genericDocuments = [
+    [10, 'FACTURE', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf'],
+    [11, 'devis', '1793961996_DEVIS SIGNE BENEFICIARY.pdf'],
+    [12, 'FACTURE', '1793961996_FACTURE AMO BENEFICIARY.pdf'],
+    [13, 'Facture AMO', '1793961996_FACTURE MR ET MME BENEFICIARY.pdf'],
+    [14, 'Nouveau devis', '1793961996_Nouveau devis _BENEFICIARY (2).pdf'],
+    [15, 'FACTURE', '1793961996_DEVIS SIGNE BENEFICIARY.pdf'],
+];
+$insert = $db->prepare('INSERT INTO MYMAR.dossier_documents (id,dossier_id,author_id,path,nom,is_public) VALUES (?,20,99,?,?,1)');
+foreach ($genericDocuments as [$id, $label, $filename]) {
+    file_put_contents('/fixtures/uploads/'.$filename, '%PDF-Synthetic generic document');
+    $insert->execute([$id, $filename, $label]);
+}
+assert(array_column($reader->catalogue(40, 5)['documents'], 'id') === [14, 11, 10, 4, 1]);
+foreach ([10, 11, 14] as $id) {
+    $stream = $reader->open(40, 5, $id);
+    assert(str_contains(stream_get_contents($stream), 'Synthetic generic document'));
+    fclose($stream);
+}
+foreach ([12, 13, 15] as $id) {
+    $denied(fn () => $reader->open(40, 5, $id), 'documents_file_unavailable');
+}
+$db->exec('DELETE FROM MYMAR.dossier_documents WHERE id BETWEEN 10 AND 15');
+echo "Libelles generiques : catalogue et telechargement reconcilies via le fichier, AMO et types contradictoires refuses.\n";
 $denied(fn () => $source->catalogue(40, 6), 'documents_appointment_not_found');
 $denied(fn () => $source->catalogue(40, 999), 'documents_appointment_not_found');
 $db->exec('UPDATE MYMAR.users SET enabled=0 WHERE id=5');
