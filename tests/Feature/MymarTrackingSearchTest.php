@@ -5,6 +5,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\TrackingSearchPage;
 use App\Services\Mymar\MymarCachedObservation;
+use App\Services\Mymar\MymarCalendarFeed;
 use App\Services\Mymar\MymarCalendarLabels;
 use App\Services\Mymar\MymarObservation;
 use App\Services\Mymar\MymarObservationPolicy;
@@ -78,6 +79,54 @@ it('returns a coverage warning instead of claiming a complete empty MAR search w
         ->assertJsonPath('total', 0)->assertJsonPath('mymar.state', 'unavailable')
         ->assertJsonPath('mymar.message', fn ($message) => str_contains($message, 'indisponible'));
 });
+
+it('filters native and MAR visits using the same past current and future boundaries', function (string $period, int $expected) {
+    $now = now('Europe/Paris')->startOfSecond();
+    $this->travelTo($now);
+    $events = [];
+    foreach ([-120, -30, 90] as $index => $offset) {
+        $start = $now->copy()->addMinutes($offset);
+        Appointment::create(['technician_id' => $this->tech->id, 'service_id' => $this->cofracService->id, 'created_by' => $this->planner->id,
+            'customer_first_name' => 'Client', 'customer_last_name' => 'Timeline', 'customer_phone' => '0600000000', 'latitude' => 48.85, 'longitude' => 2.35, 'address' => 'Test',
+            'starts_at' => $start, 'ends_at' => $start->copy()->addHour(), 'duration_minutes' => 60]);
+        $events[] = ['id' => 'mymar:'.($index + 1), 'start' => $start->toIso8601String(), 'end' => $start->copy()->addHour()->toIso8601String(),
+            'extendedProps' => ['is_mymar' => true, 'source_rdv_id' => $index + 1, 'visit_phase' => 'after_works',
+                'customer_name' => 'Client Timeline', 'address' => 'Test', 'postal_code' => '75001', 'city' => 'Paris', 'technician_name' => 'Test', 'service_label' => 'MAR']];
+    }
+    $feed = Mockery::mock(MymarCalendarFeed::class);
+    $feed->shouldReceive('window')->andReturn(['events' => $events, 'state' => 'observing']);
+    app()->instance(MymarCalendarFeed::class, $feed);
+    $this->actingAs($this->planner)->postJson(route('planner.tracking.search'), ['period' => $period])->assertOk()->assertJsonPath('total', $expected);
+})->with([['past', 2], ['ongoing', 2], ['upcoming', 2], ['all', 6]]);
+
+it('keeps mixed source pagination stable in every supported sort order', function (string $sort) {
+    $start = now('Europe/Paris')->startOfDay();
+    $expected = [];
+    $mar = [];
+    foreach (range(0, 11) as $index) {
+        $time = $start->copy()->addHours($index % 4);
+        $duration = [60, 30, 120][$index % 3];
+        $native = Appointment::create(['technician_id' => $this->tech->id, 'service_id' => $this->cofracService->id, 'created_by' => $this->planner->id,
+            'customer_first_name' => 'Test', 'customer_last_name' => 'Sort', 'customer_phone' => '0600000000', 'latitude' => 48.85, 'longitude' => 2.35, 'address' => 'Test',
+            'starts_at' => $time, 'ends_at' => $time->copy()->addMinutes($duration), 'duration_minutes' => $duration]);
+        $expected[] = ['id' => $native->id, 'time' => $time->timestamp, 'duration' => $duration, 'native' => 1];
+        if ($index % 3 === 0) {
+            $mar[] = ['id' => 'mymar:'.$index, 'start' => $time->toIso8601String(), 'extendedProps' => ['source_rdv_id' => $index, 'duration_minutes' => $duration]];
+            $expected[] = ['id' => $index, 'time' => $time->timestamp, 'duration' => $duration, 'native' => 0];
+        }
+    }
+    $key = str_starts_with($sort, 'duration_') ? 'duration' : 'time';
+    $direction = str_ends_with($sort, '_asc') ? 1 : -1;
+    usort($expected, fn ($a, $b) => $direction * ([$a[$key], $a['time']] <=> [$b[$key], $b['time']]) ?: [$b['native'], $b['id']] <=> [$a['native'], $a['id']]);
+    $found = [];
+    foreach (range(1, 6) as $page) {
+        $result = app(TrackingSearchPage::class)->paginate(Appointment::query(), $mar, $page, 3, $sort);
+        foreach ($result['rows'] as $row) {
+            $found[] = [$row['native'], $row['id']];
+        }
+    }
+    expect($found)->toBe(array_map(fn ($row) => [$row['native'], $row['id']], $expected));
+})->with(['starts_asc', 'starts_desc', 'duration_asc', 'duration_desc']);
 
 it('does not expose MAR search to external accounts or ordinary technicians', function (int $role) {
     $user = User::factory()->create(['role' => $role, 'admin' => false]);

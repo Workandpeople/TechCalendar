@@ -18,10 +18,12 @@ use App\Services\Crm\AppointmentComments;
 use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\AppointmentEditor;
 use App\Services\Crm\AppointmentProblemReport;
+use App\Services\Crm\AppointmentTimeline;
 use App\Services\Crm\TrackingSearchPage;
 use App\Services\Mymar\MymarCalendarFeed;
 use App\Services\Mymar\MymarCalendarSearch;
 use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -236,6 +238,8 @@ class PlannerTrackingController extends Controller
             'appointment_status' => ['nullable', Rule::in(['all', 'active', 'problem'])],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'period' => ['nullable', Rule::in(['all', 'upcoming', 'ongoing', 'past'])],
+            'sort' => ['nullable', Rule::in(['starts_asc', 'starts_desc', 'duration_asc', 'duration_desc'])],
         ]);
 
         $technicianIds = collect($payload['technician_ids'] ?? [])
@@ -249,6 +253,8 @@ class PlannerTrackingController extends Controller
             ->when(! empty($payload['service_id']), fn ($query) => $query->where('service_id', (int) $payload['service_id']))
             ->when(! empty($payload['date_from']), fn ($query) => $query->where('starts_at', '>=', Carbon::parse($payload['date_from'])->startOfDay()))
             ->when(! empty($payload['date_to']), fn ($query) => $query->where('starts_at', '<=', Carbon::parse($payload['date_to'])->endOfDay()));
+
+        AppointmentTimeline::apply($appointmentsQuery, $payload['period'] ?? 'all', CarbonImmutable::now('Europe/Paris'));
 
         match ($payload['appointment_status'] ?? 'all') {
             'active' => $appointmentsQuery->whereNull('appointments.deleted_at')->where('status', Appointment::STATUS_SCHEDULED),
@@ -294,7 +300,7 @@ class PlannerTrackingController extends Controller
         if (($payload['source'] ?? 'all') === 'mar') {
             $appointmentsQuery->whereRaw('1=0');
         }
-        $result = app(TrackingSearchPage::class)->paginate($appointmentsQuery, $mar['events'], $page, $limit);
+        $result = app(TrackingSearchPage::class)->paginate($appointmentsQuery, $mar['events'], $page, $limit, $payload['sort'] ?? 'starts_desc');
         $nativeIds = array_column(array_filter($result['rows'], fn ($row) => $row['native'] === 1), 'id');
         $appointments = $nativeIds === [] ? collect() : $appointmentsQuery->whereKey($nativeIds)->get();
         $nativeEvents = $this->appointmentEvents($appointments, $appointmentMailData)->keyBy('id');

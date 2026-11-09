@@ -88,6 +88,18 @@ it('stages a bounded stream then publishes one immutable PDF without overwriting
     expect(scandir($this->documentRoot.'/staging'))->toBe(['.', '..']);
 });
 
+it('can read with no staging directory while refusing every write entry point', function () {
+    $reader = new MymarDocumentFiles($this->documentRoot.'/uploads');
+    file_put_contents($this->documentRoot.'/uploads/read-only.pdf', "%PDF-1.4\nsynthetic\n%%EOF\n");
+    expect($reader->metadata('read-only.pdf')['bytes'])->toBeGreaterThan(8);
+    $stream = $reader->open('read-only.pdf');
+    expect(stream_get_contents($stream))->toStartWith('%PDF-');
+    fclose($stream);
+    expect(fn () => $reader->stage(null, vt2TestCommand()))->toThrow(MymarDocumentFailure::class)
+        ->and(fn () => $reader->preparePublication(vt2TestCommand()))->toThrow(MymarDocumentFailure::class)
+        ->and(fn () => $reader->publish(vt2TestCommand()))->toThrow(MymarDocumentFailure::class);
+});
+
 it('rejects traversal URLs hidden files and non PDF extensions', function (string $name) {
     expect(fn () => $this->files->metadata($name))->toThrow(MymarDocumentFailure::class);
 })->with(['../other.pdf', 'uploads/other.pdf', 'https://host/other.pdf', 'other%2Epdf', 'file.php', '.file.pdf', 'other..pdf', 'file.pdf:secret', "file\x00.pdf", 'a\\file.pdf']);

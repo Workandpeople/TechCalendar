@@ -1159,3 +1159,78 @@ selon les regles existantes : exclure les visites initiales des demandes a place
 ne doit pas liberer artificiellement le planning des techniciens.
 Ce correctif applicatif ne modifie ni MYMAR ni ses passerelles, leurs comptes,
 leurs configurations ou leurs services. Aucun import ni migration requis.
+
+### Replanification complete et recherche des RDV (9 novembre 2026)
+
+Le detail d'un RDV MAR apres travaux propose deux actions distinctes :
+`Replacer rapidement` conserve le formulaire court ; `Replanifier avec le planning`
+ouvre `/planner/book?mymar_rdv_id=...` avec le rendez-vous deja selectionne.
+Le parcours complet utilise les techniciens actifs, relies et habilites MAR,
+les disponibilites et le calendrier existants. La duree est celle du rendez-vous
+MYMAR relu en direct, pas une nouvelle duree prise dans le catalogue.
+
+Seul le RDV en cours de replacement est ignore dans les occupations MAR. Les
+autres rendez-vous, absences, reservations incertaines et controles de couverture
+restent appliques. La confirmation utilise l'action privee `reschedule` existante,
+avec revision source, nouvelle verification avant envoi et recu idempotent.
+Aucun rendez-vous natif Cofrac n'est cree. Un resultat incertain n'est jamais
+presente comme une reussite. Aucun changement du code ou du schema MYMAR requis.
+
+La recherche des RDV dispose de filtres `A venir`, `En cours` et `Passes`, de tris
+date/duree dans les deux sens et d'une taille de page 10/25/50/100. Les bornes sont
+identiques pour les RDV Cofrac et MAR. La pagination native reste bornee ; les
+RDV MAR proviennent du cache local avec sa periode de couverture affichee.
+
+### Factures et devis de travaux : activation separee en lecture seule
+
+Les techniciens disposent d'un acces `Factures et devis` depuis leurs rendez-vous
+MAR du jour. Le detail MAR du planning comporte egalement ce lien. Seules les
+factures et devis de travaux identifies sans ambiguite sont proposes ; contrats,
+factures AMO, impots, pieces d'identite et noms ambigus restent exclus.
+
+L'adaptateur lit les fichiers sur place et la base MYMAR via un nouveau compte
+SQL dedie limite aux seules colonnes SELECT necessaires. Il ne charge pas
+l'application MYMAR et ne reutilise pas ses identifiants. Chaque acces revalide
+le compte Cofrac, sa correspondance, le technicien MYMAR actif, l'affectation
+courante du dossier, son etat et la classification du document. Un technicien ne
+peut pas demander les pieces d'un autre technicien. Le telechargement passe par
+une route authentifiee, sans chemin source, lien public ni cache partage.
+
+Apres deploiement du code, preparer explicitement le lecteur sur `ns365601` :
+
+```sh
+sudo php8.4 /var/www/cofrac2/tools/deploy/configure-mymar-document-reader.php --enable-read-only
+```
+
+Cette commande refuse une configuration preexistante. Elle verifie le schema,
+les privileges exacts et la lisibilite de la racine documentaire pour le runtime.
+Elle ne modifie jamais les permissions des fichiers MYMAR. Si celles-ci bloquent
+la lecture, elle s'arrete : ne pas contourner ce refus par un chmod recursif.
+Les seuls ajouts sont le lecteur SQL dedie et sa configuration root-privee dans
+`/etc/cofrac2-mymar-documents`, un point de montage vide et une surcharge systemd
+`mymar-documents.conf` pour le seul PHP Cofrac. `ProtectHome=true` est conserve :
+seul le repertoire source des documents est monte en lecture seule sous
+`/srv/cofrac2-mymar-documents/uploads`, dans l'espace du service. L'activation
+reprend brievement le service `cofrac2-php-fpm` pour appliquer ce montage ;
+la programmer hors transfert de document en cours. Le controle de lecture et
+de montage `ro` est execute dans le meme espace que PHP, pas dans un CLI sans
+protection. En cas d'echec, le lecteur est verrouille, la configuration est
+desactivee et la surcharge creee par cette execution est retiree.
+Aucun service MYMAR, maintenance applicative, migration, statut, document ou
+compte applicatif MYMAR n'est modifie. Aucun envoi.
+Le montage suit le mecanisme natif
+[BindReadOnlyPaths de systemd](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml).
+
+Pour refermer cet acces sans toucher aux rendez-vous ni aux fichiers sources :
+
+```sh
+sudo php8.4 /var/www/cofrac2/tools/deploy/configure-mymar-document-reader.php --disable-read-only
+```
+
+La desactivation verrouille uniquement le compte SQL documentaire dedie, puis
+publie le mode desactive sans redemarrer de service. Les deux commandes prennent
+les memes verrous que le deploiement et les operations runtime Cofrac.
+
+Sans cette configuration, l'interface affiche une indisponibilite explicite ;
+elle ne pretend pas qu'un dossier est depourvu de documents. Le depot VT2 et
+les changements d'etat lies restent desactives et ne sont pas actives par ce lot.

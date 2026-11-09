@@ -300,7 +300,7 @@
             </div>
         </section>
 
-        @if ($isReplacementMode && empty($initialReplaceAppointmentId) && empty($initialCrmAppointmentId))
+        @if ($isReplacementMode && empty($initialReplaceAppointmentId) && empty($initialCrmAppointmentId) && empty($initialMymarRdvId))
             <section id="booking-replacement-search-section" class="gc-card p-5">
                 <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                     <div>
@@ -6547,7 +6547,11 @@
             startExternalSyncPolling();
         }
 
-        setBookingSourceMode(bookingInitialCrmAppointmentId ? 'crm' : storedBookingSourceMode());
+        const initialMarRdv = @json($initialMymarRdvId ?? null);
+        setBookingSourceMode(initialMarRdv ? 'mymar' : bookingInitialCrmAppointmentId ? 'crm' : storedBookingSourceMode());
+        if (Number.isSafeInteger(initialMarRdv) && initialMarRdv > 0) {
+            void analyzeAppointment({ mymar_rdv_id: Number(initialMarRdv) }, 'replacement MAR');
+        }
 
         if (bookingInitialCrmAppointmentId) {
             const initialCard = Array.from(document.querySelectorAll('.crm-appointment-card'))
@@ -7115,18 +7119,24 @@
             if (forceButton) forceButton.disabled = true;
 
             try {
-                if (payload.mymar_dossier_id) {
+                if (requestSnapshot?.is_mymar) {
                     if (forced || !window.CofracMymarActions) return;
                     button.textContent = 'Confirmation MYMAR…';
-                    const result = await window.CofracMymarActions.place({ dossier_id: Number(payload.mymar_dossier_id),
-                        expected_revision: currentAppointmentRequest.expected_revision, technician_id: Number(payload.technician_id),
+                    const replacing = Number.isSafeInteger(requestSnapshot.mymar_rdv_id);
+                    const result = await window.CofracMymarActions[replacing ? 'reschedule' : 'place']({
+                        ...(replacing ? { rdv_id: requestSnapshot.mymar_rdv_id } : {}), dossier_id: requestSnapshot.mymar_dossier_id,
+                        expected_revision: requestSnapshot.expected_revision, technician_id: Number(payload.technician_id),
                         starts_at: payload.starts_at, duration_minutes: Number(payload.duration_minutes) });
                     if (manual) manual.close(); else closeBookingAppointmentModal();
                     if (result?.confirmed) {
+                        if (replacing) bookingCalendar?.getEventById(`mymar:${requestSnapshot.mymar_rdv_id}`)?.remove();
                         bookingCalendar?.addEvent({ id: `mymar:${result.source_result.rdv_id}`, title: confirmedEvent.title,
                             start: result.source_result.starts_at, end: addMinutes(new Date(result.source_result.starts_at), result.source_result.duration_minutes),
                             editable: false, extendedProps: { ...confirmedEvent.extendedProps, is_suggestion: false, is_mymar: true,
-                                observation_only: true, read_only: true, availability_guard_enabled: true, duration_minutes: result.source_result.duration_minutes } });
+                                source_rdv_id: result.source_result.rdv_id, visit_phase: 'after_works', can_reschedule: true,
+                                service_label: 'MAR après travaux', observation_only: true, read_only: true,
+                                synced_at: new Date().toISOString(), cache_state: 'observing',
+                                availability_guard_enabled: true, duration_minutes: result.source_result.duration_minutes } });
                         showFeedback(result.message);
                     }
                     return;

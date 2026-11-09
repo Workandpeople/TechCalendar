@@ -706,6 +706,14 @@ html.sidebar-hidden .app-sidebar {
         transition-delay: 0s;
     }
 
+    dialog:modal {
+        position: fixed;
+        inset: 0;
+        margin: auto;
+        max-width: calc(100vw - 2rem);
+        max-height: calc(100dvh - 2rem);
+    }
+
     .gc-modal {
         @apply fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 p-4;
         backdrop-filter: blur(4px);

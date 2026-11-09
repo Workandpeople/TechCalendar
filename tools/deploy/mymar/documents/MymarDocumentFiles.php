@@ -12,12 +12,15 @@ final class MymarDocumentFiles
 {
     private array $prepared = [];
 
-    public function __construct(private readonly string $uploads, private readonly string $staging, private readonly int $reserveBytes = 53687091200)
+    public function __construct(private readonly string $uploads, private readonly ?string $staging = null, private readonly int $reserveBytes = 53687091200)
     {
-        foreach ([$uploads, $staging] as $root) {
+        foreach (array_filter([$uploads, $staging], fn ($root) => $root !== null) as $root) {
             if (! str_starts_with($root, '/') || realpath($root) !== $root || ! is_dir($root)) {
                 throw new MymarDocumentFailure('documents_unsafe_directory', 503);
             }
+        }
+        if ($staging === null) {
+            return;
         }
         if ((fileperms($staging) & 0777) !== 0700 || fileowner($staging) !== posix_geteuid() || $uploads === $staging || str_starts_with($staging, $uploads.'/')
             || str_starts_with($uploads, $staging.'/') || stat($uploads)['dev'] !== stat($staging)['dev'] || $reserveBytes < 0) {
@@ -40,6 +43,7 @@ final class MymarDocumentFiles
 
     public function stage($input, MymarVt2Command $command): void
     {
+        $this->assertWritable();
         if (! is_resource($input) || get_resource_type($input) !== 'stream') {
             throw new MymarDocumentFailure('documents_invalid_upload', 422);
         }
@@ -108,6 +112,7 @@ final class MymarDocumentFiles
 
     public function publish(MymarVt2Command $command): string
     {
+        $this->assertWritable();
         $data = $command->payload;
         $name = 'cofrac-vt2-'.$data['request_id'].'-'.$data['sha256'].'.pdf';
         $destination = $this->path($name);
@@ -137,6 +142,7 @@ final class MymarDocumentFiles
     /** The expensive hash runs before any source SQL transaction or dossier lock. */
     public function preparePublication(MymarVt2Command $command): void
     {
+        $this->assertWritable();
         $name = 'cofrac-vt2-'.$command->payload['request_id'].'-'.$command->payload['sha256'].'.pdf';
         $destination = $this->path($name);
         $path = (file_exists($destination) || is_link($destination)) ? $destination : $this->staged($command);
@@ -164,10 +170,17 @@ final class MymarDocumentFiles
         return $this->staging.'/'.$command->payload['request_id'].'-'.$command->payload['sha256'].'.pdf';
     }
 
+    private function assertWritable(): void
+    {
+        if ($this->staging === null) {
+            throw new MymarDocumentFailure('documents_upload_disabled', 503);
+        }
+    }
+
     private function path(string $name): string
     {
-        if (realpath($this->uploads) !== $this->uploads || realpath($this->staging) !== $this->staging
-            || (fileperms($this->staging) & 0777) !== 0700) {
+        if (realpath($this->uploads) !== $this->uploads || ($this->staging !== null && (realpath($this->staging) !== $this->staging
+            || (fileperms($this->staging) & 0777) !== 0700))) {
             throw new MymarDocumentFailure('documents_unsafe_directory', 503);
         }
         if ($name === '' || strlen($name) > 240 || ! mb_check_encoding($name, 'UTF-8')

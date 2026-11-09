@@ -5,13 +5,17 @@ use App\Models\MymarBookingRequest;
 use App\Models\User;
 use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Mymar\MymarActionSettings;
+use App\Services\Mymar\MymarCachedObservation;
 use App\Services\Mymar\MymarObservation;
+use App\Services\Mymar\MymarObservationPolicy;
 use App\Services\Mymar\MymarPilotSettings;
 use App\Services\Mymar\MymarSlotGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Tests\Fixtures\MymarPilotFixture;
 
 uses(RefreshDatabase::class);
 
@@ -95,3 +99,26 @@ it('ignores only the replaced MAR appointment, never another visit on the same s
     $conflicts = app(MymarSlotGuard::class)->liveConflicts($this->tech->id, $this->from, $this->to, 99);
     expect(array_column($conflicts, 'type'))->toBe($other ? ['mymar_overlap'] : []);
 })->with([false, true]);
+
+it('suggests the replaced slot only when every other MAR occupation remains clear and the cache is fresh', function (string $case) {
+    $pilot = MymarPilotFixture::pilot([44 => $this->tech->id]);
+    app(MymarPilotSettings::class)->shouldReceive('load')->andReturn($pilot);
+    $now = new DateTimeImmutable;
+    $source = MymarPilotFixture::source($pilot, $now);
+    if ($case === 'other') {
+        $source['appointments'][] = [...$source['appointments'][0], 'rdv_id' => 556, 'dossier_id' => 78];
+    }
+    $report = (new MymarObservation)->inspect($source, new MymarObservationPolicy, $now, $pilot->technicianMap);
+    $snapshot = MymarCachedObservation::project($report, $pilot, $now);
+    if ($case === 'stale') {
+        $snapshot['generated_at'] = $now->modify('-6 minutes')->format(DATE_ATOM);
+    }
+    Cache::put($pilot->cacheKey(), $snapshot, 300);
+    $period = $snapshot['periods'][0];
+    $suggestions = [['start' => $period['starts_at_utc'], 'end' => $period['ends_at_utc'],
+        'extendedProps' => ['technician_id' => $this->tech->id]]];
+    $guard = app(MymarSlotGuard::class);
+    expect($guard->filterSuggestions($suggestions))->toBe([])
+        ->and($guard->filterSuggestions($suggestions, 555))->toBe($case === 'own' ? $suggestions : []);
+    Http::assertNothingSent();
+})->with(['own', 'other', 'stale']);

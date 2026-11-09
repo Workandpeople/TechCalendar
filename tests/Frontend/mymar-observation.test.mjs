@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 
 const source = readFileSync(new URL('../../resources/views/planner/partials/mymar-observation.blade.php', import.meta.url), 'utf8');
-const script = source.split('<script>')[1].split('</script>')[0];
+const script = source.split('<script>')[1].split('</script>')[0].replace("@json(route('planner.book', [], false))", "'/planner/book'");
 function element(tag = 'div') {
     return { tagName: tag.toUpperCase(), children: [], dataset: {}, attributes: {}, hidden: false, handlers: {},
         classList: { add() {}, contains: name => name === 'nc-event' },
@@ -124,6 +124,22 @@ test('only a current after-works appointment explicitly enabled by the server of
         ui.open(appointment, element('button'));
         const rebook = body.children[0].children.find(child => child.dataset.mymarRescheduleId);
         assert.equal(Boolean(rebook), phase === 'after_works');
-        if (rebook) assert.equal(rebook.dataset.mymarRescheduleId, '555');
+        const complete = body.children[0].children.find(child => child.tagName === 'A');
+        assert.equal(Boolean(complete), phase === 'after_works');
+        if (rebook) {
+            assert.equal(rebook.dataset.mymarRescheduleId, '555');
+            assert.equal(complete.href, '/planner/book?mymar_rdv_id=555');
+        }
+    }
+});
+
+test('MAR document links only use the authenticated local document entry point', () => {
+    for (const url of ['/mar/appointments/555/documents?technician_id=9', 'https://other.test/private.pdf', 'javascript:alert(1)']) {
+        const { ui, body } = harness(); const item = event();
+        Object.assign(item.extendedProps, { visit_phase: 'after_works', documents_url: url });
+        ui.open(item, element('button'));
+        const link = body.children[0].children.find(child => child.tagName === 'A');
+        assert.equal(Boolean(link), url.startsWith('/mar/appointments/'));
+        if (link) assert.equal(link.href, url);
     }
 });

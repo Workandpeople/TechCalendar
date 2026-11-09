@@ -24,6 +24,7 @@ use App\Http\Controllers\Planner\PlannerBookingController;
 use App\Http\Controllers\Planner\PlannerDashboardController;
 use App\Http\Controllers\Planner\PlannerTrackingController;
 use App\Http\Controllers\SupportReportController;
+use App\Http\Controllers\Tech\MymarDocumentController;
 use App\Http\Controllers\Tech\TechAppointmentController;
 use App\Http\Controllers\Tech\TechPlanningController;
 use App\Http\Middleware\EnsureCrmV2Enabled;
@@ -216,6 +217,10 @@ Route::middleware('auth')->group(function (): void {
         ->name('planner.tracking.appointments.technician');
 
     Route::get('/tech/planning', [TechPlanningController::class, 'index'])->name('tech.planning');
+    Route::get('/mar/appointments/{rdv}/documents', [MymarDocumentController::class, 'index'])
+        ->whereNumber('rdv')->middleware('throttle:60,1')->name('mymar.documents.index');
+    Route::get('/mar/appointments/{rdv}/documents/{document}', [MymarDocumentController::class, 'download'])
+        ->whereNumber(['rdv', 'document'])->middleware('throttle:30,1')->name('mymar.documents.download');
     Route::middleware(EnsureCrmV2Enabled::class)->group(function (): void {
         Route::get('/tech/planning/appointments/{appointment}', [TechAppointmentController::class, 'show'])->whereNumber('appointment')->name('tech.appointments.show');
         Route::post('/tech/planning/appointments/{appointment}/on-site-report', [TechAppointmentController::class, 'report'])

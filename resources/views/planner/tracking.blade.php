@@ -2071,6 +2071,8 @@
                 const serviceLabel = props.service_label || trackingAppointmentServiceType(props);
                 const statusLabel = props.is_mymar ? (props.visit_phase === 'after_works' ? 'MAR · Après travaux' : 'MAR · Visite initiale')
                     : (props.is_historical ? 'Historique' : (props.status === 'problem' ? 'Problème RDV' : 'Planifié'));
+                const timelineLabel = new Date(event.end).getTime() <= Date.now() ? 'Passé'
+                    : new Date(event.start).getTime() <= Date.now() ? 'En cours' : 'À venir';
                 const statusStyle = props.is_historical
                     ? 'background:#f1f5f9;color:#334155;border-color:#94a3b8;'
                     : (props.status === 'problem'
@@ -2089,6 +2091,7 @@
                         <div>
                             <p class="font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(formatDateTime(event.start))}</p>
                             <span class="mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" style="${statusStyle}">${trackingEscapeHtml(statusLabel)}</span>
+                            <span class="mt-1 inline-flex rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold">${timelineLabel}</span>
                         </div>
                         <div class="min-w-0">
                             <p class="truncate font-medium" style="color:var(--gc-text);">${trackingEscapeHtml(serviceLabel)}</p>
@@ -2133,7 +2136,9 @@
                         date_to: trackingSearchDateTo?.value || null,
                         technician_ids: selectedTechnicianIds(),
                         ...trackingCalendarFilters(),
-                        limit: 50,
+                        period: document.getElementById('tracking_search_period')?.value || 'all',
+                        sort: document.getElementById('tracking_search_sort')?.value || 'starts_desc',
+                        limit: Number(document.getElementById('tracking_search_limit')?.value || 50),
                         page: trackingSearchPage,
                     }),
                 });
@@ -2620,6 +2625,7 @@
             event.preventDefault();
             runTrackingAppointmentSearch();
         });
+        trackingSearchForm?.querySelectorAll('select').forEach(select => select.addEventListener('change', () => runTrackingAppointmentSearch(1)));
         trackingSearchReset?.addEventListener('click', () => {
             trackingSearchAbortController?.abort();
             if (trackingSearchQuery) trackingSearchQuery.value = '';
@@ -2627,6 +2633,10 @@
             if (trackingSearchDateTo) trackingSearchDateTo.value = '';
             const sourceFilter = document.getElementById('tracking_search_source');
             if (sourceFilter) sourceFilter.value = 'all';
+            for (const [id, value] of [['period', 'all'], ['sort', 'starts_desc'], ['limit', '50']]) {
+                const field = document.getElementById(`tracking_search_${id}`);
+                if (field) field.value = value;
+            }
             const marCoverage = document.getElementById('tracking-search-mar-coverage');
             if (marCoverage) marCoverage.textContent = '';
             trackingSearchResultEvents.clear();

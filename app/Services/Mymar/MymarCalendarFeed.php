@@ -80,6 +80,8 @@ class MymarCalendarFeed
                         'technician_id' => $period['cofrac_user_id'], 'technician_name' => $names[$period['cofrac_user_id']],
                         'source_rdv_id' => $period['source_rdv_id'], 'visit_phase' => $period['visit_phase'],
                         'can_reschedule' => ($actionConfig['writes_enabled'] ?? false) && $period['visit_phase'] === 'after_works',
+                        'documents_url' => $period['visit_phase'] === 'after_works'
+                            ? route('mymar.documents.index', ['rdv' => $period['source_rdv_id'], 'technician_id' => $period['cofrac_user_id']], false) : null,
                         'technician_full_name' => $names[$period['cofrac_user_id']], 'service_label' => $label, 'service_name' => $label,
                         'customer_name' => $details['customer_name'] ?? '', 'address' => $details['address'] ?? '',
                         'postal_code' => $details['postal_code'] ?? '', 'city' => $details['city'] ?? '',

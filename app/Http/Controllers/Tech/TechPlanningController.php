@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\AppointmentDocumentSerializer;
 use App\Services\CoffracAppointmentService;
+use App\Services\Mymar\MymarCalendarFeed;
 use App\Services\Tech\TechnicianWorkspace;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,10 @@ class TechPlanningController extends Controller
         abort_unless($this->canAccess($request), 403);
         $filters = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']]);
 
-        return view('tech.planning', $workspace->overview($request->user(), $filters['date'] ?? null));
+        $data = $workspace->overview($request->user(), $filters['date'] ?? null);
+        $mar = app(MymarCalendarFeed::class)->window([$request->user()->id], $data['selectedDay'], $data['selectedDay']->copy()->addDay());
+
+        return view('tech.planning', [...$data, 'marAppointments' => $mar['events'], 'marState' => $mar['state']]);
     }
 
     public function events(Request $request, TechnicianWorkspace $workspace): JsonResponse

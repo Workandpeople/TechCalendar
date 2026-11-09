@@ -23,6 +23,20 @@
                 @endforelse
             </ol>
         </section>
+        @if (config('crm.v2_enabled') && (!empty($marAppointments) || !in_array($marState ?? 'disabled', ['disabled', 'outside_pilot', 'observing'])))
+            <section class="tech-agenda" aria-labelledby="tech-mar-heading">
+                <h2 id="tech-mar-heading" class="text-lg font-semibold">Mes rendez-vous MAR</h2>
+                <p class="mt-1 text-sm text-slate-600">Accédez aux factures et devis de travaux de vos visites après travaux.</p>
+                @if (!in_array($marState, ['observing', 'partial']))
+                    <p class="mt-3 text-sm text-amber-800" role="status">La synchronisation MAR est à vérifier ; ces horaires peuvent être incomplets.</p>
+                @endif
+                <ul class="mt-4 space-y-3">
+                    @foreach ($marAppointments as $event)
+                        <li class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p class="text-sm font-semibold">{{ \Carbon\Carbon::parse($event['start'])->tz('Europe/Paris')->format('H:i') }} – {{ \Carbon\Carbon::parse($event['end'])->tz('Europe/Paris')->format('H:i') }}</p><h3 class="mt-1 font-semibold">{{ $event['extendedProps']['customer_name'] ?: 'Rendez-vous MAR' }}</h3><p class="mt-2 break-words text-sm">{{ $event['extendedProps']['address'] }}</p>@if ($event['extendedProps']['documents_url'])<a class="gc-btn-primary mt-3 w-full text-center" href="{{ $event['extendedProps']['documents_url'] }}">Factures et devis</a>@endif</li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
         @include('tech.partials.calendar')
         <details class="tech-panel tech-week-stats"><summary><span><strong>Ma semaine en chiffres</strong><small>{{ $weekDays->first()->format('d/m') }} au {{ $weekDays->last()->format('d/m') }}</small></span><x-nav-icon name="dashboard" /></summary><dl>@foreach ($stats as $stat)<div><dt>{{ $stat['label'] }}</dt><dd>{{ $stat['value'] }}</dd></div>@endforeach</dl><p>Les trajets et heures supplémentaires proviennent des derniers calculs enregistrés.</p></details>
     </div>

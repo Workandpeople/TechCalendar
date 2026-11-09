@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Mymar;
 
+use App\Models\User;
 use App\Services\Crm\DossierLocation;
 use App\Services\PlanningAddressGeocoder;
 use Illuminate\Validation\ValidationException;
@@ -22,8 +23,27 @@ class MymarBookingPlanning
         if ($item === null || ! MymarPendingBookings::isAfterWorksRequest($item)) {
             throw ValidationException::withMessages(['mymar_dossier_id' => 'Seules les demandes MAR après travaux en prise de RDV peuvent être placées ici. Actualisez la liste.']);
         }
+
+        return $this->planningRequest($item, $config);
+    }
+
+    public function replacement(User $actor, int $rdvId): array
+    {
+        $source = app(MymarBookingActions::class)->scheduled($actor, $rdvId);
+        preg_match('/\b(\d{5})\b\s*(.*)$/u', $source['address'], $locality);
+
+        return $this->planningRequest([
+            'dossier_id' => $source['dossier_id'], 'expected_revision' => $source['expected_revision'],
+            'first_name' => '', 'last_name' => $source['customer'], 'phone' => '', 'email' => null,
+            'address' => $source['address'], 'postal_code' => $locality[1] ?? '', 'city' => $locality[2] ?? '',
+            'latitude' => null, 'longitude' => null,
+        ], $this->settings->load(), $source);
+    }
+
+    private function planningRequest(array $item, array $config, ?array $replacement = null): array
+    {
         $service = app(MymarAfterWorksService::class)->resolve();
-        $duration = app(MymarAfterWorksService::class)->duration($service);
+        $duration = $replacement['duration_minutes'] ?? app(MymarAfterWorksService::class)->duration($service);
         $point = DossierLocation::point($item['latitude'], $item['longitude']);
         $precision = 'unknown';
         if ($point === null) {
@@ -36,14 +56,14 @@ class MymarBookingPlanning
         }
         $label = 'Visite après travaux';
 
-        return ['id' => 'mymar-'.$id, 'source' => 'mymar', 'is_mymar' => true, 'is_lot' => false, 'is_manual' => false,
-            'mymar_dossier_id' => $id, 'expected_revision' => $item['expected_revision'],
+        return ['id' => 'mymar-'.$item['dossier_id'], 'source' => 'mymar', 'is_mymar' => true, 'is_lot' => false, 'is_manual' => false,
+            'mymar_dossier_id' => $item['dossier_id'], 'mymar_rdv_id' => $replacement['rdv_id'] ?? null, 'expected_revision' => $item['expected_revision'],
             'first_name' => $item['first_name'], 'last_name' => $item['last_name'],
             'customer_name' => trim($item['last_name'].' '.$item['first_name']), 'phone' => $item['phone'], 'email' => $item['email'],
             'address' => $item['address'], 'postal_code' => $item['postal_code'], 'city' => $item['city'],
             'department_code' => DossierLocation::departmentCode($item['postal_code']), ...$point, 'location_precision' => $precision,
             'service' => ['id' => $service->id, 'type' => 'MAR', 'name' => $service->name, 'average_duration_minutes' => $duration],
-            'service_name' => $label, 'documents' => [], 'comments' => [], 'preferred_starts_at' => null,
+            'service_name' => $label, 'documents' => [], 'comments' => [], 'preferred_starts_at' => $replacement['starts_at'] ?? null,
             'mymar_technician_ids' => array_column($config['bindings'], 'cofrac_user_id')];
     }
 }

@@ -64,7 +64,7 @@ class PlannerBookingController extends Controller
         abort_unless($this->canAccess($request), 403);
 
         $isReplacementMode = $request->routeIs('planner.appointments.modify', 'manager.appointments.modify')
-            || $request->filled('replace_appointment_id') || str_starts_with((string) $request->query('crm_appointment_id'), 'rebook-');
+            || $request->filled('replace_appointment_id') || $request->filled('mymar_rdv_id') || str_starts_with((string) $request->query('crm_appointment_id'), 'rebook-');
         $isManagerRoute = $request->routeIs('manager.*');
         $services = Service::query()->catalog()
             ->with(['externalAliases' => fn ($query) => $query
@@ -103,6 +103,7 @@ class PlannerBookingController extends Controller
             'coffracApiStatus' => $coffracPending['status'],
             'externalAppointmentSources' => $externalAppointmentSources,
             'bookingConnectorsEnabled' => $bookingConnectorsEnabled,
+            'initialMymarRdvId' => $request->integer('mymar_rdv_id') ?: null,
             'lotRequests' => $isReplacementMode ? collect() : $this->lotAppointmentRequests($autoCompletion),
             'initialCrmAppointmentId' => $request->query('crm_appointment_id'),
             'initialReplaceAppointmentId' => $request->query('replace_appointment_id') ?: $request->query('appointment_id'),
@@ -199,7 +200,7 @@ class PlannerBookingController extends Controller
             'technicians' => $this->serializeTechnicians($technicians),
             'events' => $this->calendarEvents($appointments, $replacementAppointmentId)->concat($mymar['events'])->values(),
             'mymar' => array_diff_key($mymar, ['events' => true]),
-            'suggestions' => app(MymarSlotGuard::class)->filterSuggestions($this->buildSlotSuggestions($technicians, $appointmentsForSuggestions, $crmAppointment, $drivingRoutes)),
+            'suggestions' => app(MymarSlotGuard::class)->filterSuggestions($this->buildSlotSuggestions($technicians, $appointmentsForSuggestions, $crmAppointment, $drivingRoutes), $crmAppointment['mymar_rdv_id'] ?? null),
             'calendar_range' => [
                 'start' => $calendarStart->toDateString(),
                 'end' => $calendarEnd->toDateString(),
@@ -443,7 +444,7 @@ class PlannerBookingController extends Controller
                 $drivingRoutes,
                 $windowStart,
                 $windowEnd,
-            )),
+            ), $crmAppointment['mymar_rdv_id'] ?? null),
             'calendar_range' => [
                 'start' => $windowStart->toIso8601String(),
                 'end' => $windowEnd->toIso8601String(),
@@ -462,6 +463,7 @@ class PlannerBookingController extends Controller
         $payload = $request->validate([
             ...$this->appointmentRequestRules(),
             'mymar_dossier_id' => ['prohibited'],
+            'mymar_rdv_id' => ['prohibited'],
             'technician_id' => [
                 'required',
                 'integer',
@@ -1245,9 +1247,10 @@ class PlannerBookingController extends Controller
     private function appointmentRequestRules(): array
     {
         return [
-            'mymar_dossier_id' => ['nullable', 'integer', 'min:1', 'prohibits:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id', 'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id'],
+            'mymar_rdv_id' => ['nullable', 'integer', 'min:1', 'prohibits:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id', 'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id'],
+            'mymar_dossier_id' => ['nullable', 'integer', 'min:1', 'prohibits:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id,mymar_rdv_id', 'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,replace_appointment_id,mymar_rdv_id'],
             'mymar_duration_minutes' => ['nullable', 'integer', 'min:60', 'max:480', 'multiple_of:60'],
-            'crm_appointment_id' => ['nullable', 'string', 'prohibits:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id'],
+            'crm_appointment_id' => ['nullable', 'string', 'prohibits:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id,mymar_rdv_id', 'required_without_all:manual_appointment,lot_appointment_id,replace_appointment_id,mymar_dossier_id,mymar_rdv_id'],
             'crm_service_id' => [
                 'nullable',
                 'integer',
@@ -1256,8 +1259,8 @@ class PlannerBookingController extends Controller
             'lot_appointment_id' => [
                 'nullable',
                 'integer',
-                'prohibits:manual_appointment,crm_appointment_id,replace_appointment_id,mymar_dossier_id',
-                'required_without_all:crm_appointment_id,manual_appointment,replace_appointment_id,mymar_dossier_id',
+                'prohibits:manual_appointment,crm_appointment_id,replace_appointment_id,mymar_dossier_id,mymar_rdv_id',
+                'required_without_all:crm_appointment_id,manual_appointment,replace_appointment_id,mymar_dossier_id,mymar_rdv_id',
                 Rule::exists('lot_appointments', 'id'),
             ],
             'lot_service_id' => [
@@ -1274,11 +1277,11 @@ class PlannerBookingController extends Controller
             'replace_appointment_id' => [
                 'nullable',
                 'integer',
-                'prohibits:manual_appointment,crm_appointment_id,lot_appointment_id,mymar_dossier_id',
-                'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,mymar_dossier_id',
+                'prohibits:manual_appointment,crm_appointment_id,lot_appointment_id,mymar_dossier_id,mymar_rdv_id',
+                'required_without_all:crm_appointment_id,manual_appointment,lot_appointment_id,mymar_dossier_id,mymar_rdv_id',
                 Rule::exists('appointments', 'id')->whereNull('deleted_at'),
             ],
-            'manual_appointment' => ['nullable', 'array', 'prohibits:crm_appointment_id,lot_appointment_id,replace_appointment_id,mymar_dossier_id', 'required_without_all:crm_appointment_id,lot_appointment_id,replace_appointment_id,mymar_dossier_id'],
+            'manual_appointment' => ['nullable', 'array', 'prohibits:crm_appointment_id,lot_appointment_id,replace_appointment_id,mymar_dossier_id,mymar_rdv_id', 'required_without_all:crm_appointment_id,lot_appointment_id,replace_appointment_id,mymar_dossier_id,mymar_rdv_id'],
             'manual_appointment.first_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.last_name' => ['required_with:manual_appointment', 'string', 'max:120'],
             'manual_appointment.phone' => ['required_with:manual_appointment', 'string', 'max:255'],
@@ -1319,6 +1322,9 @@ class PlannerBookingController extends Controller
         array $payload,
         CoffracAppointmentService $coffracAppointments
     ): ?array {
+        if (! empty($payload['mymar_rdv_id'])) {
+            return app(MymarBookingPlanning::class)->replacement(auth()->user(), (int) $payload['mymar_rdv_id']);
+        }
         if (! empty($payload['mymar_dossier_id'])) {
             return app(MymarBookingPlanning::class)->resolve((int) $payload['mymar_dossier_id']);
         }

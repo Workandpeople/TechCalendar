@@ -3,6 +3,7 @@
 namespace App\Services\Mymar;
 
 use App\Models\Service;
+use App\Services\Crm\AppointmentTimeline;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -34,12 +35,16 @@ final class MymarCalendarSearch
             $terms = preg_split('/\s+/u', Str::lower(Str::ascii(trim($filters['q'] ?? ''))), -1, PREG_SPLIT_NO_EMPTY) ?: [];
             $from = empty($filters['date_from']) ? null : CarbonImmutable::parse($filters['date_from'], 'Europe/Paris')->startOfDay();
             $to = empty($filters['date_to']) ? null : CarbonImmutable::parse($filters['date_to'], 'Europe/Paris')->endOfDay();
-            $events = array_values(array_filter($feed['events'], function (array $event) use ($filters, $service, $terms, $from, $to): bool {
+            $now = CarbonImmutable::now('Europe/Paris');
+            $events = array_values(array_filter($feed['events'], function (array $event) use ($filters, $service, $terms, $from, $to, $now): bool {
                 $props = $event['extendedProps'];
                 if (($filters['appointment_status'] ?? 'all') === 'problem' || ($service && ($service->type !== Service::TYPE_MAR || $props['visit_phase'] !== 'after_works'))) {
                     return false;
                 }
                 $start = CarbonImmutable::parse($event['start']);
+                if (! AppointmentTimeline::matches($event, $filters['period'] ?? 'all', $now)) {
+                    return false;
+                }
                 if (($from && $start < $from) || ($to && $start > $to)) {
                     return false;
                 }

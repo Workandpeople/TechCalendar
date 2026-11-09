@@ -29,7 +29,8 @@ final class MymarDocumentSqlAccess
             ],
         ];
 
-        return $writer ? $tables : array_filter(array_map(static fn ($operations) => array_intersect_key($operations, ['SELECT' => true]), $tables));
+        return $writer ? $tables : array_diff_key(array_filter(array_map(static fn ($operations) => array_intersect_key($operations, ['SELECT' => true]), $tables)),
+            ['cofrac_mymar_integration.document_commands' => true]);
     }
 
     public static function createSql(string $user, #[\SensitiveParameter] string $password, bool $writer = false): string

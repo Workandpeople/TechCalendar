@@ -7,6 +7,9 @@
         <div><label class="gc-label" for="tracking_search_date_from">Du</label><input id="tracking_search_date_from" type="date" class="gc-input"></div>
         <div><label class="gc-label" for="tracking_search_date_to">Au</label><input id="tracking_search_date_to" type="date" class="gc-input"></div>
         <div><label class="gc-label" for="tracking_search_source">Origine</label><select id="tracking_search_source" class="gc-input"><option value="all">Cofrac et MAR</option><option value="cofrac">Cofrac uniquement</option><option value="mar">MAR uniquement</option></select></div>
+        <div><label class="gc-label" for="tracking_search_period">Période du RDV</label><select id="tracking_search_period" class="gc-input"><option value="all">Tous les rendez-vous</option><option value="upcoming">À venir</option><option value="ongoing">En cours</option><option value="past">Passés</option></select></div>
+        <div><label class="gc-label" for="tracking_search_sort">Trier par</label><select id="tracking_search_sort" class="gc-input"><option value="starts_desc">Date : plus récents en premier</option><option value="starts_asc">Date : plus anciens en premier</option><option value="duration_asc">Durée : plus courts en premier</option><option value="duration_desc">Durée : plus longs en premier</option></select></div>
+        <div><label class="gc-label" for="tracking_search_limit">RDV par page</label><select id="tracking_search_limit" class="gc-input"><option value="10">10</option><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></div>
         <div class="flex items-center gap-3 sm:col-span-2 xl:col-span-4">
             <button id="tracking-search-submit" type="submit" class="gc-btn-primary">Rechercher</button>
             <button id="tracking-search-reset" type="button" class="gc-link">Effacer la recherche</button>

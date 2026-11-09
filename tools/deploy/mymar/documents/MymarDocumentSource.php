@@ -25,7 +25,7 @@ final readonly class MymarDocumentSource
     ) {
         if ($database->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql' || $database->getAttribute(PDO::ATTR_ERRMODE) !== PDO::ERRMODE_EXCEPTION
             || ! array_is_list($technicianIds) || $technicianIds === [] || count($technicianIds) > 200
-            || count(array_unique($technicianIds, SORT_REGULAR)) !== count($technicianIds) || $technicalAuthorId < 1
+            || count(array_unique($technicianIds, SORT_REGULAR)) !== count($technicianIds) || ($uploadsEnabled && $technicalAuthorId < 1)
             || in_array($technicalAuthorId, $technicianIds, true) || ($uploadsEnabled && ! $enabled)) {
             throw new MymarDocumentFailure('documents_invalid_configuration', 503);
         }
@@ -231,10 +231,11 @@ final readonly class MymarDocumentSource
     private function assertSchema(): void
     {
         $history = $this->uploadsEnabled ? ",'dossier_historiques'" : '';
+        $journal = $this->uploadsEnabled ? " OR (TABLE_SCHEMA='cofrac_mymar_integration' AND TABLE_NAME='document_commands')" : '';
         $tables = $this->database->query('SELECT TABLE_TYPE,ENGINE FROM information_schema.TABLES WHERE'
             ." (TABLE_SCHEMA='MYMAR' AND TABLE_NAME IN ('dossiers','clients','dossier_rdv','dossier_documents','users','roles','model_has_roles','status'$history))"
-            ." OR (TABLE_SCHEMA='cofrac_mymar_integration' AND TABLE_NAME='document_commands')")->fetchAll(PDO::FETCH_ASSOC);
-        if (count($tables) !== ($this->uploadsEnabled ? 10 : 9)
+            .$journal)->fetchAll(PDO::FETCH_ASSOC);
+        if (count($tables) !== ($this->uploadsEnabled ? 10 : 8)
             || array_filter($tables, static fn ($table) => $table['TABLE_TYPE'] !== 'BASE TABLE' || $table['ENGINE'] !== 'InnoDB')) {
             throw new MymarDocumentFailure('documents_schema_refused', 503);
         }

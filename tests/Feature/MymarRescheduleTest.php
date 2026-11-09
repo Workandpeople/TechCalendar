@@ -4,6 +4,8 @@ use App\Models\Appointment;
 use App\Models\MymarBookingRequest;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\MapboxAddressGeocoder;
+use App\Services\MapboxDrivingRouteService;
 use App\Services\Mymar\MymarActionSettings;
 use App\Services\Mymar\MymarBookingReaderSettings;
 use App\Services\Mymar\MymarObservationSync;
@@ -90,6 +92,35 @@ it('loads fresh replacement data and only offers active mapped MAR-qualified tec
         ->assertJsonPath('duration_minutes', 120)->assertJsonCount(1, 'technicians');
     Http::assertSentCount(1);
     expect(MymarBookingRequest::count())->toBe(0);
+});
+
+it('opens the complete MAR planning flow with the existing visit duration and no write', function () {
+    $this->actingAs($this->actor)->get(route('planner.book', ['mymar_rdv_id' => 555]))->assertOk()
+        ->assertViewHas('initialMymarRdvId', 555)->assertViewHas('bookingMode', 'replace')
+        ->assertDontSee('<section id="booking-replacement-search-section"', false);
+    Http::assertNothingSent();
+    $geocoder = Mockery::mock(MapboxAddressGeocoder::class);
+    $geocoder->shouldReceive('geocode')->with($this->source['address'])->andReturn(['latitude' => 48.85, 'longitude' => 2.35, 'precision' => 'address']);
+    app()->instance(MapboxAddressGeocoder::class, $geocoder);
+    $routes = Mockery::mock(MapboxDrivingRouteService::class);
+    $routes->shouldReceive('estimate')->andReturn(['distance_km' => 2, 'duration_minutes' => 10, 'source' => 'mapbox']);
+    app()->instance(MapboxDrivingRouteService::class, $routes);
+    app(MymarSlotGuard::class)->shouldReceive('filterSuggestions')->withArgs(fn ($suggestions, $ignore) => $ignore === 555)->andReturnUsing(fn ($suggestions) => $suggestions);
+    $this->tech->update(['latitude' => 48.85, 'longitude' => 2.35]);
+    $this->actingAs($this->actor)->postJson(route('planner.book.analyze'), ['mymar_rdv_id' => 555])->assertOk()
+        ->assertJsonPath('crm_appointment.mymar_rdv_id', 555)->assertJsonPath('crm_appointment.mymar_dossier_id', 123)
+        ->assertJsonPath('crm_appointment.service.average_duration_minutes', 120)
+        ->assertJsonPath('crm_appointment.expected_revision', $this->source['expected_revision']);
+    expect(Appointment::count())->toBe(0)->and(MymarBookingRequest::count())->toBe(0);
+    Http::assertNotSent(fn ($request) => $request->method() !== 'GET');
+    $this->get(route('planner.tracking'))->assertOk()->assertSee('Replanifier avec le planning')->assertSee('?mymar_rdv_id=', false);
+});
+
+it('rejects mixed replacement sources and cannot create a native copy of a MAR replacement', function () {
+    $this->actingAs($this->actor)->postJson(route('planner.book.analyze'), ['mymar_rdv_id' => 555, 'mymar_dossier_id' => 123])->assertUnprocessable();
+    $this->postJson(route('planner.book.analyze'), ['mymar_rdv_id' => 555, 'crm_appointment_id' => 'dossier-1'])->assertUnprocessable();
+    $this->postJson(route('planner.book.appointments.store'), ['mymar_rdv_id' => 555])->assertUnprocessable();
+    Http::assertNothingSent();
 });
 
 it('preserves the actual MYMAR duration and confirms a new appointment without creating a native copy', function () {

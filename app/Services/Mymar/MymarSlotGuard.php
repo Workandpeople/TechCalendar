@@ -57,7 +57,7 @@ class MymarSlotGuard
         }
     }
 
-    public function filterSuggestions(array $suggestions): array
+    public function filterSuggestions(array $suggestions, ?int $ignoreRdvId = null): array
     {
         $config = $this->settings->load();
         if (! ($config['guard_enabled'] ?? false) || $suggestions === []) {
@@ -68,14 +68,15 @@ class MymarSlotGuard
             $values = Cache::many([$pilot->cacheKey(), $pilot->cacheKey().':failure']);
             $snapshot = MymarOccupancySnapshot::fromCache($pilot, $values[$pilot->cacheKey()] ?? null, isset($values[$pilot->cacheKey().':failure']), new DateTimeImmutable);
 
-            return array_values(array_filter($suggestions, function (array $suggestion) use ($snapshot, $config): bool {
+            return array_values(array_filter($suggestions, function (array $suggestion) use ($snapshot, $config, $ignoreRdvId): bool {
                 $id = (int) ($suggestion['extendedProps']['technician_id'] ?? 0);
                 if (! in_array($id, array_column($config['bindings'], 'cofrac_user_id'), true)) {
                     return true;
                 }
                 $result = $snapshot->inspect($id, new DateTimeImmutable($suggestion['start']), new DateTimeImmutable($suggestion['end']));
 
-                return $result['known'] && $result['overlaps'] === [];
+                return $result['known'] && array_filter($result['overlaps'],
+                    fn ($period) => $period['source_rdv_id'] !== $ignoreRdvId) === [];
             }));
         } catch (Throwable) {
             $mapped = array_column($config['bindings'], 'cofrac_user_id');

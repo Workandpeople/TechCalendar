@@ -25,6 +25,7 @@
     .mymar-observation-dialog h2 { margin: 0 0 14px; font-size: 18px; font-weight: 700; }
     .mymar-observation-dialog p { margin: 10px 0; font-size: 14px; line-height: 1.6; }
     .mymar-observation-dialog button { display: block; margin: 18px 0 0 auto; padding: 8px 14px; border: 1px solid var(--gc-border, #cbd5e1); border-radius: 10px; font-weight: 600; }
+    .mymar-observation-dialog > a, .mymar-observation-dialog > button[data-mymar-reschedule-id] { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 10px; }
 </style>
 <script>
 (() => {
@@ -90,12 +91,20 @@
             node('p', props.technician_name || 'Technicien'),
             node('p', date(event.start, { dateStyle: 'full', timeStyle: 'short' }) + ' – ' + date(event.end, { timeStyle: 'short' })),
             node('p', props.can_reschedule ? 'Le replacement sera enregistré dans MYMAR ; l’ancien créneau et son historique seront conservés.' : props.availability_guard_enabled ? 'Ce rendez-vous est pris en compte dans les disponibilités. Il reste en lecture seule et se modifie dans MYMAR.' : 'Observation uniquement : ce rendez-vous MYMAR ne bloque pas encore les créneaux et ne peut pas être modifié ici.'),
-            node('p', props.availability_guard_enabled ? 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.' : 'Les durées et horaires restent à confirmer. Les documents et les trajets MYMAR ne sont pas repris.'),
+            node('p', (props.availability_guard_enabled ? '' : 'Les horaires restent à confirmer. ') + 'Les trajets autour des rendez-vous MYMAR ne sont pas encore calculés.'),
             node('p', 'Dernière synchronisation : ' + date(props.synced_at, { dateStyle: 'short', timeStyle: 'short' })), close);
         if (props.can_reschedule === true && props.visit_phase === 'after_works' && Number.isSafeInteger(props.source_rdv_id) && props.source_rdv_id > 0) {
-            const replan = node('button', 'Replacer le rendez-vous MAR');
+            const replan = node('button', 'Replacer rapidement');
             replan.type = 'button'; replan.className = 'gc-btn-warning'; replan.dataset.mymarRescheduleId = String(props.source_rdv_id);
             dialog.append(replan);
+            const full = node('a', 'Replanifier avec le planning', 'gc-btn-secondary');
+            full.href = @json(route('planner.book', [], false)) + '?mymar_rdv_id=' + encodeURIComponent(props.source_rdv_id);
+            dialog.append(full);
+        }
+        if (props.visit_phase === 'after_works' && typeof props.documents_url === 'string' && props.documents_url.startsWith('/mar/appointments/')) {
+            const documents = node('a', 'Factures et devis de travaux', 'gc-btn-secondary');
+            documents.href = props.documents_url;
+            dialog.append(documents);
         }
         dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus({ preventScroll: true }); }, { once: true });
         document.body.append(dialog);
