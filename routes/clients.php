@@ -34,6 +34,7 @@ Route::middleware(['auth', EnsureCrmV2Enabled::class])->group(function (): void 
         Route::post('/dossiers/{dossier}/prestations/{operation}/recontrole', 'respondToNonConformity')
             ->middleware('throttle:15,1')->name('dossiers.recontrol');
         Route::get('/documents/{document}', 'download')->name('documents.download');
+        Route::delete('/documents/{document}', 'removeDocument')->whereNumber('document')->middleware('throttle:15,1')->name('documents.destroy');
         Route::get('/dossiers/{dossier}/archive/{document}', 'archive')->whereNumber('document')->name('dossiers.archive');
         Route::get('/dossiers/{dossier}/documents-lots/{document}', 'lotDocument')->whereNumber('document')->name('dossiers.lot-documents.download');
         Route::get('/lots', 'lots')->name('lots');

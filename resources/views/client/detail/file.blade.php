@@ -14,5 +14,19 @@
         @else
             <span class="gc-portal-unavailable">Fichier indisponible</span>
         @endif
+        @if ($fileDeleteUrl ?? null)
+            <button type="button" class="gc-portal-file-action" data-tone="danger" data-dialog-target="{{ $fileDeleteDialog }}" aria-label="Supprimer {{ $fileName }}" title="Supprimer {{ $fileName }}"><x-nav-icon name="trash" /><span class="sr-only">Supprimer</span></button>
+        @endif
     </div>
+    @if ($fileDeleteUrl ?? null)
+        <x-dossier-dialog :id="$fileDeleteDialog" title="Supprimer votre document ?">
+            <form method="POST" action="{{ $fileDeleteUrl }}" class="gc-portal-form">
+                @csrf
+                @method('DELETE')
+                <p>Supprimer <strong class="break-words">{{ $fileName }}</strong> du dossier ?</p>
+                <p class="gc-portal-form-intro">Ce document ne sera plus accessible dans le dossier. Une trace sera conservée par notre équipe. Le dossier et son état ne seront pas modifiés.</p>
+                <footer class="gc-dialog-actions"><button type="button" class="gc-btn-secondary" data-dialog-close>Annuler</button><button type="submit" class="gc-btn-danger"><x-nav-icon name="trash" />Supprimer le document</button></footer>
+            </form>
+        </x-dossier-dialog>
+    @endif
 </li>

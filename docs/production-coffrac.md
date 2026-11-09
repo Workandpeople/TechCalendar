@@ -3425,3 +3425,19 @@ le motif, prendre une photo et valider. Verifier ensuite dans le dossier
 interne le commentaire signe, la photo et le passage en probleme RDV. Ce test
 effectue bien des ecritures et peut declencher les notifications autorisees :
 le realiser sur une demo sans envois ou avec un dossier fictif sans destinataire.
+
+### Retrait des documents par leur auteur client (9 novembre 2026)
+
+- Dans le dossier du portail, un client peut supprimer uniquement les documents
+  libres dont son propre compte est l'auteur. Une confirmation precede le retrait.
+- Les droits de lecture et de depot, l'affectation de l'organisation et les
+  categories accessibles restent requis. Un autre compte de la meme organisation
+  ne peut pas supprimer la piece. Aucun acces supplementaire pour les delegataires.
+- Les pieces internes, historiques, de lots, rapports, visites et justificatifs
+  deja utilises pour un controle, une visite, un recontrole ou un suivi CAPCEE
+  restent proteges. Le controle serveur s'applique aussi aux requetes directes.
+- Retrait transactionnel sous verrou du dossier : fichier conserve, soft delete
+  et trace privee avec l'auteur. Les etats, avis et facturations ne changent pas.
+  Aucun mail/SMS n'est envoye. Aucun schema, droit stocke ou parametre a migrer.
+- Les autorisations de retrait sont calculees uniquement pour les 15 documents
+  de la page courante, avec un nombre constant de requetes.

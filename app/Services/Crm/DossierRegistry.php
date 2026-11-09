@@ -400,14 +400,32 @@ class DossierRegistry
             if ($controlEvidence) {
                 Gate::forUser($actor)->authorize('reviewControl', $dossier);
             }
-            // Soft deletion hides the attachment, not the control result or its retained evidence.
-            $document->forceFill(['client_visible' => false, 'delegataire_visible' => false])->save();
-            $document->delete();
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
-                'body' => 'Document retiré : '.$document->name.'. Fichier et trace conservés ; état, avis et facturation inchangés.',
-                'changed_fields' => ['document_id' => $document->id, 'document_type' => $document->document_type,
-                    'control_evidence_retained' => $controlEvidence, 'control_reference' => $document->control_reference]]);
+            $this->withdrawDocument($actor, $document, $dossier, $controlEvidence);
         });
+    }
+
+    public function removeClientDocument(User $actor, DossierDocument $document): void
+    {
+        $access = app(ClientAccess::class);
+        abort_unless($access->removableDocuments($actor, $document->dossier)->whereKey($document->id)->exists(), 403);
+        DB::transaction(function () use ($actor, $document, $access): void {
+            // All dossier mutations use this lock; recheck ownership, access and evidence after waiting.
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($document->dossier_id);
+            $document = $dossier->documents()->lockForUpdate()->findOrFail($document->id);
+            abort_unless($access->removableDocuments($actor, $dossier)->whereKey($document->id)->exists(), 403);
+            $this->withdrawDocument($actor, $document, $dossier, false);
+        });
+    }
+
+    private function withdrawDocument(User $actor, DossierDocument $document, Dossier $dossier, bool $controlEvidence): void
+    {
+        // Soft deletion hides the attachment, not the control result or its retained evidence.
+        $document->forceFill(['client_visible' => false, 'delegataire_visible' => false])->save();
+        $document->delete();
+        $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'document_removed',
+            'body' => 'Document retiré : '.$document->name.'. Fichier et trace conservés ; état, avis et facturation inchangés.',
+            'changed_fields' => ['document_id' => $document->id, 'document_type' => $document->document_type,
+                'control_evidence_retained' => $controlEvidence, 'control_reference' => $document->control_reference]]);
     }
 
     private function reportDuplicateReference(string $reference, UniqueConstraintViolationException $exception): never

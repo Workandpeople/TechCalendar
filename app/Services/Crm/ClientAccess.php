@@ -79,6 +79,27 @@ class ClientAccess
         return $user->externalClient->kind === 'client';
     }
 
+    public function removableDocuments(User $user, Dossier $dossier): Builder
+    {
+        $documents = $dossier->documents()->getQuery();
+        if (! $this->uploadDocument($user, $dossier)) {
+            return $documents->whereRaw('1 = 0');
+        }
+
+        return $documents->where('author_id', $user->id)->where('document_type', 'free')->where('client_visible', true)
+            ->whereNotExists(fn (QueryBuilder $query) => $query->selectRaw('1')->from('dossier_operations')
+                ->whereColumn('dossier_operations.dossier_id', 'dossier_documents.dossier_id')
+                ->whereColumn('report_document_id', 'dossier_documents.id'))
+            ->whereNotExists(fn (QueryBuilder $query) => $query->selectRaw('1')->from('capcee_automatic_submissions')
+                ->whereColumn('dossier_document_id', 'dossier_documents.id'))
+            // Keep evidence already used by a visit or an explicit correction response.
+            ->whereNotExists(fn (QueryBuilder $query) => $query->selectRaw('1')->from('dossier_activities')
+                ->whereColumn('dossier_activities.dossier_id', 'dossier_documents.dossier_id')
+                ->where(fn (QueryBuilder $references) => $references
+                    ->whereColumn('changed_fields->visit_document_id', 'dossier_documents.id')
+                    ->orWhereColumn('changed_fields->response_document_id', 'dossier_documents.id')));
+    }
+
     public function createDossier(User $user): bool
     {
         return $this->allows($user, 'create_dossiers') && $user->externalClient->kind === 'client'

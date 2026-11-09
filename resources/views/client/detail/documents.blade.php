@@ -15,6 +15,8 @@
                         'fileOutcome' => $document->document_type === 'report' ? $document->control_outcome : null,
                         'fileUrl' => route('client.documents.download', $document),
                         'filePreview' => \App\Services\Crm\DocumentResponseHeaders::previewable($document->mime_type),
+                        'fileDeleteUrl' => in_array($document->id, $removableDocumentIds, true) ? route('client.documents.destroy', $document) : null,
+                        'fileDeleteDialog' => 'client-document-remove-'.$document->id,
                         'fileLabel' => match ($document->document_type) { 'report' => 'Rapport', 'visit' => 'Visite technique', default => 'Document' }])
                 @endforeach
             </ul>

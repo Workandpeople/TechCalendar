@@ -73,6 +73,7 @@
     .gc-portal-file-actions { display: flex; flex-shrink: 0; gap: .4rem; }
     .gc-portal-file-action { display: inline-flex; gap: .4rem; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: .5rem; border-radius: .6rem; color: #07576e; background: #dcf7fc; border: 1px solid #9fdce9; font-size: .73rem; font-weight: 700; }
     .gc-portal-file-action[data-tone='download'] { color: #2057c8; background: #edf2ff; border-color: #cbdbff; }
+    .gc-portal-file-action[data-tone='danger'] { color: #a52d37; background: #fff1f2; border-color: #f3cbd0; }
     .gc-portal-file-action:hover { filter: brightness(.96); }
     .gc-portal-file-action svg { width: 17px; height: 17px; }
     .gc-portal-unavailable { color: var(--portal-muted); font-size: .73rem; max-width: 7rem; }

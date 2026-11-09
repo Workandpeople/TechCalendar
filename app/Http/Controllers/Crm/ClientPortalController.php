@@ -86,6 +86,14 @@ class ClientPortalController extends Controller
         return $registry->download($request->user(), $document, $request->boolean('preview'));
     }
 
+    public function removeDocument(Request $request, DossierDocument $document, DossierRegistry $registry)
+    {
+        $registry->removeClientDocument($request->user(), $document);
+
+        return redirect()->to(route('client.dossiers.show', $document->dossier_id).'#client-documents')
+            ->with('status', 'Votre document a été supprimé du dossier.');
+    }
+
     public function respondToNonConformity(ClientCorrectionRequest $request, Dossier $dossier, DossierOperation $operation, PostVisitWorkflow $workflow)
     {
         $workflow->respond($request->user(), $dossier, $operation, $request->validated());

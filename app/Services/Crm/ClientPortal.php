@@ -107,6 +107,8 @@ class ClientPortal
 
         return [
             'dossier' => $dossier, 'documents' => $documents, 'collected' => $collected, 'lotDocuments' => $lotDocuments,
+            'removableDocumentIds' => $documents?->isNotEmpty()
+                ? $this->access->removableDocuments($actor, $dossier)->whereKey($documents->getCollection()->modelKeys())->pluck('id')->all() : [],
             'nextAppointment' => $dossier->appointments()->where('appointments.status', Appointment::STATUS_SCHEDULED)
                 ->where('ends_at', '>=', now())->orderBy('starts_at')->first(),
             'appointments' => $dossier->appointments()->orderByDesc('starts_at')->paginate(10, ['appointments.*'], 'rdv_page')->fragment('client-appointments'),
