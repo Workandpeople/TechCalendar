@@ -9,13 +9,13 @@ use InvalidArgumentException;
 /** Dedicated, initially locked accounts. Existing booking grants are never broadened. */
 final class MymarDocumentSqlAccess
 {
-    public static function privileges(bool $writer = false): array
+    public static function privileges(bool $writer = false, bool $documentDates = true): array
     {
         $tables = [
             'MYMAR.dossiers' => ['SELECT' => ['id', 'client_id', 'status_id', 'technicien_id', 'updated_at'], 'UPDATE' => ['status_id', 'sub_statut', 'updated_at']],
             'MYMAR.clients' => ['SELECT' => ['id', 'nom', 'prenom']],
             'MYMAR.dossier_rdv' => ['SELECT' => ['id', 'dossier_id', 'date_rdv', 'is_old', 'updated_at']],
-            'MYMAR.dossier_documents' => ['SELECT' => ['id', 'dossier_id', 'nom', 'path'],
+            'MYMAR.dossier_documents' => ['SELECT' => ['id', 'dossier_id', 'nom', 'path', ...($documentDates ? ['created_at'] : [])],
                 'INSERT' => ['dossier_id', 'author_id', 'path', 'nom', 'description', 'is_public', 'is_validated', 'request_data', 'created_at', 'updated_at']],
             'MYMAR.users' => ['SELECT' => ['id', 'enabled']],
             'MYMAR.roles' => ['SELECT' => ['id', 'name']],
@@ -48,7 +48,18 @@ final class MymarDocumentSqlAccess
         return $sql;
     }
 
-    public static function validateGrants(array $grants, bool $writer = false): void
+    public static function dateAccessSql(string $user, bool $enable = true): string
+    {
+        if (! preg_match('/^cofrac_mymar_dr_[a-f0-9]{8}$/D', $user)) {
+            throw new InvalidArgumentException('mymar.invalid_document_account');
+        }
+
+        return ($enable ? 'GRANT' : 'REVOKE').' SELECT (`created_at`) ON `MYMAR`.`dossier_documents` '
+            .($enable ? 'TO' : 'FROM')." '$user'@'localhost';\n";
+    }
+
+    /** Returns date-read capability; the exact previous grants remain valid during rollout. */
+    public static function validateGrants(array $grants, bool $writer = false): bool
     {
         $seen = [];
         $account = '`cofrac_mymar_'.($writer ? 'dw' : 'dr').'_[a-f0-9]{8}`@`localhost`';
@@ -87,8 +98,14 @@ final class MymarDocumentSqlAccess
 
             return $tables;
         };
-        if ($normalize($seen) !== $normalize(self::privileges($writer))) {
-            throw new MymarDocumentFailure('documents_unsafe_grants', 503);
+        $seen = $normalize($seen);
+        if ($seen === $normalize(self::privileges($writer))) {
+            return true;
         }
+        if ($seen === $normalize(self::privileges($writer, documentDates: false))) {
+            return false;
+        }
+
+        throw new MymarDocumentFailure('documents_unsafe_grants', 503);
     }
 }

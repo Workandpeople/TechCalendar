@@ -6,7 +6,7 @@
 @endif
 @can('reportOnSiteProblem', $appointment)
     <details id="tech-on-site-report" class="tech-panel tech-on-site-report" @if ($errors->any()) open @endif>
-        <summary><x-nav-icon name="alert" /><span>Signaler un problème sur place<small>Client absent, injoignable ou accès impossible</small></span><span aria-hidden="true">+</span></summary>
+        <summary><x-nav-icon name="alert" /><span>Signaler un problème sur place<small>Client absent, refus du RDV, oubli ou accès impossible</small></span><span aria-hidden="true">+</span></summary>
         <form method="POST" action="{{ route('tech.appointments.on-site-report', $appointment) }}" enctype="multipart/form-data"
               data-on-site-report data-actor="{{ auth()->id() }}" data-appointment="{{ $appointment->id }}">
             @csrf

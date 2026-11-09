@@ -3384,7 +3384,8 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 
 - Depuis une intervention mobile Cofrac ou lot rattachee a un dossier natif,
   « Signaler un probleme sur place » ouvre un formulaire compact : client absent,
-  injoignable, acces impossible ou autre motif avec commentaire obligatoire.
+  refus du rendez-vous, rendez-vous oublie, injoignable, acces impossible ou autre
+  motif avec commentaire obligatoire pour « Autre ».
   Une photo JPEG/PNG/WebP est obligatoire pour valider ce signalement, pas pour
   consulter les documents ou realiser normalement une visite.
 - Seul le technicien actuellement affecte peut le faire, sur un RDV planifie
@@ -3415,3 +3416,12 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
 - Aucun schema, service ou package supplementaire. PHP GD est deja un prerequis
   du runtime. MYMAR et ses rendez-vous restent exclus de cette action : aucune
   extension de ses droits ou de son workflow documentaire dans ce correctif.
+
+Pour tester sans toucher a une intervention reelle : utiliser un compte
+technicien de test actif, lui attribuer un dossier fictif avec une prestation
+en attente de visite et un RDV planifie. Dans son espace mobile, ouvrir
+`Planning technicien` puis le RDV, `Signaler un probleme sur place`, choisir
+le motif, prendre une photo et valider. Verifier ensuite dans le dossier
+interne le commentaire signe, la photo et le passage en probleme RDV. Ce test
+effectue bien des ecritures et peut declencher les notifications autorisees :
+le realiser sur une demo sans envois ou avec un dossier fictif sans destinataire.

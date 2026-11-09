@@ -20,6 +20,8 @@ class TechnicianOnSiteReports
 {
     public const REASONS = [
         'absent' => 'Client absent',
+        'refused' => 'Client refuse le rendez-vous',
+        'forgotten' => 'Client avait oublié le rendez-vous',
         'unreachable' => 'Client injoignable sur place',
         'access' => 'Accès au site impossible',
         'other' => 'Autre problème sur place',

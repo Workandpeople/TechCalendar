@@ -27,9 +27,10 @@ done
 [ "$(docker exec "$DB" mysql -NBe 'SELECT @@port')" = 3306 ]
 docker exec -i "$DB" mysql --default-character-set=utf8mb4 < "$ROOT/tools/deploy/tests/mymar-documents-fixture.sql"
 docker exec -i "$DB" mysql < "$ROOT/tools/deploy/mymar/documents/journal.sql"
-docker run -d --name "$PHP" --network none \
+docker run -d --name "$PHP" --hostname ns365601 --network none \
     --mount "type=volume,source=$SOCKET,target=/var/run/mysqld" \
     --mount "type=bind,source=$ROOT,target=/workspace,readonly" \
+    --mount "type=bind,source=$ROOT,target=/var/www/cofrac2,readonly" \
     --entrypoint sleep cofrac2-runtime-check:local 300 >/dev/null
 docker exec "$PHP" mkdir -m 700 /fixtures
 docker exec "$DB" mysql -NBe 'CHECKSUM TABLE MYMAR.clients,MYMAR.roles,MYMAR.model_has_roles' > "$WORK/before"
@@ -43,6 +44,7 @@ b=$!
 wait "$a"; wait "$b"
 php -d zend.assertions=1 -d assert.exception=1 /workspace/tools/deploy/tests/mymar-documents-fixture.php verify-race >> /fixtures/documents.log
 '
+docker exec -e MYMAR_DATES_UPDATE_FIXTURE=1 "$PHP" bash /workspace/tools/deploy/tests/mymar-document-dates-update.sh
 docker exec "$DB" mysql -NBe 'CHECKSUM TABLE MYMAR.clients,MYMAR.roles,MYMAR.model_has_roles' > "$WORK/after"
 cmp "$WORK/before" "$WORK/after"
 docker exec "$PHP" cat /fixtures/documents.log

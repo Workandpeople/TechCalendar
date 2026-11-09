@@ -51,6 +51,26 @@ it('rechecks the catalogue on each download and streams a PDF through an authent
     expect($response->streamedContent())->toBe($pdf);
 });
 
+it('shows the real source insertion time in French and Paris time including daylight saving', function (string $utc, string $display) {
+    $this->catalogue['documents'][0]['inserted_at'] = $utc;
+    $this->documents->shouldReceive('readCatalogue')->once()->with(555, 41)->andReturn($this->catalogue);
+    $this->documents->shouldNotReceive('openSource');
+    $this->actingAs($this->tech)->get(route('mymar.documents.index', 555))->assertOk()
+        ->assertSee('Ajouté dans MYMAR le '.$display)->assertSee('datetime="'.$utc.'"', false);
+})->with([
+    ['2026-11-06T09:46:36Z', '06/11/2026 à 10:46'],
+    ['2026-07-03T09:46:36Z', '03/07/2026 à 11:46'],
+    ['2026-07-03T22:30:00Z', '04/07/2026 à 00:30'],
+]);
+
+it('keeps undated documents downloadable without inventing a source timestamp', function () {
+    $this->catalogue['documents'][0]['inserted_at'] = null;
+    $this->documents->shouldReceive('readCatalogue')->once()->with(555, 41)->andReturn($this->catalogue);
+    $this->actingAs($this->tech)->get(route('mymar.documents.index', 555))->assertOk()
+        ->assertSee('Date de dépôt MYMAR non renseignée')->assertDontSee('<time', false)
+        ->assertSee(route('mymar.documents.download', [555, 5]), false);
+});
+
 it('refuses foreign technicians unmapped users external accounts and inactive users before source reads', function (string $case) {
     $this->documents->shouldNotReceive('readCatalogue');
     $user = match ($case) {

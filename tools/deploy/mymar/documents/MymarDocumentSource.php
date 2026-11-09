@@ -38,10 +38,13 @@ final readonly class MymarDocumentSource
 
     public function catalogue(int $rdvId, int $technicianId): array
     {
-        $this->begin();
+        $documentDates = $this->begin();
         try {
             $context = $this->context($rdvId, $technicianId);
-            $rows = $this->rows('SELECT /*+ MAX_EXECUTION_TIME(1500) */ id,nom,path FROM MYMAR.dossier_documents WHERE dossier_id=? ORDER BY id DESC LIMIT 201', [$context['dossier_id']]);
+            $dateColumn = $documentDates ? 'created_at' : 'NULL AS created_at';
+            $order = $documentDates ? 'created_at DESC,id DESC' : 'id DESC';
+            $rows = $this->rows('SELECT /*+ MAX_EXECUTION_TIME(1500) */ id,nom,path,'.$dateColumn
+                .' FROM MYMAR.dossier_documents WHERE dossier_id=? ORDER BY '.$order.' LIMIT 201', [$context['dossier_id']]);
             if (count($rows) > 200) {
                 throw new MymarDocumentFailure('documents_source_limit', 503);
             }
@@ -62,7 +65,7 @@ final readonly class MymarDocumentSource
                 }
                 $name = trim((string) ($row['nom'] ?? ''));
                 $documents[] = ['id' => (int) $row['id'], 'name' => $name !== '' ? $name : ($kind === 'invoice' ? 'Facture' : 'Devis'),
-                    'kind' => $kind, 'bytes' => $metadata['bytes']];
+                    'kind' => $kind, 'bytes' => $metadata['bytes'], 'inserted_at' => self::documentDate($row['created_at'])];
             }
 
             return ['format' => 'cofrac.mymar-document-catalogue', 'version' => 1,
@@ -204,7 +207,18 @@ final readonly class MymarDocumentSource
             'revision' => hash('sha256', json_encode($record, JSON_THROW_ON_ERROR))];
     }
 
-    private function begin(bool $write = false): void
+    private static function documentDate(mixed $value): ?string
+    {
+        if (! is_string($value) || ! preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/D', $value)) {
+            return null;
+        }
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone('UTC'));
+
+        return $date && $date->format('Y-m-d H:i:s') === $value && $date->format('Y') !== '0000'
+            ? $date->format('Y-m-d\TH:i:s\Z') : null;
+    }
+
+    private function begin(bool $write = false): bool
     {
         if (! $this->enabled) {
             throw new MymarDocumentFailure('documents_disabled', 503);
@@ -221,16 +235,18 @@ final readonly class MymarDocumentSource
             if ($this->database->query('SELECT CURRENT_ROLE()')->fetchColumn() !== 'NONE') {
                 throw new MymarDocumentFailure('documents_unsafe_grants', 503);
             }
-            MymarDocumentSqlAccess::validateGrants($this->database->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), $this->uploadsEnabled);
-            $this->assertSchema();
+            $documentDates = MymarDocumentSqlAccess::validateGrants($this->database->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), $this->uploadsEnabled);
+            $this->assertSchema($documentDates);
             $this->database->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
             $this->database->exec('START TRANSACTION '.($write ? 'READ WRITE' : 'READ ONLY'));
+
+            return $documentDates;
         } catch (Throwable $error) {
             throw self::failure($error);
         }
     }
 
-    private function assertSchema(): void
+    private function assertSchema(bool $documentDates): void
     {
         $history = $this->uploadsEnabled ? ",'dossier_historiques'" : '';
         $journal = $this->uploadsEnabled ? " OR (TABLE_SCHEMA='cofrac_mymar_integration' AND TABLE_NAME='document_commands')" : '';
@@ -239,6 +255,10 @@ final readonly class MymarDocumentSource
             .$journal)->fetchAll(PDO::FETCH_ASSOC);
         if (count($tables) !== ($this->uploadsEnabled ? 10 : 8)
             || array_filter($tables, static fn ($table) => $table['TABLE_TYPE'] !== 'BASE TABLE' || $table['ENGINE'] !== 'InnoDB')) {
+            throw new MymarDocumentFailure('documents_schema_refused', 503);
+        }
+        if ($documentDates && $this->database->query("SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='MYMAR'"
+            ." AND TABLE_NAME='dossier_documents' AND COLUMN_NAME='created_at'")->fetchColumn() !== 'timestamp') {
             throw new MymarDocumentFailure('documents_schema_refused', 503);
         }
         // Trigger absence needs a privileged preflight; limited runtime users cannot prove it.

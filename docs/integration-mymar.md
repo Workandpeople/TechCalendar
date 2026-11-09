@@ -1191,15 +1191,33 @@ beneficiaire ni la mention `travaux`. Un numero accole au mot est accepte
 (`Facture2026`, `Devis123`). Le titre determine le type affiche en priorite ;
 un fichier regroupant facture et devis reste consultable.
 
-Tous les documents correspondants sont conserves dans la liste, par identifiant
-de depot decroissant, sans filtrage sur l'auteur ni restriction au dernier depot.
+Tous les documents correspondants sont conserves dans la liste, par date
+de depot decroissante puis identifiant decroissant, sans filtrage sur l'auteur
+ni restriction au dernier depot. L'horodatage est celui du `created_at` MYMAR
+(TIMESTAMP lu en UTC), affiche en francais dans le fuseau Europe/Paris. Une date
+absente est signalee, jamais reconstituee depuis le nom du fichier ou sa mtime.
 Les devis de retour ANAH et factures d'acompte de travaux restent eligibles.
 Les exclusions AMO/MAR, honoraires, contrats, impots, attestations, pieces
 d'identite, RIB/IBAN et mandats restent prioritaires dans les deux noms. Une
 piece sans aucun marqueur facture/devis reste exclue. Aucun contenu PDF n'est
 lu pour decider de sa classification ; les controles de fichier restent actifs.
-La meme regle est reappliquee lors du telechargement. Aucun renommage MYMAR,
-nouveau privilege SQL ni changement de configuration du lecteur n'est requis.
+La meme regle est reappliquee lors du telechargement. Aucun renommage MYMAR
+ni changement de configuration du lecteur n'est requis.
+
+Pour un lecteur deja active avant l'affichage des dates, apres le deploiement :
+
+```sh
+sudo php8.4 /var/www/cofrac2/tools/deploy/update-mymar-document-reader-dates.php --apply
+```
+
+Cette commande idempotente ajoute uniquement `SELECT(created_at)` au lecteur
+documentaire dedie deja actif. Elle verifie le schema, les privileges exacts et
+la lecture par le compte runtime sans lire de ligne metier. Aucun droit global,
+ecriture, activation du lecteur, changement de secret, modification applicative
+MYMAR ou redemarrage. Les anciens privileges exacts restent acceptes pendant
+le deploiement : les telechargements continuent, avec dates indisponibles et
+tri par identifiant jusqu'a cette mise a jour. En cas d'echec du controle final,
+seul le droit ajoute par cette execution est retire ; la configuration est intacte.
 
 L'adaptateur lit les fichiers sur place et la base MYMAR via un nouveau compte
 SQL dedie limite aux seules colonnes SELECT necessaires. Il ne charge pas

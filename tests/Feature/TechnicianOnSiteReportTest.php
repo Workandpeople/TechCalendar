@@ -69,6 +69,19 @@ it('offers the mobile report action only for an assigned and still scheduled int
     $this->get(route('tech.appointments.show', $this->appointment))->assertOk()->assertDontSee('data-on-site-report', false);
 });
 
+it('offers and records the explicit absence refusal and forgotten appointment reasons', function (string $reason, string $label) {
+    $this->get(route('tech.appointments.show', $this->appointment))->assertOk()->assertSee($label);
+    $this->postJson($this->url, ($this->payload)(['reason' => $reason]))->assertOk();
+    expect($this->appointment->fresh()->external_payload['techcalendar_on_site']['reason'])->toBe($reason)
+        ->and($this->appointment->fresh()->status)->toBe('problem')
+        ->and($this->dossier->comments()->sole()->body)->toContain($label)
+        ->and($this->dossier->documents()->sole()->description)->toContain($label);
+})->with([
+    ['absent', 'Client absent'],
+    ['refused', 'Client refuse le rendez-vous'],
+    ['forgotten', 'Client avait oublié le rendez-vous'],
+]);
+
 it('atomically records a timestamped incident its private raster photo and the chosen shared audience', function ($audience, $client, $delegate) {
     $payload = ($this->payload)(['audience' => $audience, 'comment' => '<script>alert(1)</script> Texte <b>fourni</b>']);
     $version = $this->dossier->fresh()->version;

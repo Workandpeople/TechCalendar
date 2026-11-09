@@ -123,6 +123,19 @@ assert(! str_contains(json_encode($catalogue), 'path') && ! str_contains(json_en
 $stream = $source->open(40, 5, 1);
 assert(str_contains(stream_get_contents($stream), 'invoice'));
 fclose($stream);
+$db->exec("SET SESSION time_zone='+00:00'");
+$db->exec("UPDATE MYMAR.dossier_documents SET created_at='2026-11-06 09:46:36' WHERE id=1");
+$db->exec("UPDATE MYMAR.dossier_documents SET created_at='2026-11-04 08:00:00' WHERE id=4");
+$dated = $reader->catalogue(40, 5)['documents'];
+assert(array_column($dated, 'id') === [1, 4]);
+assert(array_column($dated, 'inserted_at') === ['2026-11-06T09:46:36Z', '2026-11-04T08:00:00Z']);
+$db->exec(MymarDocumentSqlAccess::dateAccessSql('cofrac_mymar_dr_abcdef01', enable: false));
+$legacy = $reader->catalogue(40, 5)['documents'];
+assert(array_column($legacy, 'id') === [4, 1] && array_column($legacy, 'inserted_at') === [null, null]);
+$db->exec(MymarDocumentSqlAccess::dateAccessSql('cofrac_mymar_dr_abcdef01'));
+assert($reader->catalogue(40, 5)['documents'] === $dated);
+$db->exec('UPDATE MYMAR.dossier_documents SET created_at=NULL WHERE id IN (1,4)');
+echo "Dates MYMAR : vrais horodatages UTC, tri par depot et compatibilite du lecteur avant/apres le seul droit SELECT(created_at).\n";
 foreach ([2, 3, 5, 6, 7, 8, 9] as $id) {
     $denied(fn () => $source->open(40, 5, $id), 'documents_file_unavailable');
 }
@@ -149,6 +162,7 @@ foreach ($genericDocuments as [$id, $label, $filename]) {
 $listed = $reader->catalogue(40, 5)['documents'];
 $expected = array_column(array_reverse(array_values(array_filter($genericDocuments, static fn ($row) => $row[3] !== null))), 0);
 assert(array_column($listed, 'id') === [...$expected, 4, 1]);
+assert(array_unique(array_column($listed, 'inserted_at'), SORT_REGULAR) === [null]);
 assert(array_values(array_filter($listed, static fn ($row) => $row['id'] === 20))[0]['name'] === 'Devis');
 foreach ($genericDocuments as [$id, $label, $filename, $kind]) {
     if ($kind === null) {

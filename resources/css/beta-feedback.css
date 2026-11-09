@@ -1,6 +1,8 @@
 @layer components {
-    .gc-workspace .gc-beta-trigger { position: fixed; z-index: 65; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; padding: .45rem .85rem; border: 1px solid #e8c450; border-radius: 999px; background: #fff1af; color: #553b00; box-shadow: 0 5px 18px #50390021; font-size: .8rem; font-weight: 750; cursor: pointer; }
+    .gc-workspace .gc-beta-trigger { position: fixed; z-index: 35; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; padding: .45rem .85rem; border: 1px solid #e8c450; border-radius: 999px; background: #fff1af; color: #553b00; box-shadow: 0 5px 18px #50390021; font-size: .8rem; font-weight: 750; cursor: pointer; }
     .gc-beta-trigger > span { display: grid; place-items: center; width: 22px; height: 22px; background: #ffcf32; border-radius: 50%; font-size: 1rem; }
+    /* Stay below application modals; the launcher must never cover their footer actions. */
+    .gc-workspace:has(.gc-modal:not(.hidden):not([hidden]), dialog[open]) .gc-beta-trigger { visibility: hidden; pointer-events: none; }
     .gc-beta-dialog { position: fixed; inset: 0; margin: auto; width: min(620px, calc(100vw - 24px)); max-height: min(90dvh, 850px); padding: 0; border: 1px solid #d4e2ea; border-radius: 20px; color: #263f50; background: white; box-shadow: 0 25px 100px #102f4940; overflow: hidden; }
     .gc-beta-dialog[open] { display: flex; flex-direction: column; }
     .gc-beta-dialog::backdrop { background: #152d45a3; backdrop-filter: blur(3px); }
