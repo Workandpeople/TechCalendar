@@ -25,10 +25,7 @@
             <figure data-report-preview hidden><img alt="Photo du signalement à envoyer"><figcaption data-report-photo-name></figcaption></figure>
             <label for="on-site-comment">Commentaire <span class="tech-report-help">(obligatoire pour « Autre »)</span></label>
             <textarea id="on-site-comment" name="comment" rows="3" maxlength="2000" class="gc-input" placeholder="Ex. : portail fermé, appels sans réponse…">{{ old('comment') }}</textarea>
-            <label for="on-site-audience">Partager la photo et le commentaire avec</label>
-            <select id="on-site-audience" name="audience" class="gc-input" required>
-                @foreach (\App\Services\Crm\ContentAudience::LABELS as $value => $label)<option value="{{ $value }}" @selected(old('audience', 'client') === $value)>{{ $label }}</option>@endforeach
-            </select>
+            <p class="tech-report-help">Photo et commentaire : <strong>Client uniquement</strong>. L’équipe interne conserve l’accès, pas les délégataires.</p>
             <p class="tech-report-help">Les notifications email suivent les droits et les préférences de chaque destinataire. Aucun SMS automatique.</p>
             <p class="tech-report-draft" data-report-draft-status role="status">En cas de coupure réseau, le brouillon reste sur cet appareil pendant 24 h. L’envoi reste manuel.</p>
             <div class="tech-report-feedback" data-report-feedback role="alert" hidden></div>

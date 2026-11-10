@@ -95,7 +95,7 @@ export function initOnSiteReports(root = document, view = window, store = create
             submit.disabled = busy || preparing || stale || submitted; discard.disabled = busy || preparing || submitted;
             submit.textContent = busy ? 'Enregistrement…' : 'Valider le signalement';
             form.setAttribute?.('aria-busy', String(busy));
-            ['reason', 'comment', 'audience', 'photo'].forEach(name => { field(name).disabled = busy || submitted; });
+            ['reason', 'comment', 'photo'].forEach(name => { field(name).disabled = busy || submitted; });
         };
         const drawPhoto = () => {
             if (previewUrl) view.URL.revokeObjectURL(previewUrl);
@@ -109,7 +109,7 @@ export function initOnSiteReports(root = document, view = window, store = create
         };
         const draft = () => ({ version: 1, key, actor, appointment, savedAt: Date.now(),
             requestId: field('request_id').value, snapshot: field('snapshot').value,
-            reason: field('reason').value, comment: field('comment').value, audience: field('audience').value, photo, photoName });
+            reason: field('reason').value, comment: field('comment').value, photo, photoName });
         const save = () => {
             view.clearTimeout(timer);
             if (submitted || stale || !dirty) return saving;
@@ -126,7 +126,7 @@ export function initOnSiteReports(root = document, view = window, store = create
             field('comment').required = field('reason').value === 'other';
             view.clearTimeout(timer); timer = view.setTimeout(save, 400);
         };
-        ['reason', 'comment', 'audience'].forEach(name => field(name).addEventListener('input', change));
+        ['reason', 'comment'].forEach(name => field(name).addEventListener('input', change));
         field('photo').addEventListener('change', async () => {
             const current = ++generation;
             dirty = true;
@@ -166,14 +166,14 @@ export function initOnSiteReports(root = document, view = window, store = create
             const timeout = view.setTimeout(() => controller.abort(), 90000);
             try {
                 const body = new (view.FormData || FormData)(form);
-                ['reason', 'comment', 'audience'].forEach(name => body.set(name, field(name).value));
+                ['reason', 'comment'].forEach(name => body.set(name, field(name).value));
                 body.set('photo', photo, photo.type === 'image/jpeg' ? 'signalement.jpg' : 'signalement');
                 const response = await view.fetch(form.action, { method: 'POST', credentials: 'same-origin',
                     headers: { Accept: 'application/json' }, body, signal: controller.signal });
                 const data = await readApiJson(response);
                 if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Signalement non enregistré.');
                 const destination = new URL(data.url, view.location.href);
-                if (destination.origin !== view.location.origin || !/^\/tech\/planning\/appointments\/\d+$/.test(destination.pathname)
+                if (destination.origin !== view.location.origin || !/^(?:\/tech\/planning\/appointments\/\d+|\/tech\/mar\/appointments\/\d+\/on-site-report)$/.test(destination.pathname)
                     || destination.search || destination.hash) throw new Error('Confirmation reçue. Rechargez le rendez-vous pour vérifier le signalement.');
                 submitted = true; view.clearTimeout(timer); await saving; await store.remove(key).catch(() => {});
                 status.textContent = data.message; view.location.assign(destination.href);
@@ -195,7 +195,7 @@ export function initOnSiteReports(root = document, view = window, store = create
                 status.textContent = 'Le rendez-vous a changé depuis ce brouillon. Il n’est pas repris automatiquement. Effacez le brouillon avant de signaler le nouveau rendez-vous.';
                 return;
             }
-            ['reason', 'comment', 'audience'].forEach(name => { field(name).value = typeof value[name] === 'string' ? value[name] : ''; });
+            ['reason', 'comment'].forEach(name => { field(name).value = typeof value[name] === 'string' ? value[name] : ''; });
             field('request_id').value = value.requestId;
             photo = value.photo; photoName = value.photoName || 'Photo du brouillon'; drawPhoto();
             field('comment').required = field('reason').value === 'other';

@@ -75,6 +75,7 @@
                         @endforeach
                     </select>
                     <p id="dossier-services-help" class="mt-2 text-xs text-slate-500">Une fiche technique par dossier. Le rendez-vous sera organisé ensuite.</p>
+                    <p class="mt-1 text-xs text-slate-500">Pour une même fiche CEE, un téléphone ou une adresse déjà utilisés empêchent la création d’un doublon. Une fiche SAV reste distincte.</p>
                     @if ($services->isEmpty())
                         <p class="mt-2 text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
                     @endif

@@ -19,6 +19,7 @@
         </nav>
         <form action="{{ route('planner.incidents') }}" method="GET" class="gc-card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
             <label class="gc-label">Rechercher<input class="gc-input" name="q" value="{{ $filters['q'] ?? '' }}" maxlength="150" placeholder="Bénéficiaire, adresse, technicien…"></label>
+            <label class="gc-label">Origine<select name="source" class="gc-input"><option value="">Cofrac et MAR</option><option value="cofrac" @selected(($filters['source'] ?? '') === 'cofrac')>Cofrac</option><option value="mymar" @selected(($filters['source'] ?? '') === 'mymar')>MAR</option></select></label>
             <label class="gc-label">Suivi planning<select name="status" class="gc-input"><option value="all" @selected(($filters['status'] ?? 'pending') === 'all')>Tous</option>@foreach ($planningStatuses as $key => $label)<option value="{{ $key }}" @selected(($filters['status'] ?? 'pending') === $key)>{{ $label }}</option>@endforeach</select></label>
             <label class="gc-label">Motif<select name="reason" class="gc-input"><option value="">Tous les motifs</option>@foreach (\App\Services\Tech\TechnicianOnSiteReports::REASONS as $key => $label)<option value="{{ $key }}" @selected(($filters['reason'] ?? '') === $key)>{{ $label }}</option>@endforeach</select></label>
             <label class="gc-label">Signalé du<input class="gc-input" type="date" name="from" value="{{ $filters['from'] ?? '' }}"></label>
@@ -41,8 +42,12 @@
                     <header class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 p-4">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Signalement #{{ $incident->id }} · {{ $incident->reported_at->format('d/m/Y à H:i') }}</p>
-                            <h2 id="incident-title-{{ $incident->id }}" class="mt-1 text-lg font-semibold">{{ $incident->dossier->beneficiaryLabel() }}</h2>
-                            <p class="text-sm text-slate-600">{{ $incident->dossier->client?->name ?: $incident->dossier->delegataire?->name ?: 'Société non renseignée' }} · {{ $incident->dossier->reference }}</p>
+                            <h2 id="incident-title-{{ $incident->id }}" class="mt-1 text-lg font-semibold">{{ $incident->source === 'mymar' ? $incident->source_context['customer'] : $incident->dossier->beneficiaryLabel() }}</h2>
+                            @if ($incident->source === 'mymar')
+                                <p class="text-sm text-amber-800">MAR après travaux · Dossier MYMAR #{{ $incident->mymar_dossier_id }} · RDV #{{ $incident->mymar_rdv_id }}</p>
+                            @else
+                                <p class="text-sm text-slate-600">{{ $incident->dossier->client?->name ?: $incident->dossier->delegataire?->name ?: 'Société non renseignée' }} · {{ $incident->dossier->reference }}</p>
+                            @endif
                         </div>
                         <span class="rounded-lg px-3 py-1 text-sm font-semibold {{ $incident->planning_status === 'pending' ? 'bg-rose-100 text-rose-900' : 'bg-emerald-100 text-emerald-900' }}">{{ $planningStatuses[$incident->planning_status] }}</span>
                     </header>
@@ -50,14 +55,19 @@
                         <div class="space-y-2">
                             <p class="font-semibold">{{ $incident->reasonLabel() }}</p>
                             <p class="text-sm">{{ $incident->technician?->full_name ?: 'Technicien non renseigné' }} · RDV du {{ $incident->appointment_starts_at?->format('d/m/Y à H:i') ?: 'Date non renseignée' }}</p>
-                            <p class="text-sm text-slate-600">{{ $incident->dossier->address }} · {{ $incident->dossier->postal_code }} {{ $incident->dossier->city }}</p>
+                            <p class="text-sm text-slate-600">{{ $incident->source === 'mymar' ? $incident->source_context['address'] : $incident->dossier->address.' · '.$incident->dossier->postal_code.' '.$incident->dossier->city }}</p>
+                            @if ($incident->source === 'mymar') @include('tech.partials.mymar-report-state') @endif
                             @if (filled($incident->comment))<p class="whitespace-pre-line break-words text-sm">{{ $incident->comment }}</p>@endif
                             <div class="flex flex-wrap gap-2 pt-2">
+                                @if ($incident->source === 'mymar')
+                                    <a class="gc-btn-secondary" href="{{ route('tech.mar.on-site.photo', $incident) }}">Voir la photo</a>
+                                @else
                                 <a class="gc-btn-secondary" href="{{ route('v2.dossiers.show', $incident->dossier) }}">Ouvrir le dossier</a>
                                 @if ($incident->document && ! $incident->document->trashed() && ! $incident->dossier->trashed())
                                     <a class="gc-btn-secondary" href="{{ route('v2.documents.download', ['document' => $incident->document, 'preview' => 1]) }}">Voir la photo</a>
                                 @else
                                     <span class="self-center text-xs text-slate-500">Photo conservée dans les archives du dossier.</span>
+                                @endif
                                 @endif
                             </div>
                         </div>

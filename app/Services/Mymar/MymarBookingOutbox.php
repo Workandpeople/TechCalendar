@@ -6,6 +6,7 @@ namespace App\Services\Mymar;
 
 use App\Models\MymarBookingRequest;
 use App\Models\User;
+use App\Services\Tech\MymarOnSiteReports;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ final readonly class MymarBookingOutbox
             return DB::transaction(function () use ($command, $reservation): MymarBookingRequest {
                 $data = $command->payload;
                 $author = User::query()->find($data['cofrac_actor_id']);
-                if (! $author || $author->isExternal() || (! $author->admin && ! in_array($author->role, [0, 1], true))) {
+                if (! $this->authorAllowed($author, $command)) {
                     throw new RuntimeException('mymar.booking_author_not_allowed');
                 }
                 if ($existing = MymarBookingRequest::query()->find($data['request_id'])) {
@@ -79,7 +80,7 @@ final readonly class MymarBookingOutbox
                 }
                 $this->client->assertEnabled(write: true);
                 $author = User::query()->find($record->author_id);
-                if (! $author || $author->isExternal() || (! $author->admin && ! in_array($author->role, [0, 1], true))) {
+                if (! $this->authorAllowed($author, $command)) {
                     $record->forceFill(['status' => 'rejected', 'reason' => 'booking_author_not_allowed', 'active_dossier_id' => null, 'finished_at' => now()])->save();
 
                     return null;
@@ -113,6 +114,18 @@ final readonly class MymarBookingOutbox
         }
 
         return $record;
+    }
+
+    private function authorAllowed(?User $author, MymarBookingCommand $command): bool
+    {
+        if (! $author || $author->isExternal() || $author->must_change_password) {
+            return false;
+        }
+        if ($command->payload['action'] === 'on_site_problem') {
+            return MymarOnSiteReports::canDispatch($author, $command);
+        }
+
+        return $author->admin || in_array($author->role, [0, 1], true);
     }
 
     private function assertEnabled(): void

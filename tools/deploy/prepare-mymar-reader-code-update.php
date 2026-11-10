@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-// Private code-only package, pinned to the committed application release.
+// Private gateway package, pinned to the committed application release.
+// The reader upgrade may extend its exact SELECT scope for company names; never the writer.
 umask(0077);
 chdir(dirname(__DIR__, 2));
 function readerUpdateGit(array $arguments): string

@@ -10,7 +10,7 @@ use RuntimeException;
 
 class OnSitePhoto
 {
-    public function store(UploadedFile $photo, int $dossierId): array
+    public function store(UploadedFile $photo, int $dossierId, bool $mymar = false): array
     {
         $dimensions = @getimagesize($photo->getPathname());
         $mime = $photo->getMimeType();
@@ -55,7 +55,7 @@ class OnSitePhoto
             }
             $size = ftell($stream);
             rewind($stream);
-            $path = 'crm/dossiers/'.$dossierId.'/on-site/'.Str::uuid().'.jpg';
+            $path = ($mymar ? 'crm/mymar/' : 'crm/dossiers/').$dossierId.'/on-site/'.Str::uuid().'.jpg';
             if (! Storage::disk('local')->put($path, $stream, ['visibility' => 'private'])) {
                 throw new RuntimeException('On-site photo storage failed.');
             }

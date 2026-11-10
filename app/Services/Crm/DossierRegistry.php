@@ -223,6 +223,7 @@ class DossierRegistry
 
         try {
             return DB::transaction(function () use ($actor, $data, $geocode): Dossier {
+                app(DossierDuplicateCheck::class)->ensureAvailable($data);
                 $dossier = Dossier::query()->create([
                     ...Arr::except($data, ['service_ids', 'address_precision', 'mapbox_id']),
                     'source' => 'native', 'source_reference' => null, 'created_by' => $actor->id,

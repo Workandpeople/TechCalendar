@@ -52,7 +52,9 @@ final class MymarBookingSource
         $this->begin(readOnly: true);
         try {
             $records = $this->rows('SELECT /*+ MAX_EXECUTION_TIME(1500) */ '.self::RECORD
+                .($this->readOnlyCredentials ? ',p.name AS company_name' : '')
                 .' FROM MYMAR.dossiers d JOIN MYMAR.clients c ON c.id=d.client_id'
+                .($this->readOnlyCredentials ? ' LEFT JOIN MYMAR.users p ON p.id=d.partenaire_id' : '')
                 .' WHERE d.status_id IN (1,14) AND d.id>? ORDER BY d.id LIMIT '.($limit + 1), [$after]);
             $more = count($records) > $limit;
             $records = array_slice($records, 0, $limit);
@@ -75,6 +77,7 @@ final class MymarBookingSource
                     'phase' => (int) $record['status_id'] === 14 ? 'after_works' : 'initial',
                     'expected_revision' => self::revision($record, $grouped[$id] ?? []),
                     'first_name' => (string) ($record['prenom'] ?? ''), 'last_name' => (string) $record['nom'],
+                    'company_name' => (string) ($record['company_name'] ?? ''),
                     'address' => trim(implode(', ', array_filter([$record['adress'], trim(($record['zip'] ?? '').' '.($record['ville'] ?? ''))]))),
                     'postal_code' => $record['zip'], 'city' => $record['ville'],
                     'phone' => trim((string) ($record['mobile'] ?: $record['phone'])), 'email' => $record['email'],
@@ -185,7 +188,8 @@ final class MymarBookingSource
         }
         $data = $command->payload;
         $placing = in_array($data['action'], ['place', 'reschedule'], true);
-        if ($placing && ! in_array($data['technician_id'], $this->technicianIds, true)) {
+        $onSite = $data['action'] === 'on_site_problem';
+        if (($placing || $onSite) && ! in_array($data['technician_id'], $this->technicianIds, true)) {
             throw new MymarBookingFailure('booking_technician_outside_scope', 403);
         }
         $this->begin(readOnly: false);
@@ -210,7 +214,7 @@ final class MymarBookingSource
                 return $result;
             }
             $ids = [$this->technicalAuthorId];
-            if ($placing) {
+            if ($placing || $onSite) {
                 $ids[] = $data['technician_id'];
                 $technicianLock = 'cofrac:mymar:booking:tech:'.$data['technician_id'];
                 if ((int) $this->statement('SELECT GET_LOCK(?,2)', [$technicianLock])->fetchColumn() !== 1) {
@@ -223,7 +227,7 @@ final class MymarBookingSource
             if (! array_key_exists($this->technicalAuthorId, $enabled) || (int) $enabled[$this->technicalAuthorId] !== 0) {
                 throw new MymarBookingFailure('booking_technical_author_unavailable', 503);
             }
-            if ($placing && ((int) ($enabled[$data['technician_id']] ?? 0) !== 1
+            if (($placing || $onSite) && ((int) ($enabled[$data['technician_id']] ?? 0) !== 1
                 || $this->rows("SELECT 1 FROM MYMAR.model_has_roles m JOIN MYMAR.roles r ON r.id=m.role_id WHERE m.model_id=? AND r.name='Technicien Terrain' AND m.model_type IN (?,?) LIMIT 1 FOR SHARE",
                     [$data['technician_id'], 'App\\Models\\User', 'App\\User']) === [])) {
                 throw new MymarBookingFailure('booking_technician_unavailable');
@@ -243,6 +247,10 @@ final class MymarBookingSource
             if ($data['action'] === 'reschedule' && (count($rdvs) !== 1 || (int) $rdvs[0]['id'] !== $data['rdv_id']
                 || ! in_array((int) $record['technicien_id'], $this->technicianIds, true)
                 || (int) $rdvs[0]['duree'] * 60 !== $data['duration_minutes'])) {
+                throw new MymarBookingFailure('booking_source_changed');
+            }
+            if ($onSite && (count($rdvs) !== 1 || (int) $rdvs[0]['id'] !== $data['rdv_id']
+                || (int) $record['technicien_id'] !== $data['technician_id'])) {
                 throw new MymarBookingFailure('booking_source_changed');
             }
             try {
@@ -266,10 +274,16 @@ final class MymarBookingSource
                 $description = ($data['action'] === 'reschedule' ? 'RDV MAR #'.$data['rdv_id']." replac\u{00E9} le " : "RDV MAR plac\u{00E9} le ")
                     .$start->format('d/m/Y H:i').', '.$data['duration_minutes'].' min, technicien MYMAR #'.$data['technician_id'];
             } else {
-                $recall = $data['recall_at'] === null ? null : MymarBookingCommand::instant($data['recall_at'])->format('Y-m-d H:i:s');
-                $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,date_rappel=?,updated_at=? WHERE id=?',
-                    [$targetStatus, $data['reason'], $data['comment'], $recall, $stamp, $data['dossier_id']]);
-                $description = "Probl\u{00E8}me RDV MAR signal\u{00E9}, motif conserv\u{00E9} dans le dossier";
+                $recall = ($data['recall_at'] ?? null) === null ? null : MymarBookingCommand::instant($data['recall_at'])->format('Y-m-d H:i:s');
+                if ($onSite) {
+                    $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,updated_at=? WHERE id=?',
+                        [$targetStatus, $data['reason'], $data['comment'], $stamp, $data['dossier_id']]);
+                } else {
+                    $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,date_rappel=?,updated_at=? WHERE id=?',
+                        [$targetStatus, $data['reason'], $data['comment'], $recall, $stamp, $data['dossier_id']]);
+                }
+                $description = $onSite ? 'Signalement sur place RDV MAR #'.$data['rdv_id'].', photo et commentaire complet dans Cofrac'
+                    : "Probl\u{00E8}me RDV MAR signal\u{00E9}, motif conserv\u{00E9} dans le dossier";
             }
             $history = $description.' via Cofrac, compte #'.$data['cofrac_actor_id'].', demande '.$data['request_id'];
             $this->statement('INSERT INTO MYMAR.dossier_historiques (author_id,dossier_id,status_id,text,created_at,updated_at) VALUES (?,?,?,?,?,?)',
@@ -432,9 +446,9 @@ final class MymarBookingSource
             || ($data['version'] ?? null) !== 1 || ($data['request_id'] ?? null) !== $requestId
             || ($data['source_committed'] ?? null) !== true || array_diff(array_keys($data), $fields) || array_diff($fields, array_keys($data))
             || ! is_int($data['dossier_id']) || $data['dossier_id'] < 1
-            || ! in_array($data['action'], ['place', 'problem', 'reschedule'], true)
+            || ! in_array($data['action'], ['place', 'problem', 'reschedule', 'on_site_problem'], true)
             || ! in_array($data['status_id'], match ($data['action']) {
-                'place' => [3, 16], 'reschedule' => [16], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], default => [2, 15]
             }, true)) {
             throw new MymarBookingFailure('booking_receipt_unavailable', 503);
         }

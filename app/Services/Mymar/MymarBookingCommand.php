@@ -21,6 +21,7 @@ final readonly class MymarBookingCommand
             'place' => ['technician_id', 'starts_at', 'duration_minutes'],
             'reschedule' => ['rdv_id', 'technician_id', 'starts_at', 'duration_minutes'],
             'problem' => ['comment', 'reason', 'recall_at'],
+            'on_site_problem' => ['rdv_id', 'technician_id', 'comment', 'reason'],
             default => throw new InvalidArgumentException('mymar.invalid_booking_command'),
         };
         if (array_diff(array_keys($data), [...$common, ...$fields])
@@ -62,7 +63,16 @@ final readonly class MymarBookingCommand
             if ($recall !== null) {
                 self::assertUnambiguousWallTime($recall);
             }
-            $payload += ['comment' => $comment, 'reason' => $reason, 'recall_at' => $recall?->format(DATE_ATOM)];
+            $payload += ['comment' => $comment, 'reason' => $reason];
+            if ($action === 'on_site_problem') {
+                if (! is_int($data['rdv_id'] ?? null) || $data['rdv_id'] < 1
+                    || ! is_int($data['technician_id'] ?? null) || $data['technician_id'] < 1 || $reason === null) {
+                    throw new InvalidArgumentException('mymar.invalid_on_site_booking');
+                }
+                $payload += ['rdv_id' => $data['rdv_id'], 'technician_id' => $data['technician_id']];
+            } else {
+                $payload['recall_at'] = $recall?->format(DATE_ATOM);
+            }
         }
         ksort($payload);
 
@@ -80,6 +90,7 @@ final readonly class MymarBookingCommand
             [1, 'place'] => 3, [14, 'place'] => 16,
             [1, 'problem'] => 2, [14, 'problem'] => 15,
             [16, 'reschedule'] => 16,
+            [16, 'on_site_problem'] => 15,
             default => throw new InvalidArgumentException('mymar.booking_not_pending'),
         };
     }

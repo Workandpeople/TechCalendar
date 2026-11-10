@@ -29,6 +29,9 @@ class TechnicianIncidentInbox
         $query = TechnicianIncident::query()->with(['dossier.client:id,name', 'dossier.delegataire:id,name',
             'technician:id,first_name,last_name', 'document', 'handler:id,first_name,last_name',
             'billingReviewer:id,first_name,last_name']);
+        if (filled($filters['source'] ?? null)) {
+            $query->where('source', $filters['source']);
+        }
         if (isset($filters['dossier_id'])) {
             $query->where('dossier_id', $filters['dossier_id']);
         }
@@ -64,11 +67,21 @@ class TechnicianIncidentInbox
                         $users->where(fn ($users) => $users->whereRaw("first_name LIKE ? ESCAPE '!'", [$term])
                             ->orWhereRaw("last_name LIKE ? ESCAPE '!'", [$term]));
                     }
+                })->orWhere(function ($remote) use ($terms): void {
+                    $remote->where('source', 'mymar');
+                    $grammar = DB::connection()->getQueryGrammar();
+                    foreach ($terms as $term) {
+                        $remote->where(fn ($remote) => $remote->whereRaw($grammar->wrap('source_context->customer')." LIKE ? ESCAPE '!'", [$term])
+                            ->orWhereRaw($grammar->wrap('source_context->address')." LIKE ? ESCAPE '!'", [$term]));
+                    }
                 });
             });
         }
 
-        return $query->orderByDesc('reported_at')->orderByDesc('id')->paginate(20)->withQueryString();
+        $results = $query->orderByDesc('reported_at')->orderByDesc('id')->paginate(20)->withQueryString();
+        $results->getCollection()->where('source', 'mymar')->load('sourceRequest:id,status');
+
+        return $results;
     }
 
     public function update(User $actor, TechnicianIncident $incident, array $data): void
@@ -94,6 +107,13 @@ class TechnicianIncidentInbox
             $locked->forceFill([...$after, ...($billing
                 ? ['billing_reviewed_by' => $actor->id, 'billing_reviewed_at' => now()]
                 : ['handled_by' => $actor->id, 'handled_at' => now()]), 'version' => $locked->version + 1])->save();
+            if ($locked->source === 'mymar') {
+                DB::table('technician_incident_reviews')->insert(['incident_id' => $locked->id, 'author_id' => $actor->id,
+                    'section' => $data['section'], 'before' => json_encode($before, JSON_THROW_ON_ERROR),
+                    'after' => json_encode($after, JSON_THROW_ON_ERROR), 'created_at' => now()]);
+
+                return;
+            }
             $locked->dossier->activities()->create([
                 'author_id' => $actor->id, 'kind' => 'on_site_reviewed',
                 'body' => 'Signalement technicien #'.$locked->id.' · '.($billing ? 'Comptabilité : ' : 'Planning : ')

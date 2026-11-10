@@ -88,6 +88,16 @@ it('never exposes incident or accounting data to technicians external or passwor
     expect($this->incident->fresh()->planning_status)->toBe('pending');
 })->with(['tech', 'external', 'password', 'v1']);
 
+it('explains the restricted inbox to technicians and sends them back to their own workspace without leaking reports', function () {
+    config(['app.debug' => false]);
+    $this->actingAs($this->tech)->get(route('planner.incidents'))->assertForbidden()
+        ->assertSee('réservée au planning et aux administrateurs')
+        ->assertSee('ouvrez votre rendez-vous depuis votre planning technicien')
+        ->assertDontSee('Appels sans réponse')->assertDontSee('Camille Exemple');
+    $this->get(route('dashboard'))->assertRedirect(route('tech.planning'));
+    $this->get(route('tech.planning'))->assertOk()->assertDontSee('href="'.route('planner.incidents').'"', false);
+});
+
 it('allows planning followup but hides and denies accounting decisions without permission', function () {
     $this->incident->update(['billing_note' => 'Confidentiel comptabilité']);
     $this->actingAs($this->planner)->get(route('planner.incidents'))->assertOk()->assertDontSee('Confidentiel comptabilité')->assertDontSee('Suivi du déplacement · Comptabilité');

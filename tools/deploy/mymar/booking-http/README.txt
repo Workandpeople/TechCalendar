@@ -43,3 +43,17 @@ MYMAR n'est ajoute au rendu des pages, aucun blocage des disponibilites ni
 placement n'est active. La couverture de techniciens validee reste le pilote.
 Prochain lot : cache/liste des demandes, controles et reservation native,
 puis branchement explicite du parcours avant toute activation d'ecriture.
+
+Mise a jour du lecteur existant (10 novembre 2026)
+-------------------------------------------------
+Le paquet prepare-mymar-reader-code-update.php se deploie APRES la release
+applicative correspondante (revision RUNTIME-PREPARED imposee). Il ajoute le
+nom de la societe dans les demandes MAR via dossiers.partenaire_id -> users.name.
+Seul le compte SQL lecteur gagne SELECT sur ces deux colonnes. Aucun droit
+d'ecriture, email, mot de passe ou compte applicatif MYMAR n'est ajoute/modifie.
+L'ancien perimetre SELECT doit correspondre exactement, sinon arret avant
+changement. En cas d'echec, code ET deux droits SELECT sont restaures/verifies.
+Le paquet --actions n'etend jamais les droits du compte d'ecriture.
+Les anciennes pages/cache sans societe restent acceptes par la nouvelle V2.
+Pour revenir a une V2 anterieure au support du nom de societe, restaurer aussi
+le lecteur et ses droits precedents avant de revenir a l'ancien contrat client.

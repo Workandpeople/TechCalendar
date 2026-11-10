@@ -179,7 +179,7 @@ final readonly class MymarBookingClient
             || $result['format'] !== 'cofrac.mymar-booking-result' || $result['version'] !== 1 || $result['source_committed'] !== true
             || $result['request_id'] !== $payload['request_id'] || $result['dossier_id'] !== $payload['dossier_id']
             || $result['action'] !== $payload['action'] || ! in_array($result['status_id'], match ($payload['action']) {
-                'place' => [3, 16], 'reschedule' => [16], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], default => [2, 15]
             }, true)) {
             throw new RuntimeException('mymar.invalid_booking_result');
         }

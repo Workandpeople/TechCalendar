@@ -36,6 +36,10 @@ final class ErrorPages
                     ? ['Une erreur a interrompu votre action', 'Nous n’avons pas pu terminer cette action. Vous pouvez nous transmettre le diagnostic ci-dessous.']
                     : ['Cette demande n’a pas pu aboutir', 'Revenez dans votre espace pour reprendre votre navigation.'],
             };
+            if ($status === 403 && $request->routeIs('planner.incidents*') && $request->user()?->role === 2
+                && ! $request->user()->admin && ! $request->user()->isExternal()) {
+                $description = 'La file de traitement des signalements est réservée au planning et aux administrateurs. Pour signaler un problème sur place, ouvrez votre rendez-vous depuis votre planning technicien.';
+            }
             $response->setContent(view('errors.application', [
                 'status' => $status, 'title' => $title, 'description' => $description,
                 'reference' => $context['id'] ?? null, 'errorToken' => $context ? app(ReportContext::class)->seal($context) : null,

@@ -27,5 +27,8 @@
             </ul>
         @endif
         <a href="{{ route(auth()->user()->role === 2 ? 'tech.planning' : 'planner.tracking') }}" class="gc-btn-secondary">Retour au planning</a>
+        @if (auth()->user()->role === 2 && ! auth()->user()->admin && ! $unavailable)
+            <a class="gc-btn-danger" href="{{ route('tech.mar.on-site.show', $rdv) }}">Signaler un problème sur place</a>
+        @endif
     </div>
 </x-layouts.app>

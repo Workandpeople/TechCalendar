@@ -148,6 +148,21 @@ it('validates the exact column privileges and refuses broader or missing grants'
         ->and(fn () => MymarBookingSqlAccess::validateGrants([...$grants, 'GRANT DELETE ON MYMAR.dossiers TO `cofrac_mymar_rw_abcdef01`@`localhost`']))->toThrow(RuntimeException::class);
 });
 
+it('adds only company SELECT columns to the reader and recognizes the exact old scope for a guarded upgrade', function () {
+    $old = MymarBookingSqlAccess::privileges(readOnly: true, companyNames: false);
+    $new = MymarBookingSqlAccess::privileges(readOnly: true);
+    expect($new['MYMAR.dossiers']['SELECT'])->toBe([...$old['MYMAR.dossiers']['SELECT'], 'partenaire_id'])
+        ->and($new['MYMAR.users']['SELECT'])->toBe(['id', 'enabled', 'name'])
+        ->and(MymarBookingSqlAccess::privileges()['MYMAR.users']['SELECT'])->toBe(['id', 'enabled']);
+    $grants = ['GRANT USAGE ON *.* TO `cofrac_mymar_br_abcdef01`@`localhost`'];
+    foreach ($old as $table => $verbs) {
+        $grants[] = 'GRANT SELECT ('.implode(', ', $verbs['SELECT']).') ON '.str_replace('.', '`.`', '`'.$table.'`').' TO `cofrac_mymar_br_abcdef01`@`localhost`';
+    }
+    MymarBookingSqlAccess::validateGrants($grants, readOnly: true, companyNames: false);
+    expect(fn () => MymarBookingSqlAccess::validateGrants($grants, readOnly: true))->toThrow(RuntimeException::class);
+    expect(fn () => MymarBookingSqlAccess::validateGrants([...$grants, 'GRANT SELECT (password) ON `MYMAR`.`users` TO `cofrac_mymar_br_abcdef01`@`localhost`'], readOnly: true, companyNames: false))->toThrow(RuntimeException::class);
+});
+
 it('includes beneficiary changes and every current appointment in the optimistic revision', function () {
     $record = ['id' => 1, 'client_id' => 2, 'status_id' => 14, 'updated_at' => '2026-11-01 10:00:00',
         'client_updated_at' => '2026-11-01 10:00:00', 'adress' => '3 rue test'];

@@ -50,7 +50,7 @@ it('reads validated pending pages without enabling writes or creating native rec
     Http::fake(fn () => Http::response(['format' => 'cofrac.mymar-pending-bookings', 'version' => 1, 'items' => [$item], 'next_after' => 123]));
     $client = new MymarBookingClient(Http::getFacadeRoot(), enabled: true, token: str_repeat('0123456789abcdef', 4));
     $page = $client->pending(100, 1);
-    expect($page->items)->toBe([$item])->and($page->nextAfter)->toBe(123)->and(MymarBookingRequest::count())->toBe(0);
+    expect($page->items)->toBe([[...$item, 'company_name' => '']])->and($page->nextAfter)->toBe(123)->and(MymarBookingRequest::count())->toBe(0);
     expect(fn () => $client->submit($this->command))->toThrow(RuntimeException::class, 'mymar.booking_disabled');
     Http::assertSentCount(1);
     Http::assertSent(fn ($request) => $request->method() === 'GET' && $request->url() === 'http://127.0.0.1:19847/v1/pending-bookings?after=100&limit=1');

@@ -15,7 +15,7 @@ final class MymarBookingSqlAccess
             'database_password' => 'Mb3!'.bin2hex(random_bytes(32)), 'token' => bin2hex(random_bytes(32))];
     }
 
-    public static function privileges(bool $readOnly = false): array
+    public static function privileges(bool $readOnly = false, bool $companyNames = true): array
     {
         $privileges = [
             'MYMAR.dossiers' => [
@@ -41,6 +41,10 @@ final class MymarBookingSqlAccess
         ];
         if ($readOnly) {
             $privileges = array_filter(array_map(static fn ($operations) => array_intersect_key($operations, ['SELECT' => true]), $privileges));
+            if ($companyNames) {
+                $privileges['MYMAR.dossiers']['SELECT'][] = 'partenaire_id';
+                $privileges['MYMAR.users']['SELECT'][] = 'name';
+            }
         }
 
         return $privileges;
@@ -62,7 +66,7 @@ final class MymarBookingSqlAccess
         return $sql;
     }
 
-    public static function validateGrants(array $grants, bool $readOnly = false): void
+    public static function validateGrants(array $grants, bool $readOnly = false, bool $companyNames = true): void
     {
         $seen = [];
         $account = '`cofrac_mymar_'.($readOnly ? 'br' : 'rw').'_[a-f0-9]{8}`@`localhost`';
@@ -91,7 +95,7 @@ final class MymarBookingSqlAccess
                 $seen[$table][$verb] = $columns;
             }
         }
-        $expected = self::privileges($readOnly);
+        $expected = self::privileges($readOnly, $companyNames);
         foreach ($expected as &$operations) {
             foreach ($operations as &$columns) {
                 sort($columns);

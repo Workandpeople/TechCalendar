@@ -127,7 +127,7 @@ it('lets planners use the same registry without creating another copy', function
     $this->get(route('v2.documents.download', $document))->assertOk();
     expect(Dossier::count())->toBe(1)->and($dossier->fresh()->city)->toBe('Villeurbanne');
     $this->get(route('v2.dossiers.create'))->assertOk();
-    $this->post(route('v2.dossiers.store'), [...$this->data, 'reference' => 'PLANNING-001'])
+    $this->post(route('v2.dossiers.store'), [...$this->data, 'reference' => 'PLANNING-001', 'phone' => '0611223344', 'address' => 'Une autre adresse'])
         ->assertSessionHasNoErrors()->assertRedirect();
     expect(Dossier::count())->toBe(2)
         ->and(Dossier::where('reference', 'PLANNING-001')->firstOrFail()->created_by)->toBe($planner->id);
@@ -181,7 +181,7 @@ it('validates identities services sirens and active delegataires', function () {
 it('searches literal references and filters by an operation without duplicate result rows', function () {
     $registry = app(DossierRegistry::class);
     $first = $registry->create($this->manager, [...$this->data, 'reference' => 'REF%_1']);
-    $registry->create($this->manager, [...$this->data, 'reference' => 'REFXX1']);
+    $registry->create($this->manager, [...$this->data, 'reference' => 'REFXX1', 'address' => 'Une autre voie', 'phone' => '0611111111']);
     $first->operations()->create(['service_id' => $this->service->id]);
     $this->actingAs($this->manager)->get(route('v2.dossiers.index', ['q' => '%_', 'service_id' => $this->service->id]))
         ->assertOk()->assertSee('REF%_1')->assertDontSee('REFXX1')

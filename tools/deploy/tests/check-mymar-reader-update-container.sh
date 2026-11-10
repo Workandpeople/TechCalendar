@@ -17,7 +17,19 @@ $body=str_replace(",\n        static fn (\$window, \$now) => \$reader()->calenda
 $body=str_replace(",\n        static fn (\$id) => \$reader()->scheduled(\$id)", '', $body, $count);if($count!==1)exit(1);
 file_put_contents($path,$body);
 unlink(dirname($path).'/MymarReadWindow.php');
+$path=dirname($path).'/MymarBookingSource.php';
+$source=file_get_contents($path);
+$source=str_replace(".(\$this->readOnlyCredentials ? ',p.name AS company_name' : '')", ".''", $source, $count);assert($count===1);
+$source=str_replace(".(\$this->readOnlyCredentials ? ' LEFT JOIN MYMAR.users p ON p.id=d.partenaire_id' : '')", ".''", $source, $count);assert($count===1);
+file_put_contents($path,$source);
+$path=dirname($path).'/MymarBookingSqlAccess.php';
+$source=str_replace('bool $companyNames = true', 'bool $companyNames = false', file_get_contents($path), $count);if($count!==2)exit(1);
+file_put_contents($path,$source);
+$c=json_decode(file_get_contents('/var/lib/cofrac-mymar-booking-gateway/private/config.json'),true);
+$sql="REVOKE SELECT (`partenaire_id`) ON MYMAR.dossiers FROM '".$c['database_user']."'@'localhost';\nREVOKE SELECT (`name`) ON MYMAR.users FROM '".$c['database_user']."'@'localhost';\n";
+file_put_contents('/fixtures/legacy-reader-permissions.sql',$sql);
 PHP
+mysql --defaults-file=/etc/mysql/debian.cnf < /fixtures/legacy-reader-permissions.sql
 systemctl start cofrac-mymar-booking-fpm.service cofrac-mymar-booking-http.service
 sleep 0.5
 cp REQUEST.json /fixtures/reader-update.request
@@ -36,6 +48,7 @@ cmp /fixtures/reader-units.before /fixtures/reader-unit-actions
 touch /fixtures/reader-restart-fail-once
 if apply > /fixtures/reader-update-recovery.log 2>&1; then exit 1; fi
 grep -q 'Ancien lecteur restaure et verifie' /fixtures/reader-update-recovery.log
+grep -q 'Droits SELECT du lecteur restaures' /fixtures/reader-update-recovery.log
 tree > /fixtures/reader-code.after; cmp /fixtures/reader-code.before /fixtures/reader-code.after
 apply > /fixtures/reader-update-success.log 2>&1
 php -d zend.assertions=1 -d assert.exception=1 <<'PHP'
@@ -43,10 +56,10 @@ php -d zend.assertions=1 -d assert.exception=1 <<'PHP'
 $complete=[];
 foreach(glob('/var/lib/cofrac2-production/mymar-reader-update-*/summary.json')as$file){
  $r=json_decode(file_get_contents($file),true,16,JSON_THROW_ON_ERROR);
- assert($r['complete']===true&&$r['calendar_labels_ready']===true&&$r['configuration_unchanged']===true&&$r['sql_writes']===false);
+ assert($r['complete']===true&&$r['calendar_labels_ready']===true&&$r['configuration_unchanged']===true&&$r['sql_writes']===false&&$r['reader_company_select_columns_added']===true);
  $complete[]=$r;
 }
 assert(count($complete)===1);
 assert(!file_exists('/fixtures/FORBIDDEN_CALL')&&!file_exists('/fixtures/APPLICATION_EXECUTED'));
 PHP
-echo 'Reader code upgrade: pinned release, tamper refusal, failed restart rollback and real GET verified; no SQL/config/source writes.'
+echo 'Reader upgrade: pinned release, tamper refusal, exact SELECT extension/rollback and real GET verified; no business/config/source writes.'

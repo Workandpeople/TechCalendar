@@ -24,6 +24,16 @@ final readonly class MymarPendingBookingPage
         $fields = ['dossier_id', 'status_id', 'phase', 'expected_revision', 'first_name', 'last_name', 'address',
             'postal_code', 'city', 'phone', 'email', 'latitude', 'longitude'];
         foreach ($page['items'] as $item) {
+            if (is_array($item) && array_key_exists('company_name', $item)) {
+                $company = $item['company_name'];
+                if (! is_string($company) || strlen($company) > 1024 || ! mb_check_encoding($company, 'UTF-8')
+                    || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $company)) {
+                    throw new RuntimeException('mymar.invalid_pending_booking_text');
+                }
+                unset($item['company_name']);
+            } else {
+                $company = '';
+            }
             if (! is_array($item) || array_diff(array_keys($item), $fields) || array_diff($fields, array_keys($item))
                 || ! is_int($item['dossier_id']) || $item['dossier_id'] <= $last || ! in_array($item['status_id'], [1, 14], true)
                 || $item['phase'] !== ($item['status_id'] === 14 ? 'after_works' : 'initial')
@@ -52,7 +62,7 @@ final readonly class MymarPendingBookingPage
                 }
             }
             $last = $item['dossier_id'];
-            $items[] = $item;
+            $items[] = [...$item, 'company_name' => $company];
         }
         if ($page['next_after'] !== null && (! is_int($page['next_after']) || count($page['items']) !== $limit
             || $page['next_after'] !== $last || $last <= $after)) {

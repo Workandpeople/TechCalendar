@@ -73,7 +73,7 @@ it('generates unique internal references when creating without a reference or in
     $this->mock(MapboxAddressGeocoder::class)->shouldReceive('geocode')->andReturn(['latitude' => 48.85, 'longitude' => 2.35, 'mapbox_id' => 'address.fixture']);
     $service = Service::create(['name' => 'Prestation test', 'type' => 'COFFRAC', 'average_duration_minutes' => 60]);
     for ($i = 0; $i < 2; $i++) {
-        $this->post(route('v2.dossiers.store'), ['company_name' => 'Nouveau', 'address' => 'Rue Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id]])->assertSessionHasNoErrors()->assertRedirect();
+        $this->post(route('v2.dossiers.store'), ['company_name' => 'Nouveau', 'address' => ($i + 1).' Rue Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id]])->assertSessionHasNoErrors()->assertRedirect();
     }
     $created = Dossier::where('company_name', 'Nouveau')->get();
     expect($created)->toHaveCount(2)->and($created->pluck('reference')->unique())->toHaveCount(2);

@@ -19,6 +19,19 @@ it('has distinct initial and after-works transitions without accepting arbitrary
         ->and(fn () => MymarBookingCommand::targetStatus(15, 'problem'))->toThrow(InvalidArgumentException::class);
 });
 
+it('restricts on site problems to scheduled after works with required assignment and current appointment', function () {
+    $data = mymarPlacePayload(['action' => 'on_site_problem', 'rdv_id' => 42, 'comment' => 'Client absent', 'reason' => 'Absent']);
+    unset($data['starts_at'], $data['duration_minutes']);
+    expect(MymarBookingCommand::fromArray($data)->payload)->toMatchArray(['action' => 'on_site_problem', 'rdv_id' => 42, 'technician_id' => 5])
+        ->and(MymarBookingCommand::targetStatus(16, 'on_site_problem'))->toBe(15);
+    foreach ([1, 2, 3, 14, 15, 17] as $status) {
+        expect(fn () => MymarBookingCommand::targetStatus($status, 'on_site_problem'))->toThrow(InvalidArgumentException::class);
+    }
+    foreach ([['rdv_id' => null], ['technician_id' => null], ['reason' => null], ['status_id' => 15], ['recall_at' => '2026-11-10T10:00:00+01:00']] as $bad) {
+        expect(fn () => MymarBookingCommand::fromArray([...$data, ...$bad]))->toThrow(InvalidArgumentException::class);
+    }
+});
+
 it('normalizes explicit UTC to Paris and retains the requested local clock time', function () {
     $local = MymarBookingCommand::fromArray(mymarPlacePayload());
     $utc = MymarBookingCommand::fromArray(mymarPlacePayload(['starts_at' => '2026-11-02T09:40:00+00:00']));

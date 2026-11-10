@@ -20,7 +20,13 @@ class TechnicianIncident extends Model
     protected function casts(): array
     {
         return ['reported_at' => 'datetime', 'appointment_starts_at' => 'datetime',
+            'mymar_dossier_id' => 'integer', 'mymar_rdv_id' => 'integer', 'source_context' => 'array',
             'handled_at' => 'datetime', 'billing_reviewed_at' => 'datetime', 'version' => 'integer'];
+    }
+
+    public function sourceRequest(): BelongsTo
+    {
+        return $this->belongsTo(MymarBookingRequest::class, 'request_id');
     }
 
     public function dossier(): BelongsTo

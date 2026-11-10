@@ -83,7 +83,9 @@ it('offers and records the explicit absence refusal and forgotten appointment re
     ['forgotten', 'Client avait oublié le rendez-vous'],
 ]);
 
-it('atomically records a timestamped incident its private raster photo and the chosen shared audience', function ($audience, $client, $delegate) {
+it('always records client only visibility even if an old or forged form requests another audience', function ($audience) {
+    $client = true;
+    $delegate = false;
     $payload = ($this->payload)(['audience' => $audience, 'comment' => '<script>alert(1)</script> Texte <b>fourni</b>']);
     $version = $this->dossier->fresh()->version;
     $this->postJson($this->url, $payload)->assertOk()->assertJsonPath('url', route('tech.appointments.show', $this->appointment));
@@ -114,7 +116,7 @@ it('atomically records a timestamped incident its private raster photo and the c
     $this->get(route('tech.documents.download', [$appointment, 'dossier', $document->id]).'?preview=1')->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     $this->actingAs($this->other)->get(route('tech.documents.download', [$appointment, 'dossier', $document->id]))->assertForbidden();
     Queue::assertNothingPushed();
-})->with([['internal', false, false], ['client', true, false], ['shared', true, true]]);
+})->with(['internal', 'client', 'shared', 'everyone', null]);
 
 it('acknowledges the same request again without duplicating the photo comment status or notifications', function () {
     $payload = ($this->payload)();
@@ -134,14 +136,14 @@ it('requires a usable photo reason scope and request identity without writing an
         'large' => ['photo' => UploadedFile::fake()->image('x.jpg')->size(10241)],
         'pixels' => ['photo' => UploadedFile::fake()->image('x.png', 5000, 2500)],
         'reason' => ['reason' => 'invented'], 'other' => ['reason' => 'other', 'comment' => ''],
-        'audience' => ['audience' => 'everyone'], 'uuid' => ['request_id' => 'invalid'],
+        'uuid' => ['request_id' => 'invalid'],
     };
     $this->postJson($this->url, ($this->payload)($extra))->assertUnprocessable()->assertJsonValidationErrors($field);
     expect($this->appointment->fresh()->status)->toBe('scheduled')->and($this->dossier->documents()->count())->toBe(0)
         ->and($this->dossier->comments()->count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
     Queue::assertNothingPushed();
 })->with([['missing', 'photo'], ['text', 'photo'], ['svg', 'photo'], ['large', 'photo'], ['pixels', 'photo'],
-    ['reason', 'reason'], ['other', 'comment'], ['audience', 'audience'], ['uuid', 'request_id']]);
+    ['reason', 'reason'], ['other', 'comment'], ['uuid', 'request_id']]);
 
 it('denies stale booking snapshots even if the assigned technician has not changed', function () {
     $payload = ($this->payload)();

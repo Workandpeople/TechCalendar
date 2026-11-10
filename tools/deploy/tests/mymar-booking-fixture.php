@@ -171,6 +171,10 @@ $root->exec('UPDATE MYMAR.dossier_rdv SET duree=2 WHERE id=4');
 
 // Rebooking is the same bounded writer protocol, with a separate SELECT-only snapshot.
 $reader = new MymarBookingSource(new PDO($dsn, 'cofrac_mymar_br_abcdef01', $password), 99, [5, 6, 7, 9], enabled: true, readOnlyCredentials: true);
+$companies = array_column($reader->pending(0, 100)['items'], 'company_name', 'dossier_id');
+assert($companies[24] === 'SOCIETE_MAR_FIXTURE' && $companies[28] === '');
+assert(array_column($reader->pending(0, 100)['items'], 'expected_revision', 'dossier_id')
+    === array_column($source->pending(0, 100)['items'], 'expected_revision', 'dossier_id'));
 $scheduled = $reader->scheduled(4);
 assert($scheduled['duration_minutes'] === 120 && $scheduled['technician_id'] === 5);
 expectFailure(fn () => $reader->scheduled(3), 'booking_appointment_not_found');
@@ -199,6 +203,28 @@ $before = snapshot($root);
 expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$rebook->payload, 'request_id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc']), $now), 'booking_source_changed');
 assert(snapshot($root) === $before);
 echo "Reschedule: SELECT-only snapshot, source conflicts, atomic rollback, old slot history, new technician and idempotent receipt verified.\n";
+
+// An on-site incident only affects this currently assigned after-works appointment.
+$onSiteSnapshot = $reader->scheduled($result['rdv_id']);
+$onSite = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,
+    'request_id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'action' => 'on_site_problem', 'cofrac_actor_id' => 102,
+    'dossier_id' => 23, 'rdv_id' => $result['rdv_id'], 'expected_revision' => $onSiteSnapshot['expected_revision'],
+    'technician_id' => 6, 'comment' => 'Client absent, preuve dans Cofrac #12', 'reason' => 'Client absent']);
+$before = snapshot($root);
+expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$onSite->payload, 'technician_id' => 5]), $now), 'booking_source_changed');
+assert(snapshot($root) === $before);
+$root->exec("CREATE TRIGGER MYMAR.fixture_on_site_failure BEFORE INSERT ON MYMAR.dossier_historiques FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='FIXTURE_ONLY'");
+expectFailure(fn () => $source->execute($onSite, $now), 'booking_storage_unavailable');
+assert(snapshot($root) === $before);
+$root->exec('DROP TRIGGER MYMAR.fixture_on_site_failure');
+$beforeRdvs = $root->query('CHECKSUM TABLE MYMAR.dossier_rdv')->fetchAll(PDO::FETCH_ASSOC);
+$onSiteResult = $source->execute($onSite, $now);
+assert($onSiteResult['action'] === 'on_site_problem' && $onSiteResult['status_id'] === 15 && $onSiteResult['rdv_id'] === null);
+assert($source->execute($onSite, $now) === $onSiteResult && $reader->result($onSite->payload['request_id']) === $onSiteResult);
+assert($root->query('SELECT status_id FROM MYMAR.dossiers WHERE id=23')->fetchColumn() === 15);
+assert($beforeRdvs === $root->query('CHECKSUM TABLE MYMAR.dossier_rdv')->fetchAll(PDO::FETCH_ASSOC));
+expectFailure(fn () => $reader->scheduled($onSite->payload['rdv_id']), 'booking_appointment_not_found');
+echo "On-site report: assigned technician, status 16 to 15, retained appointment, atomic rollback and idempotent receipt verified.\n";
 
 // Durable commands for two independent processes simulating concurrent planners.
 $first = command($source, 24, '88888888-8888-4888-8888-888888888888', ['starts_at' => '2026-11-10T09:00:00+01:00']);

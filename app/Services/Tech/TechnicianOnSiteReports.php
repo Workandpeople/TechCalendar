@@ -74,7 +74,7 @@ class TechnicianOnSiteReports
                 if (filled($data['comment'] ?? null)) {
                     $comment .= "\n".trim($data['comment']);
                 }
-                $flags = ContentAudience::flags($data['audience']);
+                $flags = ContentAudience::flags('client');
                 $this->workflow->recordOnSiteProblem($actor, $locked, [
                     'comment' => htmlspecialchars($comment, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                     'problem_type' => $reason, ...$flags,

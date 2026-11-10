@@ -69,7 +69,7 @@ it('links multiple existing appointments without duplicating or changing booking
 });
 
 it('rejects cross dossier operations incompatible services and missing appointments', function () {
-    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER']);
+    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER', 'address' => '20 rue de Lyon']);
     $foreignUrl = route('v2.dossiers.appointments.store', [$other, $this->operation]);
     $this->post($foreignUrl, ['appointment_id' => $this->appointment->id, 'version' => 1])->assertNotFound();
     $this->get(route('v2.dossiers.appointments.index', [$other, $this->operation]))->assertNotFound();
@@ -82,7 +82,7 @@ it('rejects cross dossier operations incompatible services and missing appointme
 
 it('rejects a conflicting link and stale updates without losing the first link', function () {
     app(DossierPlanning::class)->link($this->manager, $this->dossier, $this->operation, $this->appointment->id, 1);
-    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER']);
+    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER', 'address' => '20 rue de Lyon']);
     $this->post(route('v2.dossiers.appointments.store', [$other, $other->operations()->first()]), ['appointment_id' => $this->appointment->id, 'version' => 1])
         ->assertSessionHasErrors('appointment_id');
     $second = Appointment::create([...$this->appointmentData, 'external_reference' => 'second']);
@@ -154,7 +154,7 @@ it('shows existing lot documents without copying them and scopes downloads to th
     expect(DossierDocument::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBe([$path]);
     $url = route('v2.dossiers.lot-documents.download', [$this->dossier, $document]);
     $this->get($url)->assertOk()->assertDownload('Piece existante - Client dossier.pdf')->assertHeader('X-Content-Type-Options', 'nosniff');
-    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER']);
+    $other = app(DossierRegistry::class)->create($this->manager, [...$this->dossierData, 'reference' => 'OTHER', 'address' => '20 rue de Lyon']);
     $this->get(route('v2.dossiers.lot-documents.download', [$other, $document]))->assertNotFound();
     $document->update(['path' => '../secret.txt']);
     $this->get($url)->assertNotFound();

@@ -17,6 +17,7 @@ class TechnicianIncidentListRequest extends FormRequest
     public function rules(): array
     {
         return ['q' => ['nullable', 'string', 'max:150'],
+            'source' => ['nullable', Rule::in(['cofrac', 'mymar'])],
             'dossier_id' => ['sometimes', 'integer', 'min:1'],
             'status' => ['sometimes', Rule::in(['all', ...array_keys(TechnicianIncident::PLANNING_STATUSES)])],
             'billing' => ['nullable', Rule::in(array_keys(TechnicianIncident::BILLING_STATUSES))],

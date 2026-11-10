@@ -132,8 +132,8 @@ it('prevents double submissions of the same form and keeps unrelated clients iso
         'portal_permissions' => ClientAccess::defaults('client'),
     ]);
     $this->actingAs($account)->get(route('client.dossiers.show', Dossier::sole()))->assertForbidden();
-    $this->post(route('client.dossiers.store'), $this->data)->assertSessionHasNoErrors();
-    expect(Dossier::count())->toBe(2)->and(Dossier::query()->where('client_id', $other->id)->count())->toBe(1);
+    $this->post(route('client.dossiers.store'), $this->data)->assertSessionHasErrors('service_ids');
+    expect(Dossier::count())->toBe(1)->and(Dossier::query()->where('client_id', $other->id)->count())->toBe(0);
 });
 
 it('rejects incomplete invalid duplicate or retired service submissions', function (array $overrides, string $error) {

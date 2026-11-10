@@ -115,7 +115,7 @@ rm -f -- "$CHECK/mysql.cnf"
 php8.4 -r '
     $p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
     $pending=$p["pending_migrations"]??null;
-    if (!is_array($pending) || array_diff($pending,["2026_11_09_200000_create_technician_incidents_table"])!==[]) {
+    if (!is_array($pending) || array_diff($pending,["2026_11_09_200000_create_technician_incidents_table","2026_11_10_120000_add_mymar_technician_incidents"])!==[]) {
         fwrite(STDERR,"STOP : migrations en attente hors du schema de signalements approuve. Aucune maintenance demandee.\n");
         exit(1);
     }

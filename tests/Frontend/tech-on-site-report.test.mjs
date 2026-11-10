@@ -19,11 +19,12 @@ function fixture(initial, options = {}) {
     const image = node(), caption = node();
     targets.preview.querySelector = selector => selector === 'img' ? image : caption;
     const details = { open: false };
-    const form = node(); form.dataset = { actor: '34', appointment: '91' }; form.action = 'https://cofrac.test/tech/planning/appointments/91/on-site-report';
+    delete fields.audience;
+    const form = node(); form.dataset = { actor: '34', appointment: options.mar ? 'mar-91' : '91' }; form.action = 'https://cofrac.test/tech/planning/appointments/91/on-site-report';
     form.closest = () => details; form.elements = { namedItem: name => fields[name] };
     form.querySelector = selector => targets[selector.slice('[data-report-'.length, -1)];
     form.reportValidity = () => options.valid !== false;
-    form.reset = () => { fields.reason.value = ''; fields.comment.value = ''; fields.audience.value = 'client'; };
+    form.reset = () => { fields.reason.value = ''; fields.comment.value = ''; };
     const root = node(); root.querySelectorAll = () => [form];
     const timers = new Map(), requests = [], writes = [], values = new Map(initial ? [['34:91', initial]] : []);
     let next = 1, response = () => reply({ message: 'Signalement enregistré', url: '/tech/planning/appointments/91' });
@@ -61,6 +62,17 @@ test('does not allow a report without a photo and does not make background POST 
     assert.match(ui.feedback.textContent, /photo sur place/);
     assert.equal(ui.fields.photo.focused, true);
     assert.equal(ui.requests.length, 0);
+});
+
+test('isolates MAR drafts from native appointments and accepts only its safe local confirmation page', async () => {
+    const ui = fixture(undefined, { mar: true }); await flush(); await ui.select();
+    assert.equal(ui.values.get('34:mar-91').appointment, 'mar-91');
+    assert.equal(ui.values.has('34:91'), false);
+    ui.setResponse(() => reply({ message: 'Signalement conservé', url: '/tech/mar/appointments/91/on-site-report' }));
+    await ui.submitForm();
+    assert.equal(ui.view.location.assigned, 'https://cofrac.test/tech/mar/appointments/91/on-site-report');
+    assert.equal(ui.values.size, 0);
+    assert.equal(ui.requests[0].init.body.has('audience'), false);
 });
 
 test('keeps an offline draft and its photo under the account and appointment without automatic replay', async () => {

@@ -14,8 +14,18 @@ function pendingMarPageFixture(): array
 it('validates a complete typed page and preserves postal leading zeroes', function () {
     $data = pendingMarPageFixture();
     $page = MymarPendingBookingPage::fromArray($data, 0, 1);
-    expect($page->items)->toBe($data['items'])->and($page->items[0]['postal_code'])->toBe('01560')->and($page->nextAfter)->toBe(123);
+    expect($page->items)->toBe([[...$data['items'][0], 'company_name' => '']])->and($page->items[0]['postal_code'])->toBe('01560')->and($page->nextAfter)->toBe(123);
     expect(MymarPendingBookingPage::fromArray(array_replace($data, ['items' => [], 'next_after' => null]), 123, 50)->items)->toBe([]);
+});
+
+it('accepts the optional plain company name while remaining compatible with the previous reader', function () {
+    $data = pendingMarPageFixture();
+    $data['items'][0]['company_name'] = 'Société <img src=x onerror=alert(1)>';
+    expect(MymarPendingBookingPage::fromArray($data, 0, 1)->items[0]['company_name'])->toBe($data['items'][0]['company_name']);
+    foreach ([null, [], str_repeat('a', 1025), "bad\0name", "\xff"] as $invalid) {
+        $data['items'][0]['company_name'] = $invalid;
+        expect(fn () => MymarPendingBookingPage::fromArray($data, 0, 1))->toThrow(RuntimeException::class);
+    }
 });
 
 it('refuses incomplete, excessive, inconsistent or looping pages', function (string $case) {

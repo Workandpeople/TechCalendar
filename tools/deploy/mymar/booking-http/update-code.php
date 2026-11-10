@@ -7,7 +7,8 @@ use App\Services\Mymar\MymarPendingBookingPage;
 use App\Services\Mymar\MymarReadWindow;
 use Cofrac2\Deploy\Mymar\MymarBookingSqlAccess;
 
-// Code-only gateway upgrade. Health checks are GET-only, including on the writer.
+// Gateway upgrade. Only the reader may gain two SELECT columns for company labels.
+// Health checks remain GET-only, including on the writer.
 umask(0077);
 ini_set('display_errors', '0');
 ini_set('zend.exception_ignore_args', '1');
@@ -114,8 +115,48 @@ function upgradePendingCheck(#[SensitiveParameter] string $token): void
     }
 }
 
+function upgradeCompanyPermissions(array $config, bool $grant): void
+{
+    global $run;
+    $username = $config['database_user'];
+    if (! preg_match('/^cofrac_mymar_br_[a-f0-9]{8}$/D', $username)) {
+        throw new RuntimeException('mymar.company_permissions_identity_refused');
+    }
+    $pdo = new PDO('mysql:unix_socket=/var/run/mysqld/mysqld.sock;dbname=MYMAR;charset=utf8mb4', $username,
+        $config['database_password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 3]);
+    $columns = $pdo->prepare("SELECT TABLE_NAME,COLUMN_NAME FROM information_schema.COLUMN_PRIVILEGES WHERE TABLE_SCHEMA='MYMAR' AND PRIVILEGE_TYPE='SELECT' AND GRANTEE=?");
+    $columns->execute(["'$username'@'localhost'"]);
+    $present = $columns->fetchAll(PDO::FETCH_ASSOC);
+    $sql = '';
+    foreach (['dossiers' => 'partenaire_id', 'users' => 'name'] as $table => $column) {
+        $exists = in_array(['TABLE_NAME' => $table, 'COLUMN_NAME' => $column], $present, true);
+        if ($grant && ! $exists) {
+            $sql .= "GRANT SELECT (`$column`) ON `MYMAR`.`$table` TO '$username'@'localhost';\n";
+        } elseif (! $grant && $exists) {
+            $sql .= "REVOKE SELECT (`$column`) ON `MYMAR`.`$table` FROM '$username'@'localhost';\n";
+        }
+    }
+    if ($sql !== '') {
+        $process = proc_open(['/usr/bin/timeout', '--kill-after=3', '10', '/usr/bin/mysql', '--defaults-file=/etc/mysql/debian.cnf',
+            '--protocol=socket', '--connect-timeout=3', '--batch'],
+            [0 => ['pipe', 'r'], 1 => ['file', $run.'/permissions.log', 'a'], 2 => ['file', $run.'/permissions.log', 'a']], $pipes,
+            null, ['PATH' => '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME' => '/root']);
+        if (! is_resource($process)) {
+            throw new RuntimeException('mymar.company_permissions_update_failed');
+        }
+        fwrite($pipes[0], $sql);
+        fclose($pipes[0]);
+        if (proc_close($process) !== 0) {
+            throw new RuntimeException('mymar.company_permissions_update_failed');
+        }
+    }
+    MymarBookingSqlAccess::validateGrants($pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN),
+        readOnly: true, companyNames: $grant);
+}
+
 $changed = false;
 $stopped = false;
+$permissionsChanged = false;
 try {
     $run = $argv[1] ?? '';
     if (PHP_SAPI !== 'cli' || PHP_VERSION_ID < 80401 || posix_geteuid() !== 0 || explode('.', gethostname())[0] !== 'ns365601'
@@ -166,7 +207,18 @@ try {
     if ($pdo->query('SELECT CURRENT_USER()')->fetchColumn() !== $config['database_user'].'@localhost') {
         throw new RuntimeException('mymar.reader_sql_identity_changed');
     }
-    MymarBookingSqlAccess::validateGrants($pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN), readOnly: ! $writer);
+    $grants = $pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(PDO::FETCH_COLUMN);
+    $extendCompanyPermissions = false;
+    try {
+        MymarBookingSqlAccess::validateGrants($grants, readOnly: ! $writer);
+    } catch (RuntimeException $error) {
+        if ($writer) {
+            throw $error;
+        }
+        // Upgrade only the exact previous SELECT scope; never accept broader permissions.
+        MymarBookingSqlAccess::validateGrants($grants, readOnly: true, companyNames: false);
+        $extendCompanyPermissions = true;
+    }
     unset($pdo);
     upgradePendingCheck($config['token']);
     $files = ['entry.php' => $writer ? 'tools/deploy/mymar/actions/entry.php' : 'tools/deploy/mymar/booking-http/entry.php'];
@@ -201,6 +253,11 @@ try {
     }
     $proof = upgradeProof();
     upgradeCommand(['/usr/bin/systemctl', 'is-active', '--quiet', ...$units]);
+    if ($extendCompanyPermissions) {
+        file_put_contents($run.'/reader-grants-before.json', json_encode($grants, JSON_THROW_ON_ERROR));
+        $permissionsChanged = true;
+        upgradeCompanyPermissions($config, grant: true);
+    }
     $stopped = true;
     upgradeCommand(['/usr/bin/systemctl', 'stop', ...array_reverse($units)]);
     if (! rename($code, $backup)) {
@@ -227,9 +284,22 @@ try {
     file_put_contents($run.'/summary.json', json_encode(['format' => $request['format'], 'version' => 1,
         'complete' => true, 'target' => $target, 'revision' => $revision, 'calendar_labels_ready' => ! $writer, 'label_count' => count($labels['items']),
         'configuration_unchanged' => true, 'sql_writes' => false, 'mymar_application_unchanged' => true,
+        'reader_company_select_columns_added' => $permissionsChanged,
         'backup_directory' => $backup], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
-    echo "Passerelle MAR ($target) mise a jour et GET verifies. Aucun compte, reglage, placement ou message modifie.\nDiagnostic prive : $run\n";
+    echo "Passerelle MAR ($target) mise a jour et GET verifies. Aucun dossier, placement, message ou code MYMAR modifie.\n";
+    if ($permissionsChanged) {
+        echo "Seul le lecteur gagne SELECT sur partenaire_id et le nom de societe ; aucun nouveau droit d'ecriture.\n";
+    }
+    echo "Diagnostic prive : $run\n";
 } catch (Throwable $failure) {
+    if ($permissionsChanged) {
+        try {
+            upgradeCompanyPermissions($config, grant: false);
+            fwrite(STDERR, "Droits SELECT du lecteur restaures.\n");
+        } catch (Throwable) {
+            fwrite(STDERR, "ATTENTION : verifier les deux droits SELECT du lecteur dans le diagnostic prive.\n");
+        }
+    }
     if ($stopped) {
         try {
             upgradeCommand(['/usr/bin/systemctl', 'stop', ...array_reverse($units)]);

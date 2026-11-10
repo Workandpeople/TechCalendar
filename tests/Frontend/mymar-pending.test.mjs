@@ -79,6 +79,19 @@ test('renders external text safely and includes town without native booking acti
     assert.equal(row.children.some(node => ['button', 'a', 'form'].includes(node.tag)), false);
 });
 
+test('shows the source company under the beneficiary safely and does not guess a missing company', () => {
+    const ui = fixture(), value = page(0, 1);
+    value.items[0].company_name = '<img src=x onerror=alert(1)> Société';
+    pendingPage(value, 0);
+    renderPendingRows(ui.children.list, value.items);
+    assert.equal(ui.nodes.find(node => node.className === 'gc-booking-request-meta').textContent, value.items[0].company_name);
+    const older = fixture();
+    renderPendingRows(older.children.list, page(0, 1).items);
+    assert.equal(older.nodes.find(node => node.className === 'gc-booking-request-meta').textContent, 'Société non renseignée');
+    value.items[0].company_name = { unsafe: true };
+    assert.throws(() => pendingPage(value, 0));
+});
+
 test('MAR actions use the common compact controls without changing their target or sending on render', () => {
     const ui = fixture(), calls = [], item = page(0, 1).items[0];
     renderPendingRows(ui.children.list, [item], { choose: value => calls.push(['choose', value]), problem: value => calls.push(['problem', value]) });

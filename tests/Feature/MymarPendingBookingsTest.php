@@ -62,6 +62,15 @@ it('caches encrypted projections briefly and bounds manual refreshes', function 
     Http::assertSentCount(3);
 });
 
+it('projects the actual MAR company name without creating an organisation or exposing other account fields', function () {
+    $data = ($this->sourcePage)(0, 1);
+    $data['items'][0]['company_name'] = 'Société MAR de test';
+    Http::fake(fn () => Http::response($data));
+    $this->actingAs($this->actor)->getJson(route('planner.book.mar.index'))->assertOk()
+        ->assertJsonPath('items.0.company_name', 'Société MAR de test');
+    expect(Dossier::count())->toBe(0);
+});
+
 it('uses distinct page and generation keys and disables access before reading any cached data', function () {
     Http::fake(fn ($request) => Http::response(($this->sourcePage)((int) ($request->data()['after'] ?? 0))));
     $this->actingAs($this->actor)->getJson(route('planner.book.mar.index'))->assertOk();

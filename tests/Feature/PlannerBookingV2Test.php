@@ -247,7 +247,7 @@ it('uses the same pending dossier count in categories the sidebar and the bookin
     foreach (range(1, 7) as $index) {
         $created = app(DossierRegistry::class)->create($actor, [
             'reference' => 'COUNT-'.$index, 'company_name' => 'Client '.$index,
-            'address' => 'Rue Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id],
+            'address' => $index.' Rue Test', 'city' => 'Paris', 'mapbox_id' => 'address.fixture', 'service_ids' => [$service->id],
         ]);
         if ($index <= 2) {
             $created->operations()->first()->appointments()->create([

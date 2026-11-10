@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Tech;
 
 use App\Models\Appointment;
-use App\Services\Crm\ContentAudience;
 use App\Services\Tech\TechnicianOnSiteReports;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -25,7 +24,6 @@ class StoreOnSiteReportRequest extends FormRequest
             'reason' => ['required', Rule::in(array_keys(TechnicianOnSiteReports::REASONS))],
             'comment' => ['nullable', 'required_if:reason,other', 'string', 'max:2000'],
             'photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'audience' => ['required', Rule::in(array_keys(ContentAudience::LABELS))],
         ];
     }
 

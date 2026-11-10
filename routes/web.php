@@ -26,6 +26,7 @@ use App\Http\Controllers\Planner\PlannerTrackingController;
 use App\Http\Controllers\Planner\TechnicianIncidentController;
 use App\Http\Controllers\SupportReportController;
 use App\Http\Controllers\Tech\MymarDocumentController;
+use App\Http\Controllers\Tech\MymarOnSiteReportController;
 use App\Http\Controllers\Tech\TechAppointmentController;
 use App\Http\Controllers\Tech\TechPlanningController;
 use App\Http\Middleware\EnsureCrmV2Enabled;
@@ -228,6 +229,14 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/mar/appointments/{rdv}/documents/{document}', [MymarDocumentController::class, 'download'])
         ->whereNumber(['rdv', 'document'])->middleware('throttle:30,1')->name('mymar.documents.download');
     Route::middleware(EnsureCrmV2Enabled::class)->group(function (): void {
+        Route::get('/tech/mar/appointments/{rdv}/on-site-report', [MymarOnSiteReportController::class, 'show'])
+            ->whereNumber('rdv')->middleware('throttle:30,1')->name('tech.mar.on-site.show');
+        Route::post('/tech/mar/appointments/{rdv}/on-site-report', [MymarOnSiteReportController::class, 'store'])
+            ->whereNumber('rdv')->middleware('throttle:10,1')->name('tech.mar.on-site.store');
+        Route::post('/tech/mar/appointments/{rdv}/on-site-report/transmit', [MymarOnSiteReportController::class, 'transmit'])
+            ->whereNumber('rdv')->middleware('throttle:10,1')->name('tech.mar.on-site.transmit');
+        Route::get('/tech/mar/incidents/{incident}/photo', [MymarOnSiteReportController::class, 'photo'])
+            ->whereNumber('incident')->name('tech.mar.on-site.photo');
         Route::get('/tech/planning/appointments/{appointment}', [TechAppointmentController::class, 'show'])->whereNumber('appointment')->name('tech.appointments.show');
         Route::post('/tech/planning/appointments/{appointment}/on-site-report', [TechAppointmentController::class, 'report'])
             ->whereNumber('appointment')->middleware('throttle:10,1')->name('tech.appointments.on-site-report');

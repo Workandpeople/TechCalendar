@@ -3414,8 +3414,8 @@ rattache a une organisation. Les controles fichier/stdin donnent le meme resulta
   Un appareil sans stockage local disponible affiche un avertissement. Aucun envoi
   automatique au retour du reseau ; le technicien doit valider explicitement.
 - Aucun schema, service ou package supplementaire. PHP GD est deja un prerequis
-  du runtime. MYMAR et ses rendez-vous restent exclus de cette action : aucune
-  extension de ses droits ou de son workflow documentaire dans ce correctif.
+  du runtime. La premiere version excluait MYMAR ; son extension du 10 novembre
+  est decrite ci-dessous et passe uniquement par la passerelle dediee.
 
 Pour tester sans toucher a une intervention reelle : utiliser un compte
 technicien de test actif, lui attribuer un dossier fictif avec une prestation
@@ -3441,3 +3441,65 @@ le realiser sur une demo sans envois ou avec un dossier fictif sans destinataire
   Aucun mail/SMS n'est envoye. Aucun schema, droit stocke ou parametre a migrer.
 - Les autorisations de retrait sont calculees uniquement pour les 15 documents
   de la page courante, avec un nombre constant de requetes.
+
+### Creation sans doublon et societe MAR (10 novembre 2026)
+
+- Les formulaires internes et clients refusent une creation si un dossier non
+  supprime porte exactement le meme `service_id` et partage le telephone OU
+  l'adresse complete normalises. Aucun rapprochement par nom ou famille de
+  prestation : une fiche SAV reste distincte. Les dossiers annules/finalises
+  restent controles ; les dossiers supprimes ne bloquent pas une recreation.
+- Les numeros nationaux, sans zero initial et +33/0033 sont compares sans
+  ponctuation ; plusieurs contacts separes restent distincts. Une localisation
+  sur une commune seule n'est pas assimilee a une adresse de site identique.
+- Le verrou de la fiche est pris dans la transaction de creation avant toute
+  lecture des dossiers. La recherche utilise l'index de fiche existant et les
+  seules coordonnees de contact, sans ajout de requete aux pages de listes.
+  Aucun schema/backfill ni modification des doublons historiques n'est requis.
+  Le message de refus ne divulgue aucune identite d'une autre organisation.
+- Les demandes MAR affichent la societe, issue du lien `societe()` audite dans
+  MYMAR (`dossiers.partenaire_id` vers `users.name`), sous le beneficiaire.
+  La V2 accepte encore les anciens lecteurs/caches sans ce champ. Deployer la
+  V2 puis le paquet cible de mise a jour du lecteur : seuls deux droits SELECT
+  du lecteur sont etendus, avec restauration sur echec. Aucun code ou dossier
+  MYMAR n'est modifie, aucun compte d'ecriture n'est elargi.
+- Le 403 de la file globale des signalements reste attendu pour un compte Tech.
+  Son explication indique le parcours depuis son propre rendez-vous ; les
+  comptes planning/gerants/admins conservent la file globale, sans ouverture
+  des signalements ni des decisions comptables aux techniciens.
+
+### Signalements terrain MAR et portee imposee (10 novembre 2026)
+
+- Pour Cofrac, la photo et le commentaire des nouveaux signalements sont toujours
+  `Client uniquement` (et accessibles a l'equipe interne), jamais au delegataire.
+  Aucun selecteur a remplir ; la valeur est imposee dans le service meme si un
+  ancien formulaire transmet `internal` ou `shared`. Les droits et preferences
+  de notification existants continuent a s'appliquer. Aucun historique reecrit.
+- Pour un RDV MAR apres travaux, le technicien affecte peut signaler un probleme
+  depuis son planning mobile ou les factures/devis. Motif et photo obligatoires,
+  texte complementaire facultatif sauf `Autre`. Aucune ouverture de la file
+  globale a un compte technicien, ni acces aux interventions d'un collegue.
+- La preuve complete reste dans Cofrac, sans creer de dossier, rendez-vous ou
+  document natif factice. Elle alimente la file commune des signalements et le
+  suivi manuel du deplacement. Les clients/delegataires Cofrac n'obtiennent
+  aucun acces a ces preuves MAR : leurs dossiers ne sont pas repliques.
+- Une commande dediee `on_site_problem` demande uniquement `16 -> 15`
+  (`RDV APT ATTENTE` vers `PB PRISE RDV APT`). La passerelle revalide sous verrou
+  le RDV courant, l'affectation active et la revision source. Elle garde le RDV,
+  son historique et la date de rappel precedente ; MYMAR recoit un motif court
+  et une trace de l'acteur Cofrac. Aucun code applicatif MYMAR n'est modifie.
+- Photo et commande sont enregistrees avant le POST. Apres une reponse inconnue,
+  seules des lectures du recu sont autorisees, pas de renvoi automatique. Une
+  reference unique par RDV protege la preuve. L'interface distingue conservation
+  locale, transmission en attente, refus et confirmation effective de MYMAR.
+  Aucun email/SMS ni notification MYMAR automatique dans ce parcours.
+- Migration V2 ciblee `2026_11_10_120000_add_mymar_technician_incidents` :
+  references natives optionnelles, identifiants source, photo privee et journal
+  des decisions planning/comptables MAR. Un retour du schema est refuse si des
+  preuves MAR existent. Ne pas supprimer cette table pour revenir au code ancien.
+- Deployer le paquet applicatif puis les deux paquets de passerelle epingles a
+  sa revision (`prepare-mymar-reader-code-update.php`, avec puis sans `--actions`).
+  Ne pas tester un POST sur une vraie intervention pendant le deploiement.
+  Les controles des paquets sont des GET uniquement ; les activations, mappings,
+  mots de passe et modes mail/SMS restent conserves. Le lecteur gagne seulement
+  les deux colonnes SELECT de societe documentees plus haut, pas le writer.

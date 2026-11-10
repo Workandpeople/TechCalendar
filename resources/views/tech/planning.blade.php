@@ -19,7 +19,7 @@
                 @forelse ($dayCards as $card)
                     @include('tech.partials.appointment-card', ['card' => $card])
                 @empty
-                    <li class="tech-empty"><span class="tech-empty-icon"><x-nav-icon name="planning" /></span><h3>Aucune intervention ce jour</h3><p>Choisissez un autre jour pour retrouver vos dossiers.</p>@if ($nextCard)<a class="tech-small-button" href="{{ route('tech.planning', ['date' => $nextCard['appointment']->starts_at->toDateString()]) }}">Prochain RDV : {{ $nextCard['appointment']->starts_at->format('d/m à H:i') }}</a>@endif</li>
+                    <li class="tech-empty"><span class="tech-empty-icon"><x-nav-icon name="planning" /></span><h3>Aucune intervention ce jour</h3><p>Choisissez un autre jour pour retrouver vos dossiers.</p>@if ($nextCard)<a class="tech-small-button" href="{{ route('tech.planning', ['date' => $nextCard['appointment']->starts_at->toDateString()]) }}">Prochain RDV : {{ $nextCard['appointment']->starts_at->format('d/m à H:i') }}</a>@endif @if (($event['extendedProps']['visit_phase'] ?? '') === 'after_works')<a class="gc-btn-danger mt-3 w-full text-center" href="{{ route('tech.mar.on-site.show', $event['extendedProps']['source_rdv_id']) }}">Signaler un problème sur place</a>@endif</li>
                 @endforelse
             </ol>
         </section>
@@ -32,7 +32,7 @@
                 @endif
                 <ul class="mt-4 space-y-3">
                     @foreach ($marAppointments as $event)
-                        <li class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p class="text-sm font-semibold">{{ \Carbon\Carbon::parse($event['start'])->tz('Europe/Paris')->format('H:i') }} – {{ \Carbon\Carbon::parse($event['end'])->tz('Europe/Paris')->format('H:i') }}</p><h3 class="mt-1 font-semibold">{{ $event['extendedProps']['customer_name'] ?: 'Rendez-vous MAR' }}</h3><p class="mt-2 break-words text-sm">{{ $event['extendedProps']['address'] }}</p>@if ($event['extendedProps']['documents_url'])<a class="gc-btn-primary mt-3 w-full text-center" href="{{ $event['extendedProps']['documents_url'] }}">Factures et devis</a>@endif</li>
+                        <li class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p class="text-sm font-semibold">{{ \Carbon\Carbon::parse($event['start'])->tz('Europe/Paris')->format('H:i') }} – {{ \Carbon\Carbon::parse($event['end'])->tz('Europe/Paris')->format('H:i') }}</p><h3 class="mt-1 font-semibold">{{ $event['extendedProps']['customer_name'] ?: 'Rendez-vous MAR' }}</h3><p class="mt-2 break-words text-sm">{{ $event['extendedProps']['address'] }}</p>@if ($event['extendedProps']['documents_url'])<a class="gc-btn-primary mt-3 w-full text-center" href="{{ $event['extendedProps']['documents_url'] }}">Factures et devis</a>@endif @if (($event['extendedProps']['visit_phase'] ?? '') === 'after_works')<a class="gc-btn-danger mt-3 w-full text-center" href="{{ route('tech.mar.on-site.show', $event['extendedProps']['source_rdv_id']) }}">Signaler un problème sur place</a>@endif</li>
                     @endforeach
                 </ul>
             </section>

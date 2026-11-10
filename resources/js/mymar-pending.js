@@ -6,7 +6,8 @@ export function pendingPage(value, after) {
     for (const item of value.items) {
         if (!item || !Number.isSafeInteger(item.dossier_id) || item.dossier_id <= last
             || item.status_id !== 14 || item.phase !== 'after_works'
-            || ['first_name', 'last_name', 'address', 'phone'].some(key => typeof item[key] !== 'string' || item[key].length > 4096)) throw new Error('invalid item');
+            || ['first_name', 'last_name', 'address', 'phone'].some(key => typeof item[key] !== 'string' || item[key].length > 4096)
+            || (item.company_name !== undefined && (typeof item.company_name !== 'string' || item.company_name.length > 1024))) throw new Error('invalid item');
         last = item.dossier_id;
     }
     if (value.next_after !== null && value.next_after < last) throw new Error('invalid cursor');
@@ -26,6 +27,7 @@ export function renderPendingRows(list, items, actions = null) {
         row.setAttribute('role', 'listitem');
         const client = element('div', 'gc-booking-request-client');
         client.append(element('strong', 'gc-booking-request-name', `${item.last_name} ${item.first_name}`.trim() || 'Bénéficiaire non renseigné'));
+        client.append(element('p', 'gc-booking-request-meta', item.company_name?.trim() || 'Société non renseignée'));
         const service = element('div', 'gc-booking-request-service');
         service.append(element('span', 'gc-booking-request-service-type', 'MAR'),
             element('span', 'gc-booking-request-service-name', 'Visite après travaux'));
