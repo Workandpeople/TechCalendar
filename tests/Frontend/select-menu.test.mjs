@@ -52,13 +52,28 @@ test('menu fits narrow viewports and opens above a field near the bottom', () =>
     assert.equal(below.bottom, null);
 });
 
+test('menu stays above the mobile keyboard and within a panned visual viewport', () => {
+    const viewport = { width: 390, height: 360, offsetTop: 80, offsetLeft: 20, layoutHeight: 844 };
+    const position = selectMenuPosition({ left: 10, top: 300, bottom: 342, width: 366 }, viewport);
+    assert.equal(position.left, 28);
+    assert.equal(position.bottom, 549);
+    assert.equal(position.maxHeight, 207);
+    const obscured = selectMenuPosition({ left: 10, top: 600, bottom: 642, width: 366 }, viewport);
+    assert.equal(obscured.bottom, 412);
+    assert.equal(obscured.maxHeight, 320);
+    const above = selectMenuPosition({ left: 10, top: 0, bottom: 42, width: 366 }, viewport);
+    assert.equal(above.top, 88);
+    assert.equal(above.bottom, null);
+});
+
 function fixture() {
-    const handlers = new Map(), emitted = [], observers = [];
+    const handlers = new Map(), emitted = [], observers = [], windowHandlers = new Map(), viewportHandlers = new Map();
     const root = { activeElement: null, documentElement: { clientWidth: 1024 } };
     class Node {
         constructor(tag = 'DIV') {
             this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = new Map();
             this.handlers = {};
+            this.scrollTop = 0;
             this.style = { setProperty() {} }; this.size = 0; this.selectedIndex = 0;
         }
         get isConnected() { return this === root.body || Boolean(this.parentElement?.isConnected); }
@@ -93,7 +108,9 @@ function fixture() {
     root.createElement = tag => new Node(tag.toUpperCase());
     root.addEventListener = (name, callback) => { if (!handlers.has(name)) handlers.set(name, []); handlers.get(name).push(callback); };
     const browser = {
-        innerHeight: 720, addEventListener() {},
+        innerHeight: 720, addEventListener(name, handler) { windowHandlers.set(name, handler); },
+        visualViewport: { width: 1024, height: 720, offsetTop: 0, offsetLeft: 0,
+            addEventListener(name, handler) { viewportHandlers.set(name, handler); } },
         getComputedStyle: () => ({ getPropertyValue: () => '' }),
         Event: class { constructor(type) { this.type = type; } },
         MutationObserver: class {
@@ -116,7 +133,9 @@ function fixture() {
     };
     initSelectMenus(root, browser);
     return { root, select, emitted, browser, Node, fire,
-        menu: () => root.body.children.find(node => node.getAttribute('role') === 'listbox'),
+        menu: () => root.body.children.find(node => ['listbox', 'dialog'].includes(node.getAttribute('role'))),
+        windowEvent: name => windowHandlers.get(name)?.(),
+        viewportEvent: (name, values = {}) => { Object.assign(browser.visualViewport, values); viewportHandlers.get(name)?.(); },
         mutate: target => observers.filter(observer => observer.connected).forEach(observer => observer.callback([{ target }])),
     };
 }
@@ -161,6 +180,87 @@ test('searchable menus keep focus in a text input and only commit on explicit ch
     assert.equal(ui.select.selectedIndex, 2);
     assert.deepEqual(ui.emitted, ['input', 'change']);
     assert.equal(ui.root.activeElement, ui.select);
+});
+
+test('a touch opens the choices without automatically focusing the search or native select', () => {
+    const ui = fixture();
+    ui.select.setAttribute('data-searchable', '');
+    ui.fire('pointerdown', ui.select, { pointerType: 'touch' });
+    const popup = ui.menu(), input = popup.children[0];
+    assert.equal(ui.root.activeElement, popup);
+    assert.equal(popup.tabIndex, -1);
+    ui.viewportEvent('resize', { height: 650 });
+    ui.fire('scroll', ui.root.body);
+    assert.equal(ui.menu(), popup);
+    input.focus();
+    ui.viewportEvent('resize', { height: 360, offsetTop: 80 });
+    ui.viewportEvent('scroll', { offsetTop: 100 });
+    ui.windowEvent('resize');
+    ui.fire('scroll', ui.root.body);
+    assert.equal(ui.menu(), popup);
+    assert.equal(ui.root.activeElement, input);
+    assert.deepEqual(ui.emitted, []);
+    input.value = 'electric';
+    input.handlers.input();
+    const option = popup.querySelectorAll('[role="option"]')[0];
+    assert.equal(ui.fire('pointerdown', option, { pointerType: 'touch' }).prevented, undefined);
+    ui.fire('click', option);
+    assert.equal(ui.select.selectedIndex, 2);
+    assert.equal(ui.menu(), undefined);
+    assert.deepEqual(ui.emitted, ['input', 'change']);
+});
+
+test('touch-opened popups still support keyboard navigation and explicit dismissal', () => {
+    const ui = fixture();
+    ui.fire('pointerdown', ui.select, { pointerType: 'touch' });
+    const popup = ui.menu();
+    ui.fire('keydown', popup, { key: 'ArrowDown' });
+    ui.fire('keydown', popup, { key: 'Enter' });
+    assert.equal(ui.select.selectedIndex, 2);
+    assert.equal(ui.menu(), undefined);
+    ui.fire('pointerdown', ui.select, { pointerType: 'touch' });
+    ui.fire('pointerdown', ui.root.body, { pointerType: 'touch' });
+    assert.equal(ui.menu(), undefined);
+    ui.fire('pointerdown');
+    ui.windowEvent('pagehide');
+    assert.equal(ui.menu(), undefined);
+});
+
+test('window resizing remains safe when the Visual Viewport API is unavailable', () => {
+    const ui = fixture();
+    ui.browser.visualViewport = undefined;
+    ui.windowEvent('resize');
+    ui.fire('pointerdown');
+    const popup = ui.menu();
+    ui.browser.innerHeight = 400;
+    ui.windowEvent('resize');
+    assert.equal(ui.menu(), popup);
+    assert.equal(popup.style.maxHeight, '245px');
+    ui.fire('reset');
+    ui.windowEvent('resize');
+    assert.equal(ui.menu(), undefined);
+});
+
+test('highlighting long lists never scrolls the surrounding modal or page', () => {
+    const ui = fixture();
+    ui.Node.prototype.scrollIntoView = () => { throw new Error('Must only scroll the popup'); };
+    ui.Node.prototype.getBoundingClientRect = function () {
+        if (this.getAttribute('role') === 'listbox') return { left: 200, top: 147, bottom: 467, width: 280, height: 320 };
+        if (this.getAttribute('role') === 'option') {
+            const top = 147 + Number(this.dataset.index) * 120 - this.parentElement.scrollTop;
+            return { top, bottom: top + 44 };
+        }
+        return { left: 200, top: 100, bottom: 142, width: 280, height: 42 };
+    };
+    ui.fire('pointerdown');
+    const popup = ui.menu();
+    ui.fire('keydown', ui.select, { key: 'End' });
+    assert.equal(popup.scrollTop, 204);
+    ui.fire('keydown', ui.select, { key: 'Home' });
+    assert.equal(popup.scrollTop, 0);
+    assert.deepEqual(ui.emitted, []);
+    ui.fire('scroll', ui.root.body);
+    assert.equal(ui.menu(), undefined);
 });
 
 test('selection uses the original field and emits native input/change exactly once', () => {

@@ -29,16 +29,20 @@ export function searchSelectOption(items, query, current) {
 
 export function selectMenuPosition(anchor, viewport) {
     const margin = 8, gap = 5;
+    const viewportLeft = viewport.offsetLeft || 0, viewportTop = viewport.offsetTop || 0;
+    const viewportRight = viewportLeft + viewport.width, viewportBottom = viewportTop + viewport.height;
     const width = Math.min(Math.max(anchor.width, 240), viewport.width - margin * 2);
-    const below = viewport.height - anchor.bottom - gap - margin;
-    const above = anchor.top - gap - margin;
+    const top = Math.max(viewportTop + margin, anchor.bottom + gap);
+    const bottom = Math.min(viewportBottom - margin, anchor.top - gap);
+    const below = viewportBottom - top - margin;
+    const above = bottom - viewportTop - margin;
     const upwards = below < Math.min(280, above);
     return {
         width,
-        left: Math.max(margin, Math.min(anchor.left, viewport.width - width - margin)),
+        left: Math.max(viewportLeft + margin, Math.min(anchor.left, viewportRight - width - margin)),
         maxHeight: Math.max(0, Math.min(320, upwards ? above : below)),
-        top: upwards ? null : anchor.bottom + gap,
-        bottom: upwards ? viewport.height - anchor.top + gap : null,
+        top: upwards ? null : top,
+        bottom: upwards ? (viewport.layoutHeight ?? viewport.height) - bottom : null,
     };
 }
 
@@ -71,15 +75,26 @@ export function initSelectMenus(root = document, browser = window) {
             option.dataset.highlighted = String(current);
             if (current) {
                 active.setAttribute('aria-activedescendant', option.id);
-                option.scrollIntoView({ block: 'nearest' });
+                // Scroll only the popup, never its enclosing modal or the page on iOS.
+                const bounds = menu.getBoundingClientRect(), optionBounds = option.getBoundingClientRect();
+                const visibleTop = bounds.top + (searchInput?.offsetHeight || 0);
+                if (optionBounds.top < visibleTop) menu.scrollTop -= visibleTop - optionBounds.top;
+                else if (optionBounds.bottom > bounds.bottom) menu.scrollTop += optionBounds.bottom - bounds.bottom;
             }
         });
         if (index < 0) active.removeAttribute('aria-activedescendant');
     };
     const place = () => {
+        if (!active) return;
         const anchor = active.getBoundingClientRect();
         if (!anchor.width || !anchor.height || !eligible(active) || !active.isConnected) return close();
-        const position = selectMenuPosition(anchor, { width: root.documentElement.clientWidth, height: browser.innerHeight });
+        const viewport = browser.visualViewport;
+        const position = selectMenuPosition(anchor, {
+            width: viewport?.width || root.documentElement.clientWidth,
+            height: viewport?.height || browser.innerHeight,
+            offsetLeft: viewport?.offsetLeft || 0, offsetTop: viewport?.offsetTop || 0,
+            layoutHeight: browser.innerHeight,
+        });
         if (position.maxHeight < 36) return close();
         Object.assign(menu.style, {
             width: `${position.width}px`, left: `${position.left}px`, maxHeight: `${position.maxHeight}px`,
@@ -138,7 +153,7 @@ export function initSelectMenus(root = document, browser = window) {
         if (active) highlight(items.some(item => item.index === highlighted && !item.disabled)
             ? highlighted : nextSelectOption(items, active.selectedIndex, 0));
     };
-    const open = select => {
+    const open = (select, touch = false) => {
         close();
         if (!eligible(select)) return;
         active = select;
@@ -146,6 +161,7 @@ export function initSelectMenus(root = document, browser = window) {
         menu = root.createElement('div');
         menu.id = `gc-select-menu-${++sequence}`;
         menu.className = 'gc-select-menu';
+        menu.tabIndex = -1;
         menu.setAttribute('role', 'listbox');
         const label = select.getAttribute('aria-label') || Array.from(select.labels || []).map(item => item.textContent.trim()).join(' ');
         menu.setAttribute('aria-label', label || 'Options');
@@ -169,7 +185,9 @@ export function initSelectMenus(root = document, browser = window) {
         highlighted = select.selectedIndex;
         render();
         if (!active) return;
-        (searchInput || select).focus({ preventScroll: true });
+        // A tap shows the choices first; the keyboard opens only when the search is tapped.
+        (touch ? menu : (searchInput || select)).focus({ preventScroll: true });
+        if (!active) return;
         // AJAX can replace an option list, disable the field or remove its modal/table.
         observer = new browser.MutationObserver(records => {
             if (!active) return;
@@ -203,7 +221,7 @@ export function initSelectMenus(root = document, browser = window) {
         if (eligible(select)) {
             event.preventDefault();
             if (select === active) close();
-            else open(select);
+            else open(select, event.pointerType === 'touch');
         } else close();
     }, true);
     root.addEventListener('click', event => {
@@ -233,7 +251,7 @@ export function initSelectMenus(root = document, browser = window) {
             }
             return;
         }
-        const select = event.target;
+        const select = event.target === menu ? active : event.target;
         if (!eligible(select) || event.isComposing || event.ctrlKey || event.metaKey) return;
         if (event.key === 'Escape' && active === select) {
             event.preventDefault();
@@ -270,8 +288,16 @@ export function initSelectMenus(root = document, browser = window) {
     root.addEventListener('change', event => { if (event.target === active) close(); });
     root.addEventListener('reset', close, true);
     root.addEventListener('close', close, true);
-    root.addEventListener('scroll', event => { if (active && !menu.contains(event.target)) close(); }, true);
-    browser.addEventListener('resize', close);
-    browser.visualViewport?.addEventListener('resize', close);
+    root.addEventListener('scroll', event => {
+        if (active && !menu.contains(event.target)) {
+            if (menu.contains(root.activeElement)) place();
+            else close();
+        }
+    }, true);
+    // Safari resizes and pans its visual viewport when the keyboard or browser bars move.
+    browser.addEventListener('resize', place);
+    browser.visualViewport?.addEventListener('resize', place);
+    browser.visualViewport?.addEventListener('scroll', place);
+    browser.addEventListener('pagehide', close);
     return { close };
 }
