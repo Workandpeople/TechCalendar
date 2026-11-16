@@ -6,6 +6,7 @@
     <h3>@if ($card['detail_url'])<a href="{{ $card['detail_url'] }}">{{ $card['customer'] }}</a>@else{{ $card['customer'] }}@endif</h3>
     <p class="tech-service"><x-nav-icon name="services" />{{ $card['service'] }}</p>
     <p class="tech-address"><x-nav-icon name="location" /><span>{{ $card['address'] ?: 'Adresse non renseignée' }}</span></p>
+    @if ($locationWarning = \App\Services\Crm\DossierLocation::appointmentWarning($appointment))<p class="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-950">{{ $locationWarning }}</p>@endif
     @if ($card['detail_url'])<a class="tech-documents-button" href="{{ $card['detail_url'] }}#tech-documents"><x-nav-icon name="document" /><span>Documents du dossier<small>Consulter et télécharger les pièces</small></span><span aria-hidden="true">›</span></a>@endif
     <div class="tech-contact-actions">
         @if ($card['phone']['href'] ?? null)<a href="{{ $card['phone']['href'] }}"><x-nav-icon name="phone" />Appeler<span class="sr-only"> {{ $card['customer'] }}</span></a>@else<span>Téléphone non renseigné</span>@endif

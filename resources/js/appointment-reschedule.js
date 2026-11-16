@@ -75,6 +75,11 @@ export function initAppointmentReschedule(root = document, browser = window) {
     const form = dialog.querySelector('[data-reschedule-form]');
     const fieldset = dialog.querySelector('[data-reschedule-fields]');
     const feedback = dialog.querySelector('[data-reschedule-feedback]');
+    const locationWarning = dialog.querySelector('[data-reschedule-location-warning]');
+    const showLocationWarning = message => {
+        locationWarning.textContent = typeof message === 'string' ? message : '';
+        locationWarning.hidden = !locationWarning.textContent;
+    };
     const resultLink = dialog.querySelector('[data-reschedule-result]');
     let context = null, target = null, opener = null, pending = false, sequence = 0, loading = null;
     const close = () => { if (!pending) dialog.close(); };
@@ -92,6 +97,7 @@ export function initAppointmentReschedule(root = document, browser = window) {
         const url = new URL(button.dataset.quickRescheduleUrl, browser.location.href);
         if (url.origin !== browser.location.origin) return;
         target = url.href; opener = button; context = null; form.hidden = true; resultLink.hidden = true;
+        showLocationWarning(null);
         fieldset.disabled = false; feedback.textContent = 'Chargement du RDV…'; feedback.classList.remove('text-rose-700');
         dialog.querySelector('[data-reschedule-summary]').textContent = '';
         dialog.querySelector('[data-reschedule-address]').textContent = '';
@@ -110,6 +116,7 @@ export function initAppointmentReschedule(root = document, browser = window) {
             context = data;
             dialog.querySelector('[data-reschedule-summary]').textContent = `${data.customer} · ${data.service}`;
             dialog.querySelector('[data-reschedule-address]').textContent = data.address;
+            showLocationWarning(data.location_warning);
             const input = formatAppointmentInput(data.starts_at);
             form.elements.date.value = input.slice(0, 10); form.elements.time.value = input.slice(11, 16);
             form.elements.duration_minutes.value = data.duration_minutes || 60;
@@ -138,6 +145,7 @@ export function initAppointmentReschedule(root = document, browser = window) {
             const result = await requestAppointmentPlacement(target, payload, { root, browser });
             if (!result) { feedback.textContent = 'Replacement annulé. Aucun changement enregistré.'; return; }
             context = null; form.hidden = true;
+            showLocationWarning(result.location_warning);
             feedback.textContent = `${result.message} ${formatAppointmentDateTime(result.starts_at, { dateStyle: 'short', timeStyle: 'short' })} · ${result.technician_name}.`;
             resultLink.href = result.planning_url; resultLink.hidden = false;
             applyRescheduledAppointment(result, root);

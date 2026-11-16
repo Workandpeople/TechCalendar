@@ -22,12 +22,13 @@ function fixture() {
         set innerHTML(_) { assert.fail('User-controlled labels must not become HTML'); }
     }
     const requests = [], timers = new Map(), form = new Node(), dialog = new Node(), fieldset = new Node(), feedback = new Node();
-    const summary = new Node(), address = new Node(), result = new Node(), close = new Node();
+    const summary = new Node(), address = new Node(), result = new Node(), close = new Node(), locationWarning = new Node();
     form.elements = Object.fromEntries(['date', 'time', 'technician_id', 'duration_minutes'].map(name => [name, new Node()]));
     form.reportValidity = () => true;
     dialog.querySelector = selector => ({ '[data-reschedule-form]': form, '[data-reschedule-fields]': fieldset,
         '[data-reschedule-feedback]': feedback, '[data-reschedule-result]': result,
-        '[data-reschedule-summary]': summary, '[data-reschedule-address]': address }[selector]);
+        '[data-reschedule-summary]': summary, '[data-reschedule-address]': address,
+        '[data-reschedule-location-warning]': locationWarning }[selector]);
     dialog.querySelectorAll = () => [close]; dialog.showModal = () => { dialog.open = true; };
     dialog.close = () => { dialog.open = false; dialog.handlers.close(); };
     const root = new Node(); root.querySelector = selector => selector === '[data-quick-reschedule-dialog]' ? dialog
@@ -43,7 +44,7 @@ function fixture() {
     const click = () => root.handlers.click({ target: { closest: () => button }, preventDefault() {} });
     const submit = () => form.handlers.submit({ preventDefault() {} });
     const load = async (data = context) => { click(); requests.at(-1).resolve(response(data)); await settle(); };
-    return { root, browser, dialog, button, form, fieldset, feedback, summary, address, result, close, requests, timers, click, submit, load };
+    return { root, browser, dialog, button, form, fieldset, feedback, summary, address, result, close, locationWarning, requests, timers, click, submit, load };
 }
 
 test('quick replacement retains concurrency tokens and serializes the exact Paris hour', () => {
@@ -77,6 +78,16 @@ test('explains that a control-linked old visit is preserved before creating a ne
     assert.match(ui.feedback.textContent, /nouvelle visite/);
     assert.match(ui.feedback.textContent, /conservés/);
     assert.equal(ui.requests.length, 1);
+});
+
+test('explains location uncertainty before submit and preserves the warning after a confirmed placement', async () => {
+    const ui = fixture(); await ui.load({ ...context, location_warning: 'Localisation à vérifier avant la visite.' });
+    assert.equal(ui.locationWarning.hidden, false); assert.equal(ui.locationWarning.textContent, 'Localisation à vérifier avant la visite.');
+    ui.submit(); ui.requests[1].resolve(response({ ...saved, location_warning: 'Adresse non localisée : trajet à vérifier manuellement.' })); await settle();
+    assert.equal(ui.form.hidden, true); assert.equal(ui.locationWarning.hidden, false);
+    assert.match(ui.locationWarning.textContent, /trajet à vérifier/);
+    ui.close.handlers.click(); ui.click();
+    assert.equal(ui.locationWarning.hidden, true); assert.equal(ui.locationWarning.textContent, '');
 });
 
 test('canceling an initial lookup ignores a late response and never issues a write', async () => {

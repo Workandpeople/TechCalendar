@@ -4,6 +4,18 @@
             <div><span class="tech-eyebrow">Mon espace terrain</span><h1>Bonjour {{ $technician->first_name }}</h1><p>Vos interventions, vos trajets, vos documents.</p></div>
             <span class="tech-hero-icon"><x-nav-icon name="planning" /></span>
         </header>
+        @if (session('status'))
+            <section class="tech-panel tech-report-confirmed" role="status"><x-nav-icon name="check" /><p>{{ session('status') }}</p></section>
+        @endif
+        @if (config('crm.v2_enabled'))
+            <section class="tech-panel tech-on-site-report" data-on-site-drafts data-actor="{{ auth()->id() }}" data-appointment-base="{{ url('/tech/planning/appointments') }}" hidden>
+                <h2 class="font-semibold">Brouillons de signalement sur cet appareil</h2>
+                <p class="tech-report-help">Retrouvez la preuve d’un ancien passage, même après replanification ou réattribution. Rien n’est envoyé automatiquement. Conservation locale : 24 h.</p>
+                <ul data-drafts-list class="mt-3 grid gap-3"></ul>
+                <div data-drafts-form></div>
+                <template>@include('tech.partials.on-site-report-form', ['recovery' => true, 'appointment' => null])</template>
+            </section>
+        @endif
         <section class="tech-agenda" aria-labelledby="tech-day-heading">
             <div class="tech-day-heading"><div><p>{{ $selectedDay->isToday() ? 'Aujourd’hui' : 'Mes interventions' }}</p><h2 id="tech-day-heading">{{ $selectedDay->locale('fr')->isoFormat('dddd D MMMM') }}</h2></div><a class="tech-today-link" href="{{ route('tech.planning') }}">Aujourd’hui</a></div>
             <nav class="tech-week" aria-label="Choisir le jour des interventions">

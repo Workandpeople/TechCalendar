@@ -6,7 +6,9 @@ class StoreMymarOnSiteReportRequest extends StoreOnSiteReportRequest
 {
     public function rules(): array
     {
-        return [...parent::rules(), 'request_id' => ['required', 'uuid:4']];
+        return [...parent::rules(), 'request_id' => ['required', 'uuid:4'],
+            'report_context' => ['prohibited'], 'context_signature' => ['prohibited'],
+            'evidence_only' => ['prohibited'], 'visit_date' => ['prohibited'], 'visit_time' => ['prohibited']];
     }
 
     public function authorize(): bool

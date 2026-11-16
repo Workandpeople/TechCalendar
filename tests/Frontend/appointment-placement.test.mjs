@@ -42,6 +42,19 @@ test('forces only after confirmation with the original concurrency tokens', asyn
     assert.deepEqual(ui.calls[1].data, { ...data, force_placement: true, force_confirmed: true });
 });
 
+test('requires explicit confirmation of an unverified location and keeps absence and qualification warnings visible', async () => {
+    const constraints = ['Adresse non localisée : position et trajet à vérifier manuellement.', 'Technicien absent.', 'Technicien non habilité.'];
+    for (const approved of [false, true]) {
+        const ui = fixture([response(422, { can_force: true, conflicts: constraints.map(message => ({ message })) }), response(200, { version: 3 })], approved);
+        const result = await requestAppointmentPlacement('/appointment', data, ui);
+        assert.deepEqual(ui.confirmations[0].messages, constraints);
+        assert.equal(ui.confirmations[0].requireCheck, true);
+        assert.equal(ui.calls.length, approved ? 2 : 1);
+        if (approved) assert.equal(ui.calls[1].data.force_confirmed, true);
+        else assert.equal(result, null);
+    }
+});
+
 test('authorization and stale snapshots cannot trigger the force modal', async () => {
     for (const status of [403, 404, 419, 422, 500]) {
         const ui = fixture([response(status, { errors: { version: ['Fiche périmée'] } })]);

@@ -54,6 +54,7 @@
                     <div class="grid gap-4 p-4 lg:grid-cols-2">
                         <div class="space-y-2">
                             <p class="font-semibold">{{ $incident->reasonLabel() }}</p>
+                            @if ($incident->source_context['evidence_only'] ?? false)<p class="rounded-lg bg-sky-50 p-2 text-sm text-sky-950">Preuve d’un ancien passage · Le RDV actuel n’a pas été modifié.@if (($incident->source_context['date_source'] ?? '') === 'technician_declared') Date du passage déclarée par le technicien.@endif</p>@endif
                             <p class="text-sm">{{ $incident->technician?->full_name ?: 'Technicien non renseigné' }} · RDV du {{ $incident->appointment_starts_at?->format('d/m/Y à H:i') ?: 'Date non renseignée' }}</p>
                             <p class="text-sm text-slate-600">{{ $incident->source === 'mymar' ? $incident->source_context['address'] : $incident->dossier->address.' · '.$incident->dossier->postal_code.' '.$incident->dossier->city }}</p>
                             @if ($incident->source === 'mymar') @include('tech.partials.mymar-report-state') @endif

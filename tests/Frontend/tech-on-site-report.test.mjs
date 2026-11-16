@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createOnSiteDraftStore, initOnSiteReports, onSiteDraftValid, prepareOnSitePhoto } from '../../resources/js/tech-on-site-report.js';
+import { createOnSiteDraftStore, initOnSiteReports, onSiteDraftValid, onSiteDraftVisit, prepareOnSitePhoto } from '../../resources/js/tech-on-site-report.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const photo = () => new Blob(['synthetic jpeg'], { type: 'image/jpeg' });
@@ -15,17 +15,22 @@ function node(value = '') {
 function fixture(initial, options = {}) {
     const fields = Object.fromEntries(Object.entries({ request_id: '533e775e-c494-4897-843d-4a50077a750b', snapshot: 'a'.repeat(64),
         reason: 'absent', comment: '', audience: 'client', photo: '', _token: 'csrf-form-token' }).map(([key, value]) => [key, node(value)]));
-    const targets = Object.fromEntries(['submit', 'discard', 'feedback', 'draft-status', 'preview'].map(key => [key, node()]));
+    if (!options.mar) {
+        Object.assign(fields, Object.fromEntries(['evidence_only', 'report_context', 'context_signature', 'visit_date', 'visit_time'].map(key => [key, node('')])));
+        fields.evidence_only.checked = false;
+    }
+    const targets = Object.fromEntries(['submit', 'discard', 'feedback', 'draft-status', 'preview', 'recover', 'visit-label', 'visit-fields', 'current-intro'].map(key => [key, node()]));
     const image = node(), caption = node();
     targets.preview.querySelector = selector => selector === 'img' ? image : caption;
     const details = { open: false };
     delete fields.audience;
     const form = node(); form.dataset = { actor: '34', appointment: options.mar ? 'mar-91' : '91' }; form.action = 'https://cofrac.test/tech/planning/appointments/91/on-site-report';
     form.closest = () => details; form.elements = { namedItem: name => fields[name] };
+    if (options.recovery) { form.dataset.recovery = 'true'; form.dataset.evidenceRequired = 'true'; }
     form.querySelector = selector => targets[selector.slice('[data-report-'.length, -1)];
     form.reportValidity = () => options.valid !== false;
     form.reset = () => { fields.reason.value = ''; fields.comment.value = ''; };
-    const root = node(); root.querySelectorAll = () => [form];
+    const root = node(); root.querySelectorAll = selector => selector === '[data-on-site-report]' ? [form] : [];
     const timers = new Map(), requests = [], writes = [], values = new Map(initial ? [['34:91', initial]] : []);
     let next = 1, response = () => reply({ message: 'Signalement enregistré', url: '/tech/planning/appointments/91' });
     const storage = { async prune() {}, async get(key) { return values.get(key); },
@@ -94,8 +99,70 @@ test('restores only the matching draft and never silently applies it to a modifi
     assert.equal(ui.preview.hidden, false); assert.equal(ui.requests.length, 0);
     const stale = fixture(draft({ snapshot: 'b'.repeat(64) })); await flush();
     assert.match(stale['draft-status'].textContent, /rendez-vous a changé/);
+    assert.equal(stale.fields.comment.value, 'Portail fermé'); assert.equal(stale.preview.hidden, false);
     assert.equal(stale.submit.disabled, true); await stale.submitForm(); assert.equal(stale.requests.length, 0);
     await stale.discard.emit('click'); assert.equal(stale.values.size, 0); assert.equal(stale.submit.disabled, false);
+});
+
+const signedDraft = extra => draft({ reportContext: JSON.stringify({ version: 1, issued_at: Math.floor(Date.now() / 1000),
+    booking: { appointment_id: 91, technician_id: 34, starts_at: '2026-11-16 10:00:00', first_name: 'Test', last_name: 'Fictif' } }),
+    contextSignature: 'c'.repeat(64), ...extra });
+
+test('keeps a signed old visit and photo after rescheduling and requires explicit historical confirmation', async () => {
+    const saved = signedDraft({ snapshot: 'b'.repeat(64) });
+    const ui = fixture(saved); await flush();
+    assert.equal(ui.submit.disabled, true); assert.equal(ui.recover.hidden, false);
+    assert.equal(ui.preview.hidden, false); assert.equal(ui.fields.comment.value, saved.comment);
+    await ui.recover.emit('click');
+    assert.equal(ui.fields.evidence_only.checked, true); assert.equal(ui['visit-fields'].hidden, true);
+    assert.match(ui['visit-label'].textContent, /16\/11\/2026 à 10:00/);
+    assert.equal(ui.requests.length, 0);
+    ui.setResponse(() => reply({ message: 'Preuve enregistrée', url: '/tech/planning' }));
+    await ui.submitForm();
+    const body = ui.requests[0].init.body;
+    assert.equal(body.get('evidence_only'), '1'); assert.equal(body.get('report_context'), saved.reportContext);
+    assert.equal(body.get('context_signature'), saved.contextSignature); assert.equal(body.get('snapshot'), saved.snapshot);
+    assert.equal(body.get('request_id'), saved.requestId); assert.equal(body.get('photo'), saved.photo);
+    assert.equal(body.get('visit_date'), ''); assert.equal(ui.view.location.assigned, 'https://cofrac.test/tech/planning');
+});
+
+test('recovers a legacy draft only as a declared past visit with a fresh current snapshot', async () => {
+    const ui = fixture(draft({ snapshot: 'b'.repeat(64) })); await flush();
+    await ui.recover.emit('click');
+    assert.equal(ui.fields.evidence_only.checked, true); assert.equal(ui['visit-fields'].hidden, false);
+    assert.equal(ui.fields.evidence_only.disabled, true);
+    ui.fields.evidence_only.checked = false; await ui.fields.evidence_only.emit('change');
+    assert.equal(ui.fields.evidence_only.checked, true);
+    assert.equal(ui.fields.visit_date.required, true); assert.equal(ui.fields.visit_time.required, true);
+    ui.fields.visit_date.value = '2026-11-16'; ui.fields.visit_time.value = '10:05';
+    await ui.submitForm();
+    const body = ui.requests[0].init.body;
+    assert.equal(body.get('snapshot'), 'a'.repeat(64)); assert.equal(body.get('report_context'), '');
+    assert.equal(body.get('visit_date'), '2026-11-16'); assert.equal(body.get('visit_time'), '10:05');
+    assert.equal(body.get('evidence_only'), '1');
+});
+
+test('keeps historical recovery locked after another reload of the same draft', async () => {
+    const ui = fixture(draft({ evidenceOnly: true, historicalRecovery: true, visitDate: '2026-11-16', visitTime: '10:05' })); await flush();
+    assert.equal(ui.fields.evidence_only.checked, true); assert.equal(ui.fields.evidence_only.disabled, true);
+    assert.equal(ui.fields.visit_date.value, '2026-11-16');
+});
+
+test('forces evidence only for a signed draft recovered from planning without needing the new appointment page', async () => {
+    const ui = fixture(signedDraft(), { recovery: true }); await flush();
+    assert.equal(ui.submit.disabled, true); assert.equal(ui.fields.evidence_only.disabled, true);
+    await ui.recover.emit('click');
+    assert.equal(ui.fields.evidence_only.checked, true); assert.equal(ui.submit.disabled, false);
+    assert.equal(ui.requests.length, 0);
+    await ui.submitForm(); assert.equal(ui.requests[0].init.body.get('evidence_only'), '1');
+});
+
+test('does not claim a forged expired or foreign context to be a signed draft visit', () => {
+    assert.equal(onSiteDraftVisit(signedDraft()).appointment_id, 91);
+    for (const changes of [{ contextSignature: '' }, { reportContext: 'broken' }, { actor: '88' }, { appointment: '90' },
+        { reportContext: JSON.stringify({ version: 1, issued_at: 1, booking: {} }) }]) {
+        assert.equal(onSiteDraftVisit(signedDraft(changes)), null);
+    }
 });
 
 test('submits the normal CSRF form token and one photo then deletes the successful draft', async () => {
@@ -187,4 +254,41 @@ test('handles missing IndexedDB without sending any data elsewhere', async () =>
     const store = createOnSiteDraftStore(undefined);
     await assert.rejects(store.get('34:91'), /indisponibles/);
     await assert.rejects(store.put(draft()), /indisponibles/);
+});
+
+test('lists only bounded native draft metadata for the signed-in account, not every stored photograph', async () => {
+    const values = new Map();
+    for (let id = 1; id <= 70; id++) {
+        values.set(`34:${id}`, draft({ key: `34:${id}`, appointment: String(id) }));
+        values.set(`35:${id}`, draft({ key: `35:${id}`, actor: '35', appointment: String(id) }));
+    }
+    values.set('34:mar-91', draft({ key: '34:mar-91', appointment: 'mar-91' }));
+    const reads = [], previousRange = globalThis.IDBKeyRange;
+    globalThis.IDBKeyRange = { bound: (lower, upper) => ({ lower, upper }) };
+    const db = { transaction() {
+        const transaction = {};
+        const store = {
+            openKeyCursor(range) {
+                const request = {}, keys = [...values.keys()].sort().filter(key => key >= range.lower && key <= range.upper);
+                let index = 0;
+                const step = () => setImmediate(() => {
+                    let advanced = false;
+                    request.result = index < keys.length ? { key: keys[index++], continue() { advanced = true; step(); } } : null;
+                    request.onsuccess();
+                    setImmediate(() => { if (!advanced) transaction.oncomplete(); });
+                });
+                step(); return request;
+            },
+            get(key) { reads.push(key); const request = {}; setImmediate(() => { request.result = values.get(key); request.onsuccess(); }); return request; },
+        };
+        transaction.objectStore = () => store; return transaction;
+    } };
+    const indexedDB = { open() { const request = {}; setImmediate(() => { request.result = db; request.onsuccess(); }); return request; } };
+    try {
+        const rows = await createOnSiteDraftStore(indexedDB).list('34');
+        assert.equal(rows.length, 30); assert.equal(reads.length, 30);
+        assert.ok(reads.every(key => /^34:\d+$/.test(key)));
+        assert.ok(rows.every(row => !('photo' in row) && !('comment' in row) && /^34:\d+$/.test(row.key)));
+        assert.deepEqual(await createOnSiteDraftStore(indexedDB).list('invalid'), []);
+    } finally { globalThis.IDBKeyRange = previousRange; }
 });

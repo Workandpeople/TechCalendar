@@ -7,6 +7,7 @@ use App\Models\Dossier;
 use App\Models\DossierOperation;
 use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\DossierAppointmentRescheduler;
+use App\Services\Crm\DossierLocation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -37,6 +38,7 @@ final class DossierAppointmentRescheduleController extends Controller
             'message' => 'RDV replacé. Le dossier est en attente de visite.',
             'dossier_id' => $dossier->id, 'operation_id' => $operation->id, 'version' => $dossier->fresh()->version,
             'created' => $data['appointment_id'] === null, 'service' => $operation->service->name, 'address' => $appointment->address,
+            'location_warning' => DossierLocation::appointmentWarning($appointment),
             'appointments_count' => $operation->appointments()->count(), 'dossier_appointments_count' => $dossier->appointments()->withTrashed()->count(),
             'appointment_id' => $appointment->id, 'updated_at' => $appointment->updated_at?->toIso8601String(),
             'technician_id' => $appointment->technician_id, 'technician_name' => $appointment->technician->full_name,

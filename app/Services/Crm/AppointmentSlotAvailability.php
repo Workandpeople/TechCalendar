@@ -17,9 +17,9 @@ class AppointmentSlotAvailability
 
     public function sameSite(array $location, Appointment $appointment): bool
     {
-        // Two commune centres are not proof of co-location or of a distance below 1 km.
-        if (($location['location_precision'] ?? $location['external_payload']['location_precision'] ?? null) === 'city'
-            || ($appointment->external_payload['location_precision'] ?? null) === 'city') {
+        // Approximate or unverified points cannot prove co-location or a distance below 1 km.
+        if (in_array($location['location_precision'] ?? $location['external_payload']['location_precision'] ?? null, ['city', 'unverified'], true)
+            || in_array($appointment->external_payload['location_precision'] ?? null, ['city', 'unverified'], true)) {
             return false;
         }
         $address = $this->normalizeAddress($location['address'] ?? '');
@@ -48,10 +48,10 @@ class AppointmentSlotAvailability
     }
 
     /** Called after locking the technician, inside the booking/edit transaction. */
-    public function assertAvailable(User $technician, CarbonInterface $start, CarbonInterface $end, array $location, ?int $ignoreId = null, bool $forced = false): array
+    public function assertAvailable(User $technician, CarbonInterface $start, CarbonInterface $end, array $location, ?int $ignoreId = null, bool $forced = false, array $additionalConflicts = []): array
     {
         $checks = $this->inspect($technician, $start, $end, $location, $ignoreId);
-        $checks['conflicts'] = [...$checks['conflicts'], ...app(MymarSlotGuard::class)->liveConflicts($technician->id, $start, $end)];
+        $checks['conflicts'] = [...$checks['conflicts'], ...$additionalConflicts, ...app(MymarSlotGuard::class)->liveConflicts($technician->id, $start, $end)];
         // An uncertain external COMMIT cannot safely be overridden, even by force.
         if (collect($checks['conflicts'])->contains(fn ($conflict) => in_array($conflict['type'], ['mymar_pending', 'mymar_unknown'], true))) {
             throw AppointmentPlacementConflict::fromConflicts($checks['conflicts'], false);

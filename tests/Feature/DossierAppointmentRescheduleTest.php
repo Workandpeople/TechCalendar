@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Models\TechnicianAbsence;
 use App\Models\User;
 use App\Services\AppointmentTechnicianMailService;
+use App\Services\Crm\AppointmentSlotAvailability;
 use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
 use App\Services\Crm\DossierMapPreview;
@@ -273,11 +274,12 @@ it('keeps the existing same address overlap exemption without requiring a force'
     expect(DossierActivity::where('kind', 'appointment_forced')->count())->toBe(0);
 });
 
-it('refuses to create a new reservation without GPS even when forced', function () {
+it('blocks automatic creation without GPS and offers an explicit location confirmation', function () {
     $this->appointment->delete();
     $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->once()->andReturn(['coordinates' => null]);
-    $this->patchJson($this->url, [...$this->data, 'appointment_id' => null, 'updated_at' => null,
-        'force_placement' => true, 'force_confirmed' => true])->assertUnprocessable()->assertJsonValidationErrors('address');
+    $this->patchJson($this->url, [...$this->data, 'appointment_id' => null, 'updated_at' => null])
+        ->assertUnprocessable()->assertJsonValidationErrors('address')->assertJsonPath('can_force', true)
+        ->assertJsonPath('conflicts.0.type', 'location_unverified');
     expect(Appointment::count())->toBe(0)->and(Appointment::withTrashed()->count())->toBe(1);
 });
 
@@ -512,3 +514,84 @@ it('renders quick replacement entries directly in the dossier without a full boo
         ->assertSee('data-quick-reschedule-url', false)->assertSee('data-quick-reschedule-dialog', false)
         ->assertSee('Replacer rapidement')->assertDontSee('/planner/appointments/modify?replace_appointment_id', false);
 });
+
+it('allows an explicitly confirmed new quick visit without GPS while retaining the old visit and all evidence', function () {
+    $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS', 'inspected_on' => '2026-11-01',
+        'visit_appointment_id' => $this->appointment->id])->save();
+    $this->dossier->forceFill(['inspection_geocode' => null])->save();
+    $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    $before = $this->appointment->fresh()->getAttributes();
+    $evidence = PostVisitWorkflow::planningEvidence($this->operation);
+    $this->getJson($this->url)->assertOk()->assertJsonPath('appointment_id', null)
+        ->assertJsonPath('preserves_previous_visit', true)->assertJsonPath('location_warning', fn ($message) => str_contains($message, 'manuellement'));
+    $data = [...$this->data, 'appointment_id' => null, 'updated_at' => null];
+    $this->patchJson($this->url, $data)->assertUnprocessable()->assertJsonPath('can_force', true)
+        ->assertJsonPath('conflicts.0.type', 'location_unverified');
+    expect(Appointment::count())->toBe(1)->and($this->operation->fresh()->legacy_status)->toBe('RAPPORT GENIUS');
+    $this->patchJson($this->url, [...$data, 'force_placement' => true])->assertUnprocessable()->assertJsonValidationErrors('force_confirmed');
+    $newId = $this->patchJson($this->url, [...$data, 'force_placement' => true, 'force_confirmed' => true,
+        'latitude' => 48, 'longitude' => 2, 'location_precision' => 'address'])
+        ->assertOk()->assertJsonPath('created', true)->assertJsonPath('location_warning', DossierLocation::UNVERIFIED_APPOINTMENT_WARNING)->json('appointment_id');
+    $new = Appointment::findOrFail($newId);
+    expect($new->latitude)->toBeNull()->and($new->longitude)->toBeNull()->and($new->external_payload['location_precision'])->toBe('unverified')
+        ->and($this->appointment->fresh()->getAttributes())->toBe($before)
+        ->and(PostVisitWorkflow::planningEvidence($this->operation->fresh()))->toBe($evidence)
+        ->and($this->operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE');
+    $audit = DossierActivity::where('kind', 'appointment_forced')->sole();
+    expect($audit->author_id)->toBe($this->actor->id)->and($audit->client_visible)->toBeFalse()->and($audit->delegataire_visible)->toBeFalse()
+        ->and(collect($audit->changed_fields['conflicts'])->pluck('type')->all())->toContain('location_unverified');
+    $this->actingAs($this->otherTech)->get(route('tech.appointments.show', $new))->assertOk()->assertSee(DossierLocation::UNVERIFIED_APPOINTMENT_WARNING);
+});
+
+it('requires the same location confirmation when moving an existing appointment without GPS and does not invent a point', function () {
+    $this->appointment->update(['latitude' => 0, 'longitude' => 0]);
+    $data = [...$this->data, 'updated_at' => $this->appointment->fresh()->updated_at->toIso8601String()];
+    $this->patchJson($this->url, $data)->assertUnprocessable()->assertJsonPath('can_force', true)
+        ->assertJsonPath('conflicts.0.type', 'location_unverified');
+    $this->patchJson($this->url, [...$data, 'force_placement' => true, 'force_confirmed' => true])->assertOk()->assertJsonPath('created', false);
+    expect($this->appointment->fresh()->latitude)->toBeNull()->and($this->appointment->fresh()->longitude)->toBeNull()
+        ->and($this->appointment->fresh()->external_payload)->toBe(['source_proof' => 'keep', 'location_precision' => 'unverified']);
+});
+
+it('includes missing GPS overlap absence and qualification together before offering a force', function () {
+    $this->appointment->update(['latitude' => null, 'longitude' => null]);
+    $this->otherTech->services()->detach();
+    TechnicianAbsence::create(['technician_id' => $this->otherTech->id, 'starts_at' => '2026-11-04 09:00:00',
+        'ends_at' => '2026-11-04 18:00:00', 'reason' => 'Formation', 'created_by' => $this->actor->id]);
+    $busy = $this->appointment->replicate();
+    $busy->forceFill(['technician_id' => $this->otherTech->id, 'dossier_operation_id' => null,
+        'starts_at' => '2026-11-04 10:00:00', 'ends_at' => '2026-11-04 12:00:00'])->save();
+    $response = $this->patchJson($this->url, $this->data)->assertUnprocessable()->assertJsonPath('can_force', true);
+    expect(collect($response->json('conflicts'))->pluck('type')->all())->toContain('location_unverified', 'overlap', 'absence', 'qualification');
+    expect(Appointment::count())->toBe(2)->and(DossierActivity::where('kind', 'appointment_forced')->count())->toBe(0);
+});
+
+it('never overrides an uncertain MAR reservation even when GPS is also unavailable', function (string $type) {
+    $this->appointment->update(['latitude' => null, 'longitude' => null]);
+    $this->mock(MymarSlotGuard::class, function ($mock) use ($type) {
+        $mock->shouldReceive('pendingConflicts')->andReturn([]);
+        $mock->shouldReceive('liveConflicts')->andReturn([['type' => $type, 'field' => 'starts_at', 'message' => 'Confirmation MAR non vérifiée.']]);
+    });
+    $this->patchJson($this->url, [...$this->data, 'force_placement' => true, 'force_confirmed' => true])
+        ->assertUnprocessable()->assertJsonPath('can_force', false);
+    expect($this->appointment->fresh()->starts_at->format('Y-m-d H:i'))->toBe('2026-11-03 14:00');
+})->with(['mymar_pending', 'mymar_unknown']);
+
+it('never forces creation at an empty inspection address or guesses a point from the postcode alone', function () {
+    $this->appointment->delete();
+    $this->dossier->update(['address' => '']);
+    $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    $this->patchJson($this->url, [...$this->data, 'appointment_id' => null, 'updated_at' => null,
+        'force_placement' => true, 'force_confirmed' => true])->assertUnprocessable()->assertJsonValidationErrors('address')->assertJsonMissingPath('can_force');
+    expect(Appointment::count())->toBe(0);
+});
+
+it('never treats explicitly unverified positions as proof that two visits share a site', function (bool $uncertainTarget) {
+    $location = ['address' => $this->appointment->address, 'latitude' => 48.86, 'longitude' => 2.35];
+    if ($uncertainTarget) {
+        $location['location_precision'] = 'unverified';
+    } else {
+        $this->appointment->update(['external_payload' => ['location_precision' => 'unverified']]);
+    }
+    expect(app(AppointmentSlotAvailability::class)->sameSite($location, $this->appointment))->toBeFalse();
+})->with([true, false]);

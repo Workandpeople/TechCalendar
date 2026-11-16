@@ -5,6 +5,7 @@
             <div class="tech-intervention-time"><x-nav-icon name="planning" /><time datetime="{{ $appointment->starts_at->toIso8601String() }}">{{ $appointment->starts_at->format('H:i') }} – {{ $appointment->ends_at->format('H:i') }}</time>@if ($appointment->status === 'problem')<span class="tech-state is-problem">Problème RDV</span>@endif</div>
             <h1>{{ $card['customer'] }}</h1><p class="tech-service">{{ $card['service'] }}</p>
             <p class="tech-address"><x-nav-icon name="location" /><span>{{ $card['address'] ?: 'Adresse non renseignée' }}</span></p>
+            @if ($locationWarning = \App\Services\Crm\DossierLocation::appointmentWarning($appointment))<p class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{{ $locationWarning }}</p>@endif
             <div class="tech-contact-actions">@if ($card['phone']['href'] ?? null)<a href="{{ $card['phone']['href'] }}"><x-nav-icon name="phone" />{{ $card['phone']['label'] }}</a>@endif @if ($card['maps_url'])<a href="{{ $card['maps_url'] }}" target="_blank" rel="noopener noreferrer"><x-nav-icon name="location" />Itinéraire</a>@endif</div>
         </header>
         @include('tech.partials.on-site-report')

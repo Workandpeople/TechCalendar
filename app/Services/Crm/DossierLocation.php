@@ -2,10 +2,24 @@
 
 namespace App\Services\Crm;
 
+use App\Models\Appointment;
 use App\Models\Dossier;
 
 final class DossierLocation
 {
+    public const UNVERIFIED_APPOINTMENT_WARNING = 'Adresse non localisée : position et trajet à vérifier manuellement avant la visite.';
+
+    public static function appointmentWarning(Appointment $appointment): ?string
+    {
+        if (self::point($appointment->latitude, $appointment->longitude) === null
+            || ($appointment->external_payload['location_precision'] ?? null) === 'unverified') {
+            return self::UNVERIFIED_APPOINTMENT_WARNING;
+        }
+
+        return ($appointment->external_payload['location_precision'] ?? null) === 'city'
+            ? 'Position approximative : centre de la commune. Adresse exacte et trajet à confirmer avant la visite.' : null;
+    }
+
     public static function address(Dossier $dossier): string
     {
         $street = trim($dossier->address ?? '');

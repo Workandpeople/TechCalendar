@@ -110,6 +110,15 @@ it('records proof and outbox before POST then confirms status fifteen without cr
         ->assertSee('&lt;script&gt;test', false)->assertDontSee('<script>test', false);
 });
 
+it('rejects native historical proof fields on MAR without sending any source command', function (string $field, mixed $value) {
+    $this->postJson($this->url, ($this->payload)([$field => $value]))
+        ->assertUnprocessable()->assertJsonValidationErrors($field);
+    expect(TechnicianIncident::count())->toBe(0)->and(MymarBookingRequest::count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBeEmpty();
+    Http::assertNothingSent();
+})->with([['evidence_only', true], ['report_context', '{"version":1}'], ['context_signature', str_repeat('a', 64)],
+    ['visit_date', '2026-11-06'], ['visit_time', '10:00']]);
+
 it('keeps a timed out action uncertain and reconciles with GET only without another upload or POST', function () {
     $this->mode = 'timeout';
     $data = ($this->payload)();

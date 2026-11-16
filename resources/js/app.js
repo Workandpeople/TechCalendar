@@ -1,6 +1,6 @@
 import { initDossierMailStatus } from './dossier-mail-status';
 import { initLotReportExports } from './lot-report-exports';
-import { initOnSiteReports } from './tech-on-site-report';
+import { initOnSiteReports, initOnSiteReportDrafts } from './tech-on-site-report';
 import { initTechnicianIncidentNotifications } from './technician-incident-notifications';
 import { cofracLabel } from './cofrac-label';
 import { initSidebar } from './sidebar';
@@ -74,6 +74,7 @@ initDossierMail();
 initDossierMailStatus();
 initLotReportExports();
 initOnSiteReports();
+initOnSiteReportDrafts();
 initTechnicianIncidentNotifications();
 initDossierAddress();
 initCreationAddress();

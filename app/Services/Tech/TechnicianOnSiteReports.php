@@ -7,8 +7,11 @@ use App\Models\Dossier;
 use App\Models\DossierDocument;
 use App\Models\TechnicianIncident;
 use App\Models\User;
+use App\Services\Crm\AppointmentDateTime;
 use App\Services\Crm\ContentAudience;
 use App\Services\Crm\DossierWorkflow;
+use App\Support\CommentContent;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,30 +31,36 @@ class TechnicianOnSiteReports
         'other' => 'Autre problème sur place',
     ];
 
-    public function __construct(private readonly OnSitePhoto $photos, private readonly DossierWorkflow $workflow) {}
+    public function __construct(
+        private readonly OnSitePhoto $photos,
+        private readonly DossierWorkflow $workflow,
+        private readonly OnSiteVisitContext $contexts,
+    ) {}
 
     public function snapshot(Appointment $appointment): string
     {
-        return hash_hmac('sha256', json_encode([
-            $appointment->id, $appointment->technician_id, $appointment->dossier_operation_id,
-            $appointment->starts_at?->toIso8601String(), $appointment->ends_at?->toIso8601String(),
-            $appointment->status, $appointment->updated_at?->toIso8601String(),
-        ], JSON_THROW_ON_ERROR), config('app.key'));
+        return $this->contexts->fingerprint($appointment);
     }
 
     public function submit(User $actor, Appointment $appointment, array $data, UploadedFile $photo): array
     {
-        Gate::forUser($actor)->authorize('view', $appointment);
+        $evidenceOnly = (bool) ($data['evidence_only'] ?? false);
+        $this->authorizeSubmission($actor, $appointment, $data, $evidenceOnly);
         if ($result = $this->existing($actor, $appointment, $data['request_id'])) {
             return $result;
         }
-        Gate::forUser($actor)->authorize('reportOnSiteProblem', $appointment);
-        $this->checkSnapshot($appointment, $data['snapshot']);
+        if ($evidenceOnly) {
+            $this->evidenceDate($actor, $appointment, $data);
+        }
+        if (! $evidenceOnly) {
+            Gate::forUser($actor)->authorize('reportOnSiteProblem', $appointment);
+            $this->checkSnapshot($appointment, $data['snapshot']);
+        }
         $dossierId = $appointment->dossierOperation->dossier_id;
         $stored = $this->photos->store($photo, $dossierId);
         $used = false;
         try {
-            $result = DB::transaction(function () use ($actor, $appointment, $data, $dossierId, $stored, &$used): array {
+            $result = DB::transaction(function () use ($actor, $appointment, $data, $dossierId, $stored, $evidenceOnly, &$used): array {
                 $used = false;
                 // Same lock order as dossier workflows, then recheck assignment and appointment state.
                 $dossier = Dossier::query()->lockForUpdate()->findOrFail($dossierId);
@@ -59,49 +68,72 @@ class TechnicianOnSiteReports
                 $locked = Appointment::query()->lockForUpdate()->findOrFail($appointment->id);
                 $actor = User::query()->lockForUpdate()->find($actor->id);
                 abort_unless($actor, 403);
-                Gate::forUser($actor)->authorize('view', $locked);
+                $this->authorizeSubmission($actor, $locked, $data, $evidenceOnly);
                 if ($result = $this->existing($actor, $locked, $data['request_id'])) {
                     return $result;
                 }
-                Gate::forUser($actor)->authorize('reportOnSiteProblem', $locked);
-                $this->checkSnapshot($locked, $data['snapshot']);
+                $visitAt = $evidenceOnly ? $this->evidenceDate($actor, $locked, $data) : null;
+                if (! $evidenceOnly) {
+                    Gate::forUser($actor)->authorize('reportOnSiteProblem', $locked);
+                    $this->checkSnapshot($locked, $data['snapshot']);
+                }
                 if ($locked->dossier_operation_id !== $operation->id) {
                     throw ValidationException::withMessages(['snapshot' => 'Le rattachement du rendez-vous a changé. Rechargez sa fiche.']);
                 }
                 $reportedAt = now();
                 $reason = self::REASONS[$data['reason']];
                 $comment = $reason.' · Signalement sur place du '.$reportedAt->format('d/m/Y à H:i').'.';
+                if ($evidenceOnly) {
+                    if (TechnicianIncident::where('appointment_id', $locked->id)->where('technician_id', $actor->id)
+                        ->where('appointment_starts_at', $visitAt->format('Y-m-d H:i:s'))->exists()) {
+                        throw ValidationException::withMessages(['visit_date' => 'Un signalement existe déjà pour ce passage. Contactez le planning pour le compléter.']);
+                    }
+                    $comment = $reason.' · Preuve du passage du '.$visitAt->format('d/m/Y à H:i').'. Reçue le '.$reportedAt->format('d/m/Y à H:i').'. Le rendez-vous actuel reste inchangé.';
+                }
                 if (filled($data['comment'] ?? null)) {
                     $comment .= "\n".trim($data['comment']);
                 }
                 $flags = ContentAudience::flags('client');
-                $this->workflow->recordOnSiteProblem($actor, $locked, [
-                    'comment' => htmlspecialchars($comment, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-                    'problem_type' => $reason, ...$flags,
-                ]);
+                if ($evidenceOnly) {
+                    $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment',
+                        'body' => CommentContent::forStorage(htmlspecialchars($comment, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), 'comment'), ...$flags,
+                        'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $locked->id,
+                            'on_site_evidence' => true, 'visit_at' => $visitAt->toIso8601String()]]);
+                    $dossier->increment('version');
+                } else {
+                    $this->workflow->recordOnSiteProblem($actor, $locked, [
+                        'comment' => htmlspecialchars($comment, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                        'problem_type' => $reason, ...$flags,
+                    ]);
+                }
                 $document = $dossier->documents()->create([
                     ...$stored, ...$flags, 'author_id' => $actor->id, 'document_type' => 'free',
                     'dossier_operation_id' => $operation->id,
-                    'name' => 'Photo du signalement RDV - '.$reportedAt->format('d-m-Y H-i'),
-                    'description' => $reason.' · Reçue le '.$reportedAt->format('d/m/Y à H:i').'.',
+                    'name' => ($evidenceOnly ? 'Preuve du passage - '.$visitAt->format('d-m-Y H-i') : 'Photo du signalement RDV - '.$reportedAt->format('d-m-Y H-i')),
+                    'description' => $reason.($evidenceOnly ? ' · Ancien RDV du '.$visitAt->format('d/m/Y à H:i') : '').' · Reçue le '.$reportedAt->format('d/m/Y à H:i').'.',
                 ]);
                 $report = [
                     'request_id' => $data['request_id'], 'author_id' => $actor->id, 'reason' => $data['reason'],
                     'reported_at' => $reportedAt->toIso8601String(), 'document_id' => $document->id,
+                    'evidence_only' => $evidenceOnly,
                 ];
                 TechnicianIncident::create([
                     'request_id' => $data['request_id'], 'dossier_id' => $dossier->id,
                     'appointment_id' => $locked->id, 'technician_id' => $actor->id, 'document_id' => $document->id,
                     'reason' => $data['reason'], 'comment' => trim($data['comment'] ?? ''),
-                    'reported_at' => $reportedAt, 'appointment_starts_at' => $locked->starts_at,
+                    'reported_at' => $reportedAt, 'appointment_starts_at' => $visitAt ?? $locked->starts_at,
+                    'source_context' => $evidenceOnly ? ['evidence_only' => true, 'visit_at' => $visitAt->toIso8601String(),
+                        'date_source' => filled($data['visit_date'] ?? null) ? 'technician_declared' : 'signed_visit_context'] : null,
                 ]);
-                $locked->forceFill([
-                    'status' => Appointment::STATUS_PROBLEM,
-                    'problem_reported_at' => $locked->status === Appointment::STATUS_PROBLEM ? ($locked->problem_reported_at ?? $reportedAt) : $reportedAt,
-                    'external_payload' => [...($locked->external_payload ?? []), 'techcalendar_on_site' => $report,
-                        'techcalendar_problem' => $locked->status === Appointment::STATUS_PROBLEM && is_array($locked->external_payload['techcalendar_problem'] ?? null)
-                            ? $locked->external_payload['techcalendar_problem'] : ['comment' => $comment, 'problem_type' => $reason, ...$flags]],
-                ])->save();
+                if (! $evidenceOnly) {
+                    $locked->forceFill([
+                        'status' => Appointment::STATUS_PROBLEM,
+                        'problem_reported_at' => $locked->status === Appointment::STATUS_PROBLEM ? ($locked->problem_reported_at ?? $reportedAt) : $reportedAt,
+                        'external_payload' => [...($locked->external_payload ?? []), 'techcalendar_on_site' => $report,
+                            'techcalendar_problem' => $locked->status === Appointment::STATUS_PROBLEM && is_array($locked->external_payload['techcalendar_problem'] ?? null)
+                                ? $locked->external_payload['techcalendar_problem'] : ['comment' => $comment, 'problem_type' => $reason, ...$flags]],
+                    ])->save();
+                }
                 $used = true;
 
                 return $report;
@@ -130,7 +162,8 @@ class TechnicianOnSiteReports
             ->where('technician_id', $actor->id)->first();
         if ($incident) {
             return ['request_id' => $requestId, 'author_id' => $actor->id, 'reason' => $incident->reason,
-                'reported_at' => $incident->reported_at->toIso8601String(), 'document_id' => $incident->document_id];
+                'reported_at' => $incident->reported_at->toIso8601String(), 'document_id' => $incident->document_id,
+                'evidence_only' => (bool) ($incident->source_context['evidence_only'] ?? false)];
         }
         $report = $appointment->external_payload['techcalendar_on_site'] ?? null;
 
@@ -141,7 +174,40 @@ class TechnicianOnSiteReports
     private function checkSnapshot(Appointment $appointment, string $snapshot): void
     {
         if (! hash_equals($this->snapshot($appointment), $snapshot)) {
-            throw ValidationException::withMessages(['snapshot' => 'Ce rendez-vous a été modifié. Rechargez sa fiche avant de renvoyer le signalement.']);
+            throw ValidationException::withMessages(['snapshot' => 'Ce rendez-vous a été modifié. Pour la preuve de votre ancien passage, choisissez « Preuve d’un ancien passage ». Sinon, rechargez sa fiche.']);
         }
+    }
+
+    private function authorizeSubmission(User $actor, Appointment $appointment, array $data, bool $evidenceOnly): void
+    {
+        $signed = $this->contexts->allowsHistorical($actor, $appointment, $data);
+        if (! $evidenceOnly && $signed && $this->contexts->read($actor, $appointment, $data) !== $this->contexts->booking($appointment)) {
+            throw ValidationException::withMessages(['snapshot' => 'Le RDV a été replanifié ou réattribué. Choisissez « Preuve d’un ancien passage » pour conserver votre preuve sans modifier le nouveau RDV.']);
+        }
+        if ($evidenceOnly && $signed) {
+            return;
+        }
+        Gate::forUser($actor)->authorize($evidenceOnly ? 'reportOnSiteEvidence' : 'view', $appointment);
+    }
+
+    private function evidenceDate(User $actor, Appointment $appointment, array $data): CarbonImmutable
+    {
+        if (filled($data['visit_date'] ?? null)) {
+            Gate::forUser($actor)->authorize('reportOnSiteEvidence', $appointment);
+            $this->checkSnapshot($appointment, $data['snapshot']);
+            $date = AppointmentDateTime::parse($data['visit_date'].' '.($data['visit_time'] ?? ''), 'visit_date')->toImmutable();
+        } else {
+            $booking = $this->contexts->read($actor, $appointment, $data);
+            if (! $booking) {
+                throw ValidationException::withMessages(['visit_date' => 'Renseignez la date et l’heure réelles de votre ancien passage.']);
+            }
+            $date = AppointmentDateTime::parse($booking['starts_at'], 'visit_date')->toImmutable();
+        }
+        if ($date->gt(CarbonImmutable::now('UTC')->setTimezone(AppointmentDateTime::TIMEZONE))
+            || $date->toDateString() < $appointment->created_at->format('Y-m-d')) {
+            throw ValidationException::withMessages(['visit_date' => 'La preuve doit concerner un passage déjà effectué, après la création du rendez-vous.']);
+        }
+
+        return $date;
     }
 }

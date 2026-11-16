@@ -9,6 +9,15 @@ use App\Services\Crm\DossierStatusCatalog;
 
 class AppointmentPolicy
 {
+    public function reportOnSiteEvidence(User $user, Appointment $appointment): bool
+    {
+        return config('crm.v2_enabled') && $this->view($user, $appointment)
+            && (int) $appointment->technician_id === $user->id
+            && ! in_array($appointment->external_source, ['mymar', 'mar'], true)
+            && $appointment->dossierOperation?->dossier
+            && in_array(DossierStatusCatalog::describe($appointment->dossierOperation->legacy_status)['key'], ['pending', 'awaiting_visit', 'problem'], true);
+    }
+
     public function reportOnSiteProblem(User $user, Appointment $appointment): bool
     {
         if (! config('crm.v2_enabled') || ! $this->view($user, $appointment)

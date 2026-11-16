@@ -12,6 +12,7 @@ use App\Services\Crm\ClientAccess;
 use App\Services\Crm\DossierBookingRecalls;
 use App\Services\Crm\DossierWorkflow;
 use App\Services\Tech\OnSitePhoto;
+use App\Services\Tech\OnSiteVisitContext;
 use App\Services\Tech\TechnicianOnSiteReports;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
@@ -85,6 +86,25 @@ it('accepts a multipart mobile report with a freshly resolved session account', 
         ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM);
 });
 
+it('accepts the exact snapshot rendered in the mobile HTML', function () {
+    $page = $this->get(route('tech.appointments.show', $this->appointment))->assertOk();
+    expect(preg_match('/name="snapshot" value="([a-f0-9]{64})"/', $page->getContent(), $matches))->toBe(1);
+    $this->post($this->url, ($this->payload)(['snapshot' => $matches[1]]), ['Accept' => 'application/json'])->assertOk();
+});
+
+it('keeps an open report valid after non booking updates without losing the planning comment', function (string $change) {
+    $payload = ($this->payload)();
+    $this->travel(1)->minutes();
+    $this->appointment->update(match ($change) {
+        'comment' => ['comment' => 'Consigne du planning actualisee'],
+        'coordinates' => ['latitude' => 48.8566, 'longitude' => 2.3522],
+        'metadata' => ['external_payload' => ['retained' => 'New route metadata']],
+    });
+    $comment = $this->appointment->comment;
+    $this->postJson($this->url, $payload)->assertOk();
+    expect($this->appointment->fresh()->comment)->toBe($comment)->and(TechnicianIncident::count())->toBe(1);
+})->with(['comment', 'coordinates', 'metadata']);
+
 it('lets the assigned technician complete a problem already declared by planning without overwriting it', function (bool $appointmentFlagged) {
     $planner = User::factory()->create(['role' => 1, 'admin' => false]);
     if ($appointmentFlagged) {
@@ -123,7 +143,7 @@ it('lets the assigned technician complete a problem already declared by planning
     }
 })->with([true, false]);
 
-it('requires a refreshed form after planning declares a problem but then accepts the retained evidence', function () {
+it('keeps an open report valid when planning declares the same intervention in problem', function () {
     $payload = ($this->payload)();
     $this->travel(1)->minutes();
     $planner = User::factory()->create(['role' => 1, 'admin' => false]);
@@ -131,9 +151,6 @@ it('requires a refreshed form after planning declares a problem but then accepts
         'version' => $this->dossier->fresh()->version, 'appointment_id' => $this->appointment->id,
         'comment' => 'Client absent', 'problem_type' => 'Renvoi client',
     ]);
-    $this->postJson($this->url, $payload)->assertUnprocessable()->assertJsonValidationErrors('snapshot');
-    expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
-    $payload['snapshot'] = app(TechnicianOnSiteReports::class)->snapshot($this->appointment->fresh());
     $this->postJson($this->url, $payload)->assertOk();
     expect(TechnicianIncident::count())->toBe(1);
 });
@@ -336,3 +353,165 @@ it('strips metadata and appended content by generating a fresh raster file', fun
     $path = Storage::disk('local')->path($document->path);
     expect(getimagesize($path)[0])->toBe(2000)->and(file_get_contents($path))->not->toContain('GPS SECRET APPENDED PAYLOAD');
 });
+
+it('renders a private signed visit context and a planning draft recovery entry without exposing reassigned dossiers', function () {
+    $page = $this->get(route('tech.appointments.show', $this->appointment))->assertOk();
+    expect($page->headers->get('Cache-Control'))->toContain('private', 'no-store');
+    expect(preg_match('/name="report_context" value="([^"]+)"/', $page->getContent(), $context))->toBe(1);
+    expect(preg_match('/name="context_signature" value="([a-f0-9]{64})"/', $page->getContent(), $signature))->toBe(1);
+    $booking = app(OnSiteVisitContext::class)->read($this->tech, $this->appointment, [
+        'report_context' => html_entity_decode($context[1], ENT_QUOTES), 'context_signature' => $signature[1],
+    ]);
+    expect($booking['appointment_id'])->toBe($this->appointment->id)->and($booking['technician_id'])->toBe($this->tech->id);
+    $this->appointment->update(['technician_id' => $this->other->id]);
+    $this->get(route('tech.appointments.show', $this->appointment))->assertForbidden();
+    $this->get(route('tech.planning'))->assertOk()->assertSee('data-on-site-drafts', false)->assertDontSee('Rue de test');
+});
+
+it('attaches the old visit evidence and client comment without changing a rescheduled or reassigned appointment', function (bool $reassigned) {
+    $signed = app(OnSiteVisitContext::class)->issue($this->appointment);
+    $payload = ($this->payload)([...$signed, 'evidence_only' => true, 'audience' => 'delegataire']);
+    $this->appointment->update(['starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00',
+        'technician_id' => $reassigned ? $this->other->id : $this->tech->id, 'comment' => 'Nouvelle consigne a conserver',
+        'external_payload' => ['new_booking' => 'must stay untouched']]);
+    $appointmentBefore = $this->appointment->fresh()->getAttributes();
+    $operationBefore = $this->operation->fresh()->getAttributes();
+    $version = $this->dossier->fresh()->version;
+    $this->postJson($this->url, $payload)->assertOk()->assertJsonPath('url', route('tech.planning'));
+    $this->get(route('tech.planning'))->assertOk()->assertSee('Preuve de l’ancien passage enregistrée');
+    expect($this->appointment->fresh()->getAttributes())->toBe($appointmentBefore)
+        ->and($this->operation->fresh()->getAttributes())->toBe($operationBefore)
+        ->and($this->dossier->fresh()->version)->toBe($version + 1);
+    $incident = TechnicianIncident::sole();
+    $comment = $this->dossier->comments()->sole();
+    $document = $this->dossier->documents()->sole();
+    expect($incident->source_context['evidence_only'])->toBeTrue()
+        ->and($incident->source_context['date_source'])->toBe('signed_visit_context')
+        ->and($incident->appointment_starts_at->format('Y-m-d H:i'))->toBe('2026-11-06 10:00')
+        ->and($incident->technician_id)->toBe($this->tech->id)->and($incident->planning_status)->toBe('pending')
+        ->and($incident->billing_status)->toBe('review')
+        ->and($comment->body)->toContain('06/11/2026', '10:00', 'Portail fermé', 'actuel reste inchangé')
+        ->and($comment->client_visible)->toBeTrue()->and($comment->delegataire_visible)->toBeFalse()
+        ->and($document->client_visible)->toBeTrue()->and($document->delegataire_visible)->toBeFalse()
+        ->and($document->author_id)->toBe($this->tech->id)->and($document->description)->toContain('06/11/2026');
+    $this->postJson($this->url, $payload)->assertOk();
+    expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->comments()->count())->toBe(1)
+        ->and(Storage::disk('local')->allFiles())->toHaveCount(1);
+    $this->postJson($this->url, [...$payload, 'request_id' => (string) Str::uuid()])
+        ->assertUnprocessable()->assertJsonValidationErrors('visit_date');
+    expect(Storage::disk('local')->allFiles())->toHaveCount(1);
+    if ($reassigned) {
+        $this->get(route('tech.appointments.show', $this->appointment))->assertForbidden();
+        expect(Gate::forUser($this->tech)->allows('view', $this->appointment->fresh()))->toBeFalse();
+    }
+})->with([false, true]);
+
+it('does not turn an obsolete signed normal report into a mutation of the new booking', function (bool $reassigned) {
+    $payload = ($this->payload)(app(OnSiteVisitContext::class)->issue($this->appointment));
+    $this->appointment->update(['starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00',
+        'technician_id' => $reassigned ? $this->other->id : $this->tech->id]);
+    $this->postJson($this->url, $payload)->assertUnprocessable()->assertJsonValidationErrors('snapshot');
+    expect(TechnicianIncident::count())->toBe(0)->and($this->appointment->fresh()->status)->toBe('scheduled')
+        ->and(Storage::disk('local')->allFiles())->toBeEmpty();
+})->with([false, true]);
+
+it('refuses an old signed normal context even when the current technician supplies a fresh snapshot', function () {
+    $payload = ($this->payload)(app(OnSiteVisitContext::class)->issue($this->appointment));
+    $this->appointment->update(['starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00']);
+    $payload['snapshot'] = app(TechnicianOnSiteReports::class)->snapshot($this->appointment->fresh());
+    $this->postJson($this->url, $payload)->assertUnprocessable()->assertJsonValidationErrors('snapshot');
+    expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
+});
+
+it('acknowledges a lost normal confirmation as historical after reassignment without redirecting to the new private appointment', function () {
+    $payload = ($this->payload)(app(OnSiteVisitContext::class)->issue($this->appointment));
+    $this->postJson($this->url, $payload)->assertOk();
+    $this->appointment->update(['technician_id' => $this->other->id, 'status' => 'scheduled',
+        'starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00']);
+    $this->operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
+    $before = $this->appointment->fresh()->getAttributes();
+    $this->postJson($this->url, [...$payload, 'evidence_only' => true])->assertOk()->assertJsonPath('url', route('tech.planning'));
+    expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1)
+        ->and($this->appointment->fresh()->getAttributes())->toBe($before);
+});
+
+it('does not accept tampered expired foreign or relinked old visit authorizations', function (string $change) {
+    $payload = ($this->payload)([...app(OnSiteVisitContext::class)->issue($this->appointment), 'evidence_only' => true]);
+    $this->appointment->update(['technician_id' => $this->other->id, 'starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00']);
+    match ($change) {
+        'tamper' => $payload['report_context'] = str_replace('2026-11-06', '2026-11-05', $payload['report_context']),
+        'signature' => $payload['context_signature'] = str_repeat('a', 64),
+        'expired' => $this->travel(24)->hours(),
+        'other-actor' => $this->actingAs($this->other),
+        'role' => $this->tech->update(['role' => 0]),
+        'password' => $this->tech->update(['must_change_password' => true]),
+        'inactive' => $this->tech->delete(),
+        'cancelled' => $this->appointment->update(['status' => Appointment::STATUS_CANCELLED]),
+        'closed' => $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save(),
+        'dossier-deleted' => $this->dossier->delete(),
+        'source' => $this->appointment->update(['external_source' => 'mymar']),
+        'operation' => $this->appointment->forceFill(['dossier_operation_id' => $this->dossier->operations()->create(['service_id' => $this->service->id])->id])->save(),
+    };
+    $response = $this->postJson($this->url, $payload);
+    expect($response->status())->toBeIn([403, 422]);
+    expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
+})->with(['tamper', 'signature', 'expired', 'other-actor', 'role', 'password', 'inactive', 'cancelled', 'closed', 'dossier-deleted', 'source', 'operation']);
+
+it('can recover an unsigned legacy draft with a declared past visit only for the current assigned technician', function () {
+    $this->appointment->update(['starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00']);
+    $payload = ($this->payload)(['evidence_only' => true, 'visit_date' => '2026-11-06', 'visit_time' => '10:05']);
+    $this->postJson($this->url, $payload)->assertOk();
+    $incident = TechnicianIncident::sole();
+    expect($incident->source_context['date_source'])->toBe('technician_declared')
+        ->and($incident->appointment_starts_at->format('Y-m-d H:i'))->toBe('2026-11-06 10:05')
+        ->and($this->appointment->fresh()->status)->toBe('scheduled')
+        ->and($this->appointment->fresh()->starts_at->format('Y-m-d'))->toBe('2026-11-18');
+});
+
+it('does not infer or authorize an unsigned historical visit from an old opaque snapshot', function (string $failure) {
+    $payload = ($this->payload)(['evidence_only' => true, 'visit_date' => '2026-11-06', 'visit_time' => '10:05']);
+    match ($failure) {
+        'missing-date' => $payload['visit_date'] = $payload['visit_time'] = null,
+        'future' => $payload['visit_date'] = '2026-11-18',
+        'before-creation' => $payload['visit_date'] = '2026-11-05',
+        'stale' => $this->appointment->update(['starts_at' => '2026-11-18 14:00']),
+        'reassigned' => $this->appointment->update(['technician_id' => $this->other->id]),
+    };
+    $response = $this->postJson($this->url, $payload);
+    expect($response->status())->toBeIn([403, 422]);
+    expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
+})->with(['missing-date', 'future', 'before-creation', 'stale', 'reassigned']);
+
+it('does not allow a reassigned old technician to replace the signed visit date with an invented one', function () {
+    $payload = ($this->payload)([...app(OnSiteVisitContext::class)->issue($this->appointment), 'evidence_only' => true,
+        'visit_date' => '2026-11-06', 'visit_time' => '10:05']);
+    $this->appointment->update(['technician_id' => $this->other->id]);
+    $this->postJson($this->url, $payload)->assertForbidden();
+    expect(Storage::disk('local')->allFiles())->toBeEmpty();
+});
+
+it('rechecks historical evidence rights after staging without treating a reassignment as revocation', function (bool $revoked) {
+    $payload = ($this->payload)([...app(OnSiteVisitContext::class)->issue($this->appointment), 'evidence_only' => true]);
+    $real = new OnSitePhoto;
+    $fake = Mockery::mock(OnSitePhoto::class);
+    $fake->shouldReceive('store')->once()->andReturnUsing(function ($file, $dossier) use ($real, $revoked) {
+        $stored = $real->store($file, $dossier);
+        DB::table('appointments')->where('id', $this->appointment->id)->update(['technician_id' => $this->other->id,
+            'starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00']);
+        if ($revoked) {
+            DB::table('users')->where('id', $this->tech->id)->update(['role' => 0]);
+        }
+
+        return $stored;
+    });
+    $this->app->instance(OnSitePhoto::class, $fake);
+    $response = $this->postJson($this->url, $payload);
+    if ($revoked) {
+        $response->assertForbidden();
+        expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
+    } else {
+        $response->assertOk();
+        expect(TechnicianIncident::sole()->appointment_starts_at->format('Y-m-d H:i'))->toBe('2026-11-06 10:00')
+            ->and($this->appointment->fresh()->status)->toBe('scheduled');
+    }
+})->with([true, false]);

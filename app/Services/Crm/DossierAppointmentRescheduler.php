@@ -2,7 +2,6 @@
 
 namespace App\Services\Crm;
 
-use App\Exceptions\AppointmentPlacementConflict;
 use App\Models\Appointment;
 use App\Models\Dossier;
 use App\Models\DossierOperation;
@@ -31,6 +30,9 @@ final class DossierAppointmentRescheduler
             'customer' => $dossier->beneficiaryLabel(),
             'service' => $operation->service->name,
             'address' => $appointment?->address ?: DossierLocation::address($dossier),
+            'location_warning' => $appointment ? DossierLocation::appointmentWarning($appointment)
+                : (DossierLocation::coordinates($dossier) === null
+                    ? 'La localisation sera vérifiée à la validation. Si elle reste impossible, vous pourrez confirmer un placement avec position et trajet à vérifier manuellement.' : null),
             'starts_at' => AppointmentDateTime::formatStored($previous?->starts_at),
             'duration_minutes' => $previous?->duration_minutes ?: $operation->service->average_duration_minutes,
             'technician_id' => $previous?->technician_id,
@@ -74,18 +76,18 @@ final class DossierAppointmentRescheduler
                 ->lockForUpdate()->findOrFail($data['technician_id']);
             $address = $appointment?->address ?: DossierLocation::address($dossier);
             $point = $appointment ? DossierLocation::point($appointment->latitude, $appointment->longitude) : ($location['coordinates'] ?? null);
-            if (blank($address) || (! $appointment && $point === null)) {
-                throw ValidationException::withMessages(['address' => 'Vérifie et localise l’adresse du dossier avant de placer ce RDV.']);
+            if ((! $appointment && blank($dossier->address)) || blank($address)) {
+                throw ValidationException::withMessages(['address' => 'Renseigne l’adresse du lieu d’inspection dans le dossier avant de placer ce RDV.']);
             }
-            $precision = $appointment?->external_payload['location_precision'] ?? $location['precision'] ?? 'address';
-            $checks = app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end,
-                ['address' => $address, ...($point ?? []), 'location_precision' => $precision], $appointment?->id, $forced);
+            $precision = $point === null ? 'unverified' : ($appointment?->external_payload['location_precision'] ?? $location['precision'] ?? 'address');
+            $conflicts = $point === null ? [['field' => 'address', 'type' => 'location_unverified',
+                'message' => DossierLocation::UNVERIFIED_APPOINTMENT_WARNING.' Confirmez que vous avez vérifié l’adresse auprès du client et la faisabilité du déplacement avant de forcer le placement.']] : [];
             if (! $technician->services()->whereKey($operation->service_id)->exists()) {
-                $checks['conflicts'][] = ['field' => 'technician_id', 'type' => 'qualification', 'message' => 'Ce technicien ne couvre pas cette prestation.'];
-                if (! $forced) {
-                    throw AppointmentPlacementConflict::fromConflicts($checks['conflicts']);
-                }
+                $conflicts[] = ['field' => 'technician_id', 'type' => 'qualification', 'message' => 'Ce technicien ne couvre pas cette prestation.'];
             }
+            // Present every overridable constraint together; uncertain MAR writes remain non-overridable.
+            $checks = app(AppointmentSlotAvailability::class)->assertAvailable($technician, $start, $end,
+                ['address' => $address, ...($point ?? []), 'location_precision' => $precision], $appointment?->id, $forced, $conflicts);
             $rows = $this->lotRows($operation, $appointment);
             if ($appointment) {
                 $appointment = app(AppointmentEditor::class)->update($appointment->id, [
@@ -94,6 +96,8 @@ final class DossierAppointmentRescheduler
                     'force_placement' => $forced, 'force_confirmed' => $data['force_confirmed'] ?? false,
                     'address' => $address, 'service_id' => $operation->service_id,
                     'status' => Appointment::STATUS_SCHEDULED, 'problem_reported_at' => null,
+                    ...($point === null ? ['latitude' => null, 'longitude' => null,
+                        'external_payload' => [...($appointment->external_payload ?? []), 'location_precision' => 'unverified']] : []),
                 ], $actor, $checks);
             } else {
                 $appointment = Appointment::forceCreate([
@@ -102,7 +106,7 @@ final class DossierAppointmentRescheduler
                     'customer_first_name' => $dossier->company_name ? '' : ($dossier->first_name ?? ''),
                     'customer_last_name' => $dossier->company_name ?: ($dossier->last_name ?: $dossier->beneficiaryLabel()),
                     'customer_phone' => $dossier->phone ?? '', 'address' => $address,
-                    'latitude' => $point['latitude'], 'longitude' => $point['longitude'],
+                    'latitude' => $point['latitude'] ?? null, 'longitude' => $point['longitude'] ?? null,
                     'starts_at' => $start, 'ends_at' => $end, 'duration_minutes' => $data['duration_minutes'],
                     'external_source' => 'native', 'external_payload' => ['location_precision' => $precision,
                         'quick_reschedule_control' => PostVisitWorkflow::planningEvidence($operation)],

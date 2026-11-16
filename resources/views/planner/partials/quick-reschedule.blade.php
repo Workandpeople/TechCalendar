@@ -6,6 +6,7 @@
     <div class="gc-dossier-dialog-body">
         <p data-reschedule-summary class="mb-3 text-sm font-semibold"></p>
         <p data-reschedule-address class="mb-4 text-sm text-slate-600"></p>
+        <p data-reschedule-location-warning class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" hidden></p>
         <p data-reschedule-feedback role="status" aria-live="polite" class="mb-3 text-sm"></p>
         <form data-reschedule-form hidden>
             <fieldset class="space-y-4" data-reschedule-fields>

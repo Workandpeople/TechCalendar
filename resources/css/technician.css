@@ -10,6 +10,12 @@
     .tech-on-site-report form > label { margin-top: .35rem; font-size: .9rem; font-weight: 650; }
     .tech-on-site-report :is(input, select, textarea) { width: 100%; min-height: 48px; font-size: 16px; }
     .tech-on-site-report input[type='file'] { border: 1px dashed #d9b18e; border-radius: .65rem; padding: .6rem; background: #fffaf3; }
+    .tech-report-mode { display: flex; align-items: flex-start; gap: .65rem; padding: .8rem; border: 1px solid #c4d8e7; border-radius: .65rem; background: #f1f7fc; }
+    .tech-report-mode input[type='checkbox'] { width: 22px; min-height: 22px; height: 22px; margin-top: .15rem; flex-shrink: 0; }
+    .tech-report-mode small { display: block; margin-top: .3rem; font-size: .78rem; font-weight: 400; line-height: 1.5; }
+    .tech-report-visit-fields { display: grid; gap: .65rem; padding: .75rem; border: 1px solid #c4d8e7; border-radius: .65rem; }
+    .tech-report-visit-fields legend { font-size: .85rem; font-weight: 700; }
+    [data-drafts-list] button { width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
     .tech-report-intro, .tech-report-help { color: #667786; font-size: .8rem; line-height: 1.5; font-weight: 400; }
     .tech-report-photo-label { display: flex; align-items: center; gap: .65rem; }
     .tech-report-photo-label small { display: block; font-size: .75rem; font-weight: 400; color: #667786; }
