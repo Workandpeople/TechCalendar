@@ -131,12 +131,13 @@ class DossierWorkflow
             if (filled($data['recall_date'] ?? null)) {
                 $details .= ' · Rappel le '.$data['recall_date'].(filled($data['recall_time'] ?? null) ? ' à '.$data['recall_time'] : '');
             }
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
+            $activity = $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
                 'body' => 'Problème rendez-vous · Fiche #'.$operation->id.' · '.$details,
                 'client_visible' => false, 'delegataire_visible' => false,
                 'changed_fields' => ['operation_id' => $operation->id, 'previous_status' => $previousStatus,
                     'status' => 'PROBLÈME RENDEZ-VOUS', 'problem_type' => $data['problem_type'] ?? null,
                     'recall_date' => $data['recall_date'] ?? null, 'recall_time' => $data['recall_time'] ?? null]]);
+            app(DossierBookingRecalls::class)->remember($operation, $activity, $data);
             $dossier->increment('version');
         });
     }

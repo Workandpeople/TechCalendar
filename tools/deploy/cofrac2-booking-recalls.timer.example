@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Cofrac booking recalls every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=cofrac2-booking-recalls.service
+
+[Install]
+WantedBy=timers.target

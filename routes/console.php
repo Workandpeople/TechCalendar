@@ -129,6 +129,10 @@ if (config('crm.v2_enabled') && config('services.smsfactor.enabled')) {
     Schedule::command('sms:dispatch')->everyMinute()->withoutOverlapping(5);
 }
 
+if (config('crm.v2_enabled')) {
+    Schedule::command('dossiers:process-recalls --apply')->everyMinute()->withoutOverlapping(5);
+}
+
 Schedule::command('health:check')
     ->everyFiveMinutes();
 

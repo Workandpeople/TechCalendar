@@ -13,6 +13,16 @@ class DossierOperation extends Model
 {
     protected $fillable = ['service_id', 'source', 'source_reference'];
 
+    protected static function booted(): void
+    {
+        static::updating(function (self $operation): void {
+            if ($operation->isDirty('legacy_status')) {
+                // A later workflow decision supersedes any previously armed recall.
+                $operation->forceFill(['booking_recall_at' => null]);
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return ['inspected_on' => 'date', 'control_submitted_at' => 'datetime', 'control_validated_at' => 'datetime'];
