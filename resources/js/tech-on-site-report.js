@@ -171,6 +171,7 @@ export function initOnSiteReports(root = document, view = window, store = create
                 const response = await view.fetch(form.action, { method: 'POST', credentials: 'same-origin',
                     headers: { Accept: 'application/json' }, body, signal: controller.signal });
                 const data = await readApiJson(response);
+                if (response.status === 403) throw new Error('Le signalement n’est pas autorisé sur ce RDV dans son état actuel. Rechargez sa fiche depuis votre planning pour vérifier votre affectation et son état. Le brouillon reste sur cet appareil.');
                 if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Signalement non enregistré.');
                 const destination = new URL(data.url, view.location.href);
                 if (destination.origin !== view.location.origin || !/^(?:\/tech\/planning\/appointments\/\d+|\/tech\/mar\/appointments\/\d+\/on-site-report)$/.test(destination.pathname)

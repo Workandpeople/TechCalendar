@@ -2,6 +2,8 @@
 
 Le signalement sur place conserve la photo, son auteur, le motif et l'heure dans une file interne durable. Chaque envoi mobile est identifie par un UUID unique : une relance du meme envoi ne cree ni seconde preuve ni seconde alerte. Un nouveau passage peut produire un autre signalement, sans ecraser les precedents.
 
+Le technicien affecte peut egalement completer un RDV natif deja passe en probleme par le planning, tant que la fiche est encore en probleme et qu'aucun signalement terrain n'a deja ete enregistre pour ce RDV. Cela ajoute la photo, le commentaire client et l'alerte interne sans remplacer le motif, l'heure de declaration, les commentaires ou le rappel du planning. Une replanification, une cloture, une annulation ou une reattribution reste controlee avant et apres preparation de la photo. Un formulaire devenu obsolete doit etre recharge avant son renvoi ; il n'est jamais valide automatiquement.
+
 ## Acces et notifications
 
 - Rubrique Planning > Signalements techniciens : super-admins, gerants et planning internes actifs, hors changement de mot de passe obligatoire.

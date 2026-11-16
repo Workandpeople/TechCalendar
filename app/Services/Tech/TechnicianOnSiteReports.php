@@ -96,9 +96,11 @@ class TechnicianOnSiteReports
                     'reported_at' => $reportedAt, 'appointment_starts_at' => $locked->starts_at,
                 ]);
                 $locked->forceFill([
-                    'status' => Appointment::STATUS_PROBLEM, 'problem_reported_at' => $reportedAt,
+                    'status' => Appointment::STATUS_PROBLEM,
+                    'problem_reported_at' => $locked->status === Appointment::STATUS_PROBLEM ? ($locked->problem_reported_at ?? $reportedAt) : $reportedAt,
                     'external_payload' => [...($locked->external_payload ?? []), 'techcalendar_on_site' => $report,
-                        'techcalendar_problem' => ['comment' => $comment, 'problem_type' => $reason, ...$flags]],
+                        'techcalendar_problem' => $locked->status === Appointment::STATUS_PROBLEM && is_array($locked->external_payload['techcalendar_problem'] ?? null)
+                            ? $locked->external_payload['techcalendar_problem'] : ['comment' => $comment, 'problem_type' => $reason, ...$flags]],
                 ])->save();
                 $used = true;
 

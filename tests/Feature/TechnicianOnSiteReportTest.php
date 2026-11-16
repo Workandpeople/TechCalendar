@@ -9,8 +9,11 @@ use App\Models\Service;
 use App\Models\TechnicianIncident;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
+use App\Services\Crm\DossierBookingRecalls;
+use App\Services\Crm\DossierWorkflow;
 use App\Services\Tech\OnSitePhoto;
 use App\Services\Tech\TechnicianOnSiteReports;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +71,80 @@ it('offers the mobile report action only for an assigned and still scheduled int
     expect(Gate::forUser($this->tech)->allows('update', $this->dossier))->toBeFalse();
     $this->operation->forceFill(['legacy_status' => 'RAPPORT GENIUS'])->save();
     $this->get(route('tech.appointments.show', $this->appointment))->assertOk()->assertDontSee('data-on-site-report', false);
+});
+
+it('accepts a multipart mobile report with a freshly resolved session account', function () {
+    $sessionKey = auth()->guard('web')->getName();
+    auth()->forgetGuards();
+    $this->withSession([$sessionKey => $this->tech->id]);
+    $this->get(route('tech.appointments.show', $this->appointment))->assertOk()->assertSee('data-on-site-report', false);
+    auth()->forgetGuards();
+    $this->post($this->url, ($this->payload)(), ['Accept' => 'application/json'])
+        ->assertOk()->assertJsonPath('url', route('tech.appointments.show', $this->appointment));
+    expect(TechnicianIncident::sole()->technician_id)->toBe($this->tech->id)
+        ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM);
+});
+
+it('lets the assigned technician complete a problem already declared by planning without overwriting it', function (bool $appointmentFlagged) {
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    if ($appointmentFlagged) {
+        app(DossierWorkflow::class)->reportProblem($planner, $this->dossier, $this->operation, [
+            'version' => $this->dossier->fresh()->version, 'appointment_id' => $this->appointment->id,
+            'comment' => 'Declaration du planning a conserver', 'problem_type' => 'Renvoi client',
+            'recall_date' => '2026-11-10', 'recall_time' => '10:00',
+        ]);
+    } else {
+        app(DossierWorkflow::class)->changeStatus($planner, $this->dossier, $this->operation,
+            ['version' => $this->dossier->fresh()->version, 'status' => 'problem']);
+    }
+    $this->appointment->refresh();
+    $operationBefore = $this->operation->fresh()->getAttributes();
+    $sourceBefore = $this->dossier->activities()->where('kind', 'status_changed')->count();
+    $problemBefore = $this->appointment->external_payload['techcalendar_problem'] ?? null;
+    $problemAt = $this->appointment->problem_reported_at;
+    $this->travel(1)->minutes();
+    $this->get(route('tech.appointments.show', $this->appointment))->assertOk()->assertSee('data-on-site-report', false);
+    $payload = ($this->payload)();
+    $this->post($this->url, $payload, ['Accept' => 'application/json'])->assertOk();
+    expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1)
+        ->and($this->operation->fresh()->getAttributes())->toBe($operationBefore)
+        ->and($this->dossier->activities()->where('kind', 'status_changed')->count())->toBe($sourceBefore)
+        ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM);
+    if ($appointmentFlagged) {
+        expect($this->appointment->fresh()->external_payload['techcalendar_problem'])->toBe($problemBefore)
+            ->and($this->appointment->fresh()->problem_reported_at->toIso8601String())->toBe($problemAt->toIso8601String());
+    }
+    $this->postJson($this->url, $payload)->assertOk();
+    $this->postJson($this->url, ($this->payload)())->assertForbidden();
+    expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1);
+    if ($appointmentFlagged) {
+        $this->travelTo(CarbonImmutable::parse('2026-11-10 10:00', 'Europe/Paris'));
+        expect(app(DossierBookingRecalls::class)->process(true)['reopened'])->toBe(1);
+    }
+})->with([true, false]);
+
+it('requires a refreshed form after planning declares a problem but then accepts the retained evidence', function () {
+    $payload = ($this->payload)();
+    $this->travel(1)->minutes();
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    app(DossierWorkflow::class)->reportProblem($planner, $this->dossier, $this->operation, [
+        'version' => $this->dossier->fresh()->version, 'appointment_id' => $this->appointment->id,
+        'comment' => 'Client absent', 'problem_type' => 'Renvoi client',
+    ]);
+    $this->postJson($this->url, $payload)->assertUnprocessable()->assertJsonValidationErrors('snapshot');
+    expect(TechnicianIncident::count())->toBe(0)->and(Storage::disk('local')->allFiles())->toBeEmpty();
+    $payload['snapshot'] = app(TechnicianOnSiteReports::class)->snapshot($this->appointment->fresh());
+    $this->postJson($this->url, $payload)->assertOk();
+    expect(TechnicianIncident::count())->toBe(1);
+});
+
+it('uses the durable incident journal to prevent duplicate reports even if appointment metadata was removed', function () {
+    $payload = ($this->payload)();
+    $this->postJson($this->url, $payload)->assertOk();
+    $this->appointment->refresh()->update(['external_payload' => ['retained' => 'Existing data']]);
+    $this->postJson($this->url, $payload)->assertOk();
+    $this->postJson($this->url, ($this->payload)())->assertForbidden();
+    expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1);
 });
 
 it('offers and records the explicit absence refusal and forgotten appointment reasons', function (string $reason, string $label) {
@@ -190,6 +267,8 @@ it('rechecks assignment and account access after the photo was staged and cleans
             'assignment' => DB::table('appointments')->where('id', $this->appointment->id)->update(['technician_id' => $this->other->id]),
             'account' => DB::table('users')->where('id', $this->tech->id)->update(['deleted_at' => now()]),
             'role' => DB::table('users')->where('id', $this->tech->id)->update(['role' => 0]),
+            'cancelled' => DB::table('appointments')->where('id', $this->appointment->id)->update(['status' => Appointment::STATUS_CANCELLED]),
+            'closed' => DB::table('dossier_operations')->where('id', $this->operation->id)->update(['legacy_status' => 'CONTROLE RT']),
         };
 
         return $stored;
@@ -197,7 +276,7 @@ it('rechecks assignment and account access after the photo was staged and cleans
     $this->app->instance(OnSitePhoto::class, $fake);
     $this->postJson($this->url, ($this->payload)())->assertForbidden();
     expect(Storage::disk('local')->allFiles())->toBeEmpty()->and($this->dossier->comments()->count())->toBe(0);
-})->with(['assignment', 'account', 'role']);
+})->with(['assignment', 'account', 'role', 'cancelled', 'closed']);
 
 it('rolls back all business changes and removes the staged photo on database failure', function () {
     Event::listen('eloquent.creating: '.DossierDocument::class, fn () => throw new RuntimeException('Synthetic database failure'));

@@ -148,6 +148,20 @@ test('does not follow foreign confirmation links or remove a draft on an ambiguo
     assert.match(ui.feedback.textContent, /Rechargez/);
 });
 
+test('explains an authorization refusal in French and preserves the report and photo without automatic replay', async () => {
+    const ui = fixture(); await flush(); await ui.select();
+    const requestId = ui.fields.request_id.value;
+    ui.setResponse(() => reply({ message: 'This action is unauthorized.' }, 403));
+    await ui.submitForm();
+    assert.match(ui.feedback.textContent, /Rechargez sa fiche depuis votre planning/);
+    assert.doesNotMatch(ui.feedback.textContent, /unauthorized/);
+    assert.equal(ui.values.get('34:91').requestId, requestId);
+    assert.equal(ui.values.get('34:91').photo.type, 'image/jpeg');
+    assert.equal(ui.requests.length, 1);
+    assert.equal(ui.submit.disabled, false);
+    assert.equal(ui.view.location.assigned, undefined);
+});
+
 test('explains unavailable local storage but can still send explicitly while online', async () => {
     const ui = fixture(undefined, { storageFailure: true }); await flush(); await ui.select();
     assert.match(ui['draft-status'].textContent, /ne peut pas être enregistré/);
