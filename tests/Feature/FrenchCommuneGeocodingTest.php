@@ -148,6 +148,32 @@ it('lists all communes for a postal-only search but requires a choice before res
     expect($this->geocoder->geocodeCity('01560', 'commune.01212_01560')['city'])->toBe('Lescheroux');
 });
 
+it('accepts name-only searches partial names postal-first postal-last and repeated identical postcodes', function (string $query, string $city) {
+    ($this->fakeCommunes)();
+    $response = $this->actingAs($this->actor)->getJson(route('v2.dossiers.address.creation-suggestions', ['q' => $query, 'mode' => 'city']))
+        ->assertOk()->assertJsonCount(1, 'suggestions')->assertJsonPath('suggestions.0.city', $city);
+    expect($response->json('suggestions.0.id'))->toStartWith('commune.');
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://geo.api.gouv.fr/communes?'));
+})->with([
+    ['Lesch', 'Lescheroux'], ['Lescheroux', 'Lescheroux'], ['Lescheroux 01560', 'Lescheroux'],
+    ['Lescheroux, 01560', 'Lescheroux'], ['01560 Lescheroux', 'Lescheroux'], ['01560 01560 Lescheroux', 'Lescheroux'],
+    ['Philbert', 'Saint-Philbert-de-Grand-Lieu'], ['44310 Philbert de grand', 'Saint-Philbert-de-Grand-Lieu'],
+    ['Braud et St Louis', 'Braud-et-Saint-Louis'],
+]);
+
+it('routes postal-last locality searches to the public commune service without Mapbox', function () {
+    ($this->fakeCommunes)();
+    expect($this->geocoder->suggestions('Lescheroux 01560')[0]['city'])->toBe('Lescheroux');
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request) => $request['codePostal'] === '01560' && ! isset($request['access_token']));
+});
+
+it('never resolves a partial name or conflicting postcodes automatically', function (string $query) {
+    ($this->fakeCommunes)();
+    expect(fn () => app(FrenchCommuneGeocoder::class)->geocode($query))->toThrow(ValidationException::class);
+})->with(['01560 Lesch', '01560 32380 Lescheroux', '44310 Philbert']);
+
 it('does not cache outages and leaves the old dossier location untouched', function () {
     $before = $this->dossier->fresh()->getAttributes();
     Http::fake(['geo.api.gouv.fr/communes*' => Http::sequence()->push([], 503)->push([$this->communes[0]])]);
@@ -155,6 +181,14 @@ it('does not cache outages and leaves the old dossier location untouched', funct
     expect($this->geocoder->suggestions('01560 Lescheroux'))->toHaveCount(1);
     Http::assertSentCount(2);
     expect($this->dossier->fresh()->getAttributes())->toBe($before);
+});
+
+it('retries empty commune results instead of retaining a full day of failed lookups', function () {
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::sequence()->push([])->push([$this->communes[0]])]);
+    expect($this->geocoder->suggestions('01560 Lescheroux'))->toBe([]);
+    expect($this->geocoder->suggestions('01560 Lescheroux'))->toHaveCount(1);
+    expect($this->geocoder->geocodeCity('01560 Lescheroux')['city'])->toBe('Lescheroux');
+    Http::assertSentCount(2);
 });
 
 it('rejects malformed geometry identities and postal associations', function (array $changes) {

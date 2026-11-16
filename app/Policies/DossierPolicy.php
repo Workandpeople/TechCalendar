@@ -57,6 +57,11 @@ class DossierPolicy
         return $this->viewAny($user);
     }
 
+    public function forceCreateDuplicate(User $user): bool
+    {
+        return $this->create($user) && $user->admin;
+    }
+
     public function createFromPortal(User $user): bool
     {
         return app(ClientAccess::class)->createDossier($user);

@@ -91,6 +91,7 @@
                                             <strong class="gc-dossier-address-street">{{ $address['street'] ?: 'Adresse non renseignée' }}</strong>
                                             @if ($address['locality'] !== '')<span class="gc-dossier-address-locality">{{ $address['locality'] }}</span>@endif
                                         </button>
+                                        <x-dossier-location-warning :dossier="$dossier" />
                                         @break
                                     @case('company')
                                         @php($companies = $table->companies($dossier))

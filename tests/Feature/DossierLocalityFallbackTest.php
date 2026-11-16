@@ -117,3 +117,57 @@ it('never treats identical approximate city points as proof that simultaneous ap
     unset($location['external_payload']);
     expect(app(AppointmentSlotAvailability::class)->sameSite($location, $appointment))->toBeFalse();
 });
+
+it('saves manually entered locality details without GPS when verification fails', function (bool $external, string $failure) {
+    $rows = match ($failure) {
+        'ambiguous' => [$this->commune, [...$this->commune, 'code' => '01999']],
+        'wrong_postal' => [[...$this->commune, 'codesPostaux' => ['75001']]],
+        'invalid_point' => [[...$this->commune, 'centre' => ['type' => 'Point', 'coordinates' => [0, 0]]]],
+        default => [],
+    };
+    Http::fake(['geo.api.gouv.fr/communes*' => $failure === 'timeout' ? Http::failedConnection()
+        : Http::response($rows, $failure === 'unavailable' ? 503 : 200)]);
+    $this->actingAs($external ? $this->client : $this->staff)->post(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'), [
+        ...$this->payload, 'mapbox_id' => null, 'inspection_geocode' => ['latitude' => 48.85, 'longitude' => 2.35],
+    ])->assertSessionHasNoErrors()->assertRedirect();
+    $dossier = Dossier::sole();
+    expect($dossier->address)->toBe($this->payload['address'])->and($dossier->city)->toBe($this->payload['city'])
+        ->and($dossier->postal_code)->toBe('01560')->and(DossierLocation::coordinates($dossier))->toBeNull()
+        ->and($dossier->inspection_geocode)->toMatchArray(['precision' => 'unverified', 'latitude' => null,
+            'longitude' => null, 'mapbox_id' => null, 'provider' => null, 'verified_at' => null])
+        ->and(DossierLocation::needsReview($dossier))->toBeTrue()
+        ->and($dossier->operations()->sole()->legacy_status)->toBe('PRISE DE RDV')
+        ->and($dossier->appointments()->count())->toBe(0);
+    $this->get(route($external ? 'client.dossiers.show' : 'v2.dossiers.show', $dossier))->assertOk()->assertSee('Localisation à vérifier');
+    $this->get(route($external ? 'client.dossiers' : 'v2.dossiers.index'))->assertOk()->assertSee('Localisation à vérifier');
+    Http::assertSentCount(1);
+})->with([false, true])->with(['missing', 'unavailable', 'timeout', 'ambiguous', 'wrong_postal', 'invalid_point']);
+
+it('resolves an exact unique manually entered commune when available without selecting the first ambiguous result', function (bool $external) {
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::response([$this->commune])]);
+    $this->actingAs($external ? $this->client : $this->staff)->post(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'),
+        [...$this->payload, 'mapbox_id' => null])->assertSessionHasNoErrors();
+    $dossier = Dossier::sole();
+    expect(DossierLocation::coordinates($dossier))->toBe(['latitude' => 46.4, 'longitude' => 5.15])
+        ->and($dossier->inspection_geocode['precision'])->toBe('city')
+        ->and(DossierLocation::needsReview($dossier))->toBeFalse();
+    Http::assertSentCount(1);
+})->with([false, true]);
+
+it('still requires complete manual address details before creating any dossier', function (bool $external, string $field, mixed $value) {
+    $this->actingAs($external ? $this->client : $this->staff)->postJson(route($external ? 'client.dossiers.store' : 'v2.dossiers.store'),
+        [...$this->payload, 'mapbox_id' => null, $field => $value])->assertUnprocessable()->assertJsonValidationErrors($field);
+    expect(Dossier::count())->toBe(0);
+    Http::assertNothingSent();
+})->with([false, true])->with([['address', ''], ['city', ''], ['postal_code', ''], ['postal_code', '1234'], ['postal_code', 'abcde']]);
+
+it('clears the review badge when the saved address is later confirmed with a genuine commune selection', function () {
+    Http::fake(['geo.api.gouv.fr/communes*' => Http::sequence()->push([])->push([$this->commune])]);
+    $this->actingAs($this->staff)->post(route('v2.dossiers.store'), [...$this->payload, 'mapbox_id' => null])->assertSessionHasNoErrors();
+    $dossier = Dossier::sole();
+    $this->patch(route('v2.dossiers.address.update', $dossier), ['version' => $dossier->version,
+        'address_query' => '01560 Lescheroux', 'mapbox_id' => 'commune.01212_01560'])->assertSessionHasNoErrors();
+    expect(DossierLocation::needsReview($dossier->fresh()))->toBeFalse()
+        ->and(DossierLocation::coordinates($dossier->fresh()))->toBe(['latitude' => 46.4, 'longitude' => 5.15]);
+    Http::assertSentCount(2);
+});

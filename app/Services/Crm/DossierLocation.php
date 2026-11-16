@@ -47,12 +47,20 @@ final class DossierLocation
 
     public static function metadata(Dossier $dossier, array $result): array
     {
+        $point = self::point($result['latitude'] ?? null, $result['longitude'] ?? null);
+
         return [
             'address_hash' => hash('sha256', self::address($dossier)),
-            'latitude' => (float) $result['latitude'], 'longitude' => (float) $result['longitude'],
-            'mapbox_id' => $result['mapbox_id'] ?? null, 'verified_at' => now()->toIso8601String(),
-            'precision' => $result['precision'] ?? 'address',
-            'provider' => $result['provider'] ?? 'mapbox',
+            'latitude' => $point['latitude'] ?? null, 'longitude' => $point['longitude'] ?? null,
+            'mapbox_id' => $point ? ($result['mapbox_id'] ?? null) : null, 'verified_at' => $point ? now()->toIso8601String() : null,
+            'precision' => $point ? ($result['precision'] ?? 'address') : 'unverified',
+            'provider' => $point ? ($result['provider'] ?? 'mapbox') : null,
         ];
+    }
+
+    public static function needsReview(Dossier $dossier): bool
+    {
+        return ($dossier->inspection_geocode['precision'] ?? null) === 'unverified'
+            && ($dossier->inspection_geocode['address_hash'] ?? null) === hash('sha256', self::address($dossier));
     }
 }

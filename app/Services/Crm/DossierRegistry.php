@@ -195,6 +195,7 @@ class DossierRegistry
     public function createForClient(User $actor, array $data): Dossier
     {
         Gate::forUser($actor)->authorize('createFromPortal', Dossier::class);
+        $this->duplicateOverride($actor, $data);
         $information = Arr::only($data, [
             'company_name', 'first_name', 'last_name', 'email', 'phone', 'site_name',
             'address', 'postal_code', 'city', 'beneficiary_address', 'beneficiary_postal_code',
@@ -213,19 +214,20 @@ class DossierRegistry
 
     private function persistCreation(User $actor, array $data): Dossier
     {
+        $allowDuplicate = $this->duplicateOverride($actor, $data);
         if (! is_array($data['service_ids'] ?? null) || count($data['service_ids']) !== 1) {
             throw ValidationException::withMessages(['service_ids' => 'Sélectionnez une seule fiche technique pour ce dossier.']);
         }
         $data = DossierContacts::fillMissingSnapshots($data);
         $data['reference'] ??= 'DOS-'.Str::upper((string) Str::ulid());
-        $geocode = app(DossierAddressInput::class)->resolve($data, requireSelection: true);
+        $geocode = app(DossierAddressInput::class)->resolve($data, requireSelection: true, allowUnverifiedCity: true);
         $data['address'] = $data['address'] ?? $data['city'];
 
         try {
-            return DB::transaction(function () use ($actor, $data, $geocode): Dossier {
-                app(DossierDuplicateCheck::class)->ensureAvailable($data);
+            return DB::transaction(function () use ($actor, $data, $geocode, $allowDuplicate): Dossier {
+                $duplicateOverridden = app(DossierDuplicateCheck::class)->ensureAvailable($data, $allowDuplicate);
                 $dossier = Dossier::query()->create([
-                    ...Arr::except($data, ['service_ids', 'address_precision', 'mapbox_id']),
+                    ...Arr::except($data, ['service_ids', 'address_precision', 'mapbox_id', 'force_duplicate']),
                     'source' => 'native', 'source_reference' => null, 'created_by' => $actor->id,
                 ]);
                 if ($geocode) {
@@ -237,6 +239,8 @@ class DossierRegistry
                 }
                 $dossier->activities()->create([
                     'author_id' => $actor->id, 'kind' => 'created', 'body' => 'Dossier créé dans TechCalendar.',
+                    ...($duplicateOverridden ? ['body' => 'Dossier créé avec dérogation admin au contrôle des doublons.',
+                        'changed_fields' => ['duplicate_override' => true, 'service_id' => (int) $data['service_ids'][0]]] : []),
                 ]);
 
                 return $dossier;
@@ -244,6 +248,17 @@ class DossierRegistry
         } catch (UniqueConstraintViolationException $exception) {
             $this->reportDuplicateReference($data['reference'], $exception);
         }
+    }
+
+    private function duplicateOverride(User $actor, array $data): bool
+    {
+        $validated = validator($data, ['force_duplicate' => ['sometimes', 'boolean']])->validate();
+        $override = (bool) ($validated['force_duplicate'] ?? false);
+        if ($override) {
+            Gate::forUser($actor)->authorize('forceCreateDuplicate', Dossier::class);
+        }
+
+        return $override;
     }
 
     public function update(User $actor, Dossier $dossier, array $data): Dossier

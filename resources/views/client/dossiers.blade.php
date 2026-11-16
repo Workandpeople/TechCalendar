@@ -34,7 +34,7 @@
                     <td class="p-4 font-medium">{{ $dossier->listing_lot ?: 'Non renseigné' }}</td>
                     <td class="p-4"><span class="font-medium">{{ $dossier->beneficiaryLabel() }}</span></td>
                     <td class="p-4">@include('client.partials.appointment-date')</td>
-                    <td class="p-4">{{ $dossier->address }}<p class="text-slate-500">{{ $dossier->postal_code }} {{ $dossier->city }}</p></td>
+                    <td class="p-4">{{ $dossier->address }}<p class="text-slate-500">{{ $dossier->postal_code }} {{ $dossier->city }}</p><x-dossier-location-warning :dossier="$dossier" /></td>
                     <td class="space-y-2 p-4">@foreach ($dossier->operations as $operation)<p>{{ $operation->service?->name ?: $operation->legacy_service_name }} <x-dossier-status :status="$operation->legacy_status" /></p>@endforeach</td>
                 </tr>
             @empty<tr><td colspan="6" class="p-8 text-center text-slate-500">Aucun dossier attribué ne correspond à la recherche.</td></tr>@endforelse

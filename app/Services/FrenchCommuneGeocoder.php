@@ -18,7 +18,7 @@ final class FrenchCommuneGeocoder
         $rows = $this->communes($postal, $name);
         $matches = [];
         foreach ($rows as $row) {
-            if ($name !== '' && ! str_starts_with($this->normalize($row['nom']), $this->normalize($name))) {
+            if ($name !== '' && ! str_contains(' '.$this->normalize($row['nom']), ' '.$this->normalize($name))) {
                 continue;
             }
             foreach ($postal ? [$postal] : $row['codesPostaux'] as $code) {
@@ -69,16 +69,23 @@ final class FrenchCommuneGeocoder
         $parameters = $postal !== null ? ['codePostal' => $postal] : ['nom' => $this->normalize($name), 'limit' => 8];
         $key = 'french-communes:v1:'.hash('sha256', json_encode($parameters, JSON_THROW_ON_ERROR));
 
-        return Cache::remember($key, now()->addDay(), function () use ($parameters): array {
-            $response = Http::connectTimeout(3)->timeout(8)->withOptions(['allow_redirects' => false])
-                ->get('https://geo.api.gouv.fr/communes', [...$parameters, 'fields' => 'code,nom,codesPostaux,centre,departement', 'format' => 'json']);
-            $rows = $response->ok() ? $response->json() : null;
-            if (! is_array($rows) || ! array_is_list($rows) || count($rows) > 500) {
-                throw ValidationException::withMessages(['q' => 'Le référentiel des communes est momentanément indisponible. Réessayez dans un instant.']);
-            }
+        $cached = Cache::get($key);
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
 
-            return array_values(array_filter($rows, $this->validCommune(...)));
-        });
+        $response = Http::connectTimeout(3)->timeout(8)->withOptions(['allow_redirects' => false])
+            ->get('https://geo.api.gouv.fr/communes', [...$parameters, 'fields' => 'code,nom,codesPostaux,centre,departement', 'format' => 'json']);
+        $rows = $response->ok() ? $response->json() : null;
+        if (! is_array($rows) || ! array_is_list($rows) || count($rows) > 500) {
+            throw ValidationException::withMessages(['q' => 'Le référentiel des communes est momentanément indisponible. Réessayez dans un instant.']);
+        }
+        $valid = array_values(array_filter($rows, $this->validCommune(...)));
+        if ($valid !== []) {
+            Cache::put($key, $valid, now()->addDay());
+        }
+
+        return $valid;
     }
 
     private function validCommune(mixed $row): bool
@@ -113,13 +120,14 @@ final class FrenchCommuneGeocoder
     private function queryParts(string $query): array
     {
         $head = trim(explode(',', $query)[0]);
-        preg_match_all('/\b[0-9]{5}\b/', $head, $codes);
+        preg_match_all('/\b[0-9]{5}\b/', $query, $codes);
+        $postcodes = array_values(array_unique($codes[0]));
         $name = trim(preg_replace('/\b[0-9]{5}\b/', '', $head) ?? '');
-        if (count($codes[0]) > 1 || preg_match('/[0-9]/', $name)) {
+        if (count($postcodes) > 1 || preg_match('/[0-9]/', $name)) {
             throw $this->invalidSelection();
         }
 
-        return [$codes[0][0] ?? null, $name];
+        return [$postcodes[0] ?? null, $name];
     }
 
     private function normalize(string $name): string

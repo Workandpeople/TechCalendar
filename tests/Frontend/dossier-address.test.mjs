@@ -275,6 +275,48 @@ test('does not force a new suggestion when editing unrelated fields of an existi
     assert.equal(ui.submit().prevented, true);
 });
 
+test('manual creation remains available when the commune is absent or its search fails', async () => {
+    for (const failure of [false, true]) {
+        const ui = await creationFixture();
+        ui.elements['[data-address-fallback]'].handlers.click();
+        ui.fields.city.value = 'Commune saisie manuellement';
+        ui.fields.postal_code.value = '12345';
+        ui.fields.city.handlers.input(); ui.run(300);
+        if (failure) ui.requests[0].resolve(response([], 503));
+        else ui.requests[0].resolve(response([]));
+        await settle();
+        assert.equal(ui.fields.address_precision.value, 'city');
+        assert.equal(ui.fields.mapbox_id.value, '');
+        assert.equal(ui.fields.address.required, true);
+        assert.equal(ui.fields.postal_code.required, true);
+        assert.equal(ui.fields.city.required, true);
+        assert.equal(ui.submit().prevented, undefined);
+        assert.match(ui.elements['[data-creation-address-status]'].textContent, /créer le dossier|enregistrer le dossier/);
+    }
+});
+
+test('city lookup works by name without prefixing an incomplete postcode', async () => {
+    const ui = await creationFixture();
+    ui.elements['[data-address-fallback]'].handlers.click();
+    ui.fields.city.value = 'Saint-Philbert'; ui.fields.postal_code.value = '44';
+    ui.fields.city.handlers.input(); ui.run(300);
+    assert.equal(new URL(ui.requests[0].url).searchParams.get('q'), 'Saint-Philbert');
+    ui.fields.postal_code.value = '44310'; ui.fields.postal_code.handlers.input(); ui.run(300);
+    assert.equal(new URL(ui.requests[1].url).searchParams.get('q'), '44310 Saint-Philbert');
+});
+
+test('manual locality edits cannot retain a stale commune identifier even without input events', async () => {
+    const ui = await creationFixture();
+    ui.elements['[data-address-fallback]'].handlers.click();
+    ui.fields.postal_code.value = '01560'; ui.fields.city.value = 'Lescheroux';
+    ui.fields.city.handlers.input(); ui.run(300);
+    ui.requests[0].resolve(response([{ id: 'commune.01212_01560', label: '01560 Lescheroux', feature_type: 'place', postal_code: '01560', city: 'Lescheroux' }]));
+    await settle(); ui.elements['#creation-city-options'].children[0].handlers.click();
+    ui.fields.city.value = 'Autre commune';
+    assert.equal(ui.submit().prevented, undefined);
+    assert.equal(ui.fields.mapbox_id.value, '');
+});
+
 test('keeps a canonical commune selection valid when the correction form is submitted', async () => {
     const ui = editorFixture();
     ui.input.value = '32380 BIVE'; ui.input.handlers.input(); ui.run(300);

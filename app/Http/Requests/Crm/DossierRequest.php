@@ -45,6 +45,7 @@ class DossierRequest extends FormRequest
             'installer_siren' => ['nullable', 'regex:/^[0-9]{9}$/'],
             'service_ids' => [$dossier ? 'prohibited' : 'required', 'array', 'size:1'],
             'service_ids.*' => ['required', 'integer', 'distinct', 'exists:services,id'],
+            'force_duplicate' => ['sometimes', 'boolean', Rule::prohibitedIf($dossier !== null || ! $this->user()?->can('forceCreateDuplicate', Dossier::class))],
             'version' => [$dossier ? 'required' : 'prohibited', 'integer', 'min:1'],
         ];
         if ($this->input('address_precision') === 'city') {
@@ -70,6 +71,7 @@ class DossierRequest extends FormRequest
             'last_name' => 'nom du bénéficiaire', 'address' => 'adresse du lieu d’inspection',
             'city' => 'ville', 'postal_code' => 'code postal', 'mapbox_id' => 'adresse sélectionnée', 'installer_siren' => 'SIREN', 'service_ids' => 'fiche technique', 'service_ids.*' => 'fiche technique',
             'version' => 'version du dossier',
+            'force_duplicate' => 'dérogation au contrôle des doublons',
         ];
     }
 

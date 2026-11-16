@@ -16,6 +16,7 @@
                 <p class="gc-portal-eyebrow"><x-nav-icon name="dossiers" />Votre espace de suivi</p>
                 <h1>{{ $dossier->beneficiaryLabel() }}</h1>
                 <p class="gc-portal-address"><x-nav-icon name="location" /><span>{{ $dossier->address }}<br>{{ $dossier->postal_code }} {{ $dossier->city }}</span></p>
+                <x-dossier-location-warning :dossier="$dossier" />
                 <div class="gc-portal-meta">
                     @if ($dossier->listing_lot)<span><x-nav-icon name="lots" />{{ $dossier->listing_lot }}</span>@endif
                     @if ($dossier->created_at)<span>Ouvert le {{ $dossier->created_at->format('d/m/Y') }}</span>@endif

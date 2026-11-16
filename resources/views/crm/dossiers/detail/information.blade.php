@@ -18,7 +18,7 @@
         <h3 class="gc-dossier-subtitle"><x-nav-icon name="location" />Lieu d’inspection</h3>
         <dl class="gc-dossier-information">
             <div><dt>Nom du site</dt><dd>{{ $dossier->site_name ?: 'Non renseigné' }}</dd></div>
-            <div class="gc-dossier-information-wide"><dt>Adresse de l’intervention</dt><dd class="gc-dossier-address-row"><span>{{ $dossier->address }}<span class="block">{{ $dossier->postal_code }} {{ $dossier->city }}</span></span>
+            <div class="gc-dossier-information-wide"><dt>Adresse de l’intervention</dt><dd class="gc-dossier-address-row"><span>{{ $dossier->address }}<span class="block">{{ $dossier->postal_code }} {{ $dossier->city }}</span><x-dossier-location-warning :dossier="$dossier" /></span>
                 @can('update', $dossier)<button type="button" class="gc-btn-secondary gc-address-edit" data-dialog-target="corriger-adresse"><x-nav-icon name="edit" />Modifier l’adresse</button>@endcan
             </dd></div>
         </dl>

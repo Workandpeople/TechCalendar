@@ -1,5 +1,5 @@
         @php $portalCreation = $portalCreation ?? false; @endphp
-        <form method="POST" action="{{ $portalCreation ? route('client.dossiers.store') : ($dossier->exists ? route('v2.dossiers.update', $dossier) : route('v2.dossiers.store')) }}" class="space-y-6">
+        <form method="POST" action="{{ $portalCreation ? route('client.dossiers.store') : ($dossier->exists ? route('v2.dossiers.update', $dossier) : route('v2.dossiers.store')) }}" class="space-y-6" @unless ($dossier->exists) data-dossier-creation @endunless>
             @csrf
             @if ($portalCreation)<input type="hidden" name="submission_id" value="{{ is_string(old('submission_id')) ? old('submission_id') : $submissionId }}">@endif
             <input type="hidden" name="_form" value="information">
@@ -76,6 +76,15 @@
                     </select>
                     <p id="dossier-services-help" class="mt-2 text-xs text-slate-500">Une fiche technique par dossier. Le rendez-vous sera organisé ensuite.</p>
                     <p class="mt-1 text-xs text-slate-500">Pour une même fiche CEE, un téléphone ou une adresse déjà utilisés empêchent la création d’un doublon. Une fiche SAV reste distincte.</p>
+                    @unless ($portalCreation)
+                        @can('forceCreateDuplicate', \App\Models\Dossier::class)
+                            <details class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" @if (old('force_duplicate')) open @endif>
+                                <summary class="cursor-pointer font-semibold">Dérogation admin : création malgré un doublon</summary>
+                                <p class="my-2" id="duplicate-override-help">À utiliser uniquement pour deux interventions réellement distinctes avec la même fiche CEE et le même téléphone ou la même adresse. La dérogation sera enregistrée dans l’historique.</p>
+                                <label class="flex items-start gap-2"><input type="checkbox" name="force_duplicate" value="1" class="mt-1" aria-describedby="duplicate-override-help" @checked(old('force_duplicate') == '1')>Autoriser exceptionnellement ce doublon. Une confirmation sera demandée avant la création.</label>
+                            </details>
+                        @endcan
+                    @endunless
                     @if ($services->isEmpty())
                         <p class="mt-2 text-sm text-rose-800">{{ $portalCreation ? 'Aucune prestation disponible. Contactez notre équipe avant de créer un dossier.' : 'Ajoute d’abord une prestation dans le référentiel existant.' }}</p>
                     @endif

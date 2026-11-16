@@ -7,7 +7,7 @@ use Illuminate\Validation\ValidationException;
 
 final class DossierAddressInput
 {
-    public function resolve(array $data, bool $requireSelection = false): ?array
+    public function resolve(array $data, bool $requireSelection = false, bool $allowUnverifiedCity = false): ?array
     {
         $cityOnly = ($data['address_precision'] ?? null) === 'city';
         if ($requireSelection && blank($data['address'] ?? null)) {
@@ -31,6 +31,11 @@ final class DossierAddressInput
         $result = $cityOnly ? $geocoder->geocodeCity($query, $data['mapbox_id'] ?? null) : $geocoder->geocode($query, $data['mapbox_id']);
         if (! DossierLocation::point($result['latitude'] ?? null, $result['longitude'] ?? null)
             || (filled($data['mapbox_id'] ?? null) && ($result['mapbox_id'] ?? null) !== $data['mapbox_id'])) {
+            // Saving manually entered contact details is distinct from proving a GPS location.
+            // Explicit selections and later address corrections still require verification.
+            if ($cityOnly && $allowUnverifiedCity && blank($data['mapbox_id'] ?? null)) {
+                return ['latitude' => null, 'longitude' => null, 'precision' => 'unverified', 'provider' => null];
+            }
             throw ValidationException::withMessages([$cityOnly ? 'city' : 'address' => 'La localisation n’a pas pu être confirmée. Vérifiez la commune ou choisissez une nouvelle suggestion. Vos informations sont conservées.']);
         }
 

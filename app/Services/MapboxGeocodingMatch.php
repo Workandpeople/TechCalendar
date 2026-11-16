@@ -8,7 +8,7 @@ final class MapboxGeocodingMatch
 {
     public static function isCityQuery(string $query): bool
     {
-        return (bool) preg_match('/^\s*[0-9]{5}[\s,]+[^0-9]+$/u', trim($query));
+        return (bool) preg_match('/^(?:[0-9]{5}[\s,]+[^0-9]+|[^0-9]+[\s,]+[0-9]{5})$/u', trim($query));
     }
 
     public function accepts(string $query, array $feature, array $parts): bool

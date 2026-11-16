@@ -169,8 +169,10 @@ export function initCreationAddress(root = document, browser = window) {
         const addressList = section.querySelector('#creation-address-options'), cityList = section.querySelector('#creation-city-options');
         let cityMode = precision.value === 'city', suggestions = [], activeInput = address, activeList = addressList, index = -1;
         const values = () => [address.value, postal.value, city.value].map(value => value.trim()).join('\n');
+        const localityValues = () => [postal.value, city.value].map(value => value.trim()).join('\n');
         const originalValues = values();
         let selectedValues = identifier.value ? originalValues : null;
+        let selectedLocality = identifier.value ? localityValues() : null;
         const clearError = () => { address.setCustomValidity(''); address.removeAttribute('aria-invalid'); if (error) error.textContent = ''; };
         const hide = () => {
             addressList.hidden = cityList.hidden = true;
@@ -199,13 +201,14 @@ export function initCreationAddress(root = document, browser = window) {
             postal.value = item.postal_code || '';
             identifier.value = item.id;
             selectedValues = values();
+            selectedLocality = localityValues();
             clearError(); city.setCustomValidity('');
             syncMode();
             status.textContent = cityMode ? 'Commune sélectionnée. Position approximative, adresse exacte à confirmer.' : 'Adresse sélectionnée avec Mapbox.';
         };
         const loader = createAddressSearch(browser, {
             pending() { hide(); status.textContent = cityMode ? 'Recherche de la commune…' : 'Recherche de l’adresse…'; },
-            failure(message) { hide(); status.textContent = message; },
+            failure(message) { hide(); status.textContent = message + (cityMode ? ' Vous pouvez néanmoins créer le dossier en renseignant l’adresse, le code postal et la ville.' : ''); },
             success(items) {
                 suggestions = items; index = -1;
                 activeList.replaceChildren(...items.map((item, i) => {
@@ -217,14 +220,17 @@ export function initCreationAddress(root = document, browser = window) {
                 }));
                 activeList.hidden = items.length === 0;
                 activeInput.setAttribute('aria-expanded', String(items.length > 0));
-                status.textContent = items.length ? 'Choisissez une suggestion.' : 'Aucun résultat. Utilisez « Adresse non trouvée », puis précisez le code postal et la ville.';
+                status.textContent = items.length ? 'Choisissez une suggestion.' : cityMode
+                    ? 'Aucune commune trouvée. Vous pouvez enregistrer le dossier avec l’adresse, le code postal et la ville saisis : sa localisation sera à vérifier.'
+                    : 'Aucun résultat. Utilisez « Adresse non trouvée », puis précisez le code postal et la ville.';
             },
         });
         const search = mode => {
             loader.cancel(); hide(); identifier.value = '';
             activeInput = mode === 'city' ? city : address;
             activeList = mode === 'city' ? cityList : addressList;
-            const query = mode === 'city' ? `${postal.value.trim()} ${city.value.trim()}`.trim() : address.value.trim();
+            const code = /^[0-9]{5}$/.test(postal.value.trim()) ? postal.value.trim() : '';
+            const query = mode === 'city' ? `${code} ${city.value.trim()}`.trim() : address.value.trim();
             if (query.length < 3 || query.length > 255) return;
             const url = new URL(section.dataset.suggestionsUrl, browser.location.href);
             url.searchParams.set('q', query); url.searchParams.set('mode', mode);
@@ -237,7 +243,7 @@ export function initCreationAddress(root = document, browser = window) {
             loader.cancel(); hide(); identifier.value = ''; cityMode = !cityMode; syncMode();
             selectedValues = null;
             clearError(); city.setCustomValidity('');
-            status.textContent = cityMode ? 'Renseignez le code postal et la ville pour localiser la commune.' : 'Recherchez une adresse précise avec Mapbox.';
+            status.textContent = cityMode ? 'Recherchez la commune par son nom ou code postal, ou saisissez les champs manuellement pour créer le dossier sans localisation confirmée.' : 'Recherchez une adresse précise avec Mapbox.';
             (cityMode ? postal : address).focus();
         });
         [address, city].forEach(input => input.addEventListener('keydown', event => {
@@ -253,6 +259,7 @@ export function initCreationAddress(root = document, browser = window) {
             });
         }));
         form.addEventListener('submit', event => {
+            if (cityMode && localityValues() !== selectedLocality) identifier.value = '';
             const unchangedExisting = section.dataset.existingAddress === 'true' && values() === originalValues && !identifier.value;
             if (!cityMode && !unchangedExisting && (!/^address\.[a-zA-Z0-9_-]+$/.test(identifier.value) || values() !== selectedValues)) {
                 const message = 'Choisissez une adresse dans les suggestions ou cliquez sur « Adresse non trouvée ».';

@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 final class DossierDuplicateCheck
 {
-    public function ensureAvailable(array $data): void
+    public function ensureAvailable(array $data, bool $allowDuplicate = false): bool
     {
         // Serialize submissions of the same exact fiche, including across organisations.
         // The caller holds this lock until its dossier and operation have been committed.
@@ -21,7 +21,7 @@ final class DossierDuplicateCheck
         $phones = self::phones($data['phone'] ?? null);
         $address = self::address($data);
         if ($phones === [] && $address === null) {
-            return;
+            return false;
         }
 
         // Use the service FK index and stream only contact fields. No listing-time scan,
@@ -33,10 +33,15 @@ final class DossierDuplicateCheck
             $samePhone = $phones !== [] && array_intersect($phones, self::phones($candidate->phone)) !== [];
             $sameAddress = $address !== null && $address === self::address((array) $candidate);
             if ($samePhone || $sameAddress) {
+                if ($allowDuplicate) {
+                    return true;
+                }
                 // Never disclose another organisation's dossier or contact details.
                 throw ValidationException::withMessages(['service_ids' => 'Un dossier existe déjà pour cette fiche CEE avec le même téléphone ou la même adresse. Le nouveau dossier n’a pas été créé. Contactez l’équipe si nécessaire.']);
             }
         }
+
+        return false;
     }
 
     public static function phones(?string $value): array
