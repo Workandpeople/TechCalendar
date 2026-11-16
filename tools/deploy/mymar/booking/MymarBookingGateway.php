@@ -44,7 +44,15 @@ final readonly class MymarBookingGateway
             return self::error(422, 'invalid_booking_request');
         }
         try {
-            if (preg_match('~^/v1/scheduled-bookings/([1-9][0-9]{0,17})$~D', $path, $matches) && $this->scheduled !== null) {
+            if ($path === '/v1/capabilities') {
+                if ($method !== 'GET') {
+                    return self::error(405, 'booking_method_not_allowed');
+                }
+                if ($query !== '') {
+                    return self::error(422, 'invalid_booking_request');
+                }
+                $payload = ['format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true];
+            } elseif (preg_match('~^/v1/scheduled-bookings/([1-9][0-9]{0,17})$~D', $path, $matches) && $this->scheduled !== null) {
                 if ($method !== 'GET') {
                     return self::error(405, 'booking_method_not_allowed');
                 }

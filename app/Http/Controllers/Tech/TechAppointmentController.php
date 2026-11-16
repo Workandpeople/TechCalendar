@@ -33,6 +33,9 @@ class TechAppointmentController extends Controller
     {
         $report = $reports->submit($request->user(), $appointment, $request->validated(), $request->file('photo'));
         $message = 'Signalement enregistré. La photo et le commentaire sont ajoutés au dossier ; le RDV est en problème. Les notifications suivent les accès et préférences des destinataires.';
+        if ($report['returned_to_booking'] ?? false) {
+            $message = 'Signalement enregistré. La fiche est remise en prise de RDV ; la photo, le commentaire client et l’alerte planning sont conservés.';
+        }
 
         $historical = $request->boolean('evidence_only') || ($report['evidence_only'] ?? false);
         if ($historical) {

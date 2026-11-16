@@ -63,6 +63,19 @@ final readonly class MymarBookingClient
         }
     }
 
+    public function supportsOnSiteRebooking(): bool
+    {
+        $this->assertEnabled();
+        try {
+            [$status, $data] = $this->exchange('GET', '/v1/capabilities', [], 4096);
+
+            return $status === 200 && count($data) === 3 && ($data['format'] ?? null) === 'cofrac.mymar-booking-capabilities'
+                && ($data['version'] ?? null) === 1 && ($data['on_site_rebook'] ?? null) === true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     public function calendarLabels(MymarReadWindow $window): array
     {
         $this->assertEnabled();
@@ -179,7 +192,7 @@ final readonly class MymarBookingClient
             || $result['format'] !== 'cofrac.mymar-booking-result' || $result['version'] !== 1 || $result['source_committed'] !== true
             || $result['request_id'] !== $payload['request_id'] || $result['dossier_id'] !== $payload['dossier_id']
             || $result['action'] !== $payload['action'] || ! in_array($result['status_id'], match ($payload['action']) {
-                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14], default => [2, 15]
             }, true)) {
             throw new RuntimeException('mymar.invalid_booking_result');
         }

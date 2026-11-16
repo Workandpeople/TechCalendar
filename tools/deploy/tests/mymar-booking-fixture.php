@@ -226,6 +226,33 @@ assert($beforeRdvs === $root->query('CHECKSUM TABLE MYMAR.dossier_rdv')->fetchAl
 expectFailure(fn () => $reader->scheduled($onSite->payload['rdv_id']), 'booking_appointment_not_found');
 echo "On-site report: assigned technician, status 16 to 15, retained appointment, atomic rollback and idempotent receipt verified.\n";
 
+// The new intent is separate: legacy receipts and commands must retain status 15.
+$root->exec('UPDATE MYMAR.dossiers SET status_id=16 WHERE id=23');
+$rebookingSnapshot = $reader->scheduled($result['rdv_id']);
+$onSiteRebook = MymarBookingCommand::fromArray([...$onSite->payload,
+    'request_id' => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'action' => 'on_site_rebook',
+    'expected_revision' => $rebookingSnapshot['expected_revision']]);
+$beforeRebookRdv = $root->query('SELECT * FROM MYMAR.dossier_rdv WHERE id='.$result['rdv_id'])->fetch(PDO::FETCH_ASSOC);
+$before = snapshot($root);
+$root->exec("CREATE TRIGGER MYMAR.fixture_return_failure BEFORE INSERT ON MYMAR.dossier_historiques FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='FIXTURE_ONLY'");
+expectFailure(fn () => $source->execute($onSiteRebook, $now), 'booking_storage_unavailable');
+assert(snapshot($root) === $before);
+$root->exec('DROP TRIGGER MYMAR.fixture_return_failure');
+$returned = $source->execute($onSiteRebook, $now);
+assert($returned['action'] === 'on_site_rebook' && $returned['status_id'] === 14 && $returned['rdv_id'] === null);
+assert($source->execute($onSiteRebook, $now) === $returned && $reader->result($onSiteRebook->payload['request_id']) === $returned);
+assert($reader->result($onSite->payload['request_id'])['status_id'] === 15);
+assert((int) $root->query('SELECT status_id FROM MYMAR.dossiers WHERE id=23')->fetchColumn() === 14);
+assert((int) $root->query('SELECT COUNT(*) FROM MYMAR.dossier_rdv WHERE dossier_id=23 AND is_old=0')->fetchColumn() === 0);
+$afterRebookRdv = $root->query('SELECT * FROM MYMAR.dossier_rdv WHERE id='.$result['rdv_id'])->fetch(PDO::FETCH_ASSOC);
+assert((int) $afterRebookRdv['is_old'] === 1);
+assert(array_diff_key($beforeRebookRdv, array_flip(['is_old', 'updated_at'])) === array_diff_key($afterRebookRdv, array_flip(['is_old', 'updated_at'])));
+assert(str_contains($root->query('SELECT text FROM MYMAR.dossier_historiques WHERE dossier_id=23 ORDER BY id DESC LIMIT 1')->fetchColumn(), 'retour en prise de RDV APT'));
+$before = snapshot($root);
+expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$onSiteRebook->payload, 'request_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']), $now), 'booking_source_changed');
+assert(snapshot($root) === $before);
+echo "On-site rebooking: status 16 to 14, archived original visit, rollback, stale rejection and distinct legacy receipts verified.\n";
+
 // Durable commands for two independent processes simulating concurrent planners.
 $first = command($source, 24, '88888888-8888-4888-8888-888888888888', ['starts_at' => '2026-11-10T09:00:00+01:00']);
 $second = MymarBookingCommand::fromArray([...$first->payload, 'request_id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'starts_at' => '2026-11-11T09:00:00+01:00']);

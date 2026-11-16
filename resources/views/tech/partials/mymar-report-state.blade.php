@@ -1,7 +1,7 @@
 @php($marReportState = $incident->sourceRequest?->status ?? 'queued')
 <div role="status" class="rounded-xl border p-3 text-sm {{ $marReportState === 'confirmed' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50' }}">
     @if ($marReportState === 'confirmed')
-        <strong>MYMAR : PB prise de RDV APT confirmé.</strong> Le planning Cofrac est alerté. La photo et le commentaire complet sont conservés dans ce signalement.
+        <strong>MYMAR : {{ ($incident->sourceRequest?->result['status_id'] ?? null) === 14 ? 'retour en Prise de RDV après travaux confirmé.' : 'PB prise de RDV APT confirmé (ancien signalement).' }}</strong> Le planning Cofrac est alerté. La photo et le commentaire complet sont conservés dans ce signalement.
     @elseif ($marReportState === 'rejected')
         <strong>Signalement conservé, mais changement d’état MYMAR refusé.</strong> Le planning Cofrac est alerté et doit vérifier le dossier ; ne créez pas un nouveau signalement.
     @elseif ($marReportState === 'queued')

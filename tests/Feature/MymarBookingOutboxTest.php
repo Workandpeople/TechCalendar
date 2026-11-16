@@ -39,8 +39,28 @@ it('does nothing with the default disabled services', function () {
     expect(fn () => $client->submit($this->command))->toThrow(RuntimeException::class, 'mymar.booking_disabled');
     expect(fn () => $client->result($this->command))->toThrow(RuntimeException::class, 'mymar.booking_disabled');
     expect(fn () => $client->pending())->toThrow(RuntimeException::class, 'mymar.booking_disabled');
+    expect(fn () => $client->supportsOnSiteRebooking())->toThrow(RuntimeException::class, 'mymar.booking_disabled');
     expect(MymarBookingRequest::count())->toBe(0);
     Http::assertNothingSent();
+});
+
+it('only accepts an authenticated strict rebooking capability without issuing writes', function () {
+    $capability = ['format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true];
+    $cases = [[$capability, 200, true], [$capability, 404, false], [[], 200, false],
+        [[...$capability, 'version' => '1'], 200, false], [[...$capability, 'on_site_rebook' => 1], 200, false],
+        [[...$capability, 'extra' => true], 200, false]];
+    $sequence = Http::fakeSequence();
+    foreach ($cases as [$payload, $status]) {
+        $sequence->push($payload, $status);
+    }
+    foreach ($cases as [, , $expected]) {
+        expect($this->client->supportsOnSiteRebooking())->toBe($expected);
+    }
+    Http::assertSentCount(count($cases));
+    Http::assertNotSent(fn ($request) => $request->method() !== 'GET'
+        || $request->url() !== 'http://127.0.0.1:19847/v1/capabilities'
+        || $request->header('Authorization') !== ['Bearer '.str_repeat('0123456789abcdef', 4)]);
+    expect(MymarBookingRequest::count())->toBe(0);
 });
 
 it('reads validated pending pages without enabling writes or creating native records', function () {

@@ -34,7 +34,7 @@
                     <div>
                         <p class="font-semibold">{{ $appointment->starts_at?->format('d/m/Y H:i') }} à {{ $appointment->ends_at?->format('H:i') }}</p>
                         <p class="mt-1 text-sm text-slate-600">{{ $appointment->technician?->full_name ?: 'Technicien indisponible' }}</p>
-                        @if ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)<p class="mt-2 text-sm font-semibold text-rose-700">Problème RDV</p>@endif
+                        @if ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)<p class="mt-2 text-sm font-semibold text-rose-700">{{ ($appointment->external_payload['techcalendar_on_site']['returned_to_booking'] ?? false) ? 'Passage signalé' : 'Problème RDV' }}</p>@endif
                     </div>
                     <div>
                         @if ($appointment->dossier_operation_id === $operation->id)

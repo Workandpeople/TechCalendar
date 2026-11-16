@@ -21,7 +21,7 @@
                     @csrf
                     <input type="hidden" name="request_id" value="{{ old('request_id', (string) \Illuminate\Support\Str::uuid()) }}">
                     <input type="hidden" name="snapshot" value="{{ $snapshot }}">
-                    <p class="tech-report-intro">La validation alerte le planning Cofrac et demande le passage en <strong>PB prise de RDV APT dans MYMAR</strong>, sans supprimer le rendez-vous ni son historique.</p>
+                    <p class="tech-report-intro">La validation alerte le planning Cofrac et demande le retour en <strong>Prise de RDV après travaux dans MYMAR</strong>. L’ancien passage, la photo et le commentaire restent conservés.</p>
                     <p class="tech-report-help">Photo et commentaire complet conservés dans le suivi interne Cofrac. MYMAR reçoit l’état et un motif court tracé. Aucun email ou SMS automatique.</p>
                     @if ($errors->any())<ul class="tech-report-errors" role="alert">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>@endif
                     <label for="mar-reason">Motif *</label>

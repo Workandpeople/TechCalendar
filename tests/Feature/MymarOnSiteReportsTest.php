@@ -53,11 +53,17 @@ beforeEach(function () {
         'customer' => 'Beneficiaire MAR fictif', 'address' => '1 rue de test, 75001 Paris'];
     $this->uuid = (string) Str::uuid();
     $this->receipt = fn () => ['format' => 'cofrac.mymar-booking-result', 'version' => 1,
-        'request_id' => $this->uuid, 'action' => 'on_site_problem', 'dossier_id' => 123, 'status_id' => 15,
+        'request_id' => $this->uuid, 'action' => 'on_site_rebook', 'dossier_id' => 123, 'status_id' => 14,
         'rdv_id' => null, 'starts_at' => null, 'duration_minutes' => null, 'source_committed' => true];
     $this->mode = 'success';
     $this->posts = 0;
+    $this->unsupportedPort = null;
     Http::fake(function ($request) {
+        if (str_ends_with($request->url(), '/v1/capabilities')) {
+            return parse_url($request->url(), PHP_URL_PORT) === $this->unsupportedPort
+                ? Http::response(['error' => 'booking_endpoint_not_found'], 404)
+                : Http::response(['format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true]);
+        }
         if (str_contains($request->url(), '/scheduled-bookings/')) {
             return Http::response($this->source);
         }
@@ -93,20 +99,20 @@ it('offers the mobile MAR form only after validating the current remote assignme
     $this->get(route('tech.mar.on-site.show', 456))->assertForbidden()->assertDontSee('Beneficiaire MAR fictif');
 });
 
-it('records proof and outbox before POST then confirms status fifteen without creating native business data', function () {
+it('records proof and outbox before POST then confirms return to pending after works without creating native business data', function () {
     $this->postJson($this->url, ($this->payload)())->assertOk()->assertJsonPath('url', route('tech.mar.on-site.show', 456));
     $incident = TechnicianIncident::sole();
     expect($incident->source)->toBe('mymar')->and($incident->mymar_dossier_id)->toBe(123)->and($incident->mymar_rdv_id)->toBe(456)
         ->and($incident->dossier_id)->toBeNull()->and($incident->appointment_id)->toBeNull()->and($incident->document_id)->toBeNull()
         ->and($incident->planning_status)->toBe('pending')->and($incident->billing_status)->toBe('review')
-        ->and($incident->sourceRequest->status)->toBe('confirmed')->and($incident->sourceRequest->result['status_id'])->toBe(15)
+        ->and($incident->sourceRequest->status)->toBe('confirmed')->and($incident->sourceRequest->result['status_id'])->toBe(14)
         ->and(Dossier::count())->toBe(0)->and(Appointment::count())->toBe(0);
     Storage::disk('local')->assertExists($incident->source_context['photo']['path']);
     expect(getimagesize(Storage::disk('local')->path($incident->source_context['photo']['path']))['mime'])->toBe('image/jpeg');
     Http::assertSent(fn ($r) => $r->method() === 'POST' && $r->url() === 'http://127.0.0.1:19848/v1/booking-commands'
-        && $r['action'] === 'on_site_problem' && $r['cofrac_actor_id'] === $this->tech->id && $r['technician_id'] === 5
+        && $r['action'] === 'on_site_rebook' && $r['cofrac_actor_id'] === $this->tech->id && $r['technician_id'] === 5
         && str_contains($r['comment'], 'Signalement Cofrac #'.$incident->id) && ! str_contains($r['comment'], '<script>'));
-    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('PB prise de RDV APT confirmé')
+    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('retour en Prise de RDV après travaux confirmé')
         ->assertSee('&lt;script&gt;test', false)->assertDontSee('<script>test', false);
 });
 
@@ -119,6 +125,42 @@ it('rejects native historical proof fields on MAR without sending any source com
 })->with([['evidence_only', true], ['report_context', '{"version":1}'], ['context_signature', str_repeat('a', 64)],
     ['visit_date', '2026-11-06'], ['visit_time', '10:00']]);
 
+it('does not accept a legacy problem receipt as confirmation of a new rebooking command', function () {
+    $this->receipt = fn () => ['format' => 'cofrac.mymar-booking-result', 'version' => 1,
+        'request_id' => $this->uuid, 'action' => 'on_site_rebook', 'dossier_id' => 123, 'status_id' => 15,
+        'rdv_id' => null, 'starts_at' => null, 'duration_minutes' => null, 'source_committed' => true];
+    $this->postJson($this->url, ($this->payload)())->assertOk();
+    expect(TechnicianIncident::sole()->sourceRequest->status)->toBe('uncertain');
+    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('confirmation MYMAR en attente')
+        ->assertDontSee('retour en Prise de RDV après travaux confirmé');
+});
+
+it('does not store or dispatch a new report until both gateways support the new workflow', function (int $port) {
+    $this->unsupportedPort = $port;
+    $this->postJson($this->url, ($this->payload)())->assertStatus(503);
+    expect(TechnicianIncident::count())->toBe(0)->and(MymarBookingRequest::count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBeEmpty();
+    expect(Http::recorded(fn ($request) => $request->method() === 'POST'))->toHaveCount(0);
+})->with([19847, 19848]);
+
+it('retains the original intent of a previously queued legacy problem action after upgrade', function () {
+    $payload = ($this->payload)();
+    $this->postJson($this->url, $payload)->assertOk();
+    $incident = TechnicianIncident::sole();
+    $record = $incident->sourceRequest;
+    $command = MymarBookingCommand::fromArray([...$record->command, 'action' => 'on_site_problem']);
+    $record->forceFill(['command' => $command->payload, 'fingerprint' => $command->fingerprint(), 'status' => 'queued',
+        'result' => null, 'finished_at' => null, 'active_dossier_id' => 123])->save();
+    $incident->update(['source_context' => [...$incident->source_context, 'command_fingerprint' => $command->fingerprint()]]);
+    $this->receipt = fn () => ['format' => 'cofrac.mymar-booking-result', 'version' => 1,
+        'request_id' => $this->uuid, 'action' => 'on_site_problem', 'dossier_id' => 123, 'status_id' => 15,
+        'rdv_id' => null, 'starts_at' => null, 'duration_minutes' => null, 'source_committed' => true];
+    $this->postJson($this->url, $payload)->assertOk();
+    expect($record->fresh()->status)->toBe('confirmed')->and($record->fresh()->result['status_id'])->toBe(15)
+        ->and(TechnicianIncident::count())->toBe(1)->and(Storage::disk('local')->allFiles())->toHaveCount(1);
+    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('ancien signalement');
+});
+
 it('keeps a timed out action uncertain and reconciles with GET only without another upload or POST', function () {
     $this->mode = 'timeout';
     $data = ($this->payload)();
@@ -127,7 +169,7 @@ it('keeps a timed out action uncertain and reconciles with GET only without anot
     expect($record->status)->toBe('uncertain')->and(TechnicianIncident::count())->toBe(1);
     $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('confirmation MYMAR en attente');
     $record->forceFill(['lease_until' => 0])->save();
-    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('PB prise de RDV APT confirmé');
+    $this->get(route('tech.mar.on-site.show', 456))->assertOk()->assertSee('retour en Prise de RDV après travaux confirmé');
     $this->postJson($this->url, $data)->assertOk();
     expect(MymarBookingRequest::sole()->status)->toBe('confirmed')->and(TechnicianIncident::count())->toBe(1)
         ->and(Storage::disk('local')->allFiles())->toHaveCount(1);
@@ -174,7 +216,7 @@ it('keeps other technicians out of the proof and the global inbox but includes M
     $this->actingAs($other)->get($photo)->assertForbidden();
     $this->get(route('tech.mar.on-site.show', 456))->assertForbidden();
     $this->actingAs($this->office)->get(route('planner.incidents', ['q' => 'Beneficiaire Paris', 'source' => 'mymar']))
-        ->assertOk()->assertSee('Beneficiaire MAR fictif')->assertSee('Déplacement à vérifier')->assertSee('PB prise de RDV APT confirmé');
+        ->assertOk()->assertSee('Beneficiaire MAR fictif')->assertSee('Déplacement à vérifier')->assertSee('retour en Prise de RDV après travaux confirmé');
     $this->get($photo)->assertOk();
     $this->patch(route('planner.incidents.update', $incident), ['section' => 'planning', 'version' => 1, 'status' => 'resolved', 'note' => 'Société prévenue'])->assertRedirect();
     expect($incident->fresh()->planning_status)->toBe('resolved')->and(DB::table('technician_incident_reviews')->count())->toBe(1);
@@ -185,7 +227,7 @@ it('keeps other technicians out of the proof and the global inbox but includes M
 it('never allows a technician to enqueue a remote action without the matching persisted proof', function () {
     $client = new MymarBookingClient(Http::getFacadeRoot(), enabled: true, writesEnabled: true, token: str_repeat('0123456789abcdef', 4));
     $command = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,
-        'request_id' => $this->uuid, 'action' => 'on_site_problem', 'dossier_id' => 123, 'rdv_id' => 456,
+        'request_id' => $this->uuid, 'action' => 'on_site_rebook', 'dossier_id' => 123, 'rdv_id' => 456,
         'technician_id' => 5, 'cofrac_actor_id' => $this->tech->id, 'expected_revision' => str_repeat('a', 64), 'reason' => 'Absence', 'comment' => 'Absent']);
     expect(fn () => (new MymarBookingOutbox($client, true))->enqueue($command, $this->tech))->toThrow(RuntimeException::class, 'booking_author_not_allowed');
     expect(MymarBookingRequest::count())->toBe(0);

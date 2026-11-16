@@ -79,7 +79,7 @@ class TechnicianIncidentInbox
         }
 
         $results = $query->orderByDesc('reported_at')->orderByDesc('id')->paginate(20)->withQueryString();
-        $results->getCollection()->where('source', 'mymar')->load('sourceRequest:id,status');
+        $results->getCollection()->where('source', 'mymar')->load('sourceRequest:id,status,result');
 
         return $results;
     }

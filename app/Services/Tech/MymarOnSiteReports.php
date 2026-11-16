@@ -64,6 +64,11 @@ class MymarOnSiteReports
         if (! hash_equals($this->snapshot($source, $actor), $data['snapshot'])) {
             throw ValidationException::withMessages(['snapshot' => 'Le rendez-vous MAR a changé. Rechargez sa fiche avant de signaler le problème.']);
         }
+        $config = $this->configuration($actor, true);
+        $writer = new MymarBookingClient($this->http, enabled: true, writesEnabled: $config['writes_enabled'],
+            port: 19848, token: $this->settings->token());
+        abort_unless($this->readerClient()->supportsOnSiteRebooking() && $writer->supportsOnSiteRebooking(), 503,
+            'Le retour MAR en prise de RDV est en cours de mise à jour. Votre brouillon reste sur cet appareil ; contactez le planning avant de réessayer.');
         $stored = $this->photos->store($photo, $source['dossier_id'], mymar: true);
         $used = false;
         try {
@@ -81,11 +86,11 @@ class MymarOnSiteReports
                     'mymar_dossier_id' => $source['dossier_id'], 'mymar_rdv_id' => $rdv,
                     'reason' => $data['reason'], 'comment' => trim($data['comment'] ?? ''),
                     'reported_at' => now(), 'appointment_starts_at' => Carbon::parse($source['starts_at'])->tz('Europe/Paris'),
-                    'source_context' => [...$source, 'photo' => $stored],
+                    'source_context' => [...$source, 'photo' => $stored, 'booking_action' => 'on_site_rebook'],
                 ]);
                 // Full text and photo stay private in Cofrac; MYMAR receives a short, traced summary.
                 $command = MymarBookingCommand::fromArray([
-                    'format' => 'cofrac.mymar-booking-command', 'version' => 1, 'action' => 'on_site_problem',
+                    'format' => 'cofrac.mymar-booking-command', 'version' => 1, 'action' => 'on_site_rebook',
                     'request_id' => $incident->request_id, 'cofrac_actor_id' => $actor->id,
                     'dossier_id' => $source['dossier_id'], 'rdv_id' => $rdv, 'technician_id' => $source['technician_id'],
                     'expected_revision' => $source['expected_revision'], 'reason' => $incident->reasonLabel(),
@@ -171,7 +176,7 @@ class MymarOnSiteReports
     public static function canDispatch(User $actor, MymarBookingCommand $command): bool
     {
         if (! config('crm.v2_enabled') || $actor->trashed() || $actor->isExternal() || $actor->must_change_password
-            || $actor->role !== 2 || $actor->admin || $command->payload['action'] !== 'on_site_problem') {
+            || $actor->role !== 2 || $actor->admin || ! in_array($command->payload['action'], ['on_site_problem', 'on_site_rebook'], true)) {
             return false;
         }
         $incident = TechnicianIncident::where('source', 'mymar')->where('request_id', $command->payload['request_id'])

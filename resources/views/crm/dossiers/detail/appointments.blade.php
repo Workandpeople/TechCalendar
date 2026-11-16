@@ -13,7 +13,7 @@
                         @if ($appointment->trashed())
                             <span class="mt-2 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">Retiré du planning</span>
                         @elseif ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)
-                            <span data-appointment-state="{{ $appointment->id }}" class="mt-2 inline-block rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800">Problème RDV</span>
+                            <span data-appointment-state="{{ $appointment->id }}" class="mt-2 inline-block rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800">{{ ($appointment->external_payload['techcalendar_on_site']['returned_to_booking'] ?? false) ? 'Passage signalé' : 'Problème RDV' }}</span>
                         @else
                             <span data-appointment-state="{{ $appointment->id }}" class="mt-2 inline-block rounded-full bg-sky-50 px-3 py-1 text-xs text-sky-800">{{ $appointment->ends_at?->isPast() ? 'Créneau passé' : 'Planifié' }}</span>
                         @endif

@@ -39,6 +39,7 @@ import { initMymarActions } from './mymar-actions';
 import { initMymarReschedule } from './mymar-reschedule';
 import { readApiJson } from './api-response';
 import { createBookingPlacementForm } from './booking-placement-form';
+import { filterBookingCompanies, renderCompanyOptions } from './booking-company-filter';
 
 window.TechCalendarHttp = { readJson: readApiJson };
 window.TechCalendarLabels = { cofrac: cofracLabel };
@@ -48,6 +49,7 @@ window.TechCalendarBookingForce = { confirm: confirmForcedPlacement };
 window.TechCalendarAppointments = { request: requestAppointmentPlacement, confirm: confirmAppointmentAction };
 window.TechCalendarAppointmentTooltip = { create: createAppointmentTooltip };
 window.TechCalendarDateTime = appointmentDateTime;
+window.TechCalendarBookingCompanies = { filter: filterBookingCompanies, renderOptions: renderCompanyOptions };
 initAppointmentAssignments();
 initAppointmentReschedule();
 initCommentMarkup();

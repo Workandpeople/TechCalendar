@@ -12,7 +12,7 @@
     <input type="hidden" name="report_context" value="{{ $recovery ? '' : old('report_context', $onSiteContext['report_context']) }}">
     <input type="hidden" name="context_signature" value="{{ $recovery ? '' : old('context_signature', $onSiteContext['context_signature']) }}">
     <label class="tech-report-mode" for="{{ $prefix }}-evidence"><input id="{{ $prefix }}-evidence" type="checkbox" name="evidence_only" value="1" @checked($evidenceRequired || old('evidence_only')) @disabled($evidenceRequired)><span>Preuve d’un ancien passage<small>Photo et commentaire uniquement : ne change ni le statut ni la date du RDV actuel.</small></span></label>
-    <p class="tech-report-intro" data-report-current-intro @if ($evidenceRequired || old('evidence_only')) hidden @endif>La validation du signalement courant met le rendez-vous en <strong>problème RDV</strong>.</p>
+    <p class="tech-report-intro" data-report-current-intro @if ($evidenceRequired || old('evidence_only')) hidden @endif>La validation remet la fiche en <strong>prise de RDV</strong> et alerte le planning. La photo, le commentaire et l’ancien passage restent conservés.</p>
     <p class="tech-report-draft" data-report-visit-label hidden></p>
     <fieldset data-report-visit-fields hidden disabled class="tech-report-visit-fields">
         <legend>Date de l’ancien passage à confirmer</legend>

@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\TechnicianIncident;
 use App\Models\User;
 use App\Services\Crm\ClientAccess;
+use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierBookingRecalls;
 use App\Services\Crm\DossierWorkflow;
 use App\Services\Tech\OnSitePhoto;
@@ -105,7 +106,7 @@ it('keeps an open report valid after non booking updates without losing the plan
     expect($this->appointment->fresh()->comment)->toBe($comment)->and(TechnicianIncident::count())->toBe(1);
 })->with(['comment', 'coordinates', 'metadata']);
 
-it('lets the assigned technician complete a problem already declared by planning without overwriting it', function (bool $appointmentFlagged) {
+it('keeps the planning evidence but returns its problem to booking when the technician submits a new report', function (bool $appointmentFlagged) {
     $planner = User::factory()->create(['role' => 1, 'admin' => false]);
     if ($appointmentFlagged) {
         app(DossierWorkflow::class)->reportProblem($planner, $this->dossier, $this->operation, [
@@ -127,8 +128,11 @@ it('lets the assigned technician complete a problem already declared by planning
     $payload = ($this->payload)();
     $this->post($this->url, $payload, ['Accept' => 'application/json'])->assertOk();
     expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1)
-        ->and($this->operation->fresh()->getAttributes())->toBe($operationBefore)
-        ->and($this->dossier->activities()->where('kind', 'status_changed')->count())->toBe($sourceBefore)
+        ->and(array_diff_key($this->operation->fresh()->getAttributes(), array_flip(['legacy_status', 'booking_recall_at', 'updated_at'])))
+        ->toBe(array_diff_key($operationBefore, array_flip(['legacy_status', 'booking_recall_at', 'updated_at'])))
+        ->and($this->operation->fresh()->legacy_status)->toBe('PRISE DE RDV')
+        ->and($this->operation->fresh()->booking_recall_at)->toBeNull()
+        ->and($this->dossier->activities()->where('kind', 'status_changed')->count())->toBe($sourceBefore + 1)
         ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM);
     if ($appointmentFlagged) {
         expect($this->appointment->fresh()->external_payload['techcalendar_problem'])->toBe($problemBefore)
@@ -139,7 +143,7 @@ it('lets the assigned technician complete a problem already declared by planning
     expect(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1);
     if ($appointmentFlagged) {
         $this->travelTo(CarbonImmutable::parse('2026-11-10 10:00', 'Europe/Paris'));
-        expect(app(DossierBookingRecalls::class)->process(true)['reopened'])->toBe(1);
+        expect(app(DossierBookingRecalls::class)->process(true)['reopened'])->toBe(0);
     }
 })->with([true, false]);
 
@@ -191,7 +195,7 @@ it('always records client only visibility even if an old or forged form requests
         ->and($appointment->external_payload['retained'])->toBe('Existing data')
         ->and($appointment->external_payload['techcalendar_on_site']['request_id'])->toBe($payload['request_id'])
         ->and($appointment->external_payload['techcalendar_on_site']['document_id'])->toBe($document->id)
-        ->and($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS')
+        ->and($this->operation->fresh()->legacy_status)->toBe('PRISE DE RDV')
         ->and($document->author_id)->toBe($this->tech->id)->and($document->document_type)->toBe('free')
         ->and($document->mime_type)->toBe('image/jpeg')->and($document->client_visible)->toBe($client)
         ->and($document->delegataire_visible)->toBe($delegate)
@@ -221,6 +225,46 @@ it('acknowledges the same request again without duplicating the photo comment st
         ->and(TechnicianIncident::count())->toBe(1)
         ->and($this->dossier->fresh()->version)->toBe($version)->and(Storage::disk('local')->allFiles())->toHaveCount(1);
     $this->postJson($this->url, ($this->payload)())->assertForbidden();
+});
+
+it('returns the fiche to the real booking queue while keeping the failed visit photo comment and planning alert', function () {
+    $this->postJson($this->url, ($this->payload)())->assertOk()->assertJsonPath('message', fn ($message) => str_contains($message, 'prise de RDV'));
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    $booking = app(DossierBooking::class);
+    expect($booking->pending($planner)->pluck('dossier_operation_id')->all())->toContain($this->operation->id);
+    expect($booking->find($planner, 'dossier-'.$this->operation->id, geocode: false)['dossier_id'])->toBe($this->dossier->id)
+        ->and($this->appointment->fresh()->status)->toBe(Appointment::STATUS_PROBLEM)
+        ->and(Appointment::query()->onPlanning()->count())->toBe(0)
+        ->and(TechnicianIncident::sole()->planning_status)->toBe('pending')
+        ->and(TechnicianIncident::sole()->source_context['returned_to_booking'])->toBeTrue()
+        ->and($this->dossier->documents()->count())->toBe(1)->and($this->dossier->comments()->count())->toBe(1);
+    $audit = $this->dossier->activities()->where('kind', 'status_changed')->sole();
+    expect($audit->changed_fields['action'])->toBe('on_site_return_to_booking')
+        ->and($audit->changed_fields['previous_status'])->toBe('RDV ATTENTE VISITE')
+        ->and($audit->changed_fields['status'])->toBe('PRISE DE RDV');
+    $this->actingAs($planner)->get(route('planner.incidents'))->assertOk()->assertSee('Portail fermé');
+});
+
+it('does not retroactively reopen a legacy problem report on an idempotent retry', function () {
+    $payload = ($this->payload)();
+    $this->postJson($this->url, $payload)->assertOk();
+    TechnicianIncident::sole()->update(['source_context' => null]);
+    $this->operation->forceFill(['legacy_status' => 'PROBLÈME RENDEZ-VOUS'])->save();
+    $this->postJson($this->url, $payload)->assertOk();
+    expect($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS')
+        ->and(TechnicianIncident::count())->toBe(1)->and($this->dossier->documents()->count())->toBe(1);
+});
+
+it('requires historical mode when another appointment on the same fiche already carries the next visit', function () {
+    $signed = app(OnSiteVisitContext::class)->issue($this->appointment);
+    $payload = ($this->payload)($signed);
+    $next = $this->appointment->replicate();
+    $next->forceFill(['starts_at' => '2026-11-18 14:00', 'ends_at' => '2026-11-18 15:00', 'technician_id' => $this->other->id])->save();
+    $before = $next->fresh()->getAttributes();
+    $this->postJson($this->url, $payload)->assertUnprocessable()->assertJsonValidationErrors('snapshot');
+    expect($this->operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE')->and(Storage::disk('local')->allFiles())->toBeEmpty();
+    $this->postJson($this->url, [...$payload, 'evidence_only' => true])->assertOk();
+    expect($next->fresh()->getAttributes())->toBe($before)->and($this->operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE');
 });
 
 it('requires a usable photo reason scope and request identity without writing anything', function ($invalid, $field) {
@@ -312,7 +356,7 @@ it('rolls back all business changes and removes the staged photo on database fai
 it('only queues selected notifications for assigned organisations after a successful shared report', function () {
     config(['mail.delivery_enabled' => true, 'mail.default' => 'array', 'simulation.enabled' => false]);
     $org = ExternalDelegataire::create(['source' => 'native', 'external_id' => 'ON-SITE-CLIENT', 'kind' => 'client',
-        'name' => 'Société de test', 'is_active' => true, 'portal_categories' => ['problem']]);
+        'name' => 'Société de test', 'is_active' => true, 'portal_categories' => ['pending']]);
     $this->dossier->update(['client_id' => $org->id]);
     $recipient = User::factory()->create(['role' => 3, 'admin' => false, 'external_client_id' => $org->id,
         'portal_enabled' => true, 'must_change_password' => false, 'portal_permissions' => ClientAccess::defaults('client'),

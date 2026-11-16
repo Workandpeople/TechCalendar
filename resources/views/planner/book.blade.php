@@ -413,9 +413,14 @@
                 </div>
             </div>
 
-            <div id="booking-crm-search-wrap" class="mb-4">
+            <div id="booking-crm-search-wrap" class="mb-4 grid gap-3 md:grid-cols-3">
+                <div>
                 <label class="gc-label" for="booking_crm_search">Recherche client</label>
                 <input id="booking_crm_search" type="search" class="gc-input" placeholder="Nom ou prénom du client" autocomplete="off" />
+                </div>
+                <div><label class="gc-label" for="booking_crm_company">Société</label><select id="booking_crm_company" class="gc-input" title="Société affichée sur la ligne : client, sinon délégataire"><option value="">Toutes les sociétés</option></select></div>
+                <div><label class="gc-label" for="booking_crm_sort">Trier par</label><select id="booking_crm_sort" class="gc-input"><option value="recent">Ordre d’arrivée</option><option value="company_asc">Société : A à Z</option><option value="company_desc">Société : Z à A</option></select></div>
+                <div class="flex flex-wrap items-center justify-between gap-2 md:col-span-3"><p id="booking-filter-summary" class="text-sm" role="status" aria-live="polite"></p><button id="booking-filters-reset" type="button" class="gc-btn-secondary">Réinitialiser les filtres</button></div>
             </div>
 
             <div id="booking-crm-empty" class="hidden rounded-xl border p-4 text-sm" style="border-color:var(--gc-border);color:var(--gc-text-soft);">
@@ -1641,6 +1646,9 @@
             bookingDossierSummary.dispatchEvent(new CustomEvent('techcalendar:booking-summary-updated'));
         };
         const bookingCrmSearch = document.getElementById('booking_crm_search');
+        const bookingCrmCompany = document.getElementById('booking_crm_company');
+        const bookingCrmSort = document.getElementById('booking_crm_sort');
+        const bookingFilterSummary = document.getElementById('booking-filter-summary');
         const bookingCrmGrid = document.getElementById('booking-crm-grid');
         let bookingCrmCards = Array.from(document.querySelectorAll('.crm-appointment-card'));
         const bookingCrmEmpty = document.getElementById('booking-crm-empty');
@@ -2177,6 +2185,7 @@
             bookingCrmAppointments = Array.isArray(appointments) ? appointments : [];
             bookingCrmGrid.innerHTML = bookingCrmAppointments.map(renderBookingCrmCard).join('');
             bookingCrmCards = Array.from(bookingCrmGrid.querySelectorAll('.crm-appointment-card'));
+            window.TechCalendarBookingCompanies.renderOptions(bookingCrmCompany, bookingCrmAppointments);
             setBookingExternalSourceStatus('coffrac', apiStatus);
             bookingCrmSearch.value = preserveUi ? previousSearch : '';
             bookingCrmPage = preserveUi ? previousPage : 1;
@@ -2422,8 +2431,12 @@
         };
 
         const filterBookingCrmCards = () => {
-            const query = bookingCrmSearch.value.trim().toLowerCase();
-            const matchingCards = bookingCrmCards.filter((card) => query === '' || card.dataset.client.includes(query));
+            const matchingRows = window.TechCalendarBookingCompanies.filter(bookingCrmAppointments, {
+                query: bookingCrmSearch.value, company: bookingCrmCompany.value, sort: bookingCrmSort.value,
+            });
+            const cards = new Map(bookingCrmCards.map(card => [String(card.dataset.crmId), card]));
+            const matchingCards = matchingRows.map(row => cards.get(String(row.id))).filter(Boolean);
+            matchingCards.forEach(card => bookingCrmGrid.append(card));
             const totalPages = Math.max(1, Math.ceil(matchingCards.length / bookingCrmPageSize));
 
             bookingCrmPage = Math.min(bookingCrmPage, totalPages);
@@ -2436,6 +2449,7 @@
             });
 
             bookingCrmEmpty.classList.toggle('hidden', bookingSourceMode !== 'crm' || matchingCards.length > 0);
+            bookingFilterSummary.textContent = `${matchingCards.length} prestation(s) affichée(s) sur ${bookingCrmAppointments.length}`;
             renderBookingCrmPagination(matchingCards.length);
         };
 
@@ -6527,6 +6541,14 @@
             bookingCrmPage = 1;
             filterBookingCrmCards();
         });
+        [bookingCrmCompany, bookingCrmSort].forEach(field => field.addEventListener('change', () => {
+            bookingCrmPage = 1;
+            filterBookingCrmCards();
+        }));
+        document.getElementById('booking-filters-reset').addEventListener('click', () => {
+            bookingCrmSearch.value = ''; bookingCrmCompany.value = ''; bookingCrmSort.value = 'recent'; bookingCrmPage = 1;
+            filterBookingCrmCards();
+        });
 
         bookingSourceTabs.forEach((tab, index) => {
             tab.addEventListener('click', () => setBookingSourceMode(tab.dataset.bookingSource));
@@ -6548,9 +6570,18 @@
         }
 
         const initialMarRdv = @json($initialMymarRdvId ?? null);
-        setBookingSourceMode(initialMarRdv ? 'mymar' : bookingInitialCrmAppointmentId ? 'crm' : storedBookingSourceMode());
-        if (Number.isSafeInteger(initialMarRdv) && initialMarRdv > 0) {
-            void analyzeAppointment({ mymar_rdv_id: Number(initialMarRdv) }, 'replacement MAR');
+        const initializeBookingSource = () => {
+            window.TechCalendarBookingCompanies.renderOptions(bookingCrmCompany, bookingCrmAppointments);
+            setBookingSourceMode(initialMarRdv ? 'mymar' : bookingInitialCrmAppointmentId ? 'crm' : storedBookingSourceMode());
+            if (Number.isSafeInteger(initialMarRdv) && initialMarRdv > 0) {
+                void analyzeAppointment({ mymar_rdv_id: Number(initialMarRdv) }, 'replacement MAR');
+            }
+        };
+        // The deferred application module exposes the filtering helpers before DOMContentLoaded.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeBookingSource, { once: true });
+        } else {
+            initializeBookingSource();
         }
 
         if (bookingInitialCrmAppointmentId) {

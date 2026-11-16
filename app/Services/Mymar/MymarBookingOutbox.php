@@ -121,7 +121,7 @@ final readonly class MymarBookingOutbox
         if (! $author || $author->isExternal() || $author->must_change_password) {
             return false;
         }
-        if ($command->payload['action'] === 'on_site_problem') {
+        if (in_array($command->payload['action'], ['on_site_problem', 'on_site_rebook'], true)) {
             return MymarOnSiteReports::canDispatch($author, $command);
         }
 

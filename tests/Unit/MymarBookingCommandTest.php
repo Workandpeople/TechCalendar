@@ -32,6 +32,22 @@ it('restricts on site problems to scheduled after works with required assignment
     }
 });
 
+it('uses a distinct on site rebooking command without retargeting legacy problem commands', function () {
+    $data = mymarPlacePayload(['action' => 'on_site_rebook', 'rdv_id' => 42, 'comment' => 'Client absent', 'reason' => 'Absent']);
+    unset($data['starts_at'], $data['duration_minutes']);
+    $command = MymarBookingCommand::fromArray($data);
+    expect($command->payload['action'])->toBe('on_site_rebook')
+        ->and(MymarBookingCommand::targetStatus(16, 'on_site_rebook'))->toBe(14)
+        ->and(MymarBookingCommand::targetStatus(16, 'on_site_problem'))->toBe(15)
+        ->and($command->fingerprint())->not->toBe(MymarBookingCommand::fromArray([...$data, 'action' => 'on_site_problem'])->fingerprint());
+    foreach ([1, 2, 3, 14, 15, 17] as $status) {
+        expect(fn () => MymarBookingCommand::targetStatus($status, 'on_site_rebook'))->toThrow(InvalidArgumentException::class);
+    }
+    foreach ([['rdv_id' => null], ['technician_id' => null], ['reason' => null], ['status_id' => 14], ['force' => true]] as $invalid) {
+        expect(fn () => MymarBookingCommand::fromArray([...$data, ...$invalid]))->toThrow(InvalidArgumentException::class);
+    }
+});
+
 it('normalizes explicit UTC to Paris and retains the requested local clock time', function () {
     $local = MymarBookingCommand::fromArray(mymarPlacePayload());
     $utc = MymarBookingCommand::fromArray(mymarPlacePayload(['starts_at' => '2026-11-02T09:40:00+00:00']));

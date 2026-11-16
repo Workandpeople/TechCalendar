@@ -95,6 +95,39 @@ class DossierWorkflow
         $this->recordProblemWithPermission($actor, $appointment->dossierOperation, $data, $appointment);
     }
 
+    public function returnToBookingAfterOnSiteReport(User $actor, Appointment $appointment, array $data): void
+    {
+        DB::transaction(function () use ($actor, $appointment, $data): void {
+            $dossier = Dossier::query()->lockForUpdate()->findOrFail($appointment->dossierOperation->dossier_id);
+            $operation = $dossier->operations()->lockForUpdate()->findOrFail($appointment->dossier_operation_id);
+            $appointment = Appointment::query()->lockForUpdate()->findOrFail($appointment->id);
+            Gate::forUser($actor)->authorize('reportOnSiteProblem', $appointment);
+            abort_unless($appointment->dossier_operation_id === $operation->id, 404);
+            if ($operation->appointments()->where('status', Appointment::STATUS_SCHEDULED)->whereKeyNot($appointment->id)->exists()) {
+                throw ValidationException::withMessages(['snapshot' => 'Un nouveau RDV est déjà planifié. Choisissez « Preuve d’un ancien passage » pour conserver votre preuve sans modifier le nouveau RDV.']);
+            }
+            if (! in_array(DossierStatusCatalog::describe($operation->legacy_status)['key'], ['pending', 'awaiting_visit', 'problem'], true)) {
+                throw ValidationException::withMessages(['snapshot' => 'Cette fiche a été traitée. Rechargez le rendez-vous avant de signaler le passage.']);
+            }
+            if (blank($data['comment'] ?? null)) {
+                throw ValidationException::withMessages(['comment' => 'Le motif du signalement est obligatoire.']);
+            }
+            $previousStatus = $operation->legacy_status;
+            $operation->forceFill(['legacy_status' => 'PRISE DE RDV', 'booking_recall_at' => null])->save();
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment',
+                'body' => CommentContent::forStorage($data['comment'], 'comment'),
+                'client_visible' => true, 'delegataire_visible' => false,
+                'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id,
+                    'on_site_report' => true, 'problem_type' => $data['problem_type'] ?? null]]);
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
+                'body' => 'Signalement technicien : fiche #'.$operation->id.' remise en prise de RDV. Preuves du passage conservées.',
+                'client_visible' => false, 'delegataire_visible' => false,
+                'changed_fields' => ['action' => 'on_site_return_to_booking', 'operation_id' => $operation->id,
+                    'appointment_id' => $appointment->id, 'previous_status' => $previousStatus, 'status' => 'PRISE DE RDV']]);
+            $dossier->increment('version');
+        });
+    }
+
     private function recordProblemWithPermission(User $actor, DossierOperation $operation, array $data, ?Appointment $onSite = null): void
     {
         DB::transaction(function () use ($actor, $operation, $data, $onSite): void {

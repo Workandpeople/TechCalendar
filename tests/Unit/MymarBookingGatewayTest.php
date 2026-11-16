@@ -38,6 +38,18 @@ function mymarBookingBody(): string
         'starts_at' => '2026-11-02T10:40:00+01:00', 'duration_minutes' => 60], JSON_THROW_ON_ERROR);
 }
 
+it('advertises the additive workflow only through an authenticated read only capability request without SQL', function () {
+    $token = hash('sha256', 'synthetic-booking-token');
+    $forbidden = fn () => throw new LogicException('Capability lookup must not access data');
+    $gateway = new MymarBookingGateway(true, $token, $forbidden, $forbidden, $forbidden);
+    $call = fn ($method, $query, $auth) => $gateway->handle($method, '/v1/capabilities', $query, '', '', $auth, '127.0.0.1', new DateTimeImmutable);
+    expect($call('GET', '', 'Bearer '.$token))->toBe(['status' => 200, 'body' => [
+        'format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true]])
+        ->and($call('GET', '', '')['status'])->toBe(403)
+        ->and($call('POST', '', 'Bearer '.$token)['status'])->toBe(405)
+        ->and($call('GET', 'force=1', 'Bearer '.$token)['status'])->toBe(422);
+});
+
 it('keeps the new gateway inert unless enabled, authenticated locally and strictly validated', function (array $changes, int $status) {
     $calls = 0;
     $called = function () use (&$calls) {

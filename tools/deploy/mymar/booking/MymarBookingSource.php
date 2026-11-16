@@ -188,7 +188,7 @@ final class MymarBookingSource
         }
         $data = $command->payload;
         $placing = in_array($data['action'], ['place', 'reschedule'], true);
-        $onSite = $data['action'] === 'on_site_problem';
+        $onSite = in_array($data['action'], ['on_site_problem', 'on_site_rebook'], true);
         if (($placing || $onSite) && ! in_array($data['technician_id'], $this->technicianIds, true)) {
             throw new MymarBookingFailure('booking_technician_outside_scope', 403);
         }
@@ -276,13 +276,17 @@ final class MymarBookingSource
             } else {
                 $recall = ($data['recall_at'] ?? null) === null ? null : MymarBookingCommand::instant($data['recall_at'])->format('Y-m-d H:i:s');
                 if ($onSite) {
+                    if ($data['action'] === 'on_site_rebook') {
+                        $this->statement('UPDATE MYMAR.dossier_rdv SET is_old=1,updated_at=? WHERE id=? AND dossier_id=? AND is_old=0',
+                            [$stamp, $data['rdv_id'], $data['dossier_id']]);
+                    }
                     $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,updated_at=? WHERE id=?',
                         [$targetStatus, $data['reason'], $data['comment'], $stamp, $data['dossier_id']]);
                 } else {
                     $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,date_rappel=?,updated_at=? WHERE id=?',
                         [$targetStatus, $data['reason'], $data['comment'], $recall, $stamp, $data['dossier_id']]);
                 }
-                $description = $onSite ? 'Signalement sur place RDV MAR #'.$data['rdv_id'].', photo et commentaire complet dans Cofrac'
+                $description = $onSite ? 'Signalement sur place RDV MAR #'.$data['rdv_id'].($data['action'] === 'on_site_rebook' ? ', retour en prise de RDV APT' : '').', photo et commentaire complet dans Cofrac'
                     : "Probl\u{00E8}me RDV MAR signal\u{00E9}, motif conserv\u{00E9} dans le dossier";
             }
             $history = $description.' via Cofrac, compte #'.$data['cofrac_actor_id'].', demande '.$data['request_id'];
@@ -446,9 +450,9 @@ final class MymarBookingSource
             || ($data['version'] ?? null) !== 1 || ($data['request_id'] ?? null) !== $requestId
             || ($data['source_committed'] ?? null) !== true || array_diff(array_keys($data), $fields) || array_diff($fields, array_keys($data))
             || ! is_int($data['dossier_id']) || $data['dossier_id'] < 1
-            || ! in_array($data['action'], ['place', 'problem', 'reschedule', 'on_site_problem'], true)
+            || ! in_array($data['action'], ['place', 'problem', 'reschedule', 'on_site_problem', 'on_site_rebook'], true)
             || ! in_array($data['status_id'], match ($data['action']) {
-                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14], default => [2, 15]
             }, true)) {
             throw new MymarBookingFailure('booking_receipt_unavailable', 503);
         }
