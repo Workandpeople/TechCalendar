@@ -39,8 +39,9 @@ final class DossierAppointmentRescheduler
             'preserves_previous_visit' => $appointment === null && $previous !== null,
             'technicians' => $includeTechnicians ? User::query()->internal()->where('role', 2)->where('admin', false)
                 ->withExists(['services as qualified' => fn ($query) => $query->where('services.id', $operation->service_id)])
-                ->orderBy('last_name')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
-                ->map(fn ($tech) => ['id' => $tech->id, 'name' => $tech->full_name, 'qualified' => (bool) $tech->qualified])->all() : [],
+                ->with('departments:code,name')->orderBy('last_name')->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'phone', 'department_code'])
+                ->map(fn ($tech) => ['id' => $tech->id, 'name' => $tech->full_name, 'qualified' => (bool) $tech->qualified,
+                    'search_label' => trim(implode(' · ', array_filter([$tech->phone, $tech->departments->pluck('code')->join(', ') ?: $tech->department_code])))])->all() : [],
         ];
     }
 

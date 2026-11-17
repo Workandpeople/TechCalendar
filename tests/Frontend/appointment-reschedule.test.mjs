@@ -73,6 +73,11 @@ test('a disabled previous technician is never silently assigned to the first act
     assert.equal(ui.form.elements.technician_id.value, '');
 });
 
+test('quick replacement exposes searchable technician labels with safe phone and department text', async () => {
+    const ui = fixture(); await ui.load({ ...context, technicians: [{ id: 7, name: 'Élodie DEMO', qualified: true, search_label: '06 00 00 00 00 · 75, 92' }] });
+    assert.equal(ui.form.elements.technician_id.children[1].textContent, 'Élodie DEMO · 06 00 00 00 00 · 75, 92');
+});
+
 test('explains that a control-linked old visit is preserved before creating a new reservation', async () => {
     const ui = fixture(); await ui.load({ ...context, appointment_id: null, updated_at: null, preserves_previous_visit: true });
     assert.match(ui.feedback.textContent, /nouvelle visite/);

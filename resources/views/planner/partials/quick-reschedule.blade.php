@@ -14,7 +14,8 @@
                     <label class="gc-label">Date<input class="gc-input mt-1" type="date" name="date" required></label>
                     <label class="gc-label">Heure (Paris)<input class="gc-input mt-1" type="time" name="time" required></label>
                 </div>
-                <label class="gc-label block">Technicien<select name="technician_id" class="gc-input mt-1" required></select></label>
+                <label class="gc-label block">Technicien<select name="technician_id" class="gc-input mt-1" data-searchable required></select></label>
+                <p class="text-xs text-slate-600">Ouvrez la liste puis recherchez par nom, prénom, téléphone ou département.</p>
                 <label class="gc-label block">Durée (minutes)<input class="gc-input mt-1" type="number" name="duration_minutes" min="5" max="1440" required></label>
                 <footer class="gc-dialog-actions">
                     <button type="button" class="gc-btn-secondary" data-reschedule-close>Annuler</button>

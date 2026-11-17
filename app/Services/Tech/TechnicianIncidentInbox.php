@@ -4,6 +4,7 @@ namespace App\Services\Tech;
 
 use App\Models\TechnicianIncident;
 use App\Models\User;
+use App\Services\Crm\AppointmentChangeReviews;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -16,6 +17,7 @@ class TechnicianIncidentInbox
         Gate::forUser($actor)->authorize('viewAny', TechnicianIncident::class);
 
         return [
+            'appointment_changes' => app(AppointmentChangeReviews::class)->counts($actor),
             'pending' => TechnicianIncident::where('planning_status', 'pending')->count(),
             'billing' => Gate::forUser($actor)->allows('reviewBilling', TechnicianIncident::class)
                 ? TechnicianIncident::whereIn('billing_status', ['review', 'billable'])->count() : null,

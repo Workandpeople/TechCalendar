@@ -34,6 +34,8 @@ class Appointment extends Model
 {
     use SoftDeletes;
 
+    protected $hidden = ['global_plus_review', 'global_plus_review_version', 'global_plus_review_pending'];
+
     public const STATUS_SCHEDULED = 'scheduled';
 
     public const STATUS_PROBLEM = 'problem';
@@ -85,6 +87,9 @@ class Appointment extends Model
     protected function casts(): array
     {
         return [
+            'global_plus_review' => 'array',
+            'global_plus_review_version' => 'integer',
+            'global_plus_review_pending' => 'boolean',
             'dossier_operation_id' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',

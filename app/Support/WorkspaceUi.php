@@ -10,6 +10,7 @@ final class WorkspaceUi
     public static function forRoute(?string $route): array
     {
         $area = match (true) {
+            Str::is('planner.appointment-changes*', $route ?? '') => 'appointment-changes',
             Str::is('planner.incidents*', $route ?? '') => 'incidents',
             Str::is(['profile', 'profile.*'], $route ?? '') => 'profile',
             Str::is('client.lots*', $route ?? '') => 'client-lots',
@@ -27,6 +28,11 @@ final class WorkspaceUi
         };
 
         [$label, $tone, $icon, $steps] = match ($area) {
+            'appointment-changes' => ['RDV modifiés', 'ochre', 'tracking', [
+                ['Comparer', 'Retrouvez la première version non reportée et le dernier créneau ou technicien choisi.'],
+                ['Reporter', 'Mettez à jour Global+ manuellement. Le CRM ne transmet rien automatiquement.'],
+                ['Valider', 'Marquez la version affichée comme reportée. Une nouvelle modification réactive son indicateur.'],
+            ]],
             'incidents' => ['Signalements techniciens', 'ochre', 'alert', [
                 ['Vérifier', 'Retrouvez le motif, la photo et l’heure de chaque signalement sur place.'],
                 ['Traiter', 'Contactez la société puis renseignez le suivi planning. Ce suivi ne change pas le statut du dossier.'],

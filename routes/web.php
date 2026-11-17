@@ -15,6 +15,7 @@ use App\Http\Controllers\Manager\ManagerLotController;
 use App\Http\Controllers\Manager\ManagerMailTemplateController;
 use App\Http\Controllers\Manager\ManagerServiceController;
 use App\Http\Controllers\Manager\ManagerUserController;
+use App\Http\Controllers\Planner\AppointmentChangeReviewController;
 use App\Http\Controllers\Planner\MymarBookingActionController;
 use App\Http\Controllers\Planner\MymarPendingBookingController;
 use App\Http\Controllers\Planner\PlannerAbsenceController;
@@ -86,6 +87,9 @@ Route::middleware('auth')->group(function (): void {
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::get('/planner/incidents', [TechnicianIncidentController::class, 'index'])->name('planner.incidents');
+    Route::get('/planner/rdv-modifies', [AppointmentChangeReviewController::class, 'index'])->name('planner.appointment-changes');
+    Route::patch('/planner/rdv-modifies/{appointment}', [AppointmentChangeReviewController::class, 'update'])
+        ->whereNumber('appointment')->middleware('throttle:30,1')->name('planner.appointment-changes.update');
     Route::get('/planner/incidents/counts', [TechnicianIncidentController::class, 'counts'])
         ->middleware('throttle:20,1')->name('planner.incidents.counts');
     Route::patch('/planner/incidents/{incident}', [TechnicianIncidentController::class, 'update'])

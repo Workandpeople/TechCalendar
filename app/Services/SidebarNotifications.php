@@ -18,8 +18,11 @@ class SidebarNotifications
             return ['settings' => 0, 'today' => 0, 'pending' => 0, 'incidents' => null];
         }
 
+        $incidents = $user->can('viewAny', TechnicianIncident::class) ? app(TechnicianIncidentInbox::class)->counts($user) : null;
+
         return [
-            'incidents' => $user->can('viewAny', TechnicianIncident::class) ? app(TechnicianIncidentInbox::class)->counts($user) : null,
+            'appointment_changes' => $incidents['appointment_changes']['pending'] ?? 0,
+            'incidents' => $incidents,
             'settings' => $user->admin ? app(ApplicationSettings::class)->missingCount() : 0,
             'today' => Appointment::query()->where('technician_id', $user->id)
                 ->where('status', Appointment::STATUS_SCHEDULED)

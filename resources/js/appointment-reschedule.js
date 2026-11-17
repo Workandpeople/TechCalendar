@@ -125,7 +125,7 @@ export function initAppointmentReschedule(root = document, browser = window) {
             const placeholder = root.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choisir un technicien'; select.append(placeholder);
             for (const technician of data.technicians) {
                 const option = root.createElement('option'); option.value = String(technician.id);
-                option.textContent = technician.name + (technician.qualified ? '' : ' · Non habilité'); select.append(option);
+                option.textContent = technician.name + (technician.search_label ? ` · ${technician.search_label}` : '') + (technician.qualified ? '' : ' · Non habilité'); select.append(option);
             }
             select.value = data.technicians.some(tech => tech.id === data.technician_id) ? String(data.technician_id) : '';
             feedback.textContent = data.preserves_previous_visit ? 'Une nouvelle visite sera planifiée ; l’ancien rendez-vous et ses pièces seront conservés.' : '';

@@ -11,8 +11,10 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Crm\DossierBooking;
 use App\Services\Crm\DossierLocation;
+use App\Services\Crm\DossierMapPreview;
 use App\Services\Crm\DossierRegistry;
 use App\Services\MapboxAddressGeocoder;
+use App\Services\MapboxDrivingRouteService;
 use App\Services\SidebarNotifications;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -138,6 +140,45 @@ it('renders bold phones full postal codes and comment triggers only on the name'
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-phone") and contains(@class,"font-bold")]', $row)->item(0)->textContent)->toBe('0600000000')
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-postal")]', $row)->item(0)->textContent)->toBe('CP 01300')
         ->and($xpath->query('.//*[contains(@class,"gc-booking-request-address") and @data-crm-comments-trigger]', $row)->length)->toBe(0);
+    Http::assertNothingSent();
+});
+
+it('keeps full planning and manual technician selection usable without GPS without inventing routes', function () {
+    extract(nativeBookingFixture());
+    $this->mock(DossierMapPreview::class, function ($mock) {
+        $mock->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    });
+    $this->mock(MapboxDrivingRouteService::class, function ($mock) {
+        $mock->shouldNotReceive('estimate');
+    });
+    $technician->update(['latitude' => null, 'longitude' => null, 'last_name' => 'SansGPS']);
+    $this->actingAs($actor)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertOk()
+        ->assertJsonPath('crm_appointment.latitude', null)->assertJsonPath('crm_appointment.longitude', null)
+        ->assertJsonPath('crm_appointment.location_precision', 'unverified')->assertJsonCount(0, 'suggestions')
+        ->assertJsonPath('technicians.0.id', $technician->id)->assertJsonPath('technicians.0.driving_duration_minutes', null)
+        ->assertJsonPath('technicians.0.driving_distance_km', null);
+    $this->postJson(route('planner.book.technicians.search'), ['crm_appointment_id' => $payload['crm_appointment_id'], 'query' => 'SansGPS'])
+        ->assertOk()->assertJsonPath('technicians.0.id', $technician->id)->assertJsonPath('technicians.0.route_source', 'unavailable');
+    $this->postJson(route('planner.book.calendar-window'), ['crm_appointment_id' => $payload['crm_appointment_id'],
+        'start' => now()->toIso8601String(), 'end' => now()->addWeek()->toIso8601String(), 'technician_ids' => [$technician->id]])
+        ->assertOk()->assertJsonCount(0, 'suggestions')->assertJsonPath('technicians.0.id', $technician->id);
+    Http::assertNothingSent();
+});
+
+it('requires explicit audited force for an unlocated full-planning placement and preserves real null GPS', function () {
+    extract(nativeBookingFixture());
+    $this->mock(DossierMapPreview::class, function ($mock) {
+        $mock->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    });
+    $this->actingAs($actor)->postJson(route('planner.book.appointments.store'), $payload)->assertUnprocessable()
+        ->assertJsonPath('conflicts.0.type', 'location_unverified');
+    expect(Appointment::count())->toBe(0);
+    $this->postJson(route('planner.book.appointments.store'), [...$payload, 'force_placement' => true])->assertUnprocessable();
+    $this->postJson(route('planner.book.appointments.store'), [...$payload, 'force_placement' => true, 'force_confirmed' => true])->assertCreated();
+    $appointment = Appointment::sole();
+    expect($appointment->latitude)->toBeNull()->and($appointment->longitude)->toBeNull()
+        ->and($appointment->external_payload['location_precision'])->toBe('unverified')
+        ->and($dossier->activities()->where('kind', 'appointment_forced')->count())->toBe(1);
     Http::assertNothingSent();
 });
 

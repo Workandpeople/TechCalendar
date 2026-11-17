@@ -6,11 +6,13 @@ function fixture({ hidden = false, enabled = true } = {}) {
     const events = {}, browserEvents = {}, timers = new Map(), requests = [], replies = [];
     let next = 1;
     const counter = { textContent: '1' }, billing = { textContent: '1' };
+    const changeCounter = { textContent: '0' };
+    const changeAlert = { shown: false, classList: { remove() { changeAlert.shown = true; }, add() { changeAlert.shown = false; } } };
     const alert = { shown: false, classList: { remove(value) { if (value === 'hidden') alert.shown = true; } } };
     const panel = { dataset: { latestId: '1', countsUrl: '/planner/incidents/counts' } };
     const root = { hidden,
-        querySelector: selector => selector === '[data-incident-alert]' ? alert : enabled ? panel : null,
-        querySelectorAll: selector => selector === '[data-incident-billing-count]' ? [billing] : [counter],
+        querySelector: selector => selector === '[data-incident-alert]' ? alert : selector === '[data-appointment-change-alert]' ? changeAlert : enabled ? panel : null,
+        querySelectorAll: selector => selector === '[data-appointment-change-count]' ? [changeCounter] : selector === '[data-incident-billing-count]' ? [billing] : [counter],
         addEventListener(name, fn) { events[name] = fn; },
     };
     const browser = {
@@ -20,7 +22,7 @@ function fixture({ hidden = false, enabled = true } = {}) {
         async fetch(url, options) { requests.push({ url, options }); return replies.shift() || { ok: true, status: 200, json: async () => ({ pending: 1, billing: 1, latest_id: 1 }) }; },
     };
     initTechnicianIncidentNotifications(root, browser);
-    return { root, browser, events, browserEvents, timers, requests, replies, alert, counter, billing,
+    return { root, browser, events, browserEvents, timers, requests, replies, alert, counter, billing, changeCounter, changeAlert,
         async tick(delay = 45000) {
             const entry = [...timers].find(([, timer]) => timer.delay === delay);
             assert.ok(entry, `Missing timer ${delay}`); timers.delete(entry[0]); await entry[1].fn();
@@ -74,4 +76,29 @@ test('validates counters without allowing markup or negative/unbounded values', 
     for (const bad of [{ pending: -1, latest_id: 0, billing: 0 }, { pending: 1, latest_id: Infinity, billing: 0 }, { pending: 1, latest_id: 1 }]) {
         assert.equal(Boolean(validIncidentCounts(bad)), false);
     }
+});
+
+test('announces a new version of an already pending appointment without another poll or any write', async () => {
+    const ui = fixture();
+    ui.reply({ pending: 1, billing: 1, latest_id: 1, appointment_changes: { pending: 1, revision: 1 } });
+    await ui.tick();
+    assert.equal(ui.changeCounter.textContent, '1'); assert.equal(ui.changeAlert.shown, true);
+    ui.changeAlert.shown = false;
+    ui.reply({ pending: 1, billing: 1, latest_id: 1, appointment_changes: { pending: 1, revision: 2 } });
+    await ui.tick(); assert.equal(ui.changeAlert.shown, true); assert.equal(ui.requests.length, 2);
+    ui.reply({ pending: 1, billing: 1, latest_id: 1, appointment_changes: { pending: 0, revision: 0 } });
+    await ui.tick(); assert.equal(ui.changeCounter.textContent, '0'); assert.equal(ui.changeAlert.shown, false);
+    assert.ok(ui.requests.every(request => request.options.method == null));
+    assert.equal(validIncidentCounts({ pending: 0, billing: null, latest_id: 0, appointment_changes: { pending: '<img>', revision: 1 } }), false);
+});
+
+test('does not miss edits and acknowledgements that leave the aggregate count and revision unchanged', async () => {
+    const ui = fixture();
+    for (const fingerprint of ['a'.repeat(64), 'b'.repeat(64)]) {
+        ui.changeAlert.shown = false;
+        ui.reply({ pending: 0, billing: null, latest_id: 1, appointment_changes: { pending: 2, revision: 3, fingerprint } });
+        await ui.tick(); assert.equal(ui.changeAlert.shown, true);
+    }
+    assert.equal(validIncidentCounts({ pending: 0, billing: null, latest_id: 0,
+        appointment_changes: { pending: 2, revision: 3, fingerprint: ['a'.repeat(64)] } }), false);
 });

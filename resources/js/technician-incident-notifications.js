@@ -1,5 +1,7 @@
 export function validIncidentCounts(data) {
-    return data && ['pending', 'latest_id'].every(key => Number.isSafeInteger(data[key]) && data[key] >= 0)
+    return data && (data.appointment_changes == null || (['pending', 'revision'].every(key => Number.isSafeInteger(data.appointment_changes[key]) && data.appointment_changes[key] >= 0)
+        && (data.appointment_changes.fingerprint == null || (typeof data.appointment_changes.fingerprint === 'string' && /^[a-f0-9]{64}$/.test(data.appointment_changes.fingerprint)))))
+        && ['pending', 'latest_id'].every(key => Number.isSafeInteger(data[key]) && data[key] >= 0)
         && (data.billing === null || (Number.isSafeInteger(data.billing) && data.billing >= 0));
 }
 
@@ -8,6 +10,8 @@ export function initTechnicianIncidentNotifications(root = document, browser = w
     if (!panel || panel.dataset.ready) return;
     panel.dataset.ready = 'true';
     let latest = Number(panel.dataset.latestId) || 0;
+    let changeRevision = Number(panel.dataset.changeRevision) || 0;
+    let changeFingerprint = panel.dataset.changeFingerprint || '';
     let timer, controller, paused = false, stopped = false, delay = 45000;
     const cancel = () => { browser.clearTimeout(timer); controller?.abort(); };
     const schedule = () => {
@@ -29,6 +33,15 @@ export function initTechnicianIncidentNotifications(root = document, browser = w
             root.querySelectorAll('[data-incident-pending-count]').forEach(node => { node.textContent = String(counts.pending); });
             root.querySelectorAll('[data-incident-billing-count]').forEach(node => { node.textContent = String(counts.billing ?? 0); });
             if (counts.latest_id > latest) root.querySelector('[data-incident-alert]')?.classList.remove('hidden');
+            if (counts.appointment_changes) {
+                const changes = counts.appointment_changes;
+                root.querySelectorAll('[data-appointment-change-count]').forEach(node => { node.textContent = String(changes.pending); });
+                const changed = changes.fingerprint ? changes.fingerprint !== changeFingerprint : changes.revision !== changeRevision;
+                if (changes.pending > 0 && changed) root.querySelector('[data-appointment-change-alert]')?.classList.remove('hidden');
+                if (changes.pending === 0) root.querySelector('[data-appointment-change-alert]')?.classList.add('hidden');
+                changeRevision = changes.revision;
+                changeFingerprint = changes.fingerprint || '';
+            }
             latest = Math.max(latest, counts.latest_id);
             delay = 45000;
         } catch {
@@ -40,6 +53,7 @@ export function initTechnicianIncidentNotifications(root = document, browser = w
         }
     };
     root.addEventListener('visibilitychange', () => { cancel(); if (!root.hidden) schedule(); });
+    root.addEventListener('techcalendar:appointment-rescheduled', () => { if (!root.hidden) void check(); });
     browser.addEventListener('pagehide', () => { paused = true; cancel(); });
     browser.addEventListener('pageshow', () => { paused = false; schedule(); });
     schedule();

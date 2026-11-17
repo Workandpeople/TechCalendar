@@ -23,6 +23,7 @@ validate_release_scope() {
             database/migrations/2026_11_09_200000_create_technician_incidents_table.php) ;;
             database/migrations/2026_11_10_120000_add_mymar_technician_incidents.php) ;;
             database/migrations/2026_11_16_120000_add_booking_recalls_to_dossier_operations.php) ;;
+            database/migrations/2026_11_17_230000_add_global_plus_change_review_to_appointments.php) ;;
             config/calendar.php|vite.config.js|tools/local/*) ;;
             *) stop 'changement hors perimetre applicatif du correctif.' ;;
         esac
@@ -160,7 +161,8 @@ for migration in 2026_10_25_110000_add_reversible_dossier_deletion 2026_10_25_12
     2026_11_06_120000_create_lot_report_exports_table \
     2026_11_09_200000_create_technician_incidents_table \
     2026_11_10_120000_add_mymar_technician_incidents \
-    2026_11_16_120000_add_booking_recalls_to_dossier_operations; do
+    2026_11_16_120000_add_booking_recalls_to_dossier_operations \
+    2026_11_17_230000_add_global_plus_change_review_to_appointments; do
     app_cli artisan migrate --force --no-interaction --no-ansi --path="database/migrations/$migration.php" >> "$WORK/migrations.log" 2>&1 \
         || stop 'migration en echec ; consulter le journal prive, ne pas reinitialiser la base.'
 done

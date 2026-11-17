@@ -960,6 +960,7 @@
                             <h2 class="text-lg font-semibold" style="color:var(--gc-text);">Trajets domicile vers RDV</h2>
                         </div>
                     </div>
+                    <p id="booking-location-warning" class="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status" hidden></p>
                     <div id="booking-map" class="min-h-0 flex-1 overflow-hidden rounded-2xl border" style="border-color:var(--gc-border);"></div>
                 </section>
                 </div>
@@ -5462,6 +5463,13 @@
 
         const renderMap = async (crmAppointment, technicians) => {
             const renderRequestId = ++mapRenderRequestId;
+            const locationWarning = document.getElementById('booking-location-warning');
+            locationWarning.textContent = crmAppointment?.location_warning || '';
+            locationWarning.hidden = !locationWarning.textContent;
+            if (crmAppointment?.latitude == null || crmAppointment?.longitude == null) {
+                clearMap();
+                return;
+            }
 
             mapboxDebug('render booking map called', {
                 crm_appointment_id: crmAppointment?.id,
@@ -5564,7 +5572,7 @@
             techniciansList.innerHTML = technicians.map((technician, index) => {
                 const coverageBadge = technician.covers_requested_department
                     ? '<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">Département couvert</span>'
-                    : '<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">Fallback proximite</span>';
+                    : `<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">${technician.route_source === 'unavailable' ? 'Secteur à vérifier' : 'Fallback proximité'}</span>`;
                 const technicianId = String(technician.id);
                 const isSelected = selectedTechnicianIds.has(technicianId);
                 const color = technicianColor(technicianId);
@@ -5967,7 +5975,9 @@
                     if (generation === bookingAnalysisGeneration) shouldFetchCalendarWindow = true;
                 }, 250);
 
-                if (data.technicians.length === 0) {
+                if (data.crm_appointment?.location_warning) {
+                    showFeedback(`${data.crm_appointment.location_warning} Sélectionnez un technicien puis utilisez « Placer manuellement ». Aucun trajet ni créneau automatique calculé.`, 'warning');
+                } else if (data.technicians.length === 0) {
                     showFeedback(`Aucun technicien éligible pour ce ${sourceLabel}.`, 'error');
                 } else if (suggestions.length === 0) {
                     showFeedback('Aucune proposition de placement calculée avec les contraintes actuelles.', 'error');

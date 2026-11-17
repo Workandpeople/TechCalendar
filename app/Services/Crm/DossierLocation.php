@@ -4,10 +4,41 @@ namespace App\Services\Crm;
 
 use App\Models\Appointment;
 use App\Models\Dossier;
+use Illuminate\Validation\ValidationException;
 
 final class DossierLocation
 {
     public const UNVERIFIED_APPOINTMENT_WARNING = 'Adresse non localisée : position et trajet à vérifier manuellement avant la visite.';
+
+    public static function manualPlanningAvailable(array $request): bool
+    {
+        return config('crm.v2_enabled') && empty($request['is_mymar'])
+            && self::point($request['latitude'] ?? null, $request['longitude'] ?? null) === null;
+    }
+
+    public static function planningRequest(?array $request): ?array
+    {
+        if ($request === null || ! self::manualPlanningAvailable($request)) {
+            return $request;
+        }
+
+        return [...$request, 'latitude' => null, 'longitude' => null, 'location_precision' => 'unverified',
+            'location_warning' => self::UNVERIFIED_APPOINTMENT_WARNING,
+            'external_payload' => [...($request['external_payload'] ?? []), 'location_precision' => 'unverified']];
+    }
+
+    public static function unlocatedPlanningConflicts(array $request): array
+    {
+        if (! self::manualPlanningAvailable($request)) {
+            return [];
+        }
+        if (blank($request['address'] ?? null)) {
+            throw ValidationException::withMessages(['address' => 'Renseignez le lieu d’inspection avant de placer le RDV.']);
+        }
+
+        return [['field' => 'address', 'type' => 'location_unverified',
+            'message' => self::UNVERIFIED_APPOINTMENT_WARNING.' Confirmez la vérification de l’adresse et la faisabilité du déplacement avant de forcer le placement.']];
+    }
 
     public static function appointmentWarning(Appointment $appointment): ?string
     {

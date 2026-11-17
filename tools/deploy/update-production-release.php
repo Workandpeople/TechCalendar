@@ -86,7 +86,8 @@ try {
         '2026_10_28_140000_add_appointment_planning_window_index', '2026_10_28_200000_create_appointment_mail_deliveries_table',
         '2026_10_29_150000_add_portal_notification_preferences_to_users', '2026_11_05_130000_add_organisation_report_download_naming',
         '2026_11_06_120000_create_lot_report_exports_table', '2026_11_09_200000_create_technician_incidents_table',
-        '2026_11_10_120000_add_mymar_technician_incidents', '2026_11_16_120000_add_booking_recalls_to_dossier_operations'];
+        '2026_11_10_120000_add_mymar_technician_incidents', '2026_11_16_120000_add_booking_recalls_to_dossier_operations',
+        '2026_11_17_230000_add_global_plus_change_review_to_appointments'];
     if (array_diff($pending, $allowed) !== [] || array_diff($applied, [...$expected, ...$optional]) !== []) {
         throw new RuntimeException('Migrations appliquees ou en attente non reconnues. Aucun schema modifie.');
     }

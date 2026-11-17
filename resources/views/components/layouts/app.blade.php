@@ -94,6 +94,7 @@
                         ...($user->role === 0 && ! $user->admin ? [] : $dossierItems),
                         ['route' => 'planner.book', 'active' => 'planner.book*', 'label' => 'Prendre un RDV', 'icon' => 'book', 'badge' => $notifications['pending'], 'badge_label' => config('crm.v2_enabled') ? 'dossier(s) en prise de RDV' : 'RDV à placer'],
                         ['route' => 'planner.tracking', 'active' => ['planner.tracking*', 'planner.appointments.modify'], 'label' => 'Les RDV', 'icon' => 'tracking'],
+                        ...($user->can('viewAny', \App\Models\Dossier::class) ? [['route' => 'planner.appointment-changes', 'active' => 'planner.appointment-changes*', 'label' => 'RDV modifiés', 'icon' => 'tracking', 'badge' => $notifications['appointment_changes'] ?? 0, 'badge_label' => 'RDV à reporter sur Global+']] : []),
                         ...($notifications['incidents'] !== null ? [['route' => 'planner.incidents', 'active' => 'planner.incidents*', 'label' => 'Signalements techniciens', 'icon' => 'alert']] : []),
                     ],
                 ];
@@ -155,9 +156,12 @@
                         <x-workspace-help :context="$workspace" />
                         @if ($notifications['incidents'] !== null)
                             <a href="{{ route('planner.incidents') }}" class="gc-btn-secondary shrink-0" title="Signalements techniciens à traiter"
-                                data-incident-notifications data-counts-url="{{ route('planner.incidents.counts') }}" data-latest-id="{{ $notifications['incidents']['latest_id'] }}">
+                                data-incident-notifications data-counts-url="{{ route('planner.incidents.counts') }}" data-latest-id="{{ $notifications['incidents']['latest_id'] }}" data-change-revision="{{ $notifications['incidents']['appointment_changes']['revision'] ?? 0 }}" data-change-fingerprint="{{ $notifications['incidents']['appointment_changes']['fingerprint'] ?? '' }}">
                                 <x-nav-icon name="alert" /><span class="sr-only">Signalements techniciens à traiter : </span><span data-incident-pending-count>{{ $notifications['incidents']['pending'] }}</span>
                             </a>
+                        @endif
+                        @if ($user->can('viewAny', \App\Models\Dossier::class))
+                            <a href="{{ route('planner.appointment-changes') }}" class="gc-btn-secondary shrink-0" title="RDV modifiés à reporter sur Global+" aria-label="Ouvrir les RDV modifiés à reporter sur Global+"><x-nav-icon name="tracking" /><span data-appointment-change-count>{{ $notifications['appointment_changes'] ?? 0 }}</span></a>
                         @endif
                         <div id="header-user-menu" class="header-user-menu relative">
                             <button id="header-user-menu-trigger" type="button" class="flex items-center gap-3 rounded-xl border border-[color:var(--gc-border)] px-3 py-2" aria-haspopup="menu" aria-expanded="false">
@@ -191,6 +195,9 @@
                         </div>
                     @endif
                     <div class="gc-workspace-content">
+                        @if ($user->can('viewAny', \App\Models\Dossier::class))
+                            <div role="status" class="hidden mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-appointment-change-alert><a href="{{ route('planner.appointment-changes') }}" class="font-semibold underline">File Global+ mise à jour. Ouvrir ou actualiser les RDV modifiés</a></div>
+                        @endif
                         @if ($notifications['incidents'] !== null)
                             <div role="status" class="hidden mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-incident-alert>
                                 <a href="{{ route('planner.incidents') }}" class="font-semibold underline">Nouveau signalement technicien. Ouvrir la file de traitement</a>

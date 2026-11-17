@@ -151,7 +151,9 @@ class PlannerBookingController extends Controller
 
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
-        if (! is_numeric($crmAppointment['latitude'] ?? null) || ! is_numeric($crmAppointment['longitude'] ?? null)) {
+        $crmAppointment = DossierLocation::planningRequest($crmAppointment);
+        if (! DossierLocation::manualPlanningAvailable($crmAppointment)
+            && DossierLocation::point($crmAppointment['latitude'] ?? null, $crmAppointment['longitude'] ?? null) === null) {
             throw ValidationException::withMessages([
                 'crm_appointment_id' => 'Coordonnées GPS absentes pour ce RDV. Ouvre le détail du RDV, corrige l’adresse puis relance le géocodage Mapbox.',
             ]);
@@ -388,6 +390,7 @@ class PlannerBookingController extends Controller
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
+        $crmAppointment = DossierLocation::planningRequest($crmAppointment);
         $technicians = $this->searchTechniciansForAppointment(
             $crmAppointment,
             trim($payload['query']),
@@ -421,6 +424,7 @@ class PlannerBookingController extends Controller
         $crmAppointment = $this->resolveRequestedAppointment($payload, $coffracAppointments);
         abort_if(! $crmAppointment, 404, 'Demande de rendez-vous introuvable.');
 
+        $crmAppointment = DossierLocation::planningRequest($crmAppointment);
         $windowStart = AppointmentDateTime::parse($payload['start'], 'start');
         $windowEnd = AppointmentDateTime::parse($payload['end'], 'end');
         $technicians = isset($payload['technician_ids'])
@@ -498,6 +502,7 @@ class PlannerBookingController extends Controller
                 'mail_recipient_email' => $appointmentMailData->defaultRecipientEmail($appointment), 'global_plus' => null,
             ]);
         }
+        $crmAppointment = DossierLocation::planningRequest($crmAppointment);
         $replacementAppointment = ! empty($payload['replace_appointment_id'])
             ? Appointment::query()->findOrFail((int) $payload['replace_appointment_id'])
             : null;
@@ -581,7 +586,8 @@ class PlannerBookingController extends Controller
                         throw ValidationException::withMessages(['technician_id' => 'Ce technicien ne réalise pas cette prestation.']);
                     }
                     $placementChecks = app(AppointmentSlotAvailability::class)->assertAvailable(
-                        $technician, $startsAt, $endsAt, $crmAppointment, $replacementAppointment?->id, (bool) ($payload['force_placement'] ?? false)
+                        $technician, $startsAt, $endsAt, $crmAppointment, $replacementAppointment?->id, (bool) ($payload['force_placement'] ?? false),
+                        DossierLocation::unlocatedPlanningConflicts($crmAppointment)
                     );
                     if ($replacementAppointment) {
                         $locked = Appointment::query()->lockForUpdate()->findOrFail($replacementAppointment->id);
@@ -867,22 +873,23 @@ class PlannerBookingController extends Controller
      */
     private function eligibleTechnicians(array $crmAppointment, MapboxDrivingRouteService $drivingRoutes): Collection
     {
+        $manualLocation = DossierLocation::manualPlanningAvailable($crmAppointment);
         $candidateTechnicians = User::query()->internal()
             ->with(['departments:code,name'])
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
+            ->when(! $manualLocation, fn ($query) => $query->whereNotNull('latitude')->whereNotNull('longitude'))
             ->when($crmAppointment['is_mymar'] ?? false, fn ($query) => $query->whereIn('id', $crmAppointment['mymar_technician_ids']))
             ->when($crmAppointment['service']['id'] ?? null, function ($query) use ($crmAppointment): void {
                 $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $crmAppointment['service']['id']));
             })
-            ->get()->filter(fn (User $technician): bool => DossierLocation::point($technician->latitude, $technician->longitude) !== null);
+            ->orderBy('last_name')->orderBy('first_name')
+            ->get()->filter(fn (User $technician): bool => $manualLocation || DossierLocation::point($technician->latitude, $technician->longitude) !== null);
 
         $techniciansByDistance = $candidateTechnicians
-            ->map(function (User $technician) use ($crmAppointment): User {
-                $technician->setAttribute('flight_distance_km', $this->haversine(
+            ->map(function (User $technician) use ($crmAppointment, $manualLocation): User {
+                $technician->setAttribute('flight_distance_km', $manualLocation ? null : $this->haversine(
                     (float) $technician->latitude,
                     (float) $technician->longitude,
                     (float) $crmAppointment['latitude'],
@@ -901,23 +908,9 @@ class PlannerBookingController extends Controller
             ->filter(fn (User $technician): bool => (bool) $technician->getAttribute('covers_requested_department'))
             ->values();
         // Keep sector coverage, but never hide the nearest qualified technicians behind it.
-        $routingPool = $strictTechnicians->merge($techniciansByDistance->take(3))->unique('id')->values();
+        $routingPool = $manualLocation ? $techniciansByDistance : $strictTechnicians->merge($techniciansByDistance->take(3))->unique('id')->values();
 
-        return $routingPool
-            ->map(function (User $technician) use ($crmAppointment, $drivingRoutes): User {
-                $route = $drivingRoutes->estimate(
-                    (float) $technician->latitude,
-                    (float) $technician->longitude,
-                    (float) $crmAppointment['latitude'],
-                    (float) $crmAppointment['longitude'],
-                );
-
-                $technician->setAttribute('driving_distance_km', $route['distance_km']);
-                $technician->setAttribute('driving_duration_minutes', $route['duration_minutes']);
-                $technician->setAttribute('route_source', $route['source']);
-
-                return $technician;
-            })
+        return $this->withRouteAttributes($routingPool, $crmAppointment, $drivingRoutes)
             ->sort(function (User $leftTechnician, User $rightTechnician): int {
                 $durationComparison = (int) $leftTechnician->getAttribute('driving_duration_minutes')
                     <=> (int) $rightTechnician->getAttribute('driving_duration_minutes');
@@ -956,8 +949,7 @@ class PlannerBookingController extends Controller
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
+            ->when(! DossierLocation::manualPlanningAvailable($crmAppointment), fn ($query) => $query->whereNotNull('latitude')->whereNotNull('longitude'))
             ->when($serviceId, function ($query) use ($serviceId): void {
                 $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $serviceId));
             })
@@ -1035,8 +1027,7 @@ class PlannerBookingController extends Controller
             ->where('role', 2)
             ->where('admin', false)
             ->whereNull('deleted_at')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
+            ->when(! DossierLocation::manualPlanningAvailable($crmAppointment), fn ($query) => $query->whereNotNull('latitude')->whereNotNull('longitude'))
             ->when($serviceId, function ($query) use ($serviceId): void {
                 $query->whereHas('services', fn ($serviceQuery) => $serviceQuery->where('services.id', $serviceId));
             })
@@ -1055,12 +1046,14 @@ class PlannerBookingController extends Controller
     {
         return $technicians
             ->map(function (User $technician) use ($crmAppointment, $drivingRoutes): User {
-                $route = $drivingRoutes->estimate(
-                    (float) $technician->latitude,
-                    (float) $technician->longitude,
-                    (float) $crmAppointment['latitude'],
-                    (float) $crmAppointment['longitude'],
-                );
+                $route = DossierLocation::point($crmAppointment['latitude'] ?? null, $crmAppointment['longitude'] ?? null) === null
+                    || DossierLocation::point($technician->latitude, $technician->longitude) === null
+                    ? ['distance_km' => null, 'duration_minutes' => null, 'source' => 'unavailable'] : $drivingRoutes->estimate(
+                        (float) $technician->latitude,
+                        (float) $technician->longitude,
+                        (float) $crmAppointment['latitude'],
+                        (float) $crmAppointment['longitude'],
+                    );
 
                 $technician->setAttribute(
                     'covers_requested_department',
@@ -1101,7 +1094,7 @@ class PlannerBookingController extends Controller
             return $technicians;
         }
 
-        if ($technician->latitude === null || $technician->longitude === null) {
+        if (! DossierLocation::manualPlanningAvailable($crmAppointment) && ($technician->latitude === null || $technician->longitude === null)) {
             return $technicians;
         }
 
@@ -1164,8 +1157,8 @@ class PlannerBookingController extends Controller
                 'department_code' => $technician->department_code,
                 'latitude' => $technician->latitude,
                 'longitude' => $technician->longitude,
-                'driving_distance_km' => round((float) $technician->getAttribute('driving_distance_km'), 1),
-                'driving_duration_minutes' => (int) $technician->getAttribute('driving_duration_minutes'),
+                'driving_distance_km' => $technician->getAttribute('driving_distance_km') === null ? null : round((float) $technician->getAttribute('driving_distance_km'), 1),
+                'driving_duration_minutes' => $technician->getAttribute('driving_duration_minutes') === null ? null : (int) $technician->getAttribute('driving_duration_minutes'),
                 'route_source' => $technician->getAttribute('route_source'),
                 'covers_requested_department' => (bool) $technician->getAttribute('covers_requested_department'),
                 'absence_label' => $absences
@@ -2236,6 +2229,10 @@ class PlannerBookingController extends Controller
         ?Carbon $windowStart = null,
         ?Carbon $windowEnd = null,
     ): array {
+        if (DossierLocation::point($crmAppointment['latitude'] ?? null, $crmAppointment['longitude'] ?? null) === null) {
+            return [];
+        }
+        $technicians = $technicians->filter(fn ($technician) => DossierLocation::point($technician->latitude, $technician->longitude) !== null);
         $durationMinutes = (int) ($crmAppointment['service']['average_duration_minutes'] ?? 60);
         $durationMinutes = max(30, $durationMinutes);
         $preferredStartsAt = $this->preferredStartsAt($crmAppointment);

@@ -10,6 +10,7 @@
                         <p class="mt-1 font-semibold" data-appointment-time="{{ $appointment->id }}">{{ $appointment->starts_at?->format('d/m/Y H:i') }} à {{ $appointment->ends_at?->format('H:i') }}</p>
                         <p class="mt-1 text-sm" data-operation-label="{{ $appointment->dossier_operation_id }}">{{ $appointment->service->name }}</p>
                         <p class="mt-1 text-sm text-slate-600" data-appointment-technician="{{ $appointment->id }}">{{ $appointment->technician?->full_name ?: 'Technicien indisponible' }}</p>
+                        @if ($appointment->global_plus_review_pending)<a href="{{ route('planner.appointment-changes') }}#rdv-{{ $appointment->id }}" class="mt-2 inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-950">À reporter sur Global+</a>@endif
                         @if ($appointment->trashed())
                             <span class="mt-2 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">Retiré du planning</span>
                         @elseif ($appointment->status === \App\Models\Appointment::STATUS_PROBLEM)
