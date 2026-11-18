@@ -19,6 +19,11 @@ class ClientPortal
         $allowed = $this->access->categoryKeys($actor);
         abort_if(filled($filters['status'] ?? null) && ! in_array($filters['status'], $allowed, true), 403);
         $query = $this->access->dossiers($actor);
+        $showClientCompanies = $actor->externalClient->kind === 'delegataire';
+        $companyIds = DossierCompanyFilter::ids($filters);
+        if ($companyIds !== []) {
+            $query->whereIn('dossiers.client_id', $companyIds);
+        }
         $serviceIds = DossierServiceFilter::ids($filters);
         if ($serviceIds !== []) {
             $query->whereHas('operations', fn ($operations) => $operations->whereIn('service_id', $serviceIds));
@@ -69,8 +74,13 @@ class ClientPortal
                     ->orderByDesc('appointments.starts_at')->orderByDesc('appointments.id')
                     // Grouped eager limit: one appointment per dossier, only for this page.
                     ->limit(1);
-            }])->latest('id')->paginate(25)->withQueryString(),
+            }])->when($showClientCompanies, fn ($query) => $query->with('client:id,name,company_name'))
+            ->latest('id')->paginate(25)->withQueryString(),
             'filters' => $filters, 'categories' => $categories,
+            'showClientCompanies' => $showClientCompanies,
+            'companies' => $showClientCompanies ? $this->access->dossierCompanies($actor)
+                ->orderByRaw("COALESCE(NULLIF(TRIM(company_name), ''), name)")->orderBy('id')
+                ->get(['id', 'name', 'company_name']) : collect(),
             'services' => $this->access->dossierServices($actor)->orderBy('name')->get(['services.id', 'services.name'])];
     }
 

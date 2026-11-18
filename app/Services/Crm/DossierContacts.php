@@ -6,6 +6,18 @@ use App\Models\ExternalDelegataire;
 
 final class DossierContacts
 {
+    public static function companyName(?ExternalDelegataire $contact, mixed $snapshot = []): string
+    {
+        $snapshot = is_array($snapshot) ? $snapshot : [];
+        foreach ([$contact?->company_name, $contact?->name, $snapshot['company_name'] ?? null, $snapshot['name'] ?? null] as $name) {
+            if (is_string($name) && trim($name) !== '') {
+                return trim($name);
+            }
+        }
+
+        return '';
+    }
+
     public static function details(?ExternalDelegataire $contact): array
     {
         if (! $contact) {

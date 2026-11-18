@@ -30,11 +30,7 @@ class DossierTable
     {
         $names = [];
         foreach (['client', 'delegataire'] as $role) {
-            $contact = $dossier->$role;
-            $snapshot = $dossier->{$role.'_contact'} ?? [];
-            $candidates = [$contact?->company_name, $contact?->name, $snapshot['company_name'] ?? null, $snapshot['name'] ?? null];
-            $names[$role] = collect($candidates)->filter(fn ($name) => is_string($name) && trim($name) !== '')
-                ->map(fn ($name) => trim($name))->first() ?? '';
+            $names[$role] = DossierContacts::companyName($dossier->$role, $dossier->{$role.'_contact'} ?? []);
         }
 
         return $names;

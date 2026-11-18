@@ -8,8 +8,20 @@
         @include('client.notice')
         <div data-ajax-results="categories">@include('crm.dossiers.categories', ['categoryRoute' => 'client.dossiers'])</div>
         @php($selectedServices = \App\Services\Crm\DossierServiceFilter::ids($filters))
-        <form data-ajax-filters method="GET" action="{{ route('client.dossiers') }}" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-4">
+        @php($selectedCompanies = \App\Services\Crm\DossierCompanyFilter::ids($filters))
+        <form data-ajax-filters method="GET" action="{{ route('client.dossiers') }}" class="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 {{ $showClientCompanies ? 'xl:grid-cols-5' : 'xl:grid-cols-4' }}">
             <div><label class="gc-label" for="q">Recherche</label><input class="gc-input" id="q" name="q" value="{{ $filters['q'] ?? '' }}" maxlength="255" placeholder="Référence, bénéficiaire, adresse complète"></div>
+            @if ($showClientCompanies)
+                <div>
+                    <label class="gc-label" for="company_ids">Société cliente</label>
+                    <select class="gc-input" id="company_ids" name="company_ids[]" multiple size="4" data-multi-select
+                        data-empty-label="Toutes les sociétés" data-selected-label="sociétés sélectionnées"
+                        data-search-label="Rechercher une société cliente" data-options-label="Sociétés clientes accessibles"
+                        data-no-results-label="Aucune société ne correspond à la recherche.">
+                        @foreach ($companies as $company)<option value="{{ $company->id }}" @selected(in_array($company->id, $selectedCompanies, true))>{{ \App\Services\Crm\DossierContacts::companyName($company) }}</option>@endforeach
+                    </select>
+                </div>
+            @endif
             <div>
                 <label class="gc-label" for="service_ids">Fiches CEE</label>
                 <select class="gc-input" id="service_ids" name="service_ids[]" multiple size="4" data-multi-select
@@ -21,23 +33,24 @@
             </div>
             <div><label class="gc-label" for="lot">Numéro de lot</label><input class="gc-input" id="lot" name="lot" value="{{ $filters['lot'] ?? '' }}" maxlength="256" placeholder="Tout ou partie du numéro"></div>
             <div><label class="gc-label" for="status">État</label><select class="gc-input" id="status" name="status"><option value="">Tous les états autorisés</option>@foreach (collect($categories)->except('all') as $key => $status)<option value="{{ $key }}" @selected(($filters['status'] ?? '') === $key)>{{ $status['label'] }}</option>@endforeach</select></div>
-            <div class="flex items-end justify-end gap-3 sm:col-span-2 xl:col-span-4"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
+            <div class="flex items-end justify-end gap-3 sm:col-span-2 {{ $showClientCompanies ? 'xl:col-span-5' : 'xl:col-span-4' }}"><noscript><button class="gc-btn-primary">Rechercher</button></noscript><a class="gc-btn-secondary" href="{{ route('client.dossiers') }}">Effacer</a></div>
         </form>
         @include('client.partials.report-exports')
         <div data-ajax-results="dossiers">
         <p class="text-sm text-slate-500">{{ $dossiers->total() }} dossier(s)</p>
-        <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="p-4">Voir</th><th class="p-4">Numéro de lot</th><th class="p-4">Bénéficiaire</th><th class="p-4">Date RDV</th><th class="p-4">Lieu d’inspection</th><th class="p-4">Prestations et états</th></tr></thead><tbody class="divide-y divide-slate-100">
+        <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="p-4">Voir</th><th class="p-4">Numéro de lot</th><th class="p-4">Bénéficiaire</th>@if ($showClientCompanies)<th class="p-4">Société cliente</th>@endif<th class="p-4">Date RDV</th><th class="p-4">Lieu d’inspection</th><th class="p-4">Prestations et états</th></tr></thead><tbody class="divide-y divide-slate-100">
             @forelse ($dossiers as $dossier)
                 @php($appointment = $dossier->appointments->first())
                 <tr>
                     <td class="p-4"><a class="gc-dossier-open" href="{{ route('client.dossiers.show', $dossier) }}" aria-label="Ouvrir le dossier {{ $dossier->beneficiaryLabel() }}"><x-nav-icon name="eye" /></a></td>
                     <td class="p-4 font-medium">{{ $dossier->listing_lot ?: 'Non renseigné' }}</td>
                     <td class="p-4"><span class="font-medium">{{ $dossier->beneficiaryLabel() }}</span></td>
+                    @if ($showClientCompanies)<td class="p-4 font-medium" data-client-company>{{ \App\Services\Crm\DossierContacts::companyName($dossier->client, $dossier->client_contact ?? []) ?: 'Non renseignée' }}</td>@endif
                     <td class="p-4">@include('client.partials.appointment-date')</td>
                     <td class="p-4">{{ $dossier->address }}<p class="text-slate-500">{{ $dossier->postal_code }} {{ $dossier->city }}</p><x-dossier-location-warning :dossier="$dossier" /></td>
                     <td class="space-y-2 p-4">@foreach ($dossier->operations as $operation)<p>{{ $operation->service?->name ?: $operation->legacy_service_name }} <x-dossier-status :status="$operation->legacy_status" /></p>@endforeach</td>
                 </tr>
-            @empty<tr><td colspan="6" class="p-8 text-center text-slate-500">Aucun dossier attribué ne correspond à la recherche.</td></tr>@endforelse
+            @empty<tr><td colspan="{{ $showClientCompanies ? 7 : 6 }}" class="p-8 text-center text-slate-500">Aucun dossier attribué ne correspond à la recherche.</td></tr>@endforelse
         </tbody></table></div>
         {{ $dossiers->links() }}
         </div>

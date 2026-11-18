@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Models\Dossier;
 use App\Models\DossierActivity;
 use App\Models\DossierOperation;
+use App\Models\ExternalDelegataire;
 use App\Models\Lot;
 use App\Models\Service;
 use App\Models\User;
@@ -137,6 +138,12 @@ class ClientAccess
     {
         return Service::query()->whereIn('services.id', DossierOperation::query()->select('service_id')
             ->whereIn('dossier_id', $this->dossiers($user)->select('dossiers.id')));
+    }
+
+    public function dossierCompanies(User $user): Builder
+    {
+        return ExternalDelegataire::query()->whereIn('external_delegataires.id',
+            $this->dossiers($user)->whereNotNull('dossiers.client_id')->select('dossiers.client_id'));
     }
 
     public function categoryKeys(User $user): array

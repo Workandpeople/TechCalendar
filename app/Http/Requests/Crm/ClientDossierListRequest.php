@@ -19,6 +19,8 @@ class ClientDossierListRequest extends FormRequest
     {
         $services = $this->filled('service_ids')
             ? app(ClientAccess::class)->dossierServices($this->user())->pluck('services.id')->all() : [];
+        $companies = $this->filled('company_ids')
+            ? app(ClientAccess::class)->dossierCompanies($this->user())->pluck('external_delegataires.id')->all() : [];
 
         return [
             'q' => ['nullable', 'string', 'max:255'],
@@ -26,11 +28,14 @@ class ClientDossierListRequest extends FormRequest
             'status' => ['nullable', Rule::in(array_keys(DossierStatusCatalog::STATUSES))],
             'service_ids' => ['nullable', 'array', 'list', 'max:250'],
             'service_ids.*' => ['bail', 'required', 'integer', 'min:1', 'distinct', Rule::in($services)],
+            'company_ids' => ['nullable', 'array', 'list', 'max:250'],
+            'company_ids.*' => ['bail', 'required', 'integer', 'min:1', 'distinct', Rule::in($companies)],
         ];
     }
 
     public function attributes(): array
     {
-        return ['service_ids' => 'fiches CEE', 'service_ids.*' => 'fiche CEE'];
+        return ['service_ids' => 'fiches CEE', 'service_ids.*' => 'fiche CEE',
+            'company_ids' => 'sociétés clientes', 'company_ids.*' => 'société cliente'];
     }
 }

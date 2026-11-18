@@ -16,6 +16,15 @@ test('keeps multiple selections and resets pagination when filtering', () => {
     assert.equal(filterListUrl(url, new URLSearchParams('page=3&role=0&department[]=01&department[]=02&q=Test')).search,
         '?department%5B%5D=01&department%5B%5D=02&q=Test&role=0');
 });
+test('keeps delegate company and CEE selections together when building a status filter URL', () => {
+    const filtered = filterListUrl(new URL('https://example.test/espace-client'), new URLSearchParams(
+        'page=3&company_ids[]=12&company_ids[]=24&service_ids[]=119&status=report&lot=LOT+299'));
+    assert.deepEqual(filtered.searchParams.getAll('company_ids[]'), ['12', '24']);
+    assert.deepEqual(filtered.searchParams.getAll('service_ids[]'), ['119']);
+    assert.equal(filtered.searchParams.get('status'), 'report');
+    assert.equal(filtered.searchParams.get('lot'), 'LOT 299');
+    assert.equal(filtered.searchParams.has('page'), false);
+});
 test('cancels older requests and debounces typing while sending same-origin credentials', async () => {
     const ui = fixture(); ui.loader.load(url); ui.loader.load(url, { delay: 350 });
     assert.equal(ui.requests[0].options.signal.aborted, true);
