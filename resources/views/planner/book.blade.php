@@ -1636,6 +1636,7 @@
                 beneficiary: appointment.beneficiary_name || appointment.customer_name || `${appointment.first_name || ''} ${appointment.last_name || ''}`.trim(),
                 phone_numbers: appointment.phone ? [{ label: appointment.phone }] : [],
                 email: appointment.customer_email || appointment.email, address: appointment.address,
+                postal_code: appointment.postal_code, city: appointment.city,
                 service: appointment.service?.name || appointment.service_display_name || appointment.service_name,
                 site: appointment.site_name, installer: appointment.installer_name,
                 lot: appointment.external_payload?.lot_name,

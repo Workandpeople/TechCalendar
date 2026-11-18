@@ -25,6 +25,7 @@ use App\Services\LotAppointmentUpdateService;
 use App\Services\LotAutoCompletionCalculator;
 use App\Services\LotExcelImportService;
 use App\Services\LotImportConfirmationService;
+use App\Services\LotImportLocation;
 use App\Services\LotImportPreviewRowUpdateService;
 use App\Services\LotImportPreviewService;
 use App\Services\LotStatusService;
@@ -522,10 +523,13 @@ class ManagerLotController extends Controller
             'comment' => ['nullable', 'string', 'max:2000'],
             'unsuccessful_visits_count' => ['nullable', 'integer', 'min:0', 'max:65535'],
             'force_geocode' => ['nullable', 'boolean'],
+            'geocoding_mode' => ['sometimes', 'required', Rule::in(['address', 'city', 'unverified'])],
         ]);
 
         try {
-            $preview = $rowUpdater->update($preview, $rowNumber, $payload);
+            $preview = $rowUpdater->update($preview, $rowNumber, $payload, (int) $request->user()->id);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -2090,6 +2094,8 @@ class ManagerLotController extends Controller
             ->map(function (array $appointment, int $index) use ($preview): array {
                 $rowNumber = (int) ($appointment['row_number'] ?? 0);
                 $appointment['preview_key'] = LotImportPreview::appointmentPayloadKey($appointment, $index);
+                $appointment['blocking_warnings'] = LotImportLocation::blockingWarnings($appointment);
+                $appointment['geocoding_mode'] = LotImportLocation::acceptedMode($appointment) ?? 'address';
 
                 if ($rowNumber > 0 && $preview->status === LotImportPreview::STATUS_COMPLETED) {
                     $appointment['update_url'] = route('manager.lots.imports.rows.update', [$preview, $rowNumber]);

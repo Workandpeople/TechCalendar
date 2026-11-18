@@ -234,6 +234,7 @@ class DossierBooking
         return [
             'beneficiary' => $dossier->beneficiaryLabel(), 'email' => $dossier->email,
             'phone_numbers' => $display->phoneNumbers($dossier), 'address' => $display->address($dossier)['full'],
+            'postal_code' => $dossier->postal_code, 'city' => $dossier->city,
             'service' => $operation->service?->name ?: $operation->legacy_service_name,
             'status' => DossierStatusCatalog::describe($operation->legacy_status)['label'],
             'client' => $companies['client'], 'delegataire' => $companies['delegataire'],

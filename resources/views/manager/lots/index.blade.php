@@ -1272,6 +1272,12 @@
                 : [];
         }
 
+        function lotImportBlockingWarnings(appointment) {
+            return Array.isArray(appointment?.blocking_warnings)
+                ? appointment.blocking_warnings.filter(Boolean)
+                : lotImportWarnings(appointment);
+        }
+
         function lotImportCheckboxes() {
             return Array.from(lotImportPreviewRows.querySelectorAll('.lot-import-row-checkbox'));
         }
@@ -1288,7 +1294,7 @@
 
         function lotImportSelectedWarningCheckboxes() {
             return lotImportCheckboxes()
-                .filter((checkbox) => checkbox.checked && checkbox.dataset.hasWarnings === '1');
+                .filter((checkbox) => checkbox.checked && checkbox.dataset.hasBlockingWarnings === '1');
         }
 
         function lotImportSelectedWarningRows() {
@@ -1366,6 +1372,7 @@
 
             const appointments = normalizedPreviewRows(data.appointments);
             const warningRowsCount = appointments.filter((appointment) => lotImportWarnings(appointment).length > 0).length;
+            const blockingRowsCount = appointments.filter((appointment) => lotImportBlockingWarnings(appointment).length > 0).length;
 
             if (lotImportWarningsOnly?.checked && warningRowsCount === 0) {
                 lotImportWarningsOnly.checked = false;
@@ -1373,7 +1380,7 @@
 
             if (lotImportWarningsSummary) {
                 lotImportWarningsSummary.textContent = warningRowsCount > 0
-                    ? `${warningRowsCount} ligne(s) avec warning : corrige-les ou décoche-les avant validation.`
+                    ? `${warningRowsCount} ligne(s) avec avertissement, dont ${blockingRowsCount} à corriger ou décocher. Les replis d’adresse validés restent signalés mais ne bloquent pas l’import.`
                     : 'Aucun warning détecté sur les lignes nettoyées.';
                 lotImportWarningsSummary.style.color = warningRowsCount > 0 ? '#b45309' : '#15803d';
             }
@@ -1384,6 +1391,7 @@
                 const rowChecked = isLotImportRowSelected(rowKey, rowNumber) ? 'checked' : '';
                 const warnings = lotImportWarnings(appointment);
                 const hasWarnings = warnings.length > 0;
+                const hasBlockingWarnings = lotImportBlockingWarnings(appointment).length > 0;
                 const gps = appointment.latitude && appointment.longitude
                     ? `${Number(appointment.latitude).toFixed(5)}, ${Number(appointment.longitude).toFixed(5)}`
                     : '--';
@@ -1396,7 +1404,7 @@
                 row.dataset.hasWarnings = hasWarnings ? '1' : '0';
                 row.innerHTML = `
                     <td class="px-3 py-3 align-top">
-                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}" data-has-warnings="${hasWarnings ? '1' : '0'}" ${rowChecked}>
+                        <input class="gc-check lot-import-row-checkbox" type="checkbox" value="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}" data-has-warnings="${hasWarnings ? '1' : '0'}" data-has-blocking-warnings="${hasBlockingWarnings ? '1' : '0'}" ${rowChecked}>
                     </td>
                     <td class="px-3 py-3 align-top">
                         <div class="font-semibold" style="color:var(--gc-text);">${escapeHtml(displayName)}</div>
@@ -1407,7 +1415,7 @@
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.customer_phone || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml(appointment.address || '--')}</td>
                     <td class="px-3 py-3 align-top">${escapeHtml([appointment.postal_code, appointment.city].filter(Boolean).join(' ') || appointment.department_code || '--')}</td>
-                    <td class="px-3 py-3 align-top">${escapeHtml(gps)}</td>
+                    <td class="px-3 py-3 align-top">${escapeHtml(gps)}${appointment.geocoding_mode === 'city' ? '<p class="mt-1 text-xs text-amber-800">Centre de la commune</p>' : ''}${appointment.geocoding_mode === 'unverified' ? '<p class="mt-1 text-xs text-amber-800">Adresse conservée sans GPS</p>' : ''}</td>
                     <td class="px-3 py-3 align-top">
                         ${hasWarnings
                             ? `<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style="background:#fef3c7;color:#92400e;">${escapeHtml(warnings.join(' · '))}</span>`
@@ -1428,6 +1436,7 @@
                     editRow.dataset.updateUrl = appointment.update_url;
                     editRow.innerHTML = `
                         <td colspan="9" class="bg-slate-50 px-4 py-4">
+                            <div class="w-[calc(100vw-6rem)] max-w-full md:w-auto">
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                                 <input type="hidden" data-field="customer_name" value="${escapeHtml(appointment.customer_name || '')}">
                                 <div><label class="gc-label">Référence interne</label><input class="gc-input" data-field="internal_reference" value="${escapeHtml(appointment.internal_reference || '')}"></div>
@@ -1476,6 +1485,15 @@
                                     <label class="gc-label">Département</label>
                                     <input class="gc-input" data-field="department_code" value="${escapeHtml(appointment.department_code || '')}" maxlength="3">
                                 </div>
+                                <div class="md:col-span-2">
+                                    <label class="gc-label" for="lot-import-geocoding-${appointmentIndex}">Localisation de l’intervention</label>
+                                    <select id="lot-import-geocoding-${appointmentIndex}" class="gc-input" data-field="geocoding_mode">
+                                        <option value="address" ${!['city', 'unverified'].includes(appointment.geocoding_mode) ? 'selected' : ''}>Géocoder l’adresse précise</option>
+                                        <option value="city" ${appointment.geocoding_mode === 'city' ? 'selected' : ''}>Utiliser le centre de la commune</option>
+                                        <option value="unverified" ${appointment.geocoding_mode === 'unverified' ? 'selected' : ''}>Conserver l’adresse sans GPS</option>
+                                    </select>
+                                    <p class="mt-2 text-xs text-amber-900">Adresse introuvable ? Renseignez le code postal et la ville, puis choisissez un repli. L’adresse saisie est conservée. La position et le trajet restent à vérifier avant la visite ; sans GPS, aucun créneau automatique n’est calculé.</p>
+                                </div>
                                 <div class="md:col-span-2 xl:col-span-3">
                                     <label class="gc-label">Commentaire</label>
                                     <textarea class="gc-input min-h-24" data-field="comment">${escapeHtml(appointment.comment || '')}</textarea>
@@ -1484,7 +1502,8 @@
                             <p class="lot-import-row-error mt-3 hidden text-sm" style="color:#be123c;"></p>
                             <div class="mt-4 flex flex-wrap justify-end gap-2">
                                 <button type="button" class="gc-btn-soft lot-import-cancel-edit" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Annuler</button>
-                                <button type="button" class="gc-btn-primary lot-import-save-row" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Enregistrer et géocoder</button>
+                                <button type="button" class="gc-btn-primary lot-import-save-row" data-preview-key="${escapeHtml(rowKey)}" data-row-number="${escapeHtml(rowNumber)}">Enregistrer la ligne</button>
+                            </div>
                             </div>
                         </td>
                     `;
@@ -2122,7 +2141,12 @@
         }
 
         function toggleLotImportEditRow(rowKey, shouldOpen) {
-            lotImportEditRow(rowKey)?.classList.toggle('hidden', !shouldOpen);
+            const row = lotImportEditRow(rowKey);
+            row?.classList.toggle('hidden', !shouldOpen);
+            if (row && shouldOpen) {
+                row.closest('.overflow-x-auto')?.scrollTo({ left: 0 });
+                row.scrollIntoView({ block: 'nearest' });
+            }
         }
 
         async function saveLotImportPreviewRow(button) {
@@ -2141,7 +2165,7 @@
             });
 
             button.disabled = true;
-            button.textContent = 'Géocodage...';
+            button.textContent = 'Enregistrement...';
             error?.classList.add('hidden');
 
             try {
@@ -2166,7 +2190,7 @@
                 }
 
                 currentLotImportCompleted = false;
-                setLotImportRealtimeState(`Ligne ${rowNumber} mise à jour et géocodée.`, 'succèss');
+                setLotImportRealtimeState(`Ligne ${rowNumber} mise à jour.`, 'succèss');
                 await handleLotImportStatus(data);
             } catch (exception) {
                 if (error) {
@@ -2175,7 +2199,7 @@
                 }
             } finally {
                 button.disabled = false;
-                button.textContent = 'Enregistrer et géocoder';
+                button.textContent = 'Enregistrer la ligne';
             }
         }
 

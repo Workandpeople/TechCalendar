@@ -105,6 +105,7 @@ class LotImportPreviewProcessor
                     'comment' => $this->nullableString($appointmentPayload['comment'] ?? null),
                     'ai_confidence' => $this->confidence($appointmentPayload['confidence'] ?? null),
                     'warnings' => $warnings,
+                    'location_warnings' => $geocoding['warnings'] ?? [],
                     'raw_address_parts' => $appointmentPayload['raw_address_parts'] ?? [],
                     'raw_payload' => $appointmentPayload['raw_payload'],
                 ];

@@ -23,6 +23,14 @@ Le nettoyage local retire les suffixes cadastraux, notamment `12 RUE EXEMPLE-000
 
 Mapbox géocode le lieu d'inspection, pas le siège social. Les lignes non géocodées restent dans l'aperçu avec un avertissement. Les avertissements doivent être corrigés ou les lignes décochées avant confirmation. Le fichier original et les valeurs brutes restent disponibles pour le diagnostic.
 
+Dans **Modifier** sur une ligne de l'aperçu après import, le gestionnaire peut désormais choisir :
+
+- **Géocoder l'adresse précise** : comportement habituel, sans validation implicite des avertissements.
+- **Utiliser le centre de la commune** : vérification du couple code postal/ville dans le référentiel des communes, sans modifier la voie saisie. Une commune ambiguë ou indisponible ne donne aucune position arbitraire.
+- **Conserver l'adresse sans GPS** : choix explicite sans appel de géocodage, avec adresse, code postal et ville obligatoires. Aucune coordonnée fictive n'est créée.
+
+Les replis sont tracés avec l'auteur, la date et l'empreinte de l'adresse validée. Leur avertissement reste visible sans bloquer la création du lot ; les autres avertissements métier restent bloquants. Une modification ultérieure de l'adresse invalide cet accord. Les RDV concernés restent « À vérifier ». En V2, le placement sans GPS reste manuel, sans suggestion automatique, avec les contrôles de secteur, d'habilitation, de disponibilité et la confirmation de vérification du trajet existants. La précision « centre de commune » ou « non localisée » suit le RDV placé. Le résumé de placement affiche séparément le code postal et la ville.
+
 Les imports libres de l'ancien format sont désormais refusés avec l'indication de la colonne attendue. Les lots existants ne sont pas remappés et les aperçus déjà terminés restent confirmables.
 
 ## Coffrac

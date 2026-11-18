@@ -29,6 +29,7 @@ use App\Services\ExternalAppointmentSourceRegistry;
 use App\Services\GlobalPlus\GlobalPlusApiException;
 use App\Services\GlobalPlus\GlobalPlusAppointmentService;
 use App\Services\LotAutoCompletionCalculator;
+use App\Services\LotImportLocation;
 use App\Services\LotStatusService;
 use App\Services\MapboxDrivingRouteService;
 use App\Services\Mymar\MymarBookingPlanning;
@@ -1541,8 +1542,7 @@ class PlannerBookingController extends Controller
                             && ($appointment->service_id !== null || $lot->service_id !== null)
                             && filled($appointment->address)
                             && filled($appointment->department_code)
-                            && $appointment->latitude !== null
-                            && $appointment->longitude !== null,
+                            && LotImportLocation::canPlan($appointment),
                     ])->values(),
                 ];
             })
@@ -1664,7 +1664,7 @@ class PlannerBookingController extends Controller
             return null;
         }
 
-        if ($lotAppointment->latitude === null || $lotAppointment->longitude === null) {
+        if (! LotImportLocation::canPlan($lotAppointment)) {
             return null;
         }
 
@@ -1674,6 +1674,7 @@ class PlannerBookingController extends Controller
             ?: ($serviceId ? Service::query()->find($serviceId) : null);
         $coffracAlias = $this->resolveLotCoffracServiceAlias($service, $lotAppointment, $serviceAliasId);
         $coffracAliases = $this->coffracAliasesPayload($service);
+        $location = LotImportLocation::planningMetadata($lotAppointment);
 
         return [
             'id' => 'lot-'.$lotAppointment->id,
@@ -1697,13 +1698,14 @@ class PlannerBookingController extends Controller
             'beneficiary_address' => $lotAppointment->beneficiary_address,
             'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
             'beneficiary_city' => $lotAppointment->beneficiary_city,
-            'phone' => $lotAppointment->customer_phone,
+            'phone' => $lotAppointment->customer_phone ?? '',
             'address' => $lotAppointment->address,
             'postal_code' => $lotAppointment->postal_code,
             'city' => $lotAppointment->city,
             'department_code' => strtoupper((string) $lotAppointment->department_code),
-            'latitude' => (float) $lotAppointment->latitude,
-            'longitude' => (float) $lotAppointment->longitude,
+            'latitude' => $lotAppointment->latitude === null ? null : (float) $lotAppointment->latitude,
+            'longitude' => $lotAppointment->longitude === null ? null : (float) $lotAppointment->longitude,
+            ...$location,
             'preferred_starts_at' => null,
             'is_manual' => false,
             'is_lot' => true,
@@ -1731,6 +1733,9 @@ class PlannerBookingController extends Controller
                 'beneficiary_postal_code' => $lotAppointment->beneficiary_postal_code,
                 'beneficiary_city' => $lotAppointment->beneficiary_city,
                 'raw_payload' => $lotAppointment->raw_payload,
+                'postal_code' => $lotAppointment->postal_code,
+                'city' => $lotAppointment->city,
+                'location_precision' => $location['location_precision'],
             ],
             'service' => $service ? [
                 'id' => $service->id,
@@ -1800,6 +1805,8 @@ class PlannerBookingController extends Controller
             'installer_name' => $installerName,
             'phone' => $appointment->customer_phone,
             'address' => $appointment->address,
+            'postal_code' => $externalPayload['postal_code'] ?? null,
+            'city' => $externalPayload['city'] ?? null,
             'department_code' => $departmentCode,
             'latitude' => $appointment->latitude === null ? null : (float) $appointment->latitude,
             'longitude' => $appointment->longitude === null ? null : (float) $appointment->longitude,

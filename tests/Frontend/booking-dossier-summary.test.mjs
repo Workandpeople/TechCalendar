@@ -15,7 +15,7 @@ test('only links to a native dossier on the current origin', () => {
 });
 
 function recapHarness() {
-    const fields = ['beneficiary', 'email', 'address', 'service', 'client', 'delegataire', 'site', 'installer', 'lot', 'status']
+    const fields = ['beneficiary', 'email', 'address', 'service', 'client', 'delegataire', 'site', 'installer', 'lot', 'status', 'postal_code', 'city']
         .map(key => ({ dataset: { bookingSummaryField: key }, textContent: '', hidden: false }));
     const optional = ['client', 'delegataire', 'site', 'installer', 'lot'].map(key => ({ dataset: { bookingSummaryOptional: key } }));
     const phones = { children: [], textContent: '', replaceChildren() { this.children = []; this.textContent = ''; },
@@ -80,6 +80,28 @@ test('restores context published before the module loads and listens for later s
 });
 
 const view = readFileSync(new URL('../../resources/views/planner/book.blade.php', import.meta.url), 'utf8');
+test('publishes the operation postal code and city for a physical lot, and clears them on the next selection', () => {
+    const ui = recapHarness();
+    const code = view.slice(view.indexOf('const updateBookingDossierSummary ='), view.indexOf('const bookingCrmSearch ='));
+    const publish = runInNewContext(`${code}\nupdateBookingDossierSummary;`, {
+        bookingDossierSummary: { ...ui.section, dispatchEvent() {} }, CustomEvent: class {},
+    });
+    publish({ is_lot: true, address: '12 voie conservée', postal_code: '60110', city: '<img onerror=x>',
+        external_payload: { lot_name: 'Lot fictif' }, beneficiary_postal_code: '75002', beneficiary_city: 'Paris' });
+    const summary = JSON.parse(ui.section.dataset.bookingSummary);
+    renderBookingDossierSummary(ui.section, summary, ui.browser);
+    assert.equal(ui.fields.find(field => field.dataset.bookingSummaryField === 'postal_code').textContent, '60110');
+    assert.equal(ui.fields.find(field => field.dataset.bookingSummaryField === 'city').textContent, '<img onerror=x>');
+    assert.equal(ui.fields.find(field => field.dataset.bookingSummaryField === 'address').textContent, '12 voie conservée');
+    publish({ address: 'Autre adresse' });
+    renderBookingDossierSummary(ui.section, JSON.parse(ui.section.dataset.bookingSummary), ui.browser);
+    assert.equal(ui.fields.find(field => field.dataset.bookingSummaryField === 'postal_code').textContent, 'Non renseigné');
+    assert.equal(ui.fields.find(field => field.dataset.bookingSummaryField === 'city').textContent, 'Non renseigné');
+    const markup = readFileSync(new URL('../../resources/views/planner/booking-dossier-summary.blade.php', import.meta.url), 'utf8');
+    assert.match(markup, /data-booking-summary-field="postal_code"/);
+    assert.match(markup, /data-booking-summary-field="city"/);
+});
+
 const analysisCode = view.slice(view.indexOf('const analyzeAppointment ='), view.indexOf('const analyzeCrmAppointment ='));
 function analysisHarness() {
     const pending = [], summaries = [], rendered = [], errors = [];

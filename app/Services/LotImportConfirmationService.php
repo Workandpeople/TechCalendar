@@ -55,7 +55,7 @@ class LotImportConfirmationService
         }
 
         $selectedRowsWithWarnings = $appointments
-            ->filter(fn (array $appointment): bool => collect($appointment['warnings'] ?? [])->filter()->isNotEmpty())
+            ->filter(fn (array $appointment): bool => LotImportLocation::blockingWarnings($appointment) !== [])
             ->map(fn (array $appointment): int => (int) ($appointment['row_number'] ?? 0))
             ->filter()
             ->values();

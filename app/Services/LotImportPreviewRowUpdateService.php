@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\LotImportPreview;
+use App\Services\Crm\DossierLocation;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -10,14 +11,14 @@ class LotImportPreviewRowUpdateService
 {
     public function __construct(
         private readonly ImportedAddressCleaner $addressCleaner,
-        private readonly MapboxAddressGeocoder $geocoder,
+        private readonly LotImportLocation $location,
         private readonly LotTemplateMapper $templateMapper = new LotTemplateMapper,
     ) {}
 
     /**
      * @param  array<string, mixed>  $attributes
      */
-    public function update(LotImportPreview $preview, int $rowNumber, array $attributes): LotImportPreview
+    public function update(LotImportPreview $preview, int $rowNumber, array $attributes, int $authorId): LotImportPreview
     {
         if ($preview->status !== LotImportPreview::STATUS_COMPLETED) {
             throw new RuntimeException('La preview doit être terminée avant modification.');
@@ -32,11 +33,14 @@ class LotImportPreviewRowUpdateService
         }
 
         $appointment = $appointments->get($appointmentIndex);
+        $attributes = array_replace($appointment, $attributes);
         $cleanAddress = $this->addressCleaner->clean($this->nullableString($attributes['address'] ?? null));
         $postalCode = $this->nullableString($attributes['postal_code'] ?? null);
         $city = $this->nullableString($attributes['city'] ?? null);
-        $departmentCode = $this->nullableString($attributes['department_code'] ?? null) ?: $this->departmentFromPostalCode($postalCode);
-        $geocoding = $this->geocoder->geocode($this->fullAddress($cleanAddress, $postalCode, $city));
+        $departmentCode = DossierLocation::departmentCode($postalCode) ?: $this->nullableString($attributes['department_code'] ?? null);
+        $mode = $attributes['geocoding_mode'] ?? 'address';
+        $geocoding = $this->location->geocode($cleanAddress, $postalCode, $city, $mode);
+        $businessWarnings = array_values(array_diff($appointment['warnings'] ?? [], LotImportLocation::geocodingWarnings($appointment)));
 
         $appointment = array_merge($appointment, [
             'customer_name' => $this->customerName($attributes),
@@ -58,6 +62,7 @@ class LotImportPreviewRowUpdateService
             'mapbox_confidence' => $geocoding['mapbox_confidence'] ?? null,
             'comment' => $this->nullableString($attributes['comment'] ?? null),
             'warnings' => collect($geocoding['warnings'] ?? [])->filter()->values()->all(),
+            'location_warnings' => collect($geocoding['warnings'] ?? [])->filter()->values()->all(),
             'edited_manually' => true,
             'edited_at' => now()->toIso8601String(),
         ]);
@@ -69,10 +74,10 @@ class LotImportPreviewRowUpdateService
         }
 
         if (($appointment['import_format'] ?? null) === 'techcalendar_v1') {
-            $appointment['warnings'] = array_values(array_unique([
-                ...$appointment['warnings'], ...$this->templateMapper->warningsFor($appointment),
-            ]));
+            $businessWarnings = $this->templateMapper->warningsFor($appointment);
         }
+        $appointment['warnings'] = array_values(array_unique([...$businessWarnings, ...$appointment['warnings']]));
+        $appointment['location_review'] = LotImportLocation::review($mode, $appointment, $authorId);
 
         $appointments->put($appointmentIndex, $appointment);
 
@@ -82,7 +87,7 @@ class LotImportPreviewRowUpdateService
             'payload' => $payload,
             'normalized_rows' => $appointments->count(),
             'rejected_rows' => count($payload['rejected_rows'] ?? []),
-            'stage' => sprintf('Ligne %d modifiée et géocodée.', $rowNumber),
+            'stage' => sprintf('Ligne %d modifiée.', $rowNumber),
             'error_message' => null,
         ]);
 
@@ -116,20 +121,6 @@ class LotImportPreviewRowUpdateService
         }
 
         return $this->nullableString($payload['site_name'] ?? null) ?: 'Client à qualifier';
-    }
-
-    private function fullAddress(?string $address, ?string $postalCode, ?string $city): ?string
-    {
-        return trim(implode(' ', array_filter([$address, $postalCode, $city]))) ?: null;
-    }
-
-    private function departmentFromPostalCode(?string $postalCode): ?string
-    {
-        if (! $postalCode || ! preg_match('/\b(\d{2})\d{3}\b/', $postalCode, $matches)) {
-            return null;
-        }
-
-        return $matches[1];
     }
 
     private function nullableString(mixed $value): ?string

@@ -188,8 +188,8 @@ it('does not erase invalid template fields warnings when only the address is edi
     ]);
     $attributes = ['address' => '12 RUE DE LARGILIERE', 'postal_code' => '60110', 'city' => 'Esches', 'company_name' => 'Beneficiaire SAS'];
     $service = app(LotImportPreviewRowUpdateService::class);
-    $service->update($preview, 2, $attributes);
+    $service->update($preview, 2, $attributes, $preview->created_by);
     expect($preview->refresh()->payload['appointments'][0]['warnings'])->toHaveCount(2);
-    $service->update($preview, 2, [...$attributes, 'customer_email' => 'correct@example.test', 'installer_siren' => '348808007']);
+    $service->update($preview, 2, [...$attributes, 'customer_email' => 'correct@example.test', 'installer_siren' => '348808007'], $preview->created_by);
     expect($preview->refresh()->payload['appointments'][0]['warnings'])->toBe([]);
 });

@@ -8,6 +8,8 @@
         <div><dt>Téléphone</dt><dd data-booking-summary-phones></dd></div>
         <div><dt>Email</dt><dd data-booking-summary-field="email"></dd></div>
         <div class="gc-booking-summary-address"><dt>Adresse de l’intervention</dt><dd data-booking-summary-field="address"></dd></div>
+        <div><dt>Code postal</dt><dd data-booking-summary-field="postal_code"></dd></div>
+        <div><dt>Ville</dt><dd data-booking-summary-field="city"></dd></div>
         <div><dt>Fiche / prestation à planifier</dt><dd data-booking-summary-field="service"></dd></div>
         <div data-booking-summary-optional="site" hidden><dt>Site</dt><dd data-booking-summary-field="site"></dd></div>
         <div data-booking-summary-optional="client" hidden><dt>Client</dt><dd data-booking-summary-field="client"></dd></div>
