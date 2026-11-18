@@ -5565,14 +5565,14 @@
                 : `Département ${filters.department_code}; aucun service renseigné, pas de filtre prestation.${availabilityLabel}`;
 
             if (technicians.length === 0) {
-                techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:#fecdd3;background:#fff1f2;color:#be123c;">Aucun technicien ne couvre ce département avec ces critères.</div>';
+                techniciansList.innerHTML = '<div class="rounded-xl border p-4 text-sm" style="border-color:#fecdd3;background:#fff1f2;color:#be123c;">Aucun technicien ne couvre ce département avec ces critères. Utilisez la recherche ci-dessus pour ajouter explicitement un technicien hors secteur.</div>';
                 return;
             }
 
             techniciansList.innerHTML = technicians.map((technician, index) => {
                 const coverageBadge = technician.covers_requested_department
                     ? '<span class="rounded-lg px-2 py-1 text-xs" style="background:#dcfce7;color:#15803d;">Département couvert</span>'
-                    : `<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">${technician.route_source === 'unavailable' ? 'Secteur à vérifier' : 'Fallback proximité'}</span>`;
+                    : `<span class="rounded-lg px-2 py-1 text-xs" style="background:#fee2e2;color:#be123c;">${technician.route_source === 'unavailable' ? 'Hors département' : 'Fallback proximité'}</span>`;
                 const technicianId = String(technician.id);
                 const isSelected = selectedTechnicianIds.has(technicianId);
                 const color = technicianColor(technicianId);

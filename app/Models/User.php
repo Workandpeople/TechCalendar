@@ -124,6 +124,13 @@ class User extends Authenticatable
         });
     }
 
+    public function coversDepartment(?string $departmentCode): bool
+    {
+        $departmentCode = mb_strtoupper(trim($departmentCode ?? ''));
+
+        return $departmentCode !== '' && in_array($departmentCode, explode(',', $this->assigned_department_codes), true);
+    }
+
     protected function initials(): Attribute
     {
         return Attribute::get(function (): string {

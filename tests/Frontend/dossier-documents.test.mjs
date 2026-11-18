@@ -224,13 +224,18 @@ test('renders an image directly and reports decoding errors with accessible fall
     assert.equal(ui.dialog.attributes['aria-busy'], 'false');
 });
 
-test('keeps technician mobile file links native while retaining desktop and other portal previews', async () => {
+test('keeps technician previews inside a dismissible dialog on mobile and installed apps without navigating', async () => {
     const ui = previewHarness();
     ui.link.dataset.documentNativeMobile = '';
     ui.browser.matchMedia = () => ({ matches: true });
     await ui.click();
-    assert.equal(ui.calls.length, 0);
+    assert.equal(ui.calls.length, 1);
+    assert.equal(ui.dialog.open, true);
+    assert.equal(ui.browser.location.href, 'https://app.test/dossier/1');
+    ui.close.handlers.click();
     assert.equal(ui.dialog.open, false);
+    assert.equal(ui.link.focused, true);
+    assert.equal(ui.browser.location.href, 'https://app.test/dossier/1');
     ui.browser.matchMedia = () => ({ matches: false });
     await ui.click();
     assert.equal(ui.dialog.open, true);
@@ -238,6 +243,25 @@ test('keeps technician mobile file links native while retaining desktop and othe
     otherPortal.browser.matchMedia = () => ({ matches: true });
     await otherPortal.click();
     assert.equal(otherPortal.dialog.open, true);
+});
+
+test('can close a mobile preview and open the next document without retaining the previous media', async () => {
+    const ui = previewHarness();
+    ui.browser.matchMedia = () => ({ matches: true });
+    await ui.click();
+    const first = ui.content.children[0];
+    ui.close.handlers.click();
+    assert.equal(first.src, undefined);
+    ui.link.href = 'https://app.test/document/2?preview=1';
+    ui.link.dataset.documentDownload = 'https://app.test/document/2';
+    ui.link.dataset.documentTitle = 'Deuxième document';
+    await ui.click();
+    assert.equal(ui.content.children.length, 1);
+    assert.notEqual(ui.content.children[0], first);
+    assert.equal(ui.content.children[0].src, ui.link.href);
+    assert.equal(ui.title.textContent, 'Deuxième document');
+    assert.equal(ui.calls.length, 2);
+    assert.equal(ui.browser.location.href, 'https://app.test/dossier/1');
 });
 
 test('never embeds attachments, login pages, permission errors or network failures', async () => {
@@ -258,6 +282,10 @@ test('offers fallback instead of embedding on browsers without a native PDF view
     await ui.click();
     assert.equal(ui.content.children.length, 0);
     assert.match(ui.status.textContent, /Aperçu indisponible/);
+    assert.equal(ui.dialog.open, true);
+    assert.equal(ui.browser.location.href, 'https://app.test/dossier/1');
+    ui.close.handlers.click();
+    assert.equal(ui.dialog.open, false);
 });
 
 test('preserves modified clicks and refuses cross-origin, credentialed or non-HTTP URLs', async () => {

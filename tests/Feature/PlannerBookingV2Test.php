@@ -151,7 +151,7 @@ it('keeps full planning and manual technician selection usable without GPS witho
     $this->mock(MapboxDrivingRouteService::class, function ($mock) {
         $mock->shouldNotReceive('estimate');
     });
-    $technician->update(['latitude' => null, 'longitude' => null, 'last_name' => 'SansGPS']);
+    $technician->update(['latitude' => null, 'longitude' => null, 'last_name' => 'SansGPS', 'department_code' => '75']);
     $this->actingAs($actor)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])->assertOk()
         ->assertJsonPath('crm_appointment.latitude', null)->assertJsonPath('crm_appointment.longitude', null)
         ->assertJsonPath('crm_appointment.location_precision', 'unverified')->assertJsonCount(0, 'suggestions')
@@ -164,6 +164,53 @@ it('keeps full planning and manual technician selection usable without GPS witho
         ->assertOk()->assertJsonCount(0, 'suggestions')->assertJsonPath('technicians.0.id', $technician->id);
     Http::assertNothingSent();
 });
+
+it('only proposes qualified sector technicians without GPS and keeps out-of-sector additions explicit', function (string $postalCode, string $department, bool $legacy) {
+    extract(nativeBookingFixture());
+    $dossier->update(['postal_code' => $postalCode]);
+    Department::firstOrCreate(['code' => $department], ['name' => 'Secteur test']);
+    Department::firstOrCreate(['code' => '69'], ['name' => 'Autre secteur']);
+    if ($legacy) {
+        $technician->update(['department_code' => $department]);
+    } else {
+        $technician->departments()->attach($department);
+        $technician->update(['department_code' => '69']);
+    }
+    $outside = User::factory()->create(['role' => 2, 'last_name' => 'HorsSecteur', 'latitude' => null, 'longitude' => null]);
+    $outside->services()->attach($service);
+    $outside->departments()->attach('69');
+    $unqualified = User::factory()->create(['role' => 2]);
+    $unqualified->departments()->attach($department);
+    $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    $this->mock(MapboxDrivingRouteService::class)->shouldNotReceive('estimate');
+
+    $this->actingAs($actor)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])
+        ->assertOk()->assertJsonCount(1, 'technicians')->assertJsonCount(0, 'suggestions')
+        ->assertJsonPath('technicians.0.id', $technician->id)->assertJsonPath('technicians.0.covers_requested_department', true)
+        ->assertJsonPath('filters.department_code', $department)->assertJsonPath('technicians.0.driving_duration_minutes', null);
+    $this->postJson(route('planner.book.technicians.search'), ['crm_appointment_id' => $payload['crm_appointment_id'], 'query' => 'HorsSecteur'])
+        ->assertOk()->assertJsonCount(1, 'technicians')->assertJsonPath('technicians.0.id', $outside->id)
+        ->assertJsonPath('technicians.0.covers_requested_department', false);
+    $this->postJson(route('planner.book.calendar-window'), ['crm_appointment_id' => $payload['crm_appointment_id'],
+        'start' => now()->toIso8601String(), 'end' => now()->addWeek()->toIso8601String(), 'technician_ids' => [$outside->id]])
+        ->assertOk()->assertJsonCount(1, 'technicians')->assertJsonCount(0, 'suggestions')
+        ->assertJsonPath('technicians.0.id', $outside->id)->assertJsonPath('technicians.0.covers_requested_department', false);
+    Http::assertNothingSent();
+})->with([
+    ['07270', '07', false], ['07270', '07', true], ['20100', '2A', false],
+    ['20100', '2A', true], ['97100', '971', false], ['97100', '971', true],
+]);
+
+it('does not silently propose all technicians when the sector is missing or has no qualified technician without GPS', function (?string $postalCode) {
+    extract(nativeBookingFixture());
+    $dossier->update(['postal_code' => $postalCode]);
+    $technician->update(['department_code' => '69']);
+    $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->andReturn(['coordinates' => null]);
+    $this->mock(MapboxDrivingRouteService::class)->shouldNotReceive('estimate');
+    $this->actingAs($actor)->postJson(route('planner.book.analyze'), ['crm_appointment_id' => $payload['crm_appointment_id']])
+        ->assertOk()->assertJsonCount(0, 'technicians')->assertJsonCount(0, 'suggestions');
+    Http::assertNothingSent();
+})->with(['07270', null]);
 
 it('requires explicit audited force for an unlocated full-planning placement and preserves real null GPS', function () {
     extract(nativeBookingFixture());

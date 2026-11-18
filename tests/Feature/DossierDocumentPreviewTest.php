@@ -74,6 +74,15 @@ function dossierPreviewFixture($test, string $source, string $content, string $m
     return [$url, $path];
 }
 
+it('uses the dismissible preview for every technician open action including unsupported formats', function (bool $previewable) {
+    $html = view('tech.partials.file', ['file' => ['name' => 'Pièce de test', 'label' => 'Document du dossier',
+        'url' => '/tech/appointments/1/documents/dossier/1', 'previewable' => $previewable]])->render();
+    expect($html)->toContain('data-document-open', 'data-document-download=', 'aria-haspopup="dialog"')
+        ->not->toContain('data-document-native-mobile');
+    $preview = view('components.document-preview')->render();
+    expect($preview)->toContain('data-preview-close', 'Fermer l’aperçu et revenir au dossier', 'data-preview-download');
+})->with([true, false]);
+
 it('adds the beneficiary to native lot and archived PDF filenames without renaming stored files', function (string $source) {
     $this->dossier->update(['last_name' => 'GIRARD', 'first_name' => 'Claude']);
     [$url, $path] = dossierPreviewFixture($this, $source, "%PDF-1.4\n%%EOF\n");

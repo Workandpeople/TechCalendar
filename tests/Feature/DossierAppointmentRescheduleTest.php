@@ -230,6 +230,25 @@ it('reschedules in place at the exact Paris time and keeps comments documents an
         ->and(DossierActivity::where('kind', 'appointment_rescheduled')->count())->toBe(1);
 });
 
+it('preserves long inspection addresses when creating or moving a 25 minute visit', function (bool $newVisit) {
+    $this->dossier->update(['address' => str_repeat('Parcelle AC 0001 - ', 25).'Entrée', 'city' => str_repeat('é', 190)]);
+    $address = DossierLocation::address($this->dossier);
+    expect(mb_strlen($address))->toBeGreaterThan(255)->toBeLessThanOrEqual(1024);
+    if ($newVisit) {
+        $this->appointment->delete();
+        $this->mock(DossierMapPreview::class)->shouldReceive('coordinates')->once()
+            ->andReturn(['coordinates' => ['latitude' => 48.86, 'longitude' => 2.35]]);
+    } else {
+        $this->appointment->update(['address' => '']);
+    }
+    $this->patchJson($this->url, [...$this->data, 'appointment_id' => $newVisit ? null : $this->appointment->id,
+        'updated_at' => $newVisit ? null : $this->appointment->fresh()->updated_at->toIso8601String(), 'duration_minutes' => 25])
+        ->assertOk()->assertJsonPath('created', $newVisit)->assertJsonPath('address', $address)
+        ->assertJsonPath('starts_at', '2026-11-04T10:40:00+01:00')->assertJsonPath('ends_at', '2026-11-04T11:05:00+01:00');
+    expect(Appointment::sole()->address)->toBe($address)->and(Appointment::sole()->duration_minutes)->toBe(25)
+        ->and($this->operation->fresh()->legacy_status)->toBe('RDV ATTENTE VISITE');
+})->with([false, true]);
+
 it('shows conflicts then forces only after explicit confirmation without moving the other RDV', function () {
     $busy = $this->appointment->replicate();
     $busy->forceFill(['technician_id' => $this->otherTech->id, 'dossier_operation_id' => null,

@@ -897,7 +897,7 @@ class PlannerBookingController extends Controller
                 ));
                 $technician->setAttribute(
                     'covers_requested_department',
-                    $technician->departments->contains('code', $crmAppointment['department_code'])
+                    $technician->coversDepartment($crmAppointment['department_code'] ?? null)
                 );
 
                 return $technician;
@@ -907,8 +907,8 @@ class PlannerBookingController extends Controller
         $strictTechnicians = $techniciansByDistance
             ->filter(fn (User $technician): bool => (bool) $technician->getAttribute('covers_requested_department'))
             ->values();
-        // Keep sector coverage, but never hide the nearest qualified technicians behind it.
-        $routingPool = $manualLocation ? $techniciansByDistance : $strictTechnicians->merge($techniciansByDistance->take(3))->unique('id')->values();
+        // Without coordinates there is no reliable proximity fallback; out-of-sector additions stay explicit.
+        $routingPool = $manualLocation ? $strictTechnicians : $strictTechnicians->merge($techniciansByDistance->take(3))->unique('id')->values();
 
         return $this->withRouteAttributes($routingPool, $crmAppointment, $drivingRoutes)
             ->sort(function (User $leftTechnician, User $rightTechnician): int {
@@ -1057,7 +1057,7 @@ class PlannerBookingController extends Controller
 
                 $technician->setAttribute(
                     'covers_requested_department',
-                    $technician->departments->contains('code', $crmAppointment['department_code'])
+                    $technician->coversDepartment($crmAppointment['department_code'] ?? null)
                 );
                 $technician->setAttribute('driving_distance_km', $route['distance_km']);
                 $technician->setAttribute('driving_duration_minutes', $route['duration_minutes']);

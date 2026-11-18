@@ -1,5 +1,16 @@
 APERCU DES DOCUMENTS V2 - CONTROLES DE DEPLOIEMENT
 
+Correction mobile/PWA du 18/11/2026
+- Les actions Ouvrir des techniciens utilisent aussi la fenetre d'apercu sur
+  mobile. L'ancienne exception native quittait parfois l'application installee
+  sans commande de retour. Le bouton Fermer reste en dehors du contenu du fichier.
+- La fermeture annule le chargement, detache le fichier et rend le focus au lien
+  du dossier sans deplacer la page. Le document suivant peut etre ouvert aussitot.
+- Les formats non affichables restent dans la fenetre avec un telechargement
+  explicite : aucun changement du type MIME, des en-tetes ou des droits serveur.
+- Ce correctif est applicatif uniquement ; aucune nouvelle regle Nginx ni mise
+  a jour des passerelles privees MAR n'est necessaire.
+
 Diagnostic local (aucun acces au CT ni a la production)
 - Les trois reponses documentaires imposaient "default-src 'none'; sandbox",
   y compris aux PDF inline. Le sandbox CSP bloque certains lecteurs PDF natifs.
