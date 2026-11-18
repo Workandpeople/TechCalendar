@@ -246,9 +246,23 @@ try {
         throw new RuntimeException('Au moins un super-admin interne actif est requis. Aucun droit modifie.');
     }
     $portalAccounts = 0;
+    $inactiveOrganisationPortalAccounts = 0;
     $clientAccess = app(ClientAccess::class);
-    foreach (User::query()->where('portal_enabled', true)->with('externalClient')->lazyById(100) as $user) {
-        if (! $clientAccess->active($user) || ! array_key_exists($user->externalClient->kind, ExternalDelegataire::KINDS)) {
+    foreach (User::query()->where('portal_enabled', true)
+        ->select(['id', 'role', 'admin', 'external_client_id', 'portal_enabled', 'deleted_at'])
+        ->with('externalClient:id,kind,is_active')->lazyById(100) as $user) {
+        $organisation = $user->externalClient;
+        if ($user->role !== User::ROLE_EXTERNAL || $user->admin || ! $organisation
+            || ! array_key_exists($organisation->kind, ExternalDelegataire::KINDS)) {
+            throw new RuntimeException('Compte de portail actif sans role externe ou organisation valide. Aucun acces modifie.');
+        }
+        // Organisation deactivation already denies access; it is not an account integrity error.
+        if (! $organisation->is_active) {
+            $inactiveOrganisationPortalAccounts++;
+
+            continue;
+        }
+        if (! $clientAccess->active($user)) {
             throw new RuntimeException('Compte de portail actif sans role externe ou organisation valide. Aucun acces modifie.');
         }
         $portalAccounts++;
@@ -298,6 +312,7 @@ try {
         'code_read_only' => true, 'outbound_delivery_enabled' => $mailDeliveryEnabled,
         'mail_delivery_enabled' => $mailDeliveryEnabled, 'sms_delivery_enabled' => false, 'capcee_delivery_enabled' => false,
         'external_portals_enabled' => $portalAccounts > 0, 'enabled_external_accounts' => $portalAccounts,
+        'inactive_organisation_portal_accounts' => $inactiveOrganisationPortalAccounts,
         'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {
     $detail = get_class($exception) === RuntimeException::class ? ' '.$exception->getMessage() : '';

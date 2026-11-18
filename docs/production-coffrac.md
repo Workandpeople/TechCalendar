@@ -3503,3 +3503,18 @@ le realiser sur une demo sans envois ou avec un dossier fictif sans destinataire
   Les controles des paquets sont des GET uniquement ; les activations, mappings,
   mots de passe et modes mail/SMS restent conserves. Le lecteur gagne seulement
   les deux colonnes SELECT de societe documentees plus haut, pas le writer.
+
+## Precontrole des comptes portail et organisations inactives
+
+Le controle `production-runtime.php --check` distingue les comptes externes
+utilisables des comptes rattaches a une organisation volontairement desactivee.
+Ces derniers sont comptes dans `inactive_organisation_portal_accounts`, sans
+modifier leur role, leur rattachement, leurs permissions, leur mot de passe ou
+leur drapeau `portal_enabled`. Leur acces applicatif reste refuse par
+`ClientAccess::active()` et ne compte pas dans `enabled_external_accounts`.
+
+Une organisation inactive ne dispense jamais des controles de structure : role
+externe, absence de droits administrateur, organisation existante et type
+client/delegataire valide restent obligatoires. Un compte mal rattache bloque
+toujours le deploiement avant maintenance. Le controle ne reactive aucun compte
+et ne corrige aucune donnee de production automatiquement.

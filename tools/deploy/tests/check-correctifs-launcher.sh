@@ -15,6 +15,22 @@ PRIMARY=$(sql 'SELECT id FROM cofrac2production.users WHERE admin=1 AND deleted_
 sql "INSERT INTO cofrac2production.users (id,first_name,last_name,email,password,role,admin,created_at,updated_at)
  VALUES (77777,'Second','Admin fixture','second-admin@example.invalid','fixture-no-login-hash',0,1,NOW(),NOW());"
 runtime_check() { runuser -u cofrac2-app -- php8.4 "$APP/tools/deploy/production-runtime.php" --check; }
+# An inactive organisation is an intentional access denial, never an implicit portal reactivation.
+sql "INSERT INTO cofrac2production.external_delegataires (id,source,external_id,kind,name,is_active,created_at,updated_at)
+ VALUES (88888,'native','inactive-preflight-fixture','delegataire','Inactive fixture',0,NOW(),NOW());
+ INSERT INTO cofrac2production.users (id,first_name,last_name,email,password,role,admin,external_client_id,portal_enabled,created_at,updated_at)
+ VALUES (77778,'Inactive','Portal fixture','inactive-portal@example.invalid','fixture-no-login-hash',3,0,88888,1,NOW(),NOW());"
+sql 'SELECT u.id,u.role,u.admin,u.password,u.portal_enabled,u.external_client_id,o.is_active FROM cofrac2production.users u JOIN cofrac2production.external_delegataires o ON o.id=u.external_client_id WHERE u.id=77778;' > /tmp/correctifs-inactive-portal.before
+runtime_check > /tmp/correctifs-inactive-organisation.json
+php8.4 -r '$r=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);if($r["inactive_organisation_portal_accounts"]!==1)exit(1);' /tmp/correctifs-inactive-organisation.json
+sql 'UPDATE cofrac2production.users SET role=2 WHERE id=77778;'
+if runtime_check > /tmp/correctifs-invalid-inactive-portal.json 2>/tmp/correctifs-invalid-inactive-portal.err; then exit 1; fi
+grep -q 'Compte de portail actif sans role externe ou organisation valide' /tmp/correctifs-invalid-inactive-portal.err
+sql 'UPDATE cofrac2production.users SET role=3 WHERE id=77778;'
+runtime_check > /tmp/correctifs-inactive-organisation-restored.json
+cmp /tmp/correctifs-inactive-organisation.json /tmp/correctifs-inactive-organisation-restored.json
+sql 'SELECT u.id,u.role,u.admin,u.password,u.portal_enabled,u.external_client_id,o.is_active FROM cofrac2production.users u JOIN cofrac2production.external_delegataires o ON o.id=u.external_client_id WHERE u.id=77778;' > /tmp/correctifs-inactive-portal.after
+cmp /tmp/correctifs-inactive-portal.before /tmp/correctifs-inactive-portal.after
 runtime_check > /tmp/correctifs-two-admins.json
 cat "$APP/tools/deploy/production-runtime.php" | runuser -u cofrac2-app -- php8.4 -- --check > /tmp/correctifs-two-admins-stdin.json
 cmp /tmp/correctifs-two-admins.json /tmp/correctifs-two-admins-stdin.json
