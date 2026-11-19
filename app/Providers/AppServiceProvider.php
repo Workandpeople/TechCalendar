@@ -7,6 +7,7 @@ use App\Models\DossierActivity;
 use App\Models\DossierDocument;
 use App\Models\DossierOperation;
 use App\Observers\AppointmentChangeObserver;
+use App\Observers\AppointmentStatusChangeObserver;
 use App\Observers\PortalNotificationObserver;
 use App\Services\ApplicationSettings;
 use App\Services\FrenchMailNotifications;
@@ -42,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         Password::defaults(fn (): Password => Password::min(8)->mixedCase()->numbers());
         FrenchMailNotifications::register();
         Appointment::observe(AppointmentChangeObserver::class);
+        DossierActivity::observe(AppointmentStatusChangeObserver::class);
         foreach ([DossierActivity::class, DossierDocument::class, DossierOperation::class] as $model) {
             $model::observe(PortalNotificationObserver::class);
         }

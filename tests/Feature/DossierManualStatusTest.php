@@ -18,6 +18,7 @@ use App\Services\Crm\DossierWorkflow;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -99,15 +100,19 @@ it('preserves appointments documents technical validation satisfaction archived 
     $this->row->update(['physical_satisfaction' => false, 'physical_satisfaction_synced_at' => now(), 'contact_satisfaction' => true]);
     $billing = DossierBilling::create(['dossier_id' => $this->dossier->id, 'dossier_operation_id' => $this->operation->id,
         'source' => 'native', 'marked_at' => now(), 'marked_by' => $this->actor->id, 'invoice_reference' => 'INVOICE-EXISTING']);
-    $preserved = [$this->appointment->fresh()->getAttributes(), $document->fresh()->getAttributes(),
+    $reviewAttributes = ['global_plus_review', 'global_plus_review_version', 'global_plus_review_pending'];
+    $preserved = [Arr::except($this->appointment->fresh()->getAttributes(), $reviewAttributes), $document->fresh()->getAttributes(),
         $this->row->fresh()->getAttributes(), $this->lot->fresh()->getAttributes(), $billing->fresh()->getAttributes(),
         $this->operation->fresh()->except(['legacy_status', 'updated_at'])];
     $this->patch($this->url, [...$this->data, 'status' => 'pending'])->assertSessionHasNoErrors();
-    expect([$this->appointment->fresh()->getAttributes(), $document->fresh()->getAttributes(),
+    expect([Arr::except($this->appointment->fresh()->getAttributes(), $reviewAttributes), $document->fresh()->getAttributes(),
         $this->row->fresh()->getAttributes(), $this->lot->fresh()->getAttributes(), $billing->fresh()->getAttributes(),
         $this->operation->fresh()->except(['legacy_status', 'updated_at'])])->toEqual($preserved)
         ->and(DossierBillingService::summary($this->dossier->fresh())['label'])->toBe('Facturé')
         ->and(CapceeAutomaticSubmission::count())->toBe(0);
+    expect($this->appointment->fresh()->global_plus_review_pending)->toBeTrue()
+        ->and($this->appointment->fresh()->global_plus_review['before']['operation_status'])->toBe('RAPPORT GENIUS')
+        ->and($this->appointment->fresh()->global_plus_review['after']['operation_status'])->toBe('PRISE DE RDV');
     $this->postJson(route('v2.dossiers.billing.mark', $this->dossier), ['version' => 2, 'confirmed' => true])
         ->assertUnprocessable()->assertJsonValidationErrors('billing');
     Storage::disk('local')->assertExists($document->path);

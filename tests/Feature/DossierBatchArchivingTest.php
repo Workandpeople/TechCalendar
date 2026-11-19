@@ -13,6 +13,7 @@ use App\Services\Crm\DossierArchiving;
 use App\Services\Crm\DossierRegistry;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -88,19 +89,22 @@ it('preserves billing proof documents appointments history and unrelated operati
         'technician_id' => $this->actor->id, 'created_by' => $this->actor->id, 'customer_first_name' => 'Client',
         'customer_last_name' => 'Test', 'customer_phone' => '', 'address' => '1 rue Test', 'duration_minutes' => 60,
         'starts_at' => now()->subYears(4), 'ends_at' => now()->subYears(4)->addHour(), 'status' => Appointment::STATUS_PROBLEM]);
-    $originalAppointment = $appointment->fresh()->getRawOriginal();
+    $reviewAttributes = ['global_plus_review', 'global_plus_review_version', 'global_plus_review_pending'];
+    $originalAppointment = Arr::except($appointment->fresh()->getRawOriginal(), $reviewAttributes);
     $originalBilling = $billing->fresh()->getRawOriginal();
     $originalDocument = $document->fresh()->getRawOriginal();
     $rawPayload = '{"status":"PROBLEME RDV","billing":"FAC-123"}';
     DB::table('legacy_records')->insert(['source_table' => 'dossier', 'source_id' => 123, 'dossier_id' => $this->first->id, 'payload' => $rawPayload]);
     $this->postJson(route('v2.dossiers.batch'), [...$this->payload, 'action' => $action])->assertOk();
-    expect($appointment->fresh()->getRawOriginal())->toBe($originalAppointment)
+    expect(Arr::except($appointment->fresh()->getRawOriginal(), $reviewAttributes))->toBe($originalAppointment)
         ->and($billing->fresh()->getRawOriginal())->toBe($originalBilling)
         ->and($document->fresh()->getRawOriginal())->toBe($originalDocument)
         ->and($history->fresh()->body)->toBe('Ancien historique à garder')
         ->and($unrelated->fresh()->legacy_status)->toBe($unrelatedStatus)
         ->and(DB::table('legacy_records')->where('dossier_id', $this->first->id)->value('payload'))->toBe($rawPayload)
         ->and($this->first->refresh()->version)->toBe($action === 'cancel' ? 3 : 2);
+    expect($appointment->fresh()->global_plus_review_pending)->toBe($action === 'cancel')
+        ->and($appointment->fresh()->global_plus_review_version)->toBe($action === 'cancel' ? 1 : 0);
     Storage::disk('local')->assertExists('preserved.pdf');
     if ($action === 'delete') {
         $this->post(route('v2.dossiers.restore', $this->first), ['version' => 2])->assertRedirect();

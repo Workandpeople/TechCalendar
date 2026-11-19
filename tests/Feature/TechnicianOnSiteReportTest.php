@@ -93,6 +93,21 @@ it('accepts the exact snapshot rendered in the mobile HTML', function () {
     $this->post($this->url, ($this->payload)(['snapshot' => $matches[1]]), ['Accept' => 'application/json'])->assertOk();
 });
 
+it('retains the first status and latest report state in one private Global+ review despite a stale appointment instance', function () {
+    $this->postJson($this->url, ($this->payload)())->assertOk();
+    $review = $this->appointment->fresh()->global_plus_review;
+    expect($this->appointment->fresh()->global_plus_review_pending)->toBeTrue()
+        ->and($this->appointment->fresh()->global_plus_review_version)->toBe(2)
+        ->and($review['before']['operation_status'])->toBe('RDV ATTENTE VISITE')
+        ->and($review['before']['appointment_status'])->toBe('scheduled')
+        ->and($review['after']['operation_status'])->toBe('PRISE DE RDV')
+        ->and($review['after']['appointment_status'])->toBe('problem');
+    $this->get(route('planner.appointment-changes'))->assertForbidden();
+    $planner = User::factory()->create(['role' => 1, 'admin' => false]);
+    $this->actingAs($planner)->getJson(route('planner.incidents.counts'))->assertOk()
+        ->assertJsonPath('appointment_changes.pending', 1);
+});
+
 it('keeps an open report valid after non booking updates without losing the planning comment', function (string $change) {
     $payload = ($this->payload)();
     $this->travel(1)->minutes();
