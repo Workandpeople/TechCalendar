@@ -111,15 +111,15 @@ it('skips API tests when credentials are missing', function (string $key) {
     Http::assertNothingSent();
 })->with(['mapbox', 'openai', 'global_plus', 'capcee', 'smsfactor']);
 
-it('only authenticates Global Plus without creating data or changing its environment', function () {
-    config(['services.global_plus.api_key' => 'gp-secret', 'services.global_plus.api_url' => 'https://cee-api.test.globalplus.fr']);
-    Http::fake(['https://cee-api.test.globalplus.fr/api/Auth/token' => Http::response(['token' => 'gp-returned-token'])]);
+it('only authenticates Global Plus without creating data or changing its environment', function (string $base, string $environment) {
+    config(['services.global_plus.api_key' => 'gp-secret', 'services.global_plus.api_url' => $base]);
+    Http::fake([$base.'/api/Auth/token' => Http::response(['token' => 'gp-returned-token'])]);
     $this->postJson(route('admin.settings.diagnostics'), ['check' => 'global_plus'])->assertOk()
-        ->assertJsonPath('status', 'ok')->assertDontSee('gp-secret')->assertDontSee('gp-returned-token')->assertSee('TEST');
+        ->assertJsonPath('status', 'ok')->assertDontSee('gp-secret')->assertDontSee('gp-returned-token')->assertSee($environment);
     Http::assertSentCount(1);
-    expect(config('services.global_plus.api_url'))->toBe('https://cee-api.test.globalplus.fr')
+    expect(config('services.global_plus.api_url'))->toBe($base)
         ->and(Cache::has('global_plus:bearer_token'))->toBeFalse();
-});
+})->with([['https://cee-api.test.globalplus.fr', 'TEST'], ['https://cee-api.globalplus.fr', 'PRODUCTION']]);
 
 it('blocks unrecognised Global Plus destinations before sending credentials', function (string $base) {
     config(['services.global_plus.api_key' => 'gp-secret', 'services.global_plus.api_url' => $base]);

@@ -13,6 +13,27 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
+final class CofracProductionRuntimePolicy
+{
+    public static function globalPlusEnvironment(mixed $url): ?string
+    {
+        if (! is_string($url)) {
+            return null;
+        }
+
+        // Operational production settings may select either canonical endpoint; demo/import guards stay test-only.
+        return match (rtrim($url, '/')) {
+            'https://cee-api.test.globalplus.fr' => 'test',
+            'https://cee-api.globalplus.fr' => 'production',
+            default => null,
+        };
+    }
+}
+
+if (__FILE__ !== 'Standard input code' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') !== __FILE__) {
+    return;
+}
+
 umask(0077);
 ini_set('display_errors', '0');
 set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
@@ -206,10 +227,13 @@ try {
         || ($mailDeliveryEnabled && (config('mail.default') !== 'smtp' || config('mail.mailers.smtp.transport') !== 'smtp'))) {
         throw new RuntimeException('Livraison mail effective differente de la configuration approuvee. Aucun reglage modifie.');
     }
+    $globalPlusEnvironment = CofracProductionRuntimePolicy::globalPlusEnvironment(config('services.global_plus.api_url'));
+    if ($globalPlusEnvironment === null) {
+        throw new RuntimeException('Destination Global+ effective non approuvee : endpoints HTTPS TEST ou PRODUCTION uniquement. Aucun reglage modifie.');
+    }
     if (! app()->environment('production') || DB::connection()->getDatabaseName() !== 'cofrac2production'
         || config('app.debug') || config('simulation.enabled') || ! config('crm.v2_enabled')
         || config('services.smsfactor.enabled') || config('services.smsfactor.mode') !== 'simulate' || config('capcee.enabled')
-        || config('services.global_plus.api_url') !== 'https://cee-api.test.globalplus.fr'
         || config('queue.connections.database.retry_after') <= 1800 || config('reverb.client.host') !== $domain
         || config('app.url') !== 'https://'.$domain || config('reverb.apps.apps.0.allowed_origins') !== explode(',', $origins)) {
         throw new RuntimeException('Configuration effective differente de la recette interne approuvee.');
@@ -313,7 +337,8 @@ try {
         'mail_delivery_enabled' => $mailDeliveryEnabled, 'sms_delivery_enabled' => false, 'capcee_delivery_enabled' => false,
         'external_portals_enabled' => $portalAccounts > 0, 'enabled_external_accounts' => $portalAccounts,
         'inactive_organisation_portal_accounts' => $inactiveOrganisationPortalAccounts,
-        'apis' => 'configured_without_network_test', 'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
+        'apis' => 'configured_without_network_test', 'global_plus_environment' => $globalPlusEnvironment,
+        'final_cutover_ready' => false], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
 } catch (Throwable $exception) {
     $detail = get_class($exception) === RuntimeException::class ? ' '.$exception->getMessage() : '';
     file_put_contents('php://stderr', 'STOP : runtime V2 ('.get_class($exception).', '.basename($exception->getFile()).':'.$exception->getLine().').'.$detail." Aucun secret affiche.\n");
