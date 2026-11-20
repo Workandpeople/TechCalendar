@@ -34,7 +34,7 @@ class MymarOnSiteReportController extends Controller
         $url = route('tech.mar.on-site.show', $rdv);
 
         return $request->expectsJson()
-            ? response()->json(['message' => 'Photo et signalement enregistrés. Consultez la confirmation MYMAR.', 'url' => $url])
+            ? response()->json(['message' => 'Photo et signalement enregistrés. Le statut MAR reste inchangé, en attente de la décision administrative.', 'url' => $url])
             : redirect($url);
     }
 

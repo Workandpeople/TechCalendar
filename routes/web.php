@@ -88,12 +88,20 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::get('/planner/incidents', [TechnicianIncidentController::class, 'index'])->name('planner.incidents');
     Route::get('/planner/rdv-modifies', [AppointmentChangeReviewController::class, 'index'])->name('planner.appointment-changes');
+    Route::patch('/planner/rdv-modifies', [AppointmentChangeReviewController::class, 'updateBulk'])
+        ->middleware('throttle:10,1')->name('planner.appointment-changes.bulk');
     Route::patch('/planner/rdv-modifies/{appointment}', [AppointmentChangeReviewController::class, 'update'])
         ->whereNumber('appointment')->middleware('throttle:30,1')->name('planner.appointment-changes.update');
     Route::get('/planner/incidents/counts', [TechnicianIncidentController::class, 'counts'])
         ->middleware('throttle:20,1')->name('planner.incidents.counts');
     Route::patch('/planner/incidents/{incident}', [TechnicianIncidentController::class, 'update'])
         ->whereNumber('incident')->middleware('throttle:30,1')->name('planner.incidents.update');
+    Route::get('/planner/incidents/{incident}/status', [TechnicianIncidentController::class, 'statusContext'])
+        ->whereNumber('incident')->middleware('throttle:30,1')->name('planner.incidents.status.context');
+    Route::post('/planner/incidents/{incident}/status', [TechnicianIncidentController::class, 'changeStatus'])
+        ->whereNumber('incident')->middleware('throttle:10,1')->name('planner.incidents.status.update');
+    Route::post('/planner/incidents/{incident}/status/resume', [TechnicianIncidentController::class, 'resumeStatus'])
+        ->whereNumber('incident')->middleware('throttle:10,1')->name('planner.incidents.status.resume');
     Route::put('/profile', [ProfileController::class, 'update'])->middleware('throttle:20,1')->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
     Route::put('/profile/notifications', [ProfileController::class, 'notifications'])->middleware('throttle:20,1')->name('profile.notifications');

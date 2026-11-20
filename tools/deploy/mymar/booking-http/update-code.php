@@ -270,9 +270,14 @@ try {
     upgradeCommand(['/usr/bin/systemctl', 'start', ...$units]);
     upgradePendingCheck($config['token']);
     $capabilities = upgradeFetch('/v1/capabilities', $config['token']);
-    if (count($capabilities) !== 3 || ($capabilities['format'] ?? null) !== 'cofrac.mymar-booking-capabilities'
-        || ($capabilities['version'] ?? null) !== 1 || ($capabilities['on_site_rebook'] ?? null) !== true) {
-        throw new RuntimeException('mymar.on_site_rebooking_check_failed');
+    if (count($capabilities) !== 4 || ($capabilities['format'] ?? null) !== 'cofrac.mymar-booking-capabilities'
+        || ($capabilities['version'] ?? null) !== 1 || ($capabilities['on_site_rebook'] ?? null) !== true
+        || ($capabilities['incident_status_review'] ?? null) !== true) {
+        throw new RuntimeException('mymar.incident_status_review_check_failed');
+    }
+    $missingIncident = upgradeFetch('/v1/incident-dossiers/999999999999999999', $config['token'], 404);
+    if (($missingIncident['error'] ?? null) !== 'booking_dossier_not_found') {
+        throw new RuntimeException('mymar.incident_context_check_failed');
     }
     $labels = ['items' => []];
     if (! $writer) {
@@ -290,10 +295,11 @@ try {
         'complete' => true, 'target' => $target, 'revision' => $revision, 'calendar_labels_ready' => ! $writer, 'label_count' => count($labels['items']),
         'configuration_unchanged' => true, 'sql_writes' => false, 'mymar_application_unchanged' => true,
         'on_site_rebooking_ready' => true,
+        'incident_status_review_ready' => true,
         'reader_company_select_columns_added' => $permissionsChanged,
         'backup_directory' => $backup], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
     echo "Passerelle MAR ($target) mise a jour et GET verifies. Aucun dossier, placement, message ou code MYMAR modifie.\n";
-    echo "Retour en prise de RDV apres signalement : capacite confirmee.\n";
+    echo "Decision administrative apres signalement : capacite et lecture confirmees.\n";
     if ($permissionsChanged) {
         echo "Seul le lecteur gagne SELECT sur partenaire_id et le nom de societe ; aucun nouveau droit d'ecriture.\n";
     }

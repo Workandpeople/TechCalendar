@@ -44,7 +44,7 @@ it('advertises the additive workflow only through an authenticated read only cap
     $gateway = new MymarBookingGateway(true, $token, $forbidden, $forbidden, $forbidden);
     $call = fn ($method, $query, $auth) => $gateway->handle($method, '/v1/capabilities', $query, '', '', $auth, '127.0.0.1', new DateTimeImmutable);
     expect($call('GET', '', 'Bearer '.$token))->toBe(['status' => 200, 'body' => [
-        'format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true]])
+        'format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true, 'incident_status_review' => false]])
         ->and($call('GET', '', '')['status'])->toBe(403)
         ->and($call('POST', '', 'Bearer '.$token)['status'])->toBe(405)
         ->and($call('GET', 'force=1', 'Bearer '.$token)['status'])->toBe(422);

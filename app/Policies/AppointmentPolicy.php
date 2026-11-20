@@ -27,6 +27,10 @@ class AppointmentPolicy
             return false;
         }
         $state = DossierStatusCatalog::describe($appointment->dossierOperation->legacy_status)['key'];
+        if (TechnicianIncident::where('appointment_id', $appointment->id)
+            ->where('appointment_starts_at', $appointment->starts_at)->exists()) {
+            return false;
+        }
         if ($appointment->status === Appointment::STATUS_SCHEDULED) {
             return in_array($state, ['pending', 'awaiting_visit', 'problem'], true);
         }

@@ -8,8 +8,8 @@
                 <p class="font-semibold">{{ $incident->reasonLabel() }}</p>
                 <p class="whitespace-pre-line break-words">{{ $incident->comment }}</p>
                 <a class="gc-btn-secondary" href="{{ route('tech.mar.on-site.photo', $incident) }}">Voir la photo</a>
-                @if ($incident->sourceRequest?->status === 'queued')
-                    <form method="POST" action="{{ route('tech.mar.on-site.transmit', $rdv) }}">@csrf<button class="gc-btn-primary w-full" type="submit">Transmettre le signalement à MYMAR</button></form>
+                @if (! ($incident->source_context['status_decision_pending'] ?? false) && $incident->sourceRequest?->status === 'queued')
+                    <p class="text-sm">La décision de statut appartient désormais à l’équipe administrative.</p>
                 @elseif (in_array($incident->sourceRequest?->status, ['uncertain', 'dispatching'], true))
                     <a class="gc-btn-secondary" href="{{ route('tech.mar.on-site.show', $rdv) }}">Vérifier la confirmation</a>
                 @endif
@@ -21,7 +21,7 @@
                     @csrf
                     <input type="hidden" name="request_id" value="{{ old('request_id', (string) \Illuminate\Support\Str::uuid()) }}">
                     <input type="hidden" name="snapshot" value="{{ $snapshot }}">
-                    <p class="tech-report-intro">La validation alerte le planning Cofrac et demande le retour en <strong>Prise de RDV après travaux dans MYMAR</strong>. L’ancien passage, la photo et le commentaire restent conservés.</p>
+                    <p class="tech-report-intro">La validation conserve la photo et le commentaire et alerte le planning Cofrac. <strong>Le statut MYMAR reste inchangé</strong> jusqu’à la décision administrative.</p>
                     <p class="tech-report-help">Photo et commentaire complet conservés dans le suivi interne Cofrac. MYMAR reçoit l’état et un motif court tracé. Aucun email ou SMS automatique.</p>
                     @if ($errors->any())<ul class="tech-report-errors" role="alert">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>@endif
                     <label for="mar-reason">Motif *</label>

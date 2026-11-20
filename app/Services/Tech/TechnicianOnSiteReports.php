@@ -101,7 +101,7 @@ class TechnicianOnSiteReports
                             'on_site_evidence' => true, 'visit_at' => $visitAt->toIso8601String()]]);
                     $dossier->increment('version');
                 } else {
-                    $this->workflow->returnToBookingAfterOnSiteReport($actor, $locked, [
+                    $this->workflow->recordOnSiteReport($actor, $locked, [
                         'comment' => htmlspecialchars($comment, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                         'problem_type' => $reason, ...$flags,
                     ]);
@@ -116,7 +116,7 @@ class TechnicianOnSiteReports
                     'request_id' => $data['request_id'], 'author_id' => $actor->id, 'reason' => $data['reason'],
                     'reported_at' => $reportedAt->toIso8601String(), 'document_id' => $document->id,
                     'evidence_only' => $evidenceOnly,
-                    'returned_to_booking' => ! $evidenceOnly,
+                    'returned_to_booking' => false, 'status_decision_pending' => ! $evidenceOnly,
                 ];
                 TechnicianIncident::create([
                     'request_id' => $data['request_id'], 'dossier_id' => $dossier->id,
@@ -124,11 +124,12 @@ class TechnicianOnSiteReports
                     'reason' => $data['reason'], 'comment' => trim($data['comment'] ?? ''),
                     'reported_at' => $reportedAt, 'appointment_starts_at' => $visitAt ?? $locked->starts_at,
                     'source_context' => $evidenceOnly ? ['evidence_only' => true, 'visit_at' => $visitAt->toIso8601String(),
-                        'date_source' => filled($data['visit_date'] ?? null) ? 'technician_declared' : 'signed_visit_context'] : ['returned_to_booking' => true],
+                        'date_source' => filled($data['visit_date'] ?? null) ? 'technician_declared' : 'signed_visit_context']
+                        : ['returned_to_booking' => false, 'status_decision_pending' => true, 'operation_status' => $operation->legacy_status,
+                            'booking' => $this->contexts->booking($locked)],
                 ]);
                 if (! $evidenceOnly) {
                     $locked->forceFill([
-                        'status' => Appointment::STATUS_PROBLEM,
                         'problem_reported_at' => $locked->status === Appointment::STATUS_PROBLEM ? ($locked->problem_reported_at ?? $reportedAt) : $reportedAt,
                         'external_payload' => [...($locked->external_payload ?? []), 'techcalendar_on_site' => $report,
                             'techcalendar_problem' => $locked->status === Appointment::STATUS_PROBLEM && is_array($locked->external_payload['techcalendar_problem'] ?? null)
@@ -165,7 +166,8 @@ class TechnicianOnSiteReports
             return ['request_id' => $requestId, 'author_id' => $actor->id, 'reason' => $incident->reason,
                 'reported_at' => $incident->reported_at->toIso8601String(), 'document_id' => $incident->document_id,
                 'evidence_only' => (bool) ($incident->source_context['evidence_only'] ?? false),
-                'returned_to_booking' => (bool) ($incident->source_context['returned_to_booking'] ?? false)];
+                'returned_to_booking' => (bool) ($incident->source_context['returned_to_booking'] ?? false),
+                'status_decision_pending' => (bool) ($incident->source_context['status_decision_pending'] ?? false)];
         }
         $report = $appointment->external_payload['techcalendar_on_site'] ?? null;
 

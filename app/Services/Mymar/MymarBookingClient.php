@@ -69,10 +69,55 @@ final readonly class MymarBookingClient
         try {
             [$status, $data] = $this->exchange('GET', '/v1/capabilities', [], 4096);
 
-            return $status === 200 && count($data) === 3 && ($data['format'] ?? null) === 'cofrac.mymar-booking-capabilities'
+            return $status === 200 && ! array_diff(array_keys($data), ['format', 'version', 'on_site_rebook', 'incident_status_review'])
+                && ($data['format'] ?? null) === 'cofrac.mymar-booking-capabilities'
                 && ($data['version'] ?? null) === 1 && ($data['on_site_rebook'] ?? null) === true;
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    public function supportsIncidentStatusReview(): bool
+    {
+        $this->assertEnabled();
+        try {
+            [$status, $data] = $this->exchange('GET', '/v1/capabilities', [], 4096);
+
+            return $status === 200 && ($data['format'] ?? null) === 'cofrac.mymar-booking-capabilities'
+                && ($data['version'] ?? null) === 1 && ($data['incident_status_review'] ?? null) === true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    public function incidentContext(int $dossierId): array
+    {
+        $this->assertEnabled();
+        if ($dossierId < 1) {
+            throw new RuntimeException('mymar.invalid_booking_id');
+        }
+        try {
+            [$status, $data] = $this->exchange('GET', '/v1/incident-dossiers/'.$dossierId, [], 16384);
+            if ($status !== 200 || count($data) !== 6 || ($data['format'] ?? null) !== 'cofrac.mymar-incident-context'
+                || ($data['version'] ?? null) !== 1 || ($data['dossier_id'] ?? null) !== $dossierId
+                || ! is_int($data['status_id'] ?? null) || ! array_key_exists($data['status_id'], MymarBookingCommand::REVIEW_STATUSES)
+                || ! is_string($data['expected_revision'] ?? null) || ! preg_match('/^[a-f0-9]{64}$/D', $data['expected_revision'])
+                || ! is_array($data['statuses'] ?? null) || ! array_is_list($data['statuses'])
+                || count($data['statuses']) < 1 || count($data['statuses']) > count(MymarBookingCommand::REVIEW_STATUSES)) {
+                throw new RuntimeException;
+            }
+            $seen = [];
+            foreach ($data['statuses'] as $row) {
+                if (! is_array($row) || count($row) !== 2 || ! is_int($row['id'] ?? null)
+                    || ($row['label'] ?? null) !== (MymarBookingCommand::REVIEW_STATUSES[$row['id']] ?? null) || isset($seen[$row['id']])) {
+                    throw new RuntimeException;
+                }
+                $seen[$row['id']] = true;
+            }
+
+            return $data;
+        } catch (Throwable) {
+            throw new RuntimeException('mymar.incident_context_unavailable');
         }
     }
 
@@ -192,7 +237,8 @@ final readonly class MymarBookingClient
             || $result['format'] !== 'cofrac.mymar-booking-result' || $result['version'] !== 1 || $result['source_committed'] !== true
             || $result['request_id'] !== $payload['request_id'] || $result['dossier_id'] !== $payload['dossier_id']
             || $result['action'] !== $payload['action'] || ! in_array($result['status_id'], match ($payload['action']) {
-                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14],
+                'review_status' => [$payload['target_status_id']], default => [2, 15]
             }, true)) {
             throw new RuntimeException('mymar.invalid_booking_result');
         }

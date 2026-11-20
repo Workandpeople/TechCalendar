@@ -32,7 +32,7 @@ class TechAppointmentController extends Controller
     public function report(StoreOnSiteReportRequest $request, Appointment $appointment, TechnicianOnSiteReports $reports): Response
     {
         $report = $reports->submit($request->user(), $appointment, $request->validated(), $request->file('photo'));
-        $message = 'Signalement enregistré. La photo et le commentaire sont ajoutés au dossier ; le RDV est en problème. Les notifications suivent les accès et préférences des destinataires.';
+        $message = 'Signalement enregistré. Photo et commentaire client conservés, équipe alertée. Le statut du dossier reste inchangé jusqu’à la décision administrative.';
         if ($report['returned_to_booking'] ?? false) {
             $message = 'Signalement enregistré. La fiche est remise en prise de RDV ; la photo, le commentaire client et l’alerte planning sont conservés.';
         }

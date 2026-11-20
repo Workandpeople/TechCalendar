@@ -6,6 +6,7 @@ namespace App\Services\Mymar;
 
 use App\Models\MymarBookingRequest;
 use App\Models\User;
+use App\Services\Tech\MymarIncidentStatus;
 use App\Services\Tech\MymarOnSiteReports;
 use Closure;
 use Illuminate\Database\QueryException;
@@ -123,6 +124,9 @@ final readonly class MymarBookingOutbox
         }
         if (in_array($command->payload['action'], ['on_site_problem', 'on_site_rebook'], true)) {
             return MymarOnSiteReports::canDispatch($author, $command);
+        }
+        if ($command->payload['action'] === 'review_status') {
+            return MymarIncidentStatus::canDispatch($author, $command);
         }
 
         return $author->admin || in_array($author->role, [0, 1], true);

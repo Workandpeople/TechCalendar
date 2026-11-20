@@ -22,6 +22,7 @@ final readonly class MymarBookingGateway
         private Closure $result,
         private ?Closure $calendarLabels = null,
         private ?Closure $scheduled = null,
+        private ?Closure $incidentContext = null,
     ) {
         if (! preg_match('/^[a-f0-9]{64}$/D', $token) || count(array_unique(str_split($token))) < 8) {
             throw new InvalidArgumentException('mymar.invalid_booking_credential');
@@ -51,7 +52,13 @@ final readonly class MymarBookingGateway
                 if ($query !== '') {
                     return self::error(422, 'invalid_booking_request');
                 }
-                $payload = ['format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true];
+                $payload = ['format' => 'cofrac.mymar-booking-capabilities', 'version' => 1, 'on_site_rebook' => true,
+                    'incident_status_review' => $this->incidentContext !== null];
+            } elseif (preg_match('~^/v1/incident-dossiers/([1-9][0-9]{0,17})$~D', $path, $matches) && $this->incidentContext !== null) {
+                if ($method !== 'GET' || $query !== '') {
+                    return self::error(422, 'invalid_booking_request');
+                }
+                $payload = ($this->incidentContext)((int) $matches[1]);
             } elseif (preg_match('~^/v1/scheduled-bookings/([1-9][0-9]{0,17})$~D', $path, $matches) && $this->scheduled !== null) {
                 if ($method !== 'GET') {
                     return self::error(405, 'booking_method_not_allowed');

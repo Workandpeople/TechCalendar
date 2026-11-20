@@ -253,6 +253,37 @@ expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$onSi
 assert(snapshot($root) === $before);
 echo "On-site rebooking: status 16 to 14, archived original visit, rollback, stale rejection and distinct legacy receipts verified.\n";
 
+// Administrative decisions are separate from the technician evidence and preserve all accounts.
+$root->exec('INSERT INTO MYMAR.status VALUES (19,NULL),(21,NULL)');
+$root->exec('UPDATE MYMAR.dossiers SET status_id=16 WHERE id=23');
+$root->exec('UPDATE MYMAR.dossier_rdv SET is_old=0 WHERE id='.$result['rdv_id']);
+$beforeContext = snapshot($root);
+$context = $reader->incidentContext(23);
+assert(snapshot($root) === $beforeContext && $context['status_id'] === 16);
+assert(in_array(19, array_column($context['statuses'], 'id'), true));
+$decision = MymarBookingCommand::fromArray(['format' => 'cofrac.mymar-booking-command', 'version' => 1,
+    'request_id' => '12121212-1212-4212-8212-121212121212', 'action' => 'review_status', 'cofrac_actor_id' => 101,
+    'dossier_id' => 23, 'expected_revision' => $context['expected_revision'], 'target_status_id' => 19,
+    'comment' => 'Decision administrative Cofrac #12, preuves conservees.', 'reason' => 'Dossier examine']);
+$beforeRdv = $root->query('CHECKSUM TABLE MYMAR.dossier_rdv')->fetchAll(PDO::FETCH_ASSOC);
+$root->exec("CREATE TRIGGER MYMAR.fixture_admin_failure BEFORE INSERT ON MYMAR.dossier_historiques FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='FIXTURE_ONLY'");
+expectFailure(fn () => $source->execute($decision, $now), 'booking_storage_unavailable');
+assert(snapshot($root) === $beforeContext);
+$root->exec('DROP TRIGGER MYMAR.fixture_admin_failure');
+$decided = $source->execute($decision, $now);
+assert($decided['status_id'] === 19 && $decided['action'] === 'review_status');
+assert($source->execute($decision, $now) === $decided && $reader->result($decision->payload['request_id']) === $decided);
+assert($beforeRdv === $root->query('CHECKSUM TABLE MYMAR.dossier_rdv')->fetchAll(PDO::FETCH_ASSOC));
+expectFailure(fn () => $source->execute(MymarBookingCommand::fromArray([...$decision->payload,
+    'request_id' => '13131313-1313-4313-8313-131313131313']), $now), 'booking_source_changed');
+$context = $reader->incidentContext(23);
+$return = MymarBookingCommand::fromArray([...$decision->payload, 'request_id' => '14141414-1414-4414-8414-141414141414',
+    'target_status_id' => 14, 'expected_revision' => $context['expected_revision']]);
+assert($source->execute($return, $now)['status_id'] === 14);
+assert((int) $root->query('SELECT COUNT(*) FROM MYMAR.dossier_rdv WHERE dossier_id=23 AND is_old=0')->fetchColumn() === 0);
+assert(! in_array(16, array_column($reader->incidentContext(23)['statuses'], 'id'), true));
+echo "Admin incident decision: restricted GET context, explicit target, source conflict, rollback, retained visits, archive and idempotence verified.\n";
+
 // Durable commands for two independent processes simulating concurrent planners.
 $first = command($source, 24, '88888888-8888-4888-8888-888888888888', ['starts_at' => '2026-11-10T09:00:00+01:00']);
 $second = MymarBookingCommand::fromArray([...$first->payload, 'request_id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'starts_at' => '2026-11-11T09:00:00+01:00']);

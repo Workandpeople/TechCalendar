@@ -110,9 +110,8 @@ it('preserves appointments documents technical validation satisfaction archived 
         $this->operation->fresh()->except(['legacy_status', 'updated_at'])])->toEqual($preserved)
         ->and(DossierBillingService::summary($this->dossier->fresh())['label'])->toBe('Facturé')
         ->and(CapceeAutomaticSubmission::count())->toBe(0);
-    expect($this->appointment->fresh()->global_plus_review_pending)->toBeTrue()
-        ->and($this->appointment->fresh()->global_plus_review['before']['operation_status'])->toBe('RAPPORT GENIUS')
-        ->and($this->appointment->fresh()->global_plus_review['after']['operation_status'])->toBe('PRISE DE RDV');
+    expect($this->appointment->fresh()->global_plus_review_pending)->toBeFalse()
+        ->and($this->appointment->fresh()->global_plus_review_version)->toBe(0);
     $this->postJson(route('v2.dossiers.billing.mark', $this->dossier), ['version' => 2, 'confirmed' => true])
         ->assertUnprocessable()->assertJsonValidationErrors('billing');
     Storage::disk('local')->assertExists($document->path);

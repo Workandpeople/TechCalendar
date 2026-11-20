@@ -8,8 +8,11 @@ use App\Models\ExternalDelegataire;
 use App\Models\Service;
 use App\Models\TechnicianIncident;
 use App\Models\User;
+use App\Services\Crm\DossierStatusCatalog;
 use App\Services\SidebarNotifications;
+use App\Services\Tech\OnSiteVisitContext;
 use App\Services\Tech\TechnicianIncidentInbox;
+use App\Services\Tech\TechnicianIncidentStatus;
 use App\Services\Tech\TechnicianOnSiteReports;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -193,6 +196,7 @@ it('loads a full page without per incident relationship queries', function () {
 });
 
 it('persists real mobile reports in the same transaction as their proof and acknowledges retries', function () {
+    $this->incident->delete();
     Storage::fake('local');
     $this->travelTo(now()->setDate(2026, 11, 9)->setTime(10, 15));
     $this->appointment->update(['status' => 'scheduled']);
@@ -235,4 +239,92 @@ it('backfills only coherent legacy proofs idempotently without changing appointm
     $this->document->update(['author_id' => $this->planner->id]);
     $this->artisan('tech:backfill-incidents', ['--apply' => true])->assertSuccessful();
     expect(TechnicianIncident::count())->toBe(0);
+});
+
+it('lets an admin decide the native status directly with independent followup and accounting', function (string $target) {
+    $this->operation->forceFill(['legacy_status' => 'RDV ATTENTE VISITE'])->save();
+    $this->appointment->update(['status' => 'scheduled']);
+    $this->incident->update(['source_context' => ['status_decision_pending' => true, 'booking' => array_reverse(app(OnSiteVisitContext::class)->booking($this->appointment), true)]]);
+    $this->get(route('planner.incidents'))->assertSee('data-incident-status', false);
+    $context = $this->getJson(route('planner.incidents.status.context', $this->incident))->assertOk()->assertHeader('Cache-Control', 'no-store, private')->json('context');
+    $input = ['context' => $context, 'target_status' => $target, 'planning_status' => 'resolved', 'note' => 'Client rappelé'];
+    $url = route('planner.incidents.status.update', $this->incident);
+    $this->postJson($url, $input)->assertOk()->assertJsonPath('state', 'confirmed');
+    expect($this->operation->fresh()->legacy_status)->toBe(DossierStatusCatalog::STATUSES[$target]['values'][0])
+        ->and($this->incident->fresh()->planning_status)->toBe('resolved')->and($this->incident->fresh()->billing_status)->toBe('review')
+        ->and($this->incident->fresh()->document_id)->toBe($this->document->id)->and(DossierBilling::count())->toBe(0)
+        ->and($this->appointment->fresh()->status)->toBe($target === 'cancelled' ? 'cancelled' : 'problem');
+    $stored = $this->incident->fresh()->source_context;
+    $stored['status_review'] = array_reverse($stored['status_review'], true);
+    $this->incident->update(['source_context' => $stored]);
+    $this->postJson($url, $input)->assertOk();
+    expect($this->dossier->activities()->where('kind', 'on_site_status_reviewed')->count())->toBe(1);
+    expect($this->appointment->fresh()->global_plus_review_pending)->toBe($target !== 'pending');
+})->with(['pending', 'problem', 'cancelled']);
+
+it('denies status decisions to planning technicians and external accounts', function (int $role) {
+    $actor = User::factory()->create(['role' => $role, 'admin' => false]);
+    $this->actingAs($actor)->getJson(route('planner.incidents.status.context', $this->incident))->assertForbidden();
+    $this->actingAs($actor)->postJson(route('planner.incidents.status.update', $this->incident), ['context' => 'x', 'target_status' => 'pending', 'planning_status' => 'resolved', 'note' => 'Non'])->assertForbidden();
+    expect($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS');
+})->with([1, 2, 3, 4]);
+
+it('rejects stale or forged admin decisions before touching any status', function (string $case) {
+    $token = $this->getJson(route('planner.incidents.status.context', $this->incident))->assertOk()->json('context');
+    if ($case === 'dossier') {
+        $this->dossier->increment('version');
+    }
+    if ($case === 'incident') {
+        $this->incident->increment('version');
+    }
+    if ($case === 'booking') {
+        $this->appointment->update(['starts_at' => '2026-11-10 10:00']);
+    }
+    if ($case === 'expiry') {
+        $this->travel(16)->minutes();
+    }
+    if ($case === 'tamper') {
+        $token .= 'x';
+    }
+    if ($case === 'actor') {
+        $this->actingAs(User::factory()->create(['role' => 0, 'admin' => true]));
+    }
+    $this->postJson(route('planner.incidents.status.update', $this->incident), ['context' => $token, 'target_status' => 'pending', 'planning_status' => 'resolved', 'note' => 'Non'])
+        ->assertUnprocessable()->assertJsonValidationErrors('context');
+    expect($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS')->and($this->incident->fresh()->planning_status)->toBe('pending');
+})->with(['dossier', 'incident', 'booking', 'expiry', 'tamper', 'actor']);
+
+it('never modifies a newer appointment when reviewing historical evidence', function () {
+    $this->incident->update(['source_context' => ['evidence_only' => true]]);
+    $this->appointment->update(['status' => 'scheduled', 'starts_at' => '2026-12-01 10:00']);
+    $before = $this->appointment->fresh()->getAttributes();
+    $token = $this->getJson(route('planner.incidents.status.context', $this->incident))->assertOk()->json('context');
+    $this->postJson(route('planner.incidents.status.update', $this->incident), ['context' => $token, 'target_status' => 'pending', 'planning_status' => 'pending', 'note' => 'Ancienne preuve examinée'])->assertOk();
+    expect($this->appointment->fresh()->getAttributes())->toBe($before)->and($this->incident->fresh()->billing_status)->toBe('review');
+});
+
+it('rechecks revoked admin rights against SQL even with a stale actor instance', function () {
+    $service = app(TechnicianIncidentStatus::class);
+    $token = $service->context($this->admin, $this->incident)['context'];
+    DB::table('users')->where('id', $this->admin->id)->update(['role' => 1, 'admin' => false]);
+    expect(fn () => $service->submit($this->admin, $this->incident, ['context' => $token, 'target_status' => 'pending', 'planning_status' => 'resolved', 'note' => 'Interdit']))
+        ->toThrow(AuthorizationException::class);
+    expect($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS');
+});
+
+it('rolls back the status and followup together if administrative audit fails', function () {
+    $service = app(TechnicianIncidentStatus::class);
+    $token = $service->context($this->admin, $this->incident)['context'];
+    Event::listen('eloquent.creating: '.DossierActivity::class, function ($activity) {
+        if ($activity->kind === 'on_site_status_reviewed') {
+            throw new RuntimeException('Synthetic admin audit failure');
+        }
+    });
+    try {
+        expect(fn () => $service->submit($this->admin, $this->incident, ['context' => $token, 'target_status' => 'pending', 'planning_status' => 'resolved', 'note' => 'À annuler']))
+            ->toThrow(RuntimeException::class, 'Synthetic admin audit failure');
+    } finally {
+        Event::forget('eloquent.creating: '.DossierActivity::class);
+    }
+    expect($this->operation->fresh()->legacy_status)->toBe('PROBLÈME RENDEZ-VOUS')->and($this->incident->fresh()->planning_status)->toBe('pending');
 });

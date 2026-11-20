@@ -11,6 +11,10 @@ use InvalidArgumentException;
 /** Versioned internal contract. Never accepts a MYMAR author or an arbitrary target status. */
 final readonly class MymarBookingCommand
 {
+    public const REVIEW_STATUSES = [14 => 'PRISE RDV APT', 15 => 'PB PRISE RDV APT', 16 => 'RDV APT ATTENTE',
+        19 => 'DEPOT (solde)', 20 => 'Depot fini (solde)', 21 => 'ANNULE', 22 => 'DEPLACEMENT A FACTURER',
+        23 => 'COMPLET + PREP DOCS + SIGNAT', 29 => 'Probleme DEPOT (solde)', 32 => 'SAV (Solde en attente)'];
+
     private function __construct(public array $payload) {}
 
     public static function fromArray(array $data): self
@@ -22,6 +26,7 @@ final readonly class MymarBookingCommand
             'reschedule' => ['rdv_id', 'technician_id', 'starts_at', 'duration_minutes'],
             'problem' => ['comment', 'reason', 'recall_at'],
             'on_site_problem', 'on_site_rebook' => ['rdv_id', 'technician_id', 'comment', 'reason'],
+            'review_status' => ['target_status_id', 'comment', 'reason'],
             default => throw new InvalidArgumentException('mymar.invalid_booking_command'),
         };
         if (array_diff(array_keys($data), [...$common, ...$fields])
@@ -64,7 +69,12 @@ final readonly class MymarBookingCommand
                 self::assertUnambiguousWallTime($recall);
             }
             $payload += ['comment' => $comment, 'reason' => $reason];
-            if (in_array($action, ['on_site_problem', 'on_site_rebook'], true)) {
+            if ($action === 'review_status') {
+                if (! is_int($data['target_status_id'] ?? null) || ! array_key_exists($data['target_status_id'], self::REVIEW_STATUSES)) {
+                    throw new InvalidArgumentException('mymar.invalid_review_status');
+                }
+                $payload['target_status_id'] = $data['target_status_id'];
+            } elseif (in_array($action, ['on_site_problem', 'on_site_rebook'], true)) {
                 if (! is_int($data['rdv_id'] ?? null) || $data['rdv_id'] < 1
                     || ! is_int($data['technician_id'] ?? null) || $data['technician_id'] < 1 || $reason === null) {
                     throw new InvalidArgumentException('mymar.invalid_on_site_booking');
@@ -84,8 +94,16 @@ final readonly class MymarBookingCommand
         return is_string($value) && preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/D', $value) === 1;
     }
 
-    public static function targetStatus(int $pendingStatus, string $action): int
+    public static function targetStatus(int $pendingStatus, string $action, ?int $target = null): int
     {
+        if ($action === 'review_status') {
+            if (! array_key_exists($pendingStatus, self::REVIEW_STATUSES) || ! array_key_exists($target ?? 0, self::REVIEW_STATUSES)) {
+                throw new InvalidArgumentException('mymar.invalid_review_status');
+            }
+
+            return $target;
+        }
+
         return match ([$pendingStatus, $action]) {
             [1, 'place'] => 3, [14, 'place'] => 16,
             [1, 'problem'] => 2, [14, 'problem'] => 15,

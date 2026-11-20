@@ -95,7 +95,7 @@ class DossierWorkflow
         $this->recordProblemWithPermission($actor, $appointment->dossierOperation, $data, $appointment);
     }
 
-    public function returnToBookingAfterOnSiteReport(User $actor, Appointment $appointment, array $data): void
+    public function recordOnSiteReport(User $actor, Appointment $appointment, array $data): void
     {
         DB::transaction(function () use ($actor, $appointment, $data): void {
             $dossier = Dossier::query()->lockForUpdate()->findOrFail($appointment->dossierOperation->dossier_id);
@@ -112,18 +112,16 @@ class DossierWorkflow
             if (blank($data['comment'] ?? null)) {
                 throw ValidationException::withMessages(['comment' => 'Le motif du signalement est obligatoire.']);
             }
-            $previousStatus = $operation->legacy_status;
-            $operation->forceFill(['legacy_status' => 'PRISE DE RDV', 'booking_recall_at' => null])->save();
             $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'comment',
                 'body' => CommentContent::forStorage($data['comment'], 'comment'),
                 'client_visible' => true, 'delegataire_visible' => false,
                 'changed_fields' => ['operation_id' => $operation->id, 'appointment_id' => $appointment->id,
                     'on_site_report' => true, 'problem_type' => $data['problem_type'] ?? null]]);
-            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'status_changed',
-                'body' => 'Signalement technicien : fiche #'.$operation->id.' remise en prise de RDV. Preuves du passage conservées.',
+            $dossier->activities()->create(['author_id' => $actor->id, 'kind' => 'on_site_reported',
+                'body' => 'Signalement technicien : statut de la fiche #'.$operation->id.' conservé, décision administrative en attente.',
                 'client_visible' => false, 'delegataire_visible' => false,
-                'changed_fields' => ['action' => 'on_site_return_to_booking', 'operation_id' => $operation->id,
-                    'appointment_id' => $appointment->id, 'previous_status' => $previousStatus, 'status' => 'PRISE DE RDV']]);
+                'changed_fields' => ['action' => 'on_site_status_decision_pending', 'operation_id' => $operation->id,
+                    'appointment_id' => $appointment->id, 'retained_status' => $operation->legacy_status]]);
             $dossier->increment('version');
         });
     }

@@ -3468,7 +3468,11 @@ le realiser sur une demo sans envois ou avec un dossier fictif sans destinataire
   comptes planning/gerants/admins conservent la file globale, sans ouverture
   des signalements ni des decisions comptables aux techniciens.
 
-### Signalements terrain MAR et portee imposee (10 novembre 2026)
+### Signalements terrain MAR et portee imposee (historique du 10 novembre 2026)
+
+Le changement automatique de statut decrit dans cette section est remplace
+pour les nouveaux signalements par la decision administrative du 20 novembre,
+documentee dans `technician-incidents.md`. Les anciens recus restent conserves.
 
 - Pour Cofrac, la photo et le commentaire des nouveaux signalements sont toujours
   `Client uniquement` (et accessibles a l'equipe interne), jamais au delegataire.
@@ -3518,3 +3522,32 @@ externe, absence de droits administrateur, organisation existante et type
 client/delegataire valide restent obligatoires. Un compte mal rattache bloque
 toujours le deploiement avant maintenance. Le controle ne reactive aucun compte
 et ne corrige aucune donnee de production automatiquement.
+
+## Decisions de signalement et Global+ (20 novembre 2026)
+
+Les nouveaux signalements gardent le statut courant dans Cofrac comme MYMAR.
+L'admin ou gerant choisit ensuite le statut depuis la file des signalements,
+avec note et traitement planning independants du suivi comptable. Aucun ancien
+dossier ni recu n'est reinterprete, aucune facture n'est generee.
+
+Deployer l'application puis les deux passerelles de code epinglees a sa revision.
+Le lecteur et le writer doivent annoncer `incident_status_review=true` et
+repondre a la nouvelle lecture de contexte. Le controle de mise a jour utilise
+un identifiant inexistant et uniquement GET ; aucun POST de validation sur un
+vrai dossier. Les preuves restent deposables si le writer est desactive ou
+pendant une mise a jour partielle, mais la decision MAR est alors refusee.
+Aucun nouveau droit SQL ni migration de schema pour ce lot.
+
+Global+ suit seulement le changement de technicien, de date/heure de debut et
+les transitions depuis RDV ATTENTE VISITE vers probleme ou annulation. Une
+confirmation individuelle ou globale (selection filtree, toutes pages, maximum
+1000) signifie travail termine manuellement sur Global+, pas simple lecture.
+Les versions sont reverifiees sous verrou ; aucun envoi API ou mail ajoute.
+
+Les diagnostics operateur du 20 novembre retrouvent la revision `0bcf5a1e`,
+des services actifs, aucun OOM ni 5xx dans les journaux examines autour du
+19 novembre 18h39 Paris. Cela ne prouve pas l'absence de requetes bloquees.
+Le pool PHP est limite a 4 enfants et le disque a 95% (94 Go disponibles).
+La collecte MySQL a ete interrompue a 2 secondes sur les metadonnees, le journal
+lent etant desactive. La cause historique reste non etablie : pas de restart,
+purge, nouvel index ou changement de limites applique sans preuve complementaire.

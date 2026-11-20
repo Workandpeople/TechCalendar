@@ -58,24 +58,20 @@ class MymarOnSiteReports
         if ($incident = $this->existing($actor, $rdv)) {
             abort_unless($incident->request_id === $data['request_id'], 409, 'Ce rendez-vous a déjà un signalement. Rechargez la page.');
 
-            return $this->transmit($actor, $rdv);
+            return $incident;
         }
         $source = $this->scheduled($actor, $rdv);
         if (! hash_equals($this->snapshot($source, $actor), $data['snapshot'])) {
             throw ValidationException::withMessages(['snapshot' => 'Le rendez-vous MAR a changé. Rechargez sa fiche avant de signaler le problème.']);
         }
-        $config = $this->configuration($actor, true);
-        $writer = new MymarBookingClient($this->http, enabled: true, writesEnabled: $config['writes_enabled'],
-            port: 19848, token: $this->settings->token());
-        abort_unless($this->readerClient()->supportsOnSiteRebooking() && $writer->supportsOnSiteRebooking(), 503,
-            'Le retour MAR en prise de RDV est en cours de mise à jour. Votre brouillon reste sur cet appareil ; contactez le planning avant de réessayer.');
+        $this->configuration($actor, false);
         $stored = $this->photos->store($photo, $source['dossier_id'], mymar: true);
         $used = false;
         try {
             $incident = DB::transaction(function () use ($actor, $rdv, $data, $source, $stored, &$used): TechnicianIncident {
                 $used = false;
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
-                $this->configuration($actor, true);
+                $this->configuration($actor, false);
                 if ($existing = $this->existing($actor, $rdv)) {
                     abort_unless($existing->request_id === $data['request_id'], 409);
 
@@ -86,19 +82,9 @@ class MymarOnSiteReports
                     'mymar_dossier_id' => $source['dossier_id'], 'mymar_rdv_id' => $rdv,
                     'reason' => $data['reason'], 'comment' => trim($data['comment'] ?? ''),
                     'reported_at' => now(), 'appointment_starts_at' => Carbon::parse($source['starts_at'])->tz('Europe/Paris'),
-                    'source_context' => [...$source, 'photo' => $stored, 'booking_action' => 'on_site_rebook'],
+                    'source_context' => [...$source, 'photo' => $stored, 'status_decision_pending' => true,
+                        'source_status_id' => 16],
                 ]);
-                // Full text and photo stay private in Cofrac; MYMAR receives a short, traced summary.
-                $command = MymarBookingCommand::fromArray([
-                    'format' => 'cofrac.mymar-booking-command', 'version' => 1, 'action' => 'on_site_rebook',
-                    'request_id' => $incident->request_id, 'cofrac_actor_id' => $actor->id,
-                    'dossier_id' => $source['dossier_id'], 'rdv_id' => $rdv, 'technician_id' => $source['technician_id'],
-                    'expected_revision' => $source['expected_revision'], 'reason' => $incident->reasonLabel(),
-                    'comment' => $incident->reasonLabel().' · Signalement Cofrac #'.$incident->id
-                        .' du '.$incident->reported_at->format('d/m/Y H:i').'. Photo et commentaire complet dans Cofrac.',
-                ]);
-                $incident->forceFill(['source_context' => [...$incident->source_context, 'command_fingerprint' => $command->fingerprint()]])->save();
-                $this->outbox($this->configuration($actor, true))->enqueue($command, $actor);
                 $used = true;
 
                 return $incident;
@@ -120,12 +106,7 @@ class MymarOnSiteReports
             Storage::disk('local')->delete($stored['path']);
         }
 
-        try {
-            return $this->transmit($actor, $rdv);
-        } catch (Throwable) {
-            // Proof/outbox are already committed; report their real state rather than ask for a new photo.
-            return $incident->fresh('sourceRequest');
-        }
+        return $incident;
     }
 
     public function transmit(User $actor, int $rdv): TechnicianIncident
@@ -175,15 +156,9 @@ class MymarOnSiteReports
 
     public static function canDispatch(User $actor, MymarBookingCommand $command): bool
     {
-        if (! config('crm.v2_enabled') || $actor->trashed() || $actor->isExternal() || $actor->must_change_password
-            || $actor->role !== 2 || $actor->admin || ! in_array($command->payload['action'], ['on_site_problem', 'on_site_rebook'], true)) {
-            return false;
-        }
-        $incident = TechnicianIncident::where('source', 'mymar')->where('request_id', $command->payload['request_id'])
-            ->where('technician_id', $actor->id)->where('mymar_dossier_id', $command->payload['dossier_id'])
-            ->where('mymar_rdv_id', $command->payload['rdv_id'])->first();
-
-        return $incident !== null && hash_equals($incident->source_context['command_fingerprint'] ?? '', $command->fingerprint());
+        // Never dispatch an unsent automatic status change from an older technician report.
+        // Uncertain commands are still reconciled by GET in the outbox, without another POST.
+        return false;
     }
 
     public function authorizeProof(User $actor, TechnicianIncident $incident): void
@@ -205,7 +180,7 @@ class MymarOnSiteReports
 
     private function scheduled(User $actor, int $rdv): array
     {
-        $config = $this->configuration($actor, true);
+        $config = $this->configuration($actor, false);
         $sourceId = $this->sourceTechnician($config, $actor);
         abort_unless($sourceId !== null, 403);
         $source = $this->readerClient()->scheduled($rdv);

@@ -73,6 +73,24 @@
                             </div>
                         </div>
                         <div class="space-y-3">
+                            @can('changeStatus', $incident)
+                                <details class="rounded-lg border border-teal-200 bg-teal-50 p-3" data-incident-status
+                                    data-context-url="{{ route('planner.incidents.status.context', $incident) }}"
+                                    data-resume-url="{{ route('planner.incidents.status.resume', $incident) }}">
+                                    <summary class="cursor-pointer font-semibold">Décider du statut du dossier {{ $incident->source === 'mymar' ? 'MAR' : 'Cofrac' }}</summary>
+                                    <p class="mt-3 text-sm">Statut actuel : <strong data-status-current>à vérifier à l’ouverture</strong></p>
+                                    <p role="status" aria-live="polite" class="mt-2 break-words text-sm" data-status-message>Le signalement ne change pas automatiquement le statut du dossier.</p>
+                                    <button type="button" class="gc-btn-secondary mt-3" data-status-reload>Recharger le statut actuel</button>
+                                    <button type="button" class="gc-btn-secondary mt-3" data-status-resume hidden>Vérifier / reprendre la même décision MAR</button>
+                                    <form action="{{ route('planner.incidents.status.update', $incident) }}" method="POST" class="mt-3 space-y-3" hidden>
+                                        @csrf <input type="hidden" name="context" value="">
+                                        <label class="gc-label">Statut de destination<select class="gc-input" name="target_status" required><option value="">Choisir un statut</option></select></label>
+                                        <label class="gc-label">Suivi du signalement<select name="planning_status" class="gc-input" required>@foreach ($planningStatuses as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach</select></label>
+                                        <label class="gc-label">Note interne de décision<textarea class="gc-input" name="note" rows="3" required maxlength="2000"></textarea></label>
+                                        <button type="submit" class="gc-btn-primary">Confirmer le statut et le suivi</button>
+                                    </form>
+                                </details>
+                            @endcan
                             @if ($canBill)<p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">{{ $billingStatuses[$incident->billing_status] }}</p>@endif
                             <details class="rounded-lg border border-slate-200 p-3" @if ($reopenPlanning) open @endif>
                                 <summary class="cursor-pointer font-semibold">Suivi planning{{ $incident->planning_status === 'pending' ? ' · À traiter' : ' · Traité' }}</summary>

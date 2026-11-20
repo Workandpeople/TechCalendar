@@ -4,11 +4,15 @@
 
 Planning > RDV modifies est une file commune aux administrateurs, gerants et planning internes actifs. Elle ne constitue pas une synchronisation Global+ : aucun nouvel email, SMS ou appel API n'est declenche.
 
-Seules les nouvelles modifications de date, duree ou technicien d'un RDV Cofrac deja rattache a une fiche sont suivies. La creation initiale, les notes, les affinages GPS, les observations MAR et les imports sans auteur interne ne creent pas de demande. Les anciens changements ne sont pas repris en masse.
+Seules les nouvelles modifications de date/heure de debut ou technicien d'un RDV Cofrac deja rattache a une fiche, et les transitions metier de RDV ATTENTE VISITE vers probleme RDV ou dossier annule, sont suivies. Les changements de duree seule, autres etats, creation initiale, notes, affinages GPS, observations MAR et imports sans auteur interne ne creent pas de demande. Les anciens changements ne sont pas repris en masse.
 
 L'observateur `updating` inscrit la version et les instantanes avant/apres dans le meme UPDATE SQL que le RDV. Pas de journal asynchrone susceptible de perdre la modification apres sauvegarde. Plusieurs changements en attente conservent le premier avant et le dernier apres, sans multiplier les lignes. Les nouvelles colonnes sont masquees dans la serialisation du modele et ne sont pas assignables depuis les formulaires.
 
 Le report exige une confirmation explicite et la version courante, sous verrou du RDV. Une nouvelle modification invalide une ancienne confirmation ; une validation identique est idempotente. La validation seule ne change pas `updated_at` du RDV, pour ne pas perimer les formulaires de planning. Son auteur, son heure et les instantanes sont conserves dans un audit prive du dossier.
+
+La confirmation globale porte sur les resultats filtres, toutes pages confondues, avec confirmation manuelle du travail termine sur Global+. La selection chiffree est liee au compte et expire apres 15 minutes. Maximum 1000 RDV par lot : affiner les filtres au-dela. Si une version a change, le lot entier est annule, sans validation partielle. Les nouveaux arrivants ne sont jamais inclus dans une selection deja affichee. La confirmation individuelle reste disponible.
+
+Les historiques anterieurs hors perimetre ne sont ni effaces ni marques comme traites : ils restent consultables dans la vue dediee, sans alimenter la pastille. Les historiques encore pertinents restent a confirmer.
 
 La pastille apparait dans le dossier, la navigation et l'en-tete. Le compteur et une banniere sont actualises via le GET interne de suivi existant toutes les 45 secondes, uniquement sur une page visible, sans second polling. Les changements successifs d'une ligne deja en attente sont aussi annonces. La liste affichee n'est jamais remplacee automatiquement : il faut ouvrir ou actualiser la file avant de valider.
 

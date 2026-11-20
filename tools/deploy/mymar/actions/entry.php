@@ -50,7 +50,8 @@ try {
     $gateway = new MymarBookingGateway(true, $config['token'],
         static fn () => throw new MymarBookingFailure('booking_method_not_allowed', 405),
         static fn ($command, $now) => $config['writes_enabled'] ? $adapter()->execute($command, $now) : throw new MymarBookingFailure('booking_disabled', 503),
-        static fn ($id) => $adapter()->result($id));
+        static fn ($id) => $adapter()->result($id),
+        incidentContext: static fn ($id) => $adapter()->incidentContext($id));
     $body = file_get_contents('php://input', false, null, 0, 16385);
     $response = $gateway->handle($_SERVER['REQUEST_METHOD'] ?? '', explode('?', $_SERVER['REQUEST_URI'] ?? '', 2)[0],
         $_SERVER['QUERY_STRING'] ?? '', $_SERVER['CONTENT_TYPE'] ?? '', $body === false ? '' : $body,

@@ -23,6 +23,11 @@ class TechnicianIncidentPolicy
         return $this->viewAny($user);
     }
 
+    public function changeStatus(User $user, TechnicianIncident $incident): bool
+    {
+        return $this->viewAny($user) && ($user->admin || $user->role === 0);
+    }
+
     public function reviewBilling(User $user): bool
     {
         return $this->viewAny($user) && ($user->admin || $user->role === 0 || $user->can_manage_billing);

@@ -103,8 +103,8 @@ it('preserves billing proof documents appointments history and unrelated operati
         ->and($unrelated->fresh()->legacy_status)->toBe($unrelatedStatus)
         ->and(DB::table('legacy_records')->where('dossier_id', $this->first->id)->value('payload'))->toBe($rawPayload)
         ->and($this->first->refresh()->version)->toBe($action === 'cancel' ? 3 : 2);
-    expect($appointment->fresh()->global_plus_review_pending)->toBe($action === 'cancel')
-        ->and($appointment->fresh()->global_plus_review_version)->toBe($action === 'cancel' ? 1 : 0);
+    expect($appointment->fresh()->global_plus_review_pending)->toBeFalse()
+        ->and($appointment->fresh()->global_plus_review_version)->toBe(0);
     Storage::disk('local')->assertExists('preserved.pdf');
     if ($action === 'delete') {
         $this->post(route('v2.dossiers.restore', $this->first), ['version' => 2])->assertRedirect();

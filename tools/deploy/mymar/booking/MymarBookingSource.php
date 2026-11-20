@@ -181,6 +181,40 @@ final class MymarBookingSource
         }
     }
 
+    public function incidentContext(int $dossierId): array
+    {
+        if ($dossierId < 1) {
+            throw new MymarBookingFailure('invalid_booking_request', 422);
+        }
+        $this->begin(readOnly: true);
+        try {
+            $record = $this->rows('SELECT '.self::RECORD.' FROM MYMAR.dossiers d JOIN MYMAR.clients c ON c.id=d.client_id WHERE d.id=?', [$dossierId])[0] ?? null;
+            if ($record === null || ! array_key_exists((int) $record['status_id'], MymarBookingCommand::REVIEW_STATUSES)
+                || ! in_array((int) $record['technicien_id'], $this->technicianIds, true)) {
+                throw new MymarBookingFailure('booking_dossier_not_found', 404);
+            }
+            $rdvs = $this->rows('SELECT id,dossier_id,date_rdv,duree,is_old,updated_at FROM MYMAR.dossier_rdv WHERE dossier_id=? AND is_old=0 ORDER BY id LIMIT 2001', [$dossierId]);
+            if (count($rdvs) > 2000) {
+                throw new MymarBookingFailure('booking_source_limit', 503);
+            }
+            $ids = array_keys(MymarBookingCommand::REVIEW_STATUSES);
+            $available = array_map('intval', array_column($this->rows('SELECT id FROM MYMAR.status WHERE id IN ('.implode(',', array_fill(0, count($ids), '?')).') AND deleted_at IS NULL', $ids), 'id'));
+            $statuses = [];
+            foreach (MymarBookingCommand::REVIEW_STATUSES as $id => $label) {
+                if (in_array($id, $available, true) && ($id !== 16 || ((int) $record['status_id'] === 16 && count($rdvs) === 1))) {
+                    $statuses[] = ['id' => $id, 'label' => $label];
+                }
+            }
+
+            return ['format' => 'cofrac.mymar-incident-context', 'version' => 1, 'dossier_id' => $dossierId,
+                'status_id' => (int) $record['status_id'], 'expected_revision' => self::revision($record, $rdvs), 'statuses' => $statuses];
+        } catch (Throwable $error) {
+            throw $this->failure($error);
+        } finally {
+            $this->rollback();
+        }
+    }
+
     public function execute(MymarBookingCommand $command, DateTimeImmutable $now): array
     {
         if (! $this->writesEnabled) {
@@ -254,15 +288,26 @@ final class MymarBookingSource
                 throw new MymarBookingFailure('booking_source_changed');
             }
             try {
-                $targetStatus = MymarBookingCommand::targetStatus((int) $record['status_id'], $data['action']);
+                $targetStatus = MymarBookingCommand::targetStatus((int) $record['status_id'], $data['action'], $data['target_status_id'] ?? null);
             } catch (InvalidArgumentException) {
                 throw new MymarBookingFailure('booking_not_pending');
             }
             if (count($this->rows('SELECT id FROM MYMAR.status WHERE id IN (?,?) AND deleted_at IS NULL', [(int) $record['status_id'], $targetStatus])) !== count(array_unique([(int) $record['status_id'], $targetStatus]))) {
                 throw new MymarBookingFailure('booking_status_unavailable');
             }
+            if ($data['action'] === 'review_status' && (! in_array((int) $record['technicien_id'], $this->technicianIds, true)
+                || ($targetStatus === 16 && ((int) $record['status_id'] !== 16 || count($rdvs) !== 1)))) {
+                throw new MymarBookingFailure('booking_source_changed');
+            }
             $rdvId = null;
-            if ($placing) {
+            if ($data['action'] === 'review_status') {
+                if (in_array($targetStatus, [14, 21], true)) {
+                    $this->statement('UPDATE MYMAR.dossier_rdv SET is_old=1,updated_at=? WHERE dossier_id=? AND is_old=0', [$stamp, $data['dossier_id']]);
+                }
+                $this->statement('UPDATE MYMAR.dossiers SET status_id=?,sub_statut=?,commentaire_status=?,date_rappel=NULL,updated_at=? WHERE id=?',
+                    [$targetStatus, $data['reason'], $data['comment'], $stamp, $data['dossier_id']]);
+                $description = 'Decision administrative du signalement MAR, statut #'.$targetStatus;
+            } elseif ($placing) {
                 $start = MymarBookingCommand::instant($data['starts_at']);
                 $end = $start->modify('+'.$data['duration_minutes'].' minutes');
                 $this->assertSourceSlot($data['technician_id'], $data['dossier_id'], $start, $end, $now);
@@ -450,9 +495,10 @@ final class MymarBookingSource
             || ($data['version'] ?? null) !== 1 || ($data['request_id'] ?? null) !== $requestId
             || ($data['source_committed'] ?? null) !== true || array_diff(array_keys($data), $fields) || array_diff($fields, array_keys($data))
             || ! is_int($data['dossier_id']) || $data['dossier_id'] < 1
-            || ! in_array($data['action'], ['place', 'problem', 'reschedule', 'on_site_problem', 'on_site_rebook'], true)
+            || ! in_array($data['action'], ['place', 'problem', 'reschedule', 'on_site_problem', 'on_site_rebook', 'review_status'], true)
             || ! in_array($data['status_id'], match ($data['action']) {
-                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14], default => [2, 15]
+                'place' => [3, 16], 'reschedule' => [16], 'on_site_problem' => [15], 'on_site_rebook' => [14],
+                'review_status' => array_keys(MymarBookingCommand::REVIEW_STATUSES), default => [2, 15]
             }, true)) {
             throw new MymarBookingFailure('booking_receipt_unavailable', 503);
         }

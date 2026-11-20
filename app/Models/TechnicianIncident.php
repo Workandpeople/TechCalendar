@@ -29,6 +29,16 @@ class TechnicianIncident extends Model
         return $this->belongsTo(MymarBookingRequest::class, 'request_id');
     }
 
+    public function getStatusRequestIdAttribute(): ?string
+    {
+        return $this->source_context['status_review']['request_id'] ?? null;
+    }
+
+    public function statusRequest(): BelongsTo
+    {
+        return $this->belongsTo(MymarBookingRequest::class, 'status_request_id');
+    }
+
     public function dossier(): BelongsTo
     {
         return $this->belongsTo(Dossier::class)->withTrashed();
